@@ -588,15 +588,12 @@ describe('Waivers Competitive Edge — Spanish', () => {
     expectSpanish(out, 'faab')
     expect(out).toContain('Ventaja competitiva · los reclamos de los demás mánagers')
     expect(container.querySelector('[data-testid="waiver-edge-waiver.outbid_by"]')?.textContent).toBe('1 de los 3 otros mánagers tiene más FAAB que tus $40.')
-    expect(out).toContain('A Tasha le quedan $72 de FAAB, más que tus $40.')
-    expect(out).toContain('A Dee le quedan $40 de FAAB, lo mismo que a ti.')
-    expect(out).toContain('A Mike le quedan $12 de FAAB, menos que tus $40.')
-    expect(out).toContain('Tasha ganó 3 reclamos esta temporada y gastó $22 en total.')
-    expect(out).toContain('Su oferta ganadora más alta fue de $18 (RB).')
-    expect(out).toContain('1 de sus 3 reclamos fue una oferta de $0.')
-    expect(out).toContain('3 de sus 3 reclamos fueron ofertas de $0.')
-    expect(out).toContain('2 de sus 3 reclamos fueron de RB.')
-    expect(out).toContain('Mike no ganó ningún reclamo esta temporada.')
+    // One line per manager (2026-11-14); "más que tus $40" is said once, in the league line above.
+    const line = (team: string) => container.querySelector(`[data-testid="waiver-edge-rival-${team}"] [data-testid="waiver-edge-rival-line"]`)?.textContent
+    expect(line('2')).toBe('$72 restantes · 3 reclamos, $22 gastados, 1 a $0 · oferta más alta $18 (RB) · 2 RB')
+    expect(line('3')).toBe('$40 restantes · 3 reclamos, todos a $0')
+    expect(line('4')).toBe('$12 restantes · ningún reclamo ganado')
+    expect(out).not.toContain('le quedan')
     expect(out).toContain('Esta liga lleva 6 reclamos ganados esta temporada.')
     expect(container.querySelector('[data-testid="waiver-competitive-edge-basis"]')?.textContent).toBe(
       'Datos de los reclamos ganados en el historial de Sleeper de esta liga en la temporada 2026, a 25 sept, 8:44 ET (puede estar desactualizado). Sleeper no publica las ofertas perdidas, así que solo cuenta las ganadas. Muestra lo que hicieron, no lo que ofertarán.',
@@ -611,7 +608,8 @@ describe('Waivers Competitive Edge — Spanish', () => {
       const { container, unmount } = render(<WaiverCompetitiveEdge access={null} edge={{ available: true, data: edge }} />)
       const out = ownText(container)
       expectSpanish(out, label)
-      if (label === 'rolling') expect(out).toContain('Tasha ganó 3 reclamos esta temporada.')
+      if (label === 'rolling')
+        expect(container.querySelector('[data-testid="waiver-edge-rival-2"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe('3 reclamos · 2 RB')
       else expect(out).toContain('Todavía no hay reclamos ganados registrados en esta liga esta temporada.')
       unmount()
     }
@@ -638,10 +636,86 @@ describe('Waivers Competitive Edge — English is unchanged', () => {
     const { container } = render(<WaiverCompetitiveEdge access={edgeAccess(true)} edge={{ available: true, data: edgeOf(true) }} />)
     const out = container.textContent ?? ''
     expect(out).toContain("Competitive Edge · other managers' waiver activity")
-    expect(out).toContain('Tasha has $72 of FAAB left — more than your $40.')
-    expect(out).toContain('Dee has $40 of FAAB left — the same as yours.')
+    expect(container.querySelector('[data-testid="waiver-edge-rival-2"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe(
+      '$72 left · 3 claims, $22 spent, 1 at $0 · biggest bid $18 (RB) · 2 RBs',
+    )
+    expect(container.querySelector('[data-testid="waiver-edge-rival-3"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe('$40 left · 3 claims, all at $0')
+    expect(container.querySelector('[data-testid="waiver-edge-rival-4"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe('$12 left · no claims won')
     expect(container.querySelector('[data-testid="waiver-competitive-edge-basis"]')?.textContent).toBe(
       "Counted from winning waiver claims in this league's Sleeper history for the 2026 season, as of Sep 25, 8:44 AM ET — may be out of date. Sleeper doesn't publish losing bids, so these are wins only. It shows what they did, not what they'll bid.",
     )
   })
 })
+
+describe('player card — an NBA league value (2026-11-16, re-score item 12)', () => {
+  const BOARD_VALUE = yes({
+    sport: 'NBA', unit: 'fantasy points' as const, perGame: 40, replacementPerGame: 28, replacementName: 'Wire Guard',
+    value: 720, gamesRemaining: 60, scheduleKnown: true, seasonLabel: '2026-27', sample: { kind: 'games' as const, count: 26, thin: false }, baselineSeasonLabel: '2025-26', dynastyValue: 2140.6, age: 24,
+  })
+  const nbaLeague = () => league({ price: no('This league values its players on its own value board, not on the NFL market chart.'), boardValue: BOARD_VALUE })
+
+  it('English: the league value replaces the NFL price, with the per-game edge, games left, dynasty and its basis', async () => {
+    const { container } = sheet(universal({ context: 'league', league: nbaLeague(), market: no('Market prices are published for NFL players only.') }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('LEAGUE VALUE')
+    expect(out).not.toContain('LEAGUE PRICE')
+    expect(out).toContain('40.0 pts/g · 60 games left')
+    expect(out).toContain('DYNASTY')
+    expect(out).toContain('age 24 · model estimate')
+    expect(out).toContain(
+      "NBA value on this league's own board, the one its trade grades use: 40.0 fantasy points per game against 28.0 for the best free agent at his position (Wire Guard), over 60 games left. Rests on 26 games, leaning on the 2025-26 season.",
+    )
+    expect(out).toContain('Market prices are published for NFL players only.')
+  })
+
+  it('Spanish: every part of it', async () => {
+    lang.language = 'es'
+    const { container } = sheet(universal({ context: 'league', league: nbaLeague(), market: no('Market prices are published for NFL players only.') }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('VALOR EN LA LIGA')
+    expect(out).toContain('40.0 pts/p · quedan 60 partidos')
+    expect(out).toContain('DINASTÍA')
+    expect(out).toContain('24 años · estimación del modelo')
+    expect(out).toContain('Valor de NBA en la tabla propia de esta liga')
+    expect(out).toContain('Se apoya en 26 partidos, todavía con peso de la temporada 2025-26.')
+    expect(out).toContain('Los precios de mercado solo se publican para jugadores de la NFL.')
+    expect(out).not.toContain('Market prices are published')
+  })
+
+  it('a board that cannot price him: a dash, and the reason', async () => {
+    const { container } = sheet(universal({ context: 'league', league: league({ boardValue: no('This league’s value board could not be read just now.') }) }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('LEAGUE VALUE')
+    expect(out).toContain('This league’s value board could not be read just now.')
+  })
+})
+
+describe('player card — an MLB league value (2026-11-16)', () => {
+  const MLB_VALUE = yes({
+    sport: 'MLB', unit: 'fantasy points' as const, perGame: 4.1, replacementPerGame: 2.6, replacementName: 'Wire Bat',
+    value: 243, gamesRemaining: 162, scheduleKnown: false, seasonLabel: '2027', sample: { kind: 'at_bats' as const, count: 541, thin: false },
+    baselineSeasonLabel: null, dynastyValue: null, age: null,
+  })
+  const mlbLeague = () => league({ price: no('This league values its players on its own value board, not on the NFL market chart.'), boardValue: MLB_VALUE })
+
+  it('English: at-bats, never games, and a full season not yet scheduled', async () => {
+    const { container } = sheet(universal({ context: 'league', league: mlbLeague() }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('4.1 pts/g · 162-game season')
+    expect(out).toContain('over a full 162-game season (the schedule is not posted yet). Rests on 541 at-bats.')
+  })
+
+  it('Spanish', async () => {
+    lang.language = 'es'
+    const { container } = sheet(universal({ context: 'league', league: mlbLeague() }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('4.1 pts/p · temporada de 162 partidos')
+    expect(out).toContain('en una temporada completa de 162 partidos (el calendario todavía no se publicó). Se apoya en 541 turnos al bate.')
+  })
+})
+

@@ -1110,13 +1110,13 @@ export function CommissionerControlCenterModal({
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={ui.auctionAutoNominationEnabled ?? false}
+                  aria-checked={ui.auctionAutoNominationEnabled ?? true}
                   disabled={settingsSaving}
                   data-testid="draft-commissioner-toggle-auction-auto-nomination"
-                  onClick={() => handleToggle('auctionAutoNominationEnabled', !(ui.auctionAutoNominationEnabled ?? false))}
-                  className={`rounded border px-3 py-1 text-xs ${ui.auctionAutoNominationEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+                  onClick={() => handleToggle('auctionAutoNominationEnabled', !(ui.auctionAutoNominationEnabled ?? true))}
+                  className={`rounded border px-3 py-1 text-xs ${(ui.auctionAutoNominationEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
                 >
-                  {ui.auctionAutoNominationEnabled ? 'On' : 'Off'}
+                  {(ui.auctionAutoNominationEnabled ?? true) ? 'On' : 'Off'}
                 </button>
               </label>
             )}

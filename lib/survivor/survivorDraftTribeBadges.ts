@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import type { SlotOrderEntry, SlotOrderTribeBadge } from '@/lib/live-draft-engine/types'
 import { readStoredTribePlan } from './survivorTribePlan'
 import { resolveTribeEmblem } from './survivorTribeIdentity'
+import { readSGTribes } from '@/lib/survivor-guillotine/live'
+import { sgTribeArt } from '@/lib/survivor-guillotine/visual-model'
 
 type Db = Prisma.TransactionClient | typeof prisma
 
@@ -17,6 +19,7 @@ type Db = Prisma.TransactionClient | typeof prisma
 export async function attachSurvivorTribeBadges(leagueId: string, slotOrder: SlotOrderEntry[], db: Db = prisma): Promise<SlotOrderEntry[]> {
   if (slotOrder.length === 0) return slotOrder
   const league = await db.league.findUnique({ where: { id: leagueId }, select: { survivorMode: true, leagueVariant: true } })
+  if (league?.leagueVariant === 'survivor_guillotine') return attachSurvivorGuillyTribeBadges(leagueId, slotOrder, db)
   if (!league || (!league.survivorMode && league.leagueVariant !== 'survivor')) return slotOrder
   const detail = await db.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } })
   if (readStoredTribePlan(detail?.settings)?.showOnBoard === false) return slotOrder
@@ -35,6 +38,27 @@ export async function attachSurvivorTribeBadges(leagueId: string, slotOrder: Slo
     for (const member of tribe.members) byRoster.set(member.rosterId, badge)
   }
   if (byRoster.size === 0) return slotOrder
+  return slotOrder.map((entry) => {
+    const tribe = byRoster.get(entry.rosterId)
+    return tribe ? { ...entry, tribe } : entry
+  })
+}
+
+/**
+ * Survivor Guilly forms its starting tribes in period 0, and the random and manager-choice
+ * formations can finish before the draft. Its engine stores ids only (`tribe-0`…); the name, colour
+ * and symbol come from `sgTribeArt`, the same identity the league page shows, so the board and the
+ * league never disagree on what a tribe is called. No tribes formed yet: the board is untouched.
+ */
+async function attachSurvivorGuillyTribeBadges(leagueId: string, slotOrder: SlotOrderEntry[], db: Db): Promise<SlotOrderEntry[]> {
+  const row = await db.survivorGuillotineLeague.findUnique({ where: { leagueId }, select: { tribes: true } })
+  const members = readSGTribes(row?.tribes)
+  if (members.length === 0) return slotOrder
+  const byRoster = new Map<string, SlotOrderTribeBadge>()
+  for (const member of members) {
+    const art = sgTribeArt(member.tribeId)
+    byRoster.set(member.rosterId, { id: member.tribeId, name: art.name, colorHex: art.color, markUrl: art.symbolSrc, crestUrl: art.buffSrc })
+  }
   return slotOrder.map((entry) => {
     const tribe = byRoster.get(entry.rosterId)
     return tribe ? { ...entry, tribe } : entry

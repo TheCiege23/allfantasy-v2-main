@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react'
 import { dispatchStateRefreshEvent } from '@/lib/state-consistency/state-events'
 
-export interface AISuggestion {
+interface AISuggestion {
   player: string
   position: string
   team?: string | null
@@ -13,7 +13,7 @@ export interface AISuggestion {
   type?: 'primary' | 'pivot' | 'value'
 }
 
-export interface AIAssistantState {
+interface AIAssistantState {
   /** Top suggestion */
   bestPick: AISuggestion | null
   /** Explanation (aiInsight) */

@@ -16,7 +16,7 @@
 import { cannotStart, isNonStarterSlot } from '@/lib/redraft/lineupValidation'
 
 export type ChecklistStatus = 'done' | 'todo' | 'heads_up'
-export type Bilingual = { en: string; es: string }
+type Bilingual = { en: string; es: string }
 
 export type ChecklistItem = {
   id: 'scores' | 'waivers' | 'lineups' | 'trades' | 'dues' | 'trade_deadline' | 'playoffs' | 'final_week'

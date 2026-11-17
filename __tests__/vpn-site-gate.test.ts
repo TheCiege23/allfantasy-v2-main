@@ -214,6 +214,8 @@ describe("what stays open over a VPN", () => {
     "/offline",
     "/vpn-blocked?from=%2Fcore",
     "/robots.txt",
+    // Ad-network crawlers fetch this from data centres, which the VPN check would otherwise catch.
+    "/ads.txt",
     "/sitemap.xml",
     "/manifest.webmanifest",
     "/.well-known/assetlinks.json",

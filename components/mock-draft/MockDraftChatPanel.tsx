@@ -5,7 +5,7 @@ import { MessageCircle, Send } from 'lucide-react'
 import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
 import { mockDraftReportThreadId } from '@/lib/moderation/reportRooms'
 
-export interface MockDraftChatPanelProps {
+interface MockDraftChatPanelProps {
   draftId: string
   pollIntervalMs?: number
   aiSuggestion?: string | null

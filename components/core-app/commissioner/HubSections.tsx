@@ -17,7 +17,7 @@ import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
  * own client islands.
  */
 
-export function HubAnchor({ link, className, language = 'en' }: { link: HubLink; className?: string; language?: string }) {
+function HubAnchor({ link, className, language = 'en' }: { link: HubLink; className?: string; language?: string }) {
   const label = hubCopy(link.label, language)
   if (link.external) {
     return (

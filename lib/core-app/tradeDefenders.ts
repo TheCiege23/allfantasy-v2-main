@@ -63,7 +63,7 @@ export function valueToRank(value: number, curve: RankCurve = DEFAULT_RANK_CURVE
 }
 
 /** What a defender is worth, in both the currencies a trade screen needs. */
-export type DefenderPrice = { rank: number; value: number }
+type DefenderPrice = { rank: number; value: number }
 
 /** Prices one defender by Sleeper id. Null means the board does not hold him. */
 export type DefenderPricer = (sleeperId: string) => DefenderPrice | null

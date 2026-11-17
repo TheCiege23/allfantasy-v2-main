@@ -17,7 +17,7 @@
  */
 
 /** The verdicts a chip can show. The label is fixed per key — the wire never carries display text. */
-export type ChimmyVerdictKey =
+type ChimmyVerdictKey =
   | 'yes' | 'no' | 'hold' | 'counter' | 'counter_hold' | 'start' | 'start_both' | 'sit_both' | 'bid'
   /* A guillotine week that is already DECIDED (`lib/core-app/eliminationSettle.ts`). Never a margin. */
   | 'safe' | 'out'
@@ -26,10 +26,10 @@ export type ChimmyVerdictKey =
  * go = act / good news, stop = do not / bad news, wait = hold off / renegotiate. Colour AND text
  * carry it. SAFE is `go` and OUT is `stop` — the same good / bad the Week board's SAFE / OUT badge uses.
  */
-export type ChimmyVerdictTone = 'go' | 'stop' | 'wait'
+type ChimmyVerdictTone = 'go' | 'stop' | 'wait'
 
 /** Which engine decided — shown as the chip's title so "who says so" is one hover away. */
-export type ChimmyVerdictSource = 'trade_engine' | 'lineup_engine' | 'faab_plan' | 'elimination_settle'
+type ChimmyVerdictSource = 'trade_engine' | 'lineup_engine' | 'faab_plan' | 'elimination_settle'
 
 export type ChimmyVerdict = {
   key: ChimmyVerdictKey
@@ -79,7 +79,7 @@ export function readChimmyVerdict(value: unknown): ChimmyVerdict | null {
 /** How many bids the card lists — the same cap as the model's text (`FAAB_TEXT_MAX_BIDS`). */
 export const FAAB_CARD_MAX_BIDS = 8
 
-export type ChimmyFaabCardBid = {
+type ChimmyFaabCardBid = {
   name: string
   position: string | null
   /** Dollars to bid up to; null outside an elimination league or with no remaining FAAB on file. */
@@ -160,12 +160,72 @@ export function readChimmyFaabCard(value: unknown): ChimmyFaabCard | null {
  * level; a decision-engine answer carries them inside `meta.decision` (`decisionAnswerMeta`), which
  * is also what a private @chimmy reply stores on its message — so one reader serves every surface.
  */
-export function readAnswerPolish(meta: unknown): { verdict: ChimmyVerdict | null; faabPlan: ChimmyFaabCard | null; answerKeys: string[] } {
-  if (!isRecord(meta)) return { verdict: null, faabPlan: null, answerKeys: [] }
+export function readAnswerPolish(meta: unknown): {
+  verdict: ChimmyVerdict | null
+  faabPlan: ChimmyFaabCard | null
+  answerKeys: string[]
+  proUpsell: ChimmyProOnlyTool[]
+  recalledPastChats: boolean
+} {
+  if (!isRecord(meta)) return { verdict: null, faabPlan: null, answerKeys: [], proUpsell: [], recalledPastChats: false }
   const decision = isRecord(meta.decision) ? meta.decision : null
   const verdict = readChimmyVerdict(meta.verdict) ?? (decision && decision.status === 'ready' ? readChimmyVerdict(decision.verdict) : null)
   const keys = [...readAnswerKeys(meta.answerKeys), ...(decision && decision.status === 'ready' ? readAnswerKeys(decision.answerKeys) : [])]
-  return { verdict, faabPlan: readChimmyFaabCard(meta.faabPlan), answerKeys: readAnswerKeys(keys) }
+  return {
+    verdict,
+    faabPlan: readChimmyFaabCard(meta.faabPlan),
+    answerKeys: readAnswerKeys(keys),
+    proUpsell: readProUpsell(meta.proUpsell),
+    recalledPastChats: meta.recalledPastChats === true,
+  }
+}
+
+/* ── AF Pro depth: the upgrade button and the past-chats chip ───────────────────────────────── */
+
+/**
+ * The AF Pro analyst tools and what each is called on screen (`lib/chimmy/chimmyDepth.ts` gates them).
+ * Defined HERE, not there, because the drawer renders the labels and this module is the client-safe one.
+ */
+export const PRO_ONLY_TOOL_LABEL = {
+  get_playoff_outlook: 'the playoff simulator',
+  find_trade_ideas: 'trade ideas',
+  get_faab_bid_plan: 'FAAB bid plans',
+  recall_past_chats: 'recalling your past chats',
+  get_draft_pick_outlook: "who's likely gone before your pick",
+  /*
+   * A leaguemate's record (2026-11-16) is gated on Competitive Edge, not on the Chimmy plan — so it is
+   * on this label map for the button line, and OFF the executor's pre-gate (`chimmyDepth.ts`): a War
+   * Room member has Competitive Edge without AF Pro's Chimmy depth.
+   */
+  get_manager_record: "a leaguemate's full record",
+} as const
+
+export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL
+
+/** AF Pro on the purchase surface, tagged so the plans page can tell this button's buyers apart. */
+export const CHIMMY_PRO_TOOL_UPGRADE_HREF = '/upgrade?plan=af_pro&from=chimmy-pro-tool'
+
+/**
+ * `meta.proUpsell`: the AF Pro tools a free user's answer reached for and the EXECUTOR refused.
+ * 🛑 Like the verdict chip, never read out of the answer's text — only a refusal the code made puts
+ * the upgrade button under an answer. Unknown names are dropped; at most one of each.
+ */
+export function readProUpsell(value: unknown): ChimmyProOnlyTool[] {
+  if (!Array.isArray(value)) return []
+  const out: ChimmyProOnlyTool[] = []
+  for (const v of value) {
+    if (typeof v !== 'string' || !Object.prototype.hasOwnProperty.call(PRO_ONLY_TOOL_LABEL, v)) continue
+    if (!out.includes(v as ChimmyProOnlyTool)) out.push(v as ChimmyProOnlyTool)
+  }
+  return out
+}
+
+/** "AF Pro adds the playoff simulator and trade ideas." — the line beside the upgrade button. */
+export function proUpsellLine(tools: readonly ChimmyProOnlyTool[]): string {
+  const labels = tools.map((t) => PRO_ONLY_TOOL_LABEL[t])
+  const list = labels.length <= 1 ? (labels[0] ?? 'deeper answers')
+    : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+  return `AF Pro adds ${list}.`
 }
 
 /* ── "Newer answer below" ───────────────────────────────────────────────────────────────────── */

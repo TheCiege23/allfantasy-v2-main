@@ -1,12 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getWeightEvolution,
-  blendMultiYearWeights,
-  getBaselineWeights,
-  resolveLeagueClass,
-  type LeagueClass,
-} from '@/lib/rankings-engine/adaptive-weight-learning'
+import { getWeightEvolution, blendMultiYearWeights, getBaselineWeights, resolveLeagueClass } from '@/lib/rankings-engine/adaptive-weight-learning'
 
 export const GET = withApiUsage({ endpoint: "/api/rankings/weight-evolution", tool: "RankingsWeightEvolution" })(async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams

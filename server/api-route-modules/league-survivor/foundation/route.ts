@@ -1,3 +1,4 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { setCouncilPaused } from '@/lib/survivor/survivorCouncilPause'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { noEliminationWeeksFor, spreadEliminationWeeks } from '@/lib/survivor/survivorEliminationSchedule'
@@ -252,6 +253,9 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!access.decisions.canUpdateSettings) {
       return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
     }
+    // Survivor setup is league setup: a co-commissioner also needs that area (lib/league/commissionerAccess.ts).
+    const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league')
+    if (refusedScope) return refusedScope
     if (action === 'set-commissioner-participation-mode') {
       const mode =
         body.mode === 'participating_player' || body.commissionerParticipationMode === 'participating_player'
@@ -268,6 +272,9 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!access.decisions.canUpdateSettings) {
       return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
     }
+    // Survivor setup is league setup: a co-commissioner also needs that area (lib/league/commissionerAccess.ts).
+    const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league')
+    if (refusedScope) return refusedScope
     const preset = body.preset
     if (!isSurvivorTwistPresetId(preset)) return NextResponse.json({ error: 'Choose Simple, Classic or Full twists.' }, { status: 400 })
     if (await isSurvivorDraftStarted(leagueId)) return NextResponse.json({ error: 'Twists lock when the draft starts.' }, { status: 409 })

@@ -32,7 +32,8 @@ import { enqueueLeagueEngineJob } from '@/lib/jobs/enqueue'
 import { dispatchReactions, type ReactionEnqueue, type ReactionJob, type DispatchResult } from './reactions'
 import { getScreenSummaryDefinition, invalidateScreenForLeague } from './summaries'
 import { sportsDataCacheTier } from './durableTier'
-import { isEnabled, DEFAULT_ROLLOUTS, type RolloutRule } from './rollout'
+import { isEnabled, type RolloutRule } from './rollout'
+import { resolveRollouts } from './rolloutConfig'
 
 export const REACTION_CONSUMER_NAME = 'sports-os.reactions'
 
@@ -76,7 +77,7 @@ async function leagueKeyFor(screen: string, event: DomainEvent): Promise<string 
 }
 
 export function createReactionConsumer(options: ReactionConsumerOptions = {}): EventConsumer {
-  const rules = options.rules ?? DEFAULT_ROLLOUTS
+  const rules = options.rules ?? resolveRollouts()
   const enqueue = options.enqueue ?? realEnqueue
   const durable = options.durable === undefined ? sportsDataCacheTier() : options.durable
 

@@ -1,3 +1,4 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -60,6 +61,7 @@ export async function PUT(req: NextRequest, ctx: Context) {
   const { leagueId, userId, access } = await viewer(ctx)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!access?.isLeagueMember || !access.decisions.canUpdateSettings) return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+  { const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league'); if (refusedScope) return refusedScope }
   const body = await req.json().catch(() => null)
   if (!body || !Number.isInteger(body.tribeCount) || body.tribeCount < 2 || body.tribeCount > 4) return NextResponse.json({ error: 'Choose between 2 and 4 tribes.' }, { status: 400 })
   return withSurvivorSetupTransaction(leagueId, async db => {
@@ -104,6 +106,7 @@ export async function POST(req: NextRequest, ctx: Context) {
   const { leagueId, userId, access } = await viewer(ctx)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!access?.isLeagueMember || !access.decisions.canUpdateSettings) return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+  { const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league'); if (refusedScope) return refusedScope }
   const body = await req.json().catch(() => null)
   const plan = normalizeTribePlan(body?.plan)
   if (!plan) return NextResponse.json({ error: 'Send the tribe plan to lock.' }, { status: 400 })

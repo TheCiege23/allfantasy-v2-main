@@ -2,6 +2,7 @@ import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { projectionSportScope } from '@/lib/core-app/playerProjections'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import {
@@ -102,11 +103,37 @@ export interface LineupScenarioDeps extends LeagueWeekPricingDeps {
    * Players in that week's feed whose name normalizes to `name` — the only way to reach a free agent.
    * `complete` is false when the feed could not be searched in full, so "no match" is not a finding.
    */
-  findWeekPlayersByName: (args: { week: ScenarioWeek; name: string }) => Promise<{ players: WeekPlayer[]; complete: boolean }>
+  findWeekPlayersByName: (args: { week: ScenarioWeek; name: string; sport?: string | null }) => Promise<{ players: WeekPlayer[]; complete: boolean }>
 }
 
 const statsOf = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+
+/**
+ * Players in one week's feed whose name normalizes to `name`.
+ *
+ * ⚠ SCOPED TO THE LEAGUE'S SPORT. Today only an NFL league reaches it (`leagueWeekBasis` refuses every
+ * other sport first), but the feed is NFL rows and a Sleeper NBA league's ids live in another namespace:
+ * a non-NFL league searching it would be offered an NFL namesake as its free agent. A known non-NFL sport
+ * reads only its own rows (`projectionSportScope`); NFL or absent sends the read it always did.
+ */
+export async function findWeekPlayersByName({ week, name, sport }: { week: ScenarioWeek; name: string; sport?: string | null }): Promise<{ players: WeekPlayer[]; complete: boolean }> {
+  const target = normalizePlayerName(name)
+  if (!target) return { players: [], complete: true }
+  const rows = await prisma.fantasyProjection.findMany({
+    where: { season: week.season, week: week.week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
+    select: { playerId: true, stats: true },
+    take: NAME_SEARCH_CAP,
+  })
+  const players: WeekPlayer[] = []
+  for (const row of rows) {
+    const stats = statsOf(row.stats)
+    const rowName = typeof stats.name === 'string' ? stats.name : ''
+    if (!rowName || normalizePlayerName(rowName) !== target) continue
+    players.push({ playerId: row.playerId, name: rowName, position: typeof stats.position === 'string' ? stats.position : null })
+  }
+  return { players, complete: rows.length < NAME_SEARCH_CAP }
+}
 
 const defaultDeps: LineupScenarioDeps = {
   ...defaultLeagueWeekPricingDeps,
@@ -114,23 +141,7 @@ const defaultDeps: LineupScenarioDeps = {
   loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
   loadAvailability: enrichLineupAvailability,
   checkLocks: checkStartedGames,
-  findWeekPlayersByName: async ({ week, name }) => {
-    const target = normalizePlayerName(name)
-    if (!target) return { players: [], complete: true }
-    const rows = await prisma.fantasyProjection.findMany({
-      where: { season: week.season, week: week.week, source: { not: 'allfantasy' } },
-      select: { playerId: true, stats: true },
-      take: NAME_SEARCH_CAP,
-    })
-    const players: WeekPlayer[] = []
-    for (const row of rows) {
-      const stats = statsOf(row.stats)
-      const rowName = typeof stats.name === 'string' ? stats.name : ''
-      if (!rowName || normalizePlayerName(rowName) !== target) continue
-      players.push({ playerId: row.playerId, name: rowName, position: typeof stats.position === 'string' ? stats.position : null })
-    }
-    return { players, complete: rows.length < NAME_SEARCH_CAP }
-  },
+  findWeekPlayersByName,
 }
 
 /* ── Detection ─────────────────────────────────────────────────────────────────────────────── */
@@ -464,7 +475,7 @@ export async function buildWaiverScenario(
   let found: { players: WeekPlayer[]; complete: boolean } = { players: [], complete: true }
   for (const variant of nameVariants(addName)) {
     found = await deps
-      .findWeekPlayersByName({ week: basis.week, name: variant })
+      .findWeekPlayersByName({ week: basis.week, name: variant, sport: world.league.sport })
       .catch(() => ({ players: [], complete: false }))
     if (found.players.length > 0) {
       addName = variant

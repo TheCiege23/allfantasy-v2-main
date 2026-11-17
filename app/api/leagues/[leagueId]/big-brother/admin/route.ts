@@ -2,6 +2,7 @@
  * [NEW] POST: Big Brother commissioner admin actions. PROMPT 5.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -28,7 +29,7 @@ export async function POST(
     select: { userId: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (league.userId !== userId) return NextResponse.json({ error: 'Forbidden: commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) return NextResponse.json({ error: 'Forbidden: commissioner only' }, { status: 403 })
 
   const isBB = await isBigBrotherLeague(leagueId)
   if (!isBB) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })

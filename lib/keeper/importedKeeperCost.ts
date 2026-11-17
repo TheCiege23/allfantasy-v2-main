@@ -30,7 +30,7 @@ export type KeeperDraftPick = {
 /** Flagged keepers needed before a league's rule counts as measured. */
 export const MIN_MEASURED_KEEPERS = 5
 /** Share of them that must sit at their previous round for the same-round rule. */
-export const SAME_ROUND_SHARE = 0.7
+const SAME_ROUND_SHARE = 0.7
 
 export type KeeperCostRule =
   | { rule: 'same_round'; season: number; measured: number; agreeing: number }
@@ -83,7 +83,7 @@ export function measureKeeperCostRule(picks: readonly KeeperDraftPick[]): Keeper
   return { rule: 'same_round', season, measured, agreeing }
 }
 
-export type PlayerKeeperCost = {
+type PlayerKeeperCost = {
   /** The round keeping him costs next season. */
   costRound: number
   /** He was himself kept this season (slotted as a keeper), not freshly drafted. */

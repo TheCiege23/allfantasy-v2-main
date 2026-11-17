@@ -15,6 +15,7 @@
  */
 
 import type { ImportProvider } from './types'
+import { isImportProviderAvailable } from './provider-ui-config'
 
 export type PlatformLanding = {
   provider: ImportProvider
@@ -44,6 +45,24 @@ export type PlatformLanding = {
   steps: readonly string[]
   /** Questions people actually ask. Becomes visible copy and FAQPage data. */
   faq: readonly { q: string; a: string }[]
+  /**
+   * Copy used INSTEAD of the fields above while the platform is off in provider-ui-config.
+   *
+   * ⚠ A DISCLAIMER OVER LIVE COPY WAS NOT ENOUGH. The page put a "not connectable" notice above a
+   * headline, intro, share title and FAQ that all still described a working import — and the FAQ
+   * is published as FAQPage structured data, so "Can I import one Yahoo league by ID? Yes." was a
+   * claim to Google about a path that refuses every request. Everything a reader or a crawler sees
+   * now says "coming soon" until the flag flips; `steps` stay, framed as how it will work.
+   */
+  comingSoon?: {
+    title: string
+    description: string
+    heading: string
+    intro: string
+    /** Why it is not live, in the visitor's terms. Shown in the status notice. */
+    reason: string
+    faq: readonly { q: string; a: string }[]
+  }
 }
 
 /** Shared trust content — identical on every page because the promise is identical. */
@@ -92,16 +111,16 @@ const LANDINGS: readonly PlatformLanding[] = [
     name: 'ESPN',
     title: 'Import your ESPN fantasy league to AllFantasy — read-only',
     description:
-      'Connect an ESPN fantasy football league to AllFantasy. One-click with the browser extension, or paste two cookies. Read-only, stored encrypted, no password.',
+      'Connect an ESPN fantasy football league to AllFantasy. Public leagues need only the league ID; private leagues connect with the browser extension or two cookies. Read-only, no password.',
     heading: 'Import your ESPN league',
     intro:
-      'ESPN gives no public way to read a league, so AllFantasy reads it as you — using your own browser session, stored encrypted. We never ask for your ESPN password.',
+      'A public ESPN league imports from its league ID — you pick your team. For a private league, or to run your league here as its commissioner, AllFantasy reads it as you using your own browser session, stored encrypted. We never ask for your ESPN password.',
     needs:
-      'A connected ESPN session, via the AllFantasy browser extension or two cookies you paste once. This is needed for every ESPN league, public ones included.',
+      'For a public league, just your league ID — you pick your team. A private league, or a commissioner who wants the commissioner tools, also needs a connected ESPN session: the AllFantasy browser extension or two cookies you paste once.',
     steps: [
       'Choose ESPN on the connect screen.',
-      'Connect once — one click with the AllFantasy extension, or paste your SWID and espn_s2 cookie values.',
-      'Paste the league ID from your ESPN league URL.',
+      'Paste the league ID or the whole league URL.',
+      'Public league: say who runs it and pick your team. Private league or commissioner: connect once — one click with the AllFantasy extension, or paste your SWID and espn_s2 cookie values.',
       'Your read-only copy is built: rosters, matchups, scoring settings and past seasons.',
     ],
     faq: [
@@ -151,6 +170,29 @@ const LANDINGS: readonly PlatformLanding[] = [
         a: 'Yes. If the account-wide list is refused you can paste a single league ID and AllFantasy will ask Yahoo for just that league.',
       },
     ],
+    comingSoon: {
+      title: 'Yahoo fantasy league import — coming soon to AllFantasy',
+      description:
+        'Yahoo import is coming soon. AllFantasy is waiting on Yahoo to approve its Fantasy Sports API access. Import from Sleeper, ESPN, Fantrax, MFL or Fleaflicker today.',
+      heading: 'Yahoo import is coming soon',
+      intro:
+        'Yahoo will connect with its own sign-in, so there will be no username to type and no password for AllFantasy to see. It is not switched on yet.',
+      reason: "We're waiting on Yahoo to approve AllFantasy's access to its Fantasy Sports API.",
+      faq: [
+        {
+          q: 'When can I import a Yahoo league?',
+          a: "As soon as Yahoo approves AllFantasy's access to its Fantasy Sports API. Until then Yahoo cannot be connected, and nothing on our side can work around that.",
+        },
+        {
+          q: 'What will AllFantasy be allowed to do on Yahoo?',
+          a: 'Read your leagues, and nothing else. The approval will be read-only and AllFantasy never sets lineups, makes trades or posts in chat.',
+        },
+        {
+          q: 'What can I import today?',
+          a: 'Sleeper, ESPN, Fantrax, MFL and Fleaflicker leagues, free and read-only.',
+        },
+      ],
+    },
   },
   {
     provider: 'fleaflicker',
@@ -252,6 +294,18 @@ export const PLATFORM_LANDINGS = LANDINGS
 export function getPlatformLanding(slug: string): PlatformLanding | null {
   const wanted = slug.trim().toLowerCase()
   return LANDINGS.find((l) => l.slug === wanted) ?? null
+}
+
+/**
+ * The copy to RENDER for a platform: its `comingSoon` block replaces the live copy while the import
+ * config has it off. The flag is read here, not in the page, so the metadata, the visible copy and
+ * the FAQPage data cannot disagree about which copy is current.
+ */
+export function getPlatformLandingForDisplay(slug: string): PlatformLanding | null {
+  const landing = getPlatformLanding(slug)
+  if (!landing || !landing.comingSoon || isImportProviderAvailable(landing.provider)) return landing
+  const { title, description, heading, intro, faq } = landing.comingSoon
+  return { ...landing, title, description, heading, intro, faq }
 }
 
 export function platformLandingSlugs(): string[] {

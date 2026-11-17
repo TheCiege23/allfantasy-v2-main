@@ -20,7 +20,7 @@
  */
 
 /** All possible billing intent reasons */
-export type AiBillingReason =
+type AiBillingReason =
   | "deterministic"         // answered from policy/rules — no AI cost
   | "cache_hit"             // answered from cache — LLM was skipped
   | "llm_required"          // LLM was called — token charge applies

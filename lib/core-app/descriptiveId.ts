@@ -17,7 +17,7 @@
  * timeout rather than an error anyone can read.
  */
 
-export type DescribedPlayer = {
+type DescribedPlayer = {
   name: string
   position: string | null
   team: string | null

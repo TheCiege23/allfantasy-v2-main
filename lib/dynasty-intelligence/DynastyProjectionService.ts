@@ -832,40 +832,6 @@ function buildOverviewCards(payload: {
   ]
 }
 
-export async function getMarketValueTrend(
-  playerId: string,
-  sport: string,
-  context?: { position?: string; age?: number | null; currentValue?: number }
-): Promise<MarketValueTrend | null> {
-  const normalizedSport = normalizeToSupportedSport(sport)
-  const resolvedPosition = normalizePosition(normalizedSport, context?.position)
-  const row = await prisma.playerMetaTrend.findUnique({
-    where: { uniq_player_meta_trend_player_sport: { playerId, sport: normalizedSport } },
-    select: {
-      trendScore: true,
-      previousTrendScore: true,
-      addRate: true,
-      dropRate: true,
-      tradeInterest: true,
-      draftFrequency: true,
-      lineupStartRate: true,
-      injuryImpact: true,
-      trendingDirection: true,
-      updatedAt: true,
-    },
-  })
-
-  if (!row && !context) return null
-
-  return buildDeterministicMarketValueTrend({
-    sport: normalizedSport,
-    position: resolvedPosition,
-    age: context?.age ?? null,
-    currentValue: context?.currentValue ?? 0,
-    row,
-  })
-}
-
 export async function getPlayerDynastyIntelligence(
   options: DynastyIntelligenceOptions
 ): Promise<PlayerDynastyIntelligence> {

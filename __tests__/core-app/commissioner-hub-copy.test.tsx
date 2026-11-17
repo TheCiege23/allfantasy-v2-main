@@ -243,7 +243,9 @@ describe('the Commissioner Hub follows en → es → en', () => {
 
     rerender(view('es'))
     expect(screen.getByRole('link', { name: '← Todas las ligas que diriges' })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Dynasty Dragons') // the league's own name stays
+    // The headline is the answer now (2026-11-14); a never-synced league says so. The league's own name stays, above it.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Esta liga aún no se ha sincronizado')
+    expect(screen.getByText(/Core · Comisionado · Dynasty Dragons/)).toBeTruthy()
     expect(screen.getByText('Te necesita ahora')).toBeTruthy() // HubSections, a server section
     expect(screen.getByText('Aún sin medir')).toBeTruthy()
     expect(screen.getByText(/3 equipos aún no están conectados/)).toBeTruthy()

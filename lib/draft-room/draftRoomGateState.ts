@@ -6,7 +6,7 @@ import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 
 export type DraftRoomTimerMode = 'live' | 'paused' | 'blocked'
 
-export type DraftRoomGateState = {
+type DraftRoomGateState = {
   rosterConfigurationIncomplete: boolean
   rosterConfigurationMessage?: string
   canDraft: boolean

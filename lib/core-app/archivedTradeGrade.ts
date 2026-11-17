@@ -38,6 +38,11 @@ export type ArchivedTradeRow = {
   picksReceived: unknown
   /** Which side of the graded ledger is the OTHER one — see `draftedPickNamesForRow`. */
   partnerRosterId?: number | null
+  /**
+   * When the trade completed. Read only for a provider league's rows (`sleeperIdOf` given): their ids are not
+   * Sleeper snowflakes, so without it a new original could never be priced at the time of the trade.
+   */
+  tradeDate?: Date | string | null
 }
 
 /** A printable pick with the drafted player attached where the ledger knows it. */
@@ -60,8 +65,15 @@ export async function gradeArchivedTradeRows(args: {
   /** The provider's league id, which keys the graded ledger. */
   platformLeagueId: string
   rows: ReadonlyArray<ArchivedTradeRow>
-  /** A Sleeper id to a display name, or null — an unnamed player withholds the letter. */
+  /** A stored player id to a display name, or null — an unnamed player withholds the letter. */
   nameOf: (sleeperId: string) => string | null
+  /**
+   * The Sleeper id a STORED player id is priced as. Absent: the id itself, which is right for a Sleeper league's
+   * rows. 🛑 A provider league's `LeagueTrade` rows (ESPN, Yahoo, MFL, Fleaflicker) carry the PROVIDER's ids, and
+   * an MFL id like "13604" is also somebody's Sleeper id — read as one, the deal is priced (and frozen) on the
+   * wrong player. Such a caller resolves the id first and returns the linked Sleeper id, or null to price by name.
+   */
+  sleeperIdOf?: (storedId: string) => string | null
   currentSeason?: number
   /** Explicit current review: return a fresh grade without reading or creating an original. */
   freezeOriginal?: boolean
@@ -97,14 +109,17 @@ export async function gradeArchivedTradeRows(args: {
       const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn, drafted?.idsIn)
       const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut, drafted?.idsOut)
       // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
-      const player = (sleeperId: string) => ({ name: args.nameOf(sleeperId), sleeperId })
+      const player = (id: string) => ({ name: args.nameOf(id), sleeperId: args.sleeperIdOf ? args.sleeperIdOf(id) : id })
       const { grade, give, get } = await gradeArchivedTradeWithInputs(grader, {
         received: idsOf(t.playersReceived).map(player),
         gave: idsOf(t.playersGiven).map(player),
         picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         currentSeason,
-        original: args.freezeOriginal === false ? undefined : { afLeagueId: args.afLeagueId, tradeId: t.transactionId, frozen, onFreeze: (f) => toFreeze.push(f), now },
+        original: args.freezeOriginal === false ? undefined : {
+          afLeagueId: args.afLeagueId, tradeId: t.transactionId, frozen, onFreeze: (f) => toFreeze.push(f), now,
+          ...(args.sleeperIdOf && t.tradeDate ? { tradeAt: t.tradeDate } : {}),
+        },
       })
       out.set(t.transactionId, { grade, picksIn, picksOut, give, get })
     }),

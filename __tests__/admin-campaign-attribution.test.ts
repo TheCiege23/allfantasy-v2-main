@@ -141,12 +141,14 @@ describe("admin campaign attribution — data truth", () => {
       expect(metric.value).toBeNull()
       expect(metric.note).toBeTruthy()
     }
-    expect(unbuilt.map((m) => m.key)).toEqual(
-      expect.arrayContaining(["start_clicked", "onboarding_completed", "paid_conversion_confirmed"]),
-    )
+    expect(unbuilt.map((m) => m.key)).toEqual(expect.arrayContaining(["start_clicked", "onboarding_completed"]))
     // Phase 1B shipped these two, so they must NOT appear as unbuilt any more.
     expect(unbuilt.map((m) => m.key)).not.toContain("landing_viewed")
     expect(unbuilt.map((m) => m.key)).not.toContain("dashboard_activated")
+    // 2026-11-15 shipped the email, import and paid stages: they are measured now, never "not built".
+    for (const shipped of ["email_verified", "import_started", "import_completed", "checkout_started", "paid_conversion_confirmed"]) {
+      expect(unbuilt.map((m) => m.key)).not.toContain(shipped)
+    }
   })
 
   it("never reports returning_authenticated as measured — the link event is not a proxy", async () => {
@@ -176,14 +178,40 @@ describe("admin campaign attribution — data truth", () => {
       .mockResolvedValueOnce([
         { unique_visitors: 0n, events: 0n, landing_views: 0n, signups: 0n, activations: 0n, linked: 0n, last_event: null },
       ])
+      // The upgrades-by-entry read (2026-11-15): an empty window has no checkouts either.
+      .mockResolvedValueOnce([])
 
     const result = await report()
     const visitors = result.summary.find((m) => m.key === "unique_visitors")
 
+    expect(result.upgradesByEntry).toEqual([])
     expect(visitors?.status).toBe("no_activity")
     expect(visitors?.value).toBeNull()
     expect(result.freshness).toBe("no_data")
     expect(result.errors).toHaveLength(0)
+  })
+
+  it("counts the email, import and paid stages, and which surface sent each paying subscriber (2026-11-15)", async () => {
+    mocks.queryRaw
+      .mockResolvedValueOnce([{ ...CAMPAIGN_ROW, imports_completed: 3n }])
+      .mockResolvedValueOnce([{ ...TOTALS_ROW, email_verified: 4n, imports_started: 6n, imports_completed: 3n }])
+      .mockResolvedValueOnce([
+        { entry_source: "lock_player_depth", started: 10n, trials: 6n, paid: 4n },
+        { entry_source: "unknown", started: 2n, trials: 0n, paid: 0n },
+      ])
+
+    const result = await report()
+    const metric = (key: string) => result.summary.find((m) => m.key === key)
+
+    expect(metric("email_verified")).toMatchObject({ status: "confirmed", value: 4 })
+    expect(metric("import_started")).toMatchObject({ status: "confirmed", value: 6 })
+    expect(metric("import_completed")).toMatchObject({ status: "confirmed", value: 3 })
+    expect(result.conversions.importStartedToCompleted).toBe(0.5)
+    expect(result.campaigns[0]?.importsCompleted).toBe(3)
+    expect(result.upgradesByEntry).toEqual([
+      { entrySource: "lock_player_depth", checkoutsStarted: 10, trialsStarted: 6, paid: 4, checkoutToPaidRate: 0.4 },
+      { entrySource: "unknown", checkoutsStarted: 2, trialsStarted: 0, paid: 0, checkoutToPaidRate: 0 },
+    ])
   })
 
   it("returns null — not 0% — for a conversion rate with no denominator", async () => {

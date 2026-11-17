@@ -61,7 +61,6 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
     leagueIntelligence: absent,
     portfolio: absent,
     savedAnalysis: absent,
-    managerPsychology: absent,
     gaps: [],
     meta: { sources: [], killedFeeds: [], buildMs: 1 },
     ...over,
@@ -71,12 +70,12 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
 describe('R2.2 — decisions reach the prompt with their substance intact', () => {
   it('🛑 renders the four contract answers, NOT the word "available"', () => {
     const slice = decisionToSlice(makeDecision(), GAP, { describeAction: (a) => `start ${a.player}` })
-    const text = serializeDecisionOsGroundingForPrompt(packet({ lineupDecision: slice }), NOW)
+    const text = serializeDecisionOsGroundingForPrompt(packet({ waiverDecision: slice }), NOW)
     expect(text).toContain('Two starters are on bye.')
     expect(text).toContain('You would field ten players.')
     expect(text).toContain('Start Smith and Jones.')
     // The G11 signature: a header with no substance beneath it.
-    expect(text).not.toMatch(/Lineup decision: available\s*$/m)
+    expect(text).not.toMatch(/Waiver decision: available\s*$/m)
   })
 
   it('🛑 an ILLEGAL verdict is rendered and is never dropped', () => {
@@ -96,7 +95,7 @@ describe('R2.2 — decisions reach the prompt with their substance intact', () =
   it('states the action COUNT even when the actions are not itemised', () => {
     // No describer supplied — the count is still true and must not read as "no actions".
     const slice = decisionToSlice(makeDecision(), GAP)
-    const text = serializeDecisionOsGroundingForPrompt(packet({ lineupDecision: slice }), NOW)
+    const text = serializeDecisionOsGroundingForPrompt(packet({ waiverDecision: slice }), NOW)
     expect(text).toMatch(/2 recommended actions \(not itemised here\)/)
   })
 

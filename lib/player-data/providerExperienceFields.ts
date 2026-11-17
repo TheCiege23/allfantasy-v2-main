@@ -3,7 +3,7 @@
  * Does not infer from age or college alone — only explicit stored fields.
  */
 
-export type ExperienceSignalSource =
+type ExperienceSignalSource =
   | 'rolling_insights'
   | 'thesportsdb'
   | 'clearsports'
@@ -209,10 +209,6 @@ export function extractExperienceSignalsFromProviderPayload(
   }
 
   return empty()
-}
-
-export function extractRollingInsightsExperienceSignals(input: unknown): ProviderExperienceSignal {
-  return extractExperienceSignalsFromProviderPayload(input, 'rolling_insights')
 }
 
 export function extractTheSportsDbExperienceSignals(input: unknown): ProviderExperienceSignal {

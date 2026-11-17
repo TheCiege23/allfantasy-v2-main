@@ -16,7 +16,7 @@ import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 
-export type DraftPlayerCardProps = {
+type DraftPlayerCardProps = {
   /** Normalized display model (preferred) */
   display?: PlayerDisplayModel | null
   /** Unified product layer — fallback headshot / injury when display assets omit data */
@@ -260,7 +260,7 @@ function DraftPlayerCardInner({
   const adpCellValue = adp === undefined && adpMetricLabel === 'ADP' ? modelMarketAdp : adp ?? null
 
   // Position tag filled in the board's colour for that position (null for a blank position).
-  const positionTint = positionTintHex(position)
+  const positionTint = positionTintHex(position, draftSport)
   const positionChipStyle = positionTint ? { backgroundColor: positionTint, color: SKIN_ON_FILL } : undefined
   const headshotUrl =
     getPlayerImage(normalized, draftSport) ??

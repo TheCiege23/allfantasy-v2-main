@@ -60,7 +60,7 @@ function sportMatchesFilter(item: SearchResultItem, sportFilter: SportFilterValu
   return item.sport.toUpperCase() === sportFilter
 }
 
-export interface SearchOverlayProps {
+interface SearchOverlayProps {
   open: boolean
   onClose: () => void
 }

@@ -83,6 +83,65 @@ export function startingSlotTemplate(settings: unknown): string[] | null {
   return slots.length > 0 ? slots : null
 }
 
+/** ESPN's slot names (`espnLookups.ts`) in this file's vocabulary. */
+const PROVIDER_SLOT_ALIAS: Record<string, string> = {
+  'D/ST': 'DEF',
+  'RB/WR': 'W/R',
+  'WR/TE': 'W/T',
+  OP: 'SFLEX',
+}
+
+/**
+ * The slot each starter is ACTUALLY in, as the provider recorded it at import — or null.
+ *
+ * ⚠ THIS IS WHAT AN ESPN LINEUP NEVER HAD. `startingSlotTemplate` refuses ESPN's SLOT:COUNT
+ * template (it cannot be aligned to the stored `starters`), so every ESPN slot was named after
+ * whoever stood in it: a FLEX holding Sam LaPorta read "TE", beside the real TE. The importer
+ * now keeps ESPN's own `lineupSlotId` per starter as `starter_slot_by_id`, keyed by PLAYER ID
+ * rather than by index, so a re-ordered `starters` list cannot mis-pair a label.
+ *
+ * All or nothing: if any starter has no label, or a label is a bench/unknown slot, the map is
+ * ignored and the caller falls back to inference — half a lineup named by the provider and half
+ * guessed would hide which half to trust. Rosters imported before this field existed carry no
+ * map and fall back exactly as before until their next sync.
+ */
+export function storedStarterSlotLabels(byId: unknown, starterIds: readonly string[]): string[] | null {
+  if (!byId || typeof byId !== 'object' || Array.isArray(byId)) return null
+  const map = byId as Record<string, unknown>
+  const labels: string[] = []
+  for (const id of starterIds) {
+    const raw = String(map[id] ?? '').trim().toUpperCase()
+    if (!raw || NON_STARTING_SLOT.has(raw) || raw === 'BE' || /^SLOT[_ ]/.test(raw)) return null
+    labels.push(SLOT_ALIAS[raw] ?? PROVIDER_SLOT_ALIAS[raw] ?? raw)
+  }
+  return labels.length > 0 ? labels : null
+}
+
+/**
+ * The order a football lineup reads in: QB, RB, WR, TE, the flexes, superflex, then D/ST and K,
+ * then IDP. Any label not listed (a neutral `SLOT 9`) sorts last.
+ */
+const LINEUP_READING_ORDER = ['QB', 'RB', 'WR', 'TE', 'W/R', 'W/T', 'FLEX', 'SFLEX', 'DEF', 'K', 'DL', 'LB', 'DB', 'IDP', 'P']
+
+/**
+ * Starting slots in reading order, stable within a label.
+ *
+ * ⚠ ONLY FOR A LINEUP WITH NO TEMPLATE. A Sleeper `roster_positions` template IS the league's own
+ * order and must be left alone. An imported ESPN lineup is stored in whatever order the provider's
+ * roster array happened to list players — Ja'Marr Chase first, the QB fifth — so without this the
+ * screen read as a shuffled list rather than a lineup.
+ */
+export function orderStartingSlots<T extends { slotLabel: string }>(slots: readonly T[]): T[] {
+  const rank = (label: string) => {
+    const i = LINEUP_READING_ORDER.indexOf(label.trim().toUpperCase())
+    return i === -1 ? LINEUP_READING_ORDER.length : i
+  }
+  return slots
+    .map((slot, index) => ({ slot, index }))
+    .sort((a, b) => rank(a.slot.slotLabel) - rank(b.slot.slotLabel) || a.index - b.index)
+    .map(({ slot }) => slot)
+}
+
 /**
  * Which positions may legally fill each slot.
  *

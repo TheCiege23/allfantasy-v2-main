@@ -46,6 +46,39 @@ describe('LeagueHome redraft deck', () => {
     expect(container.querySelector('.af-lh-timeline-panel')).toBeNull()
   })
 
+  it('puts the page tools at the foot of a redraft Home in the shell, and names the platform properly', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    const { container } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
+    // Nothing but the hidden title is left in the header.
+    expect(container.querySelector('.af-lh-head .af-lh-headside')).toBeNull()
+    const foot = container.querySelector('[data-testid=league-home-foot]')
+    expect(foot).not.toBeNull()
+    expect(text(foot)).toContain('Back to home')
+    expect(foot?.querySelector('.af-lh-back')).not.toBeNull()
+    // The foot is the last thing on the page, after the deck and the week.
+    const page = container.querySelector('.af-lh')!
+    expect(page.lastElementChild).toBe(foot)
+    // "Imported from sleeper" read as a typo.
+    expect(text(container)).not.toMatch(/from sleeper/)
+    expect(text(foot)).toContain('Sleeper')
+  })
+
+  // 2026-11-13 guide: inside the shell EVERY format puts the page tools at the foot (the guide's answer
+  // takes the top); outside the shell (/dashboard?league=) the header keeps them.
+  it('puts the page tools at the foot in the shell for every format, and in the header outside it', () => {
+    for (const opts of [{ identity: false }, { identity: true, leagueType: 'dynasty' }]) {
+      const { data } = homeFixture('nfl', opts)
+      const { container, unmount } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
+      expect(container.querySelector('.af-lh-head .af-lh-headside')).toBeNull()
+      expect(container.querySelector('[data-testid=league-home-foot] .af-lh-back')).not.toBeNull()
+      unmount()
+      const outside = render(<LeagueHome data={data} otherLeagueIssueCount={0} />)
+      expect(outside.container.querySelector('.af-lh-head .af-lh-headside .af-lh-back')).not.toBeNull()
+      expect(outside.container.querySelector('[data-testid=league-home-foot]')).toBeNull()
+      outside.unmount()
+    }
+  })
+
   it('identity off (and any non-redraft import) renders Home exactly as before: no deck, timeline back', () => {
     for (const opts of [{ identity: false }, { identity: true, leagueType: 'dynasty' }]) {
       const { data, redraftSport } = homeFixture('nfl', opts)

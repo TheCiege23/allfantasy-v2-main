@@ -1,4 +1,3 @@
-import { coreUiCopy } from './coreUiCopy'
 import { infoReasonText } from './finderPlayerInfoCopy'
 import { designationText } from './playerFinderCopy'
 import { ageText } from './shellCopy'
@@ -84,6 +83,24 @@ export type PlayerCardCopy = {
   // tiles
   leaguePrice: string
   leaguePriceSub: (mode: string, numQbs: number, teams: number) => string
+  /** A league-value-board sport (NBA first): his value on the league's own board. */
+  leagueValue: string
+  /** `scheduleKnown` false: `gamesLeft` is the sport's full season, its schedule not posted yet (MLB's offseason). */
+  leagueValueSub: (perGame: string, unit: 'fantasy points' | 'category score', gamesLeft: number, scheduleKnown: boolean) => string
+  dynastyValue: string
+  dynastyValueSub: (age: number | null) => string
+  boardBasis: (b: {
+    sport: string
+    perGame: string
+    unit: 'fantasy points' | 'category score'
+    replacement: string
+    replacementName: string
+    gamesLeft: number
+    scheduleKnown: boolean
+    /** What the value rests on: games, or in baseball at-bats or innings. */
+    sample: { kind: 'games' | 'at_bats' | 'innings'; count: number } | null
+    baseline: string | null
+  }) => string
   notPriced: string
   slot: string
   tradePrice: string
@@ -99,6 +116,10 @@ export type PlayerCardCopy = {
   noMarketPrice: string
   // schedule
   weekRow: (week: number, bye: boolean, home: boolean, opponent: string | null) => string
+  /** A daily-sport game: "Thu 11/12 · vs BOS" — `day` arrives already in the reader's language. */
+  gameRow: (day: string, home: boolean, opponent: string) => string
+  /** His club's games in the current fantasy week (NBA / NHL). */
+  gamesThisWeek: (n: number) => string
   projTitle: (provider: string) => string
   projNote: (provider: string) => string
   schedule: string
@@ -197,6 +218,12 @@ const REASON_ES: Record<string, string> = {
   'FantasyCalc publishes no value for kickers or defenders, so this player has no market price.':
     'FantasyCalc no publica valores para pateadores ni defensas, así que este jugador no tiene precio de mercado.',
   'No market snapshot on file for this player.': 'No hay ningún registro de mercado de este jugador.',
+  // NFL-only reads (2026-11-16): another sport's card never reads the NFL chart or ownership board.
+  'Market prices are published for NFL players only.': 'Los precios de mercado solo se publican para jugadores de la NFL.',
+  'Ownership rates are counted across NFL leagues only.': 'Los porcentajes en plantilla solo se cuentan en ligas de la NFL.',
+  'This league values its players on its own value board, not on the NFL market chart.':
+    'Esta liga valora a sus jugadores en su propia tabla de valor, no en la tabla de mercado de la NFL.',
+  'This league’s value board could not be read just now.': 'No se pudo leer ahora la tabla de valor de esta liga.',
   'No other players priced in this capture.': 'No hay otros jugadores valorados en este registro.',
   'No comparable prices found.': 'No se encontraron precios comparables.',
   'No price for this player, so there is nothing to compare against.': 'Este jugador no tiene precio, así que no hay con qué compararlo.',
@@ -204,6 +231,8 @@ const REASON_ES: Record<string, string> = {
   'No club on file for this player, so his fixtures cannot be looked up.':
     'No tenemos el equipo de este jugador, así que no se pueden buscar sus partidos.',
   'No fixtures on file for these weeks.': 'No hay partidos registrados para estas semanas.',
+  "Weekly schedules and byes are football's. This card does not list his games yet.":
+    'El calendario semanal y las semanas libres son del fútbol americano. Esta ficha todavía no muestra sus partidos.',
   // loadTrades
   'No Sleeper id on file, so trades cannot be matched to this player.':
     'No tenemos el id de Sleeper, así que no se pueden emparejar intercambios con este jugador.',
@@ -312,7 +341,7 @@ export function insightText(insight: PlayerCardInsight, language: string): { hea
 
 /* ── the Waivers screens' Competitive Edge card ─────────────────────────────────────────────────── */
 
-export type WaiverEdgeCopy = {
+type WaiverEdgeCopy = {
   heading: string
   aria: string
   basis: (season: number, asOf: string, stale: boolean) => string

@@ -387,21 +387,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "
       })) // End Promise.all batch
     } // End batch loop
 
-    // 5) Check for email preferences and send alerts for new trades
-    if (newTrades.length > 0) {
-      const emailPref = await prisma.emailPreference.findFirst({
-        where: {
-          OR: [
-            { legacyUserId: legacyUser.id },
-            { sleeperUsername: sleeperUsername },
-          ],
-          tradeAlerts: true,
-          unsubscribedAt: null,
-        },
-      })
-
-    }
-
     // 6) Mark unseen trades as seen (after they've been returned to user)
     const markSeen = body.mark_seen !== false
     if (markSeen && seenTradeIds.length > 0) {

@@ -22,7 +22,7 @@ export { TENANT_MISMATCH } from './errorCodes'
 // ─── The union ───────────────────────────────────────────────────────────────
 
 /** The actor is not permitted this action. Authorization said no. */
-export type ForbiddenError = {
+type ForbiddenError = {
   readonly code: 'FORBIDDEN'
   /** The `ActionKey` that was denied. Safe to show — it is our vocabulary. */
   readonly action: string
@@ -31,7 +31,7 @@ export type ForbiddenError = {
 }
 
 /** The resource is in the wrong lifecycle phase for this action. */
-export type WrongPhaseError = {
+type WrongPhaseError = {
   readonly code: 'WRONG_PHASE'
   readonly action: string
   readonly actual: string
@@ -44,7 +44,7 @@ export type WrongPhaseError = {
 }
 
 /** A domain rule would be violated. Not a permission problem and not a race. */
-export type InvariantError = {
+type InvariantError = {
   readonly code: 'INVARIANT'
   /** Short stable identifier, e.g. `roster.slotsExceeded`. */
   readonly invariant: string
@@ -65,7 +65,7 @@ export type ReasonRequiredError = {
 }
 
 /** The tenant's plan does not include this. A billing answer, not a security one. */
-export type NotEntitledError = {
+type NotEntitledError = {
   readonly code: 'NOT_ENTITLED'
   /** e.g. `maxLeagues`, `maxSeats`, `apiRateLimit` — a `Tenant` column name. */
   readonly limit: string
@@ -75,7 +75,7 @@ export type NotEntitledError = {
 }
 
 /** Someone else changed it first. The only variant that is worth retrying. */
-export type ConflictError = {
+type ConflictError = {
   readonly code: 'CONFLICT'
   readonly resource: string
   readonly detail: string
@@ -89,7 +89,7 @@ export type ConflictError = {
  * one describes code that would have silently read tenant A's rows while
  * believing it was reading tenant B's. It maps to 500, not 4xx.
  */
-export type TenantMismatchDomainError = {
+type TenantMismatchDomainError = {
   readonly code: typeof TENANT_MISMATCH
   readonly outerTenantId: string
   readonly innerTenantId: string
@@ -104,7 +104,7 @@ export type TenantMismatchDomainError = {
  * and the fix is to wait. Collapsing them would send someone to a billing page
  * over a burst, and 402 is not a code any HTTP client retries.
  */
-export type RateLimitedError = {
+type RateLimitedError = {
   readonly code: 'RATE_LIMITED'
   readonly limit: number
   /** Seconds until the caller may retry. Becomes the Retry-After header. */
@@ -246,7 +246,7 @@ export class TenantMismatchError extends Error {
 
 // ─── HTTP mapping ────────────────────────────────────────────────────────────
 
-export type HttpErrorResponse = {
+type HttpErrorResponse = {
   readonly status: number
   readonly body: {
     readonly error: {

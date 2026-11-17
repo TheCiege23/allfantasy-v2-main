@@ -55,7 +55,7 @@ export const confirmEmailReminderDeps: ConfirmEmailReminderDeps = {
       select: { id: true, email: true, createdAt: true },
     })
     return users
-      .filter((u) => typeof u.email === 'string' && u.email.length > 0)
+      .filter((u): u is typeof u & { email: string } => typeof u.email === 'string' && u.email.length > 0)
       .map((u) => ({ userId: u.id, email: u.email, createdAt: u.createdAt }))
   },
   loadSent: async (userIds) => {

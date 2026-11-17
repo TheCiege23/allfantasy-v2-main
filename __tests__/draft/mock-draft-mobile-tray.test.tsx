@@ -18,30 +18,33 @@ function checkpoint() {
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem(key, JSON.stringify(checkpoint()))
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ leagues: [] }), { status: 200 })))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-const tray = () => screen.getByTestId('mock-draft-mobile-tray')
+const tray = () => screen.getByTestId('draft-mobile-tray')
 
-describe('mock draft room — shared mobile tray', () => {
+describe('mock draft room — the live room\'s shell and tray (room v2 phase 5)', () => {
   it('starts collapsed with the board on screen, and uses the shared tray (not an overlay)', async () => {
     render(<MockDraftSleeperRoomClient viewerId="viewer" />)
     await screen.findByTestId('mock-draft-resume')
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    expect(screen.getByTestId('mock-draft-mobile-layout').textContent).toContain('Manager 1')
+    expect(screen.getByTestId('draft-mobile-layout').textContent).toContain('Manager 1')
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('a tab opens the tray to half; Board and Close collapse it', async () => {
+  it('a tab opens the tray (Players full, Roster half); Board and Close collapse it', async () => {
     render(<MockDraftSleeperRoomClient viewerId="viewer" />)
     await screen.findByTestId('mock-draft-resume')
-    fireEvent.click(screen.getByTestId('mock-draft-mobile-tab-players'))
-    expect(tray().getAttribute('data-snap')).toBe('half')
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-players'))
+    expect(tray().getAttribute('data-snap')).toBe('full')
     expect(screen.getByRole('region', { name: 'Players' })).toBeTruthy()
-    fireEvent.click(screen.getByTestId('mock-draft-mobile-tab-board'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-board'))
     expect(tray().getAttribute('data-snap')).toBe('peek')
-    fireEvent.click(screen.getByTestId('mock-draft-mobile-tab-roster'))
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-roster'))
+    expect(tray().getAttribute('data-snap')).toBe('half')
+    expect(screen.getByRole('region', { name: 'Current Roster' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }))
     expect(tray().getAttribute('data-snap')).toBe('peek')
   })
@@ -49,11 +52,14 @@ describe('mock draft room — shared mobile tray', () => {
   it('dragging the handle back up reopens the last panel', async () => {
     render(<MockDraftSleeperRoomClient viewerId="viewer" />)
     await screen.findByTestId('mock-draft-resume')
-    fireEvent.click(screen.getByTestId('mock-draft-mobile-tab-chat'))
-    const handle = screen.getByTestId('mock-draft-mobile-tray-handle')
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-chat'))
+    const handle = screen.getByTestId('draft-mobile-tray-handle')
+    // Chat opens full (the composer stays on screen); two steps down collapse it.
+    expect(tray().getAttribute('data-snap')).toBe('full')
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
     fireEvent.keyDown(handle, { key: 'ArrowDown' })
     expect(tray().getAttribute('data-snap')).toBe('peek')
     fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(screen.getByTestId('mock-draft-mobile-content').getAttribute('data-active-tab')).toBe('chat')
+    expect(screen.getByTestId('draft-mobile-content').getAttribute('data-active-tab')).toBe('chat')
   })
 })

@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { parseZombieSettlementSnapshot } from './weeklySettlementSnapshot'
 import { itemTransaction, lockItemLeague, usesBeta2025Items } from './beta2025ItemService'

@@ -19,14 +19,14 @@ import { applyDevyPricing, pickPolicyRefusal, priceHeldDevyAssets, type HeldDevy
  * college player avoids being priced as the stranger who shares his name.
  */
 
-export type DevyPricedSide = {
+type DevyPricedSide = {
   lines: TradeConsolePlayerLine[]
   priced: PricedAsset[]
   devyPriced: number
   unmeasured: string[]
 }
 
-export type LeagueAssetPolicy = {
+type LeagueAssetPolicy = {
   /** Why the deal's picks cannot be priced in this league, or null. */
   pickRefusal(assets: readonly TradeAssetInput[]): string | null
   /** Price the lines the chart could not, when they are prospects this league holds. */
@@ -102,7 +102,7 @@ export async function priceEvaluatorDevy(
   }
 }
 
-export type LeagueAssetPolicyDeps = { loadHeld: (leagueId: string) => Promise<HeldDevyPlayer[]> }
+type LeagueAssetPolicyDeps = { loadHeld: (leagueId: string) => Promise<HeldDevyPlayer[]> }
 
 export function createLeagueAssetPolicy(
   league: { id: string; sport: string; leagueType: LeagueTypeBasis; season?: number | null; status?: string | null },

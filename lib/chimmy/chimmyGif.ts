@@ -16,7 +16,7 @@ export { extractChimmyGifMood, type ChimmyGifMood } from './chimmyGifMoods'
  * that matches nothing simply means no GIF.
  */
 
-export type ChimmyGif = {
+type ChimmyGif = {
   url: string
   previewUrl: string
   title: string

@@ -34,7 +34,7 @@ function scrubUnknownString(value: unknown): unknown {
   return typeof value === 'string' ? scrubUrl(value) : value
 }
 
-export function isSensitiveHeaderName(name: string): boolean {
+function isSensitiveHeaderName(name: string): boolean {
   return SENSITIVE_HEADER_NAME.test(name)
 }
 

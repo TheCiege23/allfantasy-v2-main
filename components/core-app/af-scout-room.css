@@ -1,6 +1,5 @@
 /*
- * Scout — "the room at a glance" grid and your strongest / weakest tiles (Scout.tsx `RoomGrid`), plus the
- * War Room eyebrow over the header.
+ * Scout — "the room at a glance" grid and your strongest / weakest tiles (Scout.tsx `RoomGrid`).
  *
  * Scoped under `.af-core`, like af-scout.css, and for the same reason: an unscoped rule would leak into
  * pages that do not carry the token set.
@@ -14,15 +13,7 @@
  * ⚠ AND EXACTLY ONE `@media` BLOCK, AT THE BOTTOM — af-scout.css's rule, for af-scout.css's reason.
  */
 
-.af-core .af-sc-eyebrow {
-  margin: 0 0 4px;
-  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
+/* The head's eyebrow is the shared PageHeader's (primitives/af-primitives.css). */
 
 .af-core .af-sc-room {
   --sc-room-hue: var(--rd-accent, var(--accent));
@@ -188,7 +179,7 @@
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--good);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
 }
 

@@ -1,5 +1,5 @@
 /** Anything carrying a provider's own league status — every adapter's normalized league does. */
-export type SeasonStatusBearing = { status?: string | null } | null | undefined
+type SeasonStatusBearing = { status?: string | null } | null | undefined
 
 /**
  * Is this season OVER — genuinely, not merely already imported?

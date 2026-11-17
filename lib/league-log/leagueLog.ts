@@ -99,6 +99,8 @@ const SECTION_LABELS: Record<string, Line> = {
   playoffs: { en: 'playoff', es: 'playoffs' },
   commissioner: { en: 'commissioner', es: 'comisionado' },
   conceptRules: { en: 'format', es: 'formato' },
+  dynasty: { en: 'dynasty', es: 'dinastía' },
+  divisions: { en: 'division', es: 'divisiones' },
   ai: { en: 'AI', es: 'IA' },
 }
 
@@ -120,6 +122,10 @@ export const LOG_ACTIONS: Record<string, Action> = {
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
       const label = section ? SECTION_LABELS[section] : undefined
+      // Shared scoring (2026-11-16) says so, without naming the other league: its members are not this league's.
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring settings to the commissioner’s shared scoring', es: 'Cambió la puntuación a la puntuación compartida del comisionado' }
+      }
       return label
         ? { en: `Changed the ${label.en} settings`, es: `Cambió los ajustes de ${label.es}` }
         : { en: 'Changed the league settings', es: 'Cambió los ajustes de la liga' }
@@ -130,6 +136,9 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring rules mid-season to the commissioner’s shared scoring', es: 'Cambió la puntuación a mitad de temporada a la puntuación compartida del comisionado' }
+      }
       return section === 'scoring'
         ? { en: 'Changed the scoring rules mid-season', es: 'Cambió la puntuación a mitad de temporada' }
         : { en: 'Changed the roster settings mid-season', es: 'Cambió la plantilla a mitad de temporada' }
@@ -180,6 +189,93 @@ export const LOG_ACTIONS: Record<string, Action> = {
         es: `Se encontraron correcciones de estadísticas${wk.es}${players.es}`,
         detailEn: flipped ? `${flipped} result${flipped === 1 ? '' : 's'} would change. Nothing was applied.` : 'No result would change. Nothing was applied.',
         detailEs: flipped ? `Cambiaría${flipped === 1 ? '' : 'n'} ${flipped} resultado${flipped === 1 ? '' : 's'}. No se aplicó nada.` : 'Ningún resultado cambiaría. No se aplicó nada.',
+      }
+    },
+  },
+  // Written by the Guilly correction pass (lib/guillotine/statCorrectionHandler.ts): a stat correction
+  // after a chop moved that week's scores. Applied to scores and history; the chop always stands.
+  guillotine_stat_correction: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const a = obj(ctx.row.afterState)
+      const week = num(m.week)
+      const changes = Array.isArray(a.changes) ? a.changes.length : 0
+      const disputed = a.chopDisputed === true
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const wk = { en: week != null ? ` in week ${week}` : '', es: week != null ? ` en la semana ${week}` : '' }
+      return {
+        en: `Stat corrections updated ${changes} team score${changes === 1 ? '' : 's'}${wk.en}`,
+        es: `Las correcciones de estadísticas cambiaron ${changes} puntuaci${changes === 1 ? 'ón' : 'ones'}${wk.es}`,
+        detailEn: disputed
+          ? `With the corrected scores ${names(a.wouldHaveChoppedRedraftRosterIds, 'en') || 'another team'} would have been chopped instead of ${names(a.choppedRedraftRosterIds, 'en') || 'the chopped team'}. The chop stands.`
+          : 'The chop would have been the same. The chop stands.',
+        detailEs: disputed
+          ? `Con las puntuaciones corregidas habría caído ${names(a.wouldHaveChoppedRedraftRosterIds, 'es') || 'otro equipo'} en lugar de ${names(a.choppedRedraftRosterIds, 'es') || 'el equipo eliminado'}. La eliminación se mantiene.`
+          : 'La eliminación habría sido la misma. La eliminación se mantiene.',
+      }
+    },
+  },
+  // Written by the week finalizer (lib/redraft/weekFinalizer.ts) when a team's game is final but its box
+  // score has been missing from the feed for a day past the grace period. The week is NOT closed on zeros;
+  // it keeps waiting, and this is how the commissioner learns why.
+  week_stat_gap: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const teams = obj(ctx.row.afterState).teams
+      const list = Array.isArray(teams) ? teams.filter((t): t is string => typeof t === 'string') : []
+      const wk = { en: week != null ? `Week ${week}` : 'A week', es: week != null ? `La semana ${week}` : 'Una semana' }
+      const named = list.length ? list.slice(0, 6).join(', ') : null
+      return {
+        en: `${wk.en} is waiting on missing stats`,
+        es: `${wk.es} espera estadísticas que faltan`,
+        detailEn: `${named ? `No box score has arrived for ${named}. ` : ''}The week stays open rather than score those players 0, and closes on its own once the stats land.`,
+        detailEs: `${named ? `No ha llegado la ficha de ${named}. ` : ''}La semana sigue abierta en vez de dar 0 a esos jugadores, y se cierra sola cuando lleguen las estadísticas.`,
+      }
+    },
+  },
+  // Written by the week finalizer when a box score is STILL missing three days past the grace period. The
+  // week is sealed so the league can move on; the players named scored 0 for now, and a box score that
+  // lands later is applied by the stat-correction pass.
+  week_stat_gap_sealed: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const teams = obj(ctx.row.afterState).teams
+      const list = Array.isArray(teams) ? teams.filter((t): t is string => typeof t === 'string') : []
+      const wk = { en: week != null ? `Week ${week}` : 'A week', es: week != null ? `La semana ${week}` : 'Una semana' }
+      const named = list.length ? list.slice(0, 6).join(', ') : null
+      return {
+        en: `${wk.en} closed with stats still missing`,
+        es: `${wk.es} se cerró con estadísticas pendientes`,
+        detailEn: `${named ? `No box score arrived for ${named} in three days. ` : ''}The week was closed so the season can continue; those players count 0 until their stats land, and late stats are applied as a correction.`,
+        detailEs: `${named ? `No llegó la ficha de ${named} en tres días. ` : ''}La semana se cerró para que la temporada siga; esos jugadores cuentan 0 hasta que lleguen sus estadísticas, y las tardías se aplican como corrección.`,
+      }
+    },
+  },
+  // Written once per league per season by lib/bestball/draftUnfinishedAtSeasonStart.ts when a best ball
+  // league's first scoring week kicks off with its draft still open. Commissioner-only: it is the
+  // commissioner's to act on (finish the draft), and no manager is notified.
+  best_ball_draft_unfinished_at_season_start: {
+    category: 'draft',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const season = num(m.season)
+      const yr = season != null ? `${season} ` : ''
+      return {
+        en: `The ${yr}season started before the draft finished`,
+        es: `La temporada ${yr}empezó antes de terminar el draft`,
+        detailEn:
+          'No team has a roster until the draft finishes, so best ball scoring has not started. Weeks played before the draft finishes may not count. Finish the draft to start scoring.',
+        detailEs:
+          'Ningún equipo tiene plantilla hasta que termine el draft, así que la puntuación de best ball no ha empezado. Las semanas jugadas antes de terminar el draft pueden no contar. Termina el draft para empezar a puntuar.',
       }
     },
   },
@@ -242,6 +338,42 @@ export const LOG_ACTIONS: Record<string, Action> = {
     category: 'scoring',
     members: true,
     line: () => ({ en: 'Recalculated the standings', es: 'Recalculó la clasificación' }),
+  },
+  // Written when a commissioner picks who goes in a tied Guilly chop (lib/guillotine/commissionerTiebreakStore.ts).
+  // The chop itself follows on the next score sync; this records that the commissioner, not a rule, decided it.
+  guillotine_tiebreak_decided: {
+    category: 'rulings',
+    members: true,
+    line: (ctx) => {
+      const a = obj(ctx.row.afterState)
+      const week = str(obj(ctx.row.metadata).key)?.split(':')[1]
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const tied = Array.isArray(a.tiedRosterIds) ? a.tiedRosterIds.length : 0
+      const wk = { en: week ? ` in week ${week}` : '', es: week ? ` en la semana ${week}` : '' }
+      return {
+        en: `Broke the chop tie${wk.en}: ${names(a.choppedRosterIds, 'en') || 'a team'} goes`,
+        es: `Desempató la eliminación${wk.es}: cae ${names(a.choppedRosterIds, 'es') || 'un equipo'}`,
+        detailEn: tied ? `${tied} teams were tied, and the league's tiebreak order left it to the commissioner.` : null,
+        detailEs: tied ? `${tied} equipos estaban empatados y el orden de desempate de la liga lo dejó al comisionado.` : null,
+      }
+    },
+  },
+  // Written when the commissioner undoes a Guilly chop (lib/guillotine/chopUndoService.ts). Members see it: a chop
+  // being taken back is exactly the kind of ruling the league log exists to make visible.
+  guillotine_chop_undone: {
+    category: 'rulings',
+    members: true,
+    line: (ctx) => {
+      const a = obj(ctx.row.afterState)
+      const week = num(obj(ctx.row.metadata).week)
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const wk = { en: week != null ? ` week ${week}` : '', es: week != null ? ` de la semana ${week}` : '' }
+      const restored = Array.isArray(a.restoredRosterIds) ? a.restoredRosterIds.length : 0
+      return {
+        en: `Undid the${wk.en} chop: ${names(a.restoredRosterIds, 'en') || 'a team'} ${restored === 1 ? 'is' : 'are'} back in`,
+        es: `Deshizo la eliminación${wk.es}: ${names(a.restoredRosterIds, 'es') || 'un equipo'} ${restored === 1 ? 'vuelve' : 'vuelven'}`,
+      }
+    },
   },
   dispute_ruled: {
     category: 'rulings',
@@ -358,10 +490,82 @@ export const LOG_ACTIONS: Record<string, Action> = {
         ? { en: 'Turned on auto-subs', es: 'Activó los cambios automáticos' }
         : { en: 'Turned off auto-subs', es: 'Desactivó los cambios automáticos' },
   },
+  // lib/schedule-runtime/matchupSwapService.ts — two teams traded places in one week.
+  schedule_matchup_swap: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const a = team(ctx, m.rosterA)
+      const b = team(ctx, m.rosterB)
+      const wk = week != null ? week : '?'
+      return {
+        en: `Swapped ${a.en} and ${b.en} in the week ${wk} schedule`,
+        es: `Intercambió a ${a.es} y ${b.es} en el calendario de la semana ${wk}`,
+      }
+    },
+  },
+  schedule_rivalry_week: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const week = num(obj(ctx.row.metadata).week)
+      const wk = week != null ? week : '?'
+      return { en: `Made week ${wk} rivalry week`, es: `Convirtió la semana ${wk} en semana de rivalidades` }
+    },
+  },
+  schedule_regenerated: {
+    category: 'league',
+    members: true,
+    line: () => ({ en: 'Rebuilt the schedule for the weeks that had not started', es: 'Rehízo el calendario de las semanas que no habían empezado' }),
+  },
   commissioner_undo_draft_pick: {
     category: 'draft',
     members: true,
     line: () => ({ en: 'Undid the last draft pick', es: 'Deshizo la última elección del draft' }),
+  },
+  // lib/draft-room/commissionerDraftActions.ts — one row per commissioner action in the draft room. The line reads
+  // only `action`, `overall`, `rosterId` and `seconds`; an action this map does not name still shows, generically.
+  draft_commissioner_action: {
+    category: 'draft',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const action = str(m.action) ?? ''
+      const overall = num(m.overall)
+      const seconds = num(m.seconds)
+      const at = overall != null ? ` #${overall}` : ''
+      const t = team(ctx, m.rosterId)
+      switch (action) {
+        case 'start': return { en: 'Started the draft', es: 'Inició el draft' }
+        case 'pause': return { en: 'Paused the draft', es: 'Pausó el draft' }
+        case 'resume': return { en: 'Resumed the draft', es: 'Reanudó el draft' }
+        case 'reset_timer': return { en: 'Restarted the pick clock', es: 'Reinició el reloj de la elección' }
+        case 'set_timer_seconds':
+          return seconds != null
+            ? { en: `Set the pick clock to ${seconds} seconds`, es: `Puso el reloj de elección en ${seconds} segundos` }
+            : { en: 'Changed the pick clock', es: 'Cambió el reloj de elección' }
+        case 'force_autopick': return { en: 'Made an automatic pick for the team on the clock', es: 'Hizo una elección automática para el equipo en turno' }
+        case 'skip_pick': return { en: `Skipped the pick on the clock`, es: 'Saltó la elección en turno' }
+        case 'undo_pick': return { en: 'Undid the last draft pick', es: 'Deshizo la última elección del draft' }
+        case 'complete': return { en: 'Ended the draft', es: 'Terminó el draft' }
+        case 'resolve_auction': return { en: 'Closed the current auction', es: 'Cerró la subasta en curso' }
+        case 'reset_draft': return { en: 'Reset the draft', es: 'Reinició el draft' }
+        case 'swap_manager': return { en: 'Swapped two teams’ draft slots', es: 'Intercambió los turnos de dos equipos' }
+        case 'create_next_draft': return { en: 'Set up next season’s draft', es: 'Preparó el draft de la próxima temporada' }
+        case 'pick_edit': return { en: `Changed pick${at}`, es: `Cambió la elección${at}` }
+        case 'commissioner_pick': return { en: `Made pick${at} for ${t.en}`, es: `Hizo la elección${at} por ${t.es}` }
+        case 'order': return { en: 'Changed the draft order', es: 'Cambió el orden del draft' }
+        case 'randomize_order': return { en: 'Randomized the draft order', es: 'Sorteó el orden del draft' }
+        default: return { en: 'Made a change in the draft room', es: 'Hizo un cambio en la sala del draft' }
+      }
+    },
+  },
+  draft_reset: {
+    category: 'draft',
+    members: true,
+    line: () => ({ en: 'Reset the draft', es: 'Reinició el draft' }),
   },
   league_lock_toggle: {
     category: 'league',
@@ -462,7 +666,8 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
   const ids = new Set<string>()
   for (const row of rows) {
     const m = obj(row.metadata)
-    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo' || row.actionType === 'draft_commissioner_action') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if (row.actionType === 'schedule_matchup_swap') for (const k of ['rosterA', 'rosterB']) if (str(m[k])) ids.add(str(m[k])!)
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||
@@ -472,6 +677,23 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
+    }
+    if (row.actionType === 'guillotine_chop_undone') {
+      for (const id of (Array.isArray(obj(row.afterState).restoredRosterIds) ? (obj(row.afterState).restoredRosterIds as unknown[]) : [])) {
+        if (str(id)) ids.add(str(id)!)
+      }
+    }
+    if (row.actionType === 'guillotine_tiebreak_decided') {
+      const a = obj(row.afterState)
+      for (const id of [a.choppedRosterIds, a.tiedRosterIds].flatMap((v) => (Array.isArray(v) ? v : []))) {
+        if (str(id)) ids.add(str(id)!)
+      }
+    }
+    if (row.actionType === 'guillotine_stat_correction') {
+      const a = obj(row.afterState)
+      for (const id of [a.choppedRedraftRosterIds, a.wouldHaveChoppedRedraftRosterIds].flatMap((v) => (Array.isArray(v) ? v : []))) {
+        if (str(id)) ids.add(str(id)!)
+      }
     }
   }
   return [...ids]

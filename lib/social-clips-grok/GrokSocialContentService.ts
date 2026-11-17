@@ -29,10 +29,6 @@ function getClient(): { client: OpenAI; model: string } | null {
   };
 }
 
-export function isGrokConfigured(): boolean {
-  return !!getXaiConfigFromEnv();
-}
-
 export async function generateSocialContent(
   input: SocialPromptBuildInput
 ): Promise<GrokSocialOutput | null> {

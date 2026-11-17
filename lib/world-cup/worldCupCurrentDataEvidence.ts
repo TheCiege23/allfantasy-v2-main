@@ -15,21 +15,12 @@ export type WorldCupCurrentDataKey =
   | "lineups"
   | "odds"
 
-export type WorldCupCurrentDataEvidenceRow = Record<string, unknown>
+type WorldCupCurrentDataEvidenceRow = Record<string, unknown>
 
 export type WorldCupCurrentDataEvidenceSnapshot = Record<
   WorldCupCurrentDataKey,
   { rows: WorldCupCurrentDataEvidenceRow[] }
 >
-
-const ALL_KEYS: WorldCupCurrentDataKey[] = [
-  "injuries",
-  "player_stats",
-  "team_stats",
-  "squad_news",
-  "lineups",
-  "odds",
-]
 
 function emptySnapshot(): WorldCupCurrentDataEvidenceSnapshot {
   return {

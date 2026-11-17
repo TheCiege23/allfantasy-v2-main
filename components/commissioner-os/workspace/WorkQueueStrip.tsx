@@ -5,7 +5,7 @@ import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface WorkQueueStripProps {
+interface WorkQueueStripProps {
   queues: WorkspaceQueueDefinition[]
   tasks: CommissionerTask[]
   activeQueueId: string

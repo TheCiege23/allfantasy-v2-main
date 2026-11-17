@@ -177,13 +177,15 @@ jobs:
         key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || startsWith(matrix.lane, 'mobile-') && 'mobile' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Browsers
       if: startsWith(matrix.lane, 'core-shard-')
-      run: npx playwright install --with-deps
+      # scripts/ci/install-playwright.sh: browsers are required, apt packages are retried and
+      # tolerated, then each browser must launch. See the script header (2026-11-11 apt outage).
+      run: bash scripts/ci/install-playwright.sh
     - name: Install Playwright Chromium
       if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'retention-engagement' || matrix.lane == 'zombie-rehearsal'
-      run: npx playwright install --with-deps chromium
+      run: bash scripts/ci/install-playwright.sh chromium
     - name: Install Playwright Chromium + WebKit
       if: startsWith(matrix.lane, 'mobile-')
-      run: npx playwright install --with-deps chromium webkit
+      run: bash scripts/ci/install-playwright.sh chromium webkit
     # Schema bootstrap — applied to both `referral-growth-db` (always
     # needed) and `core` (added in fix/ci-playwright-core-schema-bootstrap).
     # Without these steps, the `core` lane hits 60-min `timeout-minutes`
@@ -493,7 +495,7 @@ jobs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Chromium
-      run: npx playwright install --with-deps chromium
+      run: bash scripts/ci/install-playwright.sh chromium
     - name: Prepare DB schema for draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
@@ -538,7 +540,7 @@ jobs:
       run: |
         # Refuse if a tagged spec exists that neither run below lists -- it would silently not run.
         tagged=$(grep -rlE "@draft-room|@mock-draft-room" e2e | sort | tr '\n' ' ')
-        listed="e2e/draft-board-coverage.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
+        listed="e2e/draft-board-coverage.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/league-mock-room-chimmy.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-chimmy-card.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
         if [ "$tagged" != "$listed" ]; then
           echo "::error::@draft-room specs changed. Tagged: $tagged -- add new ones to a run in this step."
           exit 1
@@ -558,12 +560,14 @@ jobs:
         PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/click-audit \
           npx playwright test e2e/draft-room-click-audit.spec.ts \
             --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
-        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production,$OTHER_SPECS_API \
+        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production,/e2e/league-mock-room,$OTHER_SPECS_API \
         PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/other-specs \
           npx playwright test \
             e2e/draft-room-commissioner-regression.spec.ts \
             e2e/draft-roster-configuration-gate.spec.ts \
+            e2e/league-mock-room-chimmy.spec.ts \
             e2e/mobile-draft-production.spec.ts \
+            e2e/mock-draft-chimmy-card.spec.ts \
             e2e/mock-draft-room-click-audit.spec.ts \
             --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
         E2E_WARM_ROUTES=/,/e2e/draft-board-coverage \

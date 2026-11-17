@@ -23,6 +23,14 @@ const ES: Record<string, string> = {
   'Storyline Studio': 'Estudio de historias',
   // ── Header, gate, footer ──────────────────────────────────────────────
   '← All leagues you run': '← Todas las ligas que diriges',
+  // ── The headline and the folds (2026-11-14) ──────────────────────────
+  'This league hasn’t synced yet': 'Esta liga aún no se ha sincronizado',
+  'Nothing needs you right now': 'Nada necesita de ti ahora mismo',
+  '1 thing needs you': '1 cosa necesita de ti',
+  '1 gone quiet': '1 sin actividad',
+  'Turn this week into league action': 'Convierte esta semana en acción para la liga',
+  'Find players for your league': 'Encuentra jugadores para tu liga',
+  'Lineup and roster autopilot': 'Piloto automático de alineaciones y plantillas',
   'Core · Commissioner': 'Core · Comisionado',
   Commissioner: 'Comisionado',
   'Co-commissioner': 'Cocomisionado',
@@ -358,6 +366,8 @@ const PATTERNS: Pattern[] = [
   [/^week (\d+)$/, (w) => `semana ${w}`],
   // access
   [/^(\d+) people$/, (n) => `${n} personas`],
+  [/^(\d+) things need you$/, (n) => `${n} cosas necesitan de ti`],
+  [/^(\d+) gone quiet$/, (n) => `${n} sin actividad`],
   // A platform name only — a broader `On …` would turn a server sentence half Spanish.
   [/^Here and on ([A-Za-z0-9]+)$/, (p) => `Aquí y en ${p}`],
   [/^On ([A-Za-z0-9]+)$/, (p) => `En ${p}`],
@@ -454,6 +464,8 @@ const HEALTH_PROBLEM_ES: Array<[RegExp, (n: string) => string]> = [
   [/^(\d+) inactive managers — engagement at risk$/, (n) => `${n} mánagers inactivos: la participación está en riesgo.`],
   [/^(\d+) abandoned teams — immediate action needed$/, (n) => `${n} equipos abandonados: hace falta actuar de inmediato.`],
   [/^(\d+) unresolved disputes eroding trust$/, (n) => `${n} disputas sin resolver están minando la confianza.`],
+  [/^(\d+) managers said they might leave the league$/, (n) => `${n} mánagers dijeron que podrían dejar la liga.`],
+  [/^(\d+) collusion complaints — managers are losing trust in trades$/, (n) => `${n} denuncias de colusión: los mánagers pierden la confianza en los intercambios.`],
   [/^Low engagement — league activity is below healthy levels$/, () => 'Participación baja: la actividad de la liga está por debajo de lo saludable.'],
   [/^Poor lineup submission rate — managers are checked out$/, () => 'Pocas alineaciones enviadas: los mánagers se han desconectado.'],
 ]

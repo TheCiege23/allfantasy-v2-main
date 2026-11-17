@@ -149,6 +149,7 @@ export async function getDraftBoardData(
     platform: league.platform,
     playerIds: picks.map((p) => p.playerId),
     leagueSettings: league.settings,
+    sport: league.sport,
   })
 
   const totalPicks = session.rounds * session.teamCount

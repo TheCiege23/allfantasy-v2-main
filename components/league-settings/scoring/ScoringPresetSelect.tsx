@@ -10,7 +10,7 @@
 import { Lock } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
-export interface ScoringPresetSelectProps<K extends string> {
+interface ScoringPresetSelectProps<K extends string> {
   /** This sport's preset keys, in the panel's own order. */
   presetKeys: readonly K[]
   value: K

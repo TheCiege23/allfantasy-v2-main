@@ -5,7 +5,7 @@
 import type { LegacyScoreRow } from './LegacyRankingService'
 import { getLegacySportLabel } from './SportLegacyResolver'
 
-export interface LegacyExplanationContext {
+interface LegacyExplanationContext {
   entityType: string
   entityId: string
   sport: string

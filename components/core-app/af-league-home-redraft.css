@@ -96,3 +96,22 @@
   .af-core .af-lh-rd-odds{padding:6px 8px}
   .af-core .af-lh-rd-odds strong{font-size:17px}
 }
+
+/*
+ * ── Wide screens: the recap sits under the matchup, beside the race (2026-11-05) ──────────────
+ * The race is twelve rows tall and the matchup card about three, so with the recap forced onto its
+ * own full-width row a large empty well opened under the matchup. Now the race spans both rows of
+ * the right column and the recap fills the left one. Its three cells shrink to fit one line.
+ * A sibling top-level block, after the 860px one, so neither changes the other's query.
+ */
+@media (min-width:861px){
+  /* Row 1 is the matchup's own height; the race's extra height all goes to row 2. Without this the
+     spanning race shares its height across both rows and opens a gap under the matchup. */
+  .af-core .af-lh-rd-grid[data-has-race]{grid-template-rows:auto 1fr}
+  .af-core .af-lh-rd-grid[data-has-race]>.af-lh-rd-bug{grid-column:1;grid-row:1}
+  .af-core .af-lh-rd-grid[data-has-race]>.af-lh-rd-race{grid-column:2;grid-row:1/span 2}
+  .af-core .af-lh-rd-grid[data-has-race]>.af-lh-rd-recap{grid-column:1;grid-row:2;align-self:start}
+  .af-core .af-lh-rd-grid[data-has-race]>.af-lh-rd-recap .af-lh-rd-recap-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  /* Three cells in half the width: the matchup line wraps rather than ending in "…". */
+  .af-core .af-lh-rd-grid[data-has-race]>.af-lh-rd-recap .af-lh-rd-recap-grid dd span{white-space:normal;overflow-wrap:anywhere}
+}

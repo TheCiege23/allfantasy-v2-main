@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import {
   assignDraftSalary,
   getTeamCapSummary,
@@ -12,6 +14,19 @@ import {
 } from '@/lib/idp/capEngine'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * 🛑 A CAP WRITE IS FOR YOUR OWN TEAM, OR A COMMISSIONER WITH ROSTERS. Both writes took `rosterId` from the body and
+ * checked only that the caller was in the league, so any manager could cut, extend, tag or assign salary on any team
+ * (2026-11-16). The cap screens send the viewer's own redraft roster; anyone else needs the rosters permission.
+ */
+async function capWriteRefusal(leagueId: string, rosterId: string, userId: string): Promise<NextResponse | null> {
+  const roster = await prisma.redraftRoster.findFirst({ where: { id: rosterId, leagueId }, select: { ownerId: true } })
+  if (!roster) return NextResponse.json({ error: 'Team not found in this league' }, { status: 404 })
+  if (roster.ownerId === userId) return null
+  if (await isAcceptedCoOwnerForRedraftRoster(leagueId, rosterId, userId).catch(() => false)) return null
+  return commissionerAccessResponse(leagueId, userId, 'rosters')
+}
 
 function parseSeason(p: string | null, fallback: number): number {
   if (!p) return fallback
@@ -139,6 +154,8 @@ export async function PATCH(req: NextRequest) {
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  const refused = await capWriteRefusal(leagueId, rosterId, userId)
+  if (refused) return refused
 
   try {
     if (body.action === 'cut') {
@@ -226,6 +243,10 @@ export async function POST(req: NextRequest) {
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  // Setting a salary is the commissioner's (it defaults to acquisitionMethod 'commissioner'); a manager setting their
+  // own players' salaries would set them to $1.
+  const refused = await commissionerAccessResponse(leagueId, userId, 'rosters')
+  if (refused) return refused
 
   try {
     const record = await assignDraftSalary(

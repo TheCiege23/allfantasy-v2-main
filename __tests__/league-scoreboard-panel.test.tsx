@@ -202,7 +202,8 @@ describe('LeagueScoreboardPanel', () => {
     expect(t).toContain('Sixth')
   })
 
-  it('says "level" rather than "by 0.0" on a tie', () => {
+  // 2026-11-13: "level" read as a result on games nobody had started; a tie now says Tied, 0–0 says Not started.
+  it('says "Tied" rather than "by 0.0" on a tie, and "Not started" on a 0–0 game', () => {
     const t = text(
       board({
         games: [
@@ -216,7 +217,14 @@ describe('LeagueScoreboardPanel', () => {
         ],
       }),
     )
-    expect(t).toContain('level')
+    expect(t).toContain('Tied')
+    expect(t).not.toContain('level')
+    const zero = text(
+      board({
+        games: [{ matchupId: 1, unplayed: false, margin: 0, winProbability: null, teams: [team({ points: 0 }), team({ rosterId: '2', points: 0 })] }],
+      }),
+    )
+    expect(zero).toContain('Not started')
   })
 
   it('falls back to the roster id rather than rendering a blank name', () => {
@@ -244,14 +252,16 @@ describe('LeagueScoreboardPanel', () => {
     // Four numbers per row and no header saying which was which. A column of
     // figures with no heading is a puzzle, not information.
     const t = text(board())
-    expect(t).toContain('PTS')
+    // In plain words since 2026-11-13 (PTS / FROM / MARGIN were codes).
+    expect(t).toContain('Points')
     expect(t).toContain('WIN')
-    expect(t).toContain('MARGIN')
+    expect(t).toContain('Lead')
+    expect(t).not.toContain('MARGIN')
   })
 
-  it('says PROJ rather than PTS while the week is unplayed', () => {
+  it('says Projected rather than Points while the week is unplayed', () => {
     const t = text(board({ allUnplayed: true }))
-    expect(t).toContain('PROJ')
+    expect(t).toContain('Projected')
   })
 
   it('shows a win chance on each side, and they complement to 100', () => {

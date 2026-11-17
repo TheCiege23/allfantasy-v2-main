@@ -9,9 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
-import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type WaiverType = 'FAAB' | 'ROLLING' | 'PRIORITY'
 type LeagueFormat = 'redraft' | 'dynasty' | 'keeper'
@@ -136,10 +137,6 @@ const PHASES: Array<{ key: PhaseKey; label: string; icon: string }> = [
   { key: 'ai', label: 'AI', icon: '🧠' },
   { key: 'check', label: 'Check', icon: '✅' },
 ]
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -1391,7 +1388,8 @@ export default function WaiverAIPage() {
       }
 
       if (!response.ok || !payload.data) {
-        throw new Error(payload.error ?? 'Failed to analyze waivers.')
+        // A plan refusal says which plan and why ("AF Pro is required…"), never the bare "Premium feature".
+        throw new Error(readPlanRefusal(response.status, payload)?.message ?? payload.error ?? 'Failed to analyze waivers.')
       }
 
       setAnalysis({

@@ -232,7 +232,7 @@ export function createIsolationAssertion(getConnectionSource: () => string | nul
 }
 
 /** The error message, kept in one place so the throw and the tests cannot drift apart. */
-export function isolationErrorMessage(reason: string, connectionSource: string | null): string {
+function isolationErrorMessage(reason: string, connectionSource: string | null): string {
   return (
     `Commissioner OS refuses to run a tenant-scoped query: ${reason}.\n` +
     `Connection came from ${connectionSource ?? 'an unknown source'}. ` +

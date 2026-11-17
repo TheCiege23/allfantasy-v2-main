@@ -16,7 +16,7 @@ interface SaveSettingsInput {
   }
 }
 
-export interface SaveSettingsResult {
+interface SaveSettingsResult {
   ok: boolean
   error?: string
   resolvedPreferences?: UniversalPreferenceResolution

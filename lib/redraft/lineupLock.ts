@@ -23,6 +23,7 @@
  * Emergency commissioner unlocks (postponements/data errors) always win.
  */
 import type { PrismaClient } from '@prisma/client'
+import { getAllCanonicalTeams } from '@/lib/team-abbrev'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 // Client-safe: takes the client as an argument and imports Prisma for types only.
@@ -143,9 +144,11 @@ const NFL_TEAM_ALIASES: Record<string, string> = {
   NEP: 'NE',
 }
 
+const NFL_FULL_TEAM_NAMES = new Map(getAllCanonicalTeams().map(team => [team.fullName.toUpperCase(), team.abbrev]))
+
 export function normalizeNflTeam(team: string | null | undefined): string {
   const u = String(team ?? '').trim().toUpperCase()
-  return NFL_TEAM_ALIASES[u] ?? u
+  return NFL_TEAM_ALIASES[u] ?? NFL_FULL_TEAM_NAMES.get(u) ?? u
 }
 
 /**
@@ -445,10 +448,14 @@ export async function buildWeekKickoffMap(
     return { byTeam, firstKickoff, warnings }
   }
 
-  const games = (await prisma.sportsGame.findMany({
+  const rows = (await prisma.sportsGame.findMany({
     where: { sport: 'NFL', season: args.season, week: args.week, startTime: { not: null } },
-    select: { homeTeam: true, awayTeam: true, startTime: true },
-  })) as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null }>
+    select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true },
+  })) as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null; seasonType?: string | null }>
+  const games = nflRegularSlate(rows)
+  if (games.length < rows.length) {
+    warnings.push(`Ignored ${rows.length - games.length} NFL preseason/postseason row(s) filed under season ${args.season} week ${args.week}.`)
+  }
 
   for (const g of games) {
     if (!g.startTime) continue
@@ -466,6 +473,41 @@ export async function buildWeekKickoffMap(
     warnings.push(`No NFL games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
   }
   return { byTeam, firstKickoff, warnings }
+}
+
+/**
+ * How far an untagged game may sit from the week's tagged regular-season games and still count. A full
+ * week: a source may tag only PART of a slate (one Thursday game), and every Thursday-to-Monday game
+ * must still survive. The leaks it removes sit four weeks away (preseason) or months away (postseason).
+ */
+const NFL_SLATE_MARGIN_MS = 7 * 86_400_000
+
+/**
+ * One NFL week's REGULAR-SEASON games out of everything filed under that week number. Pure.
+ *
+ * 🛑 PRESEASON GAMES LOCKED THE FIRST WEEKS OF THE SEASON IN AUGUST. Several schedule sources file
+ * preseason (and postseason) games under the same `season` and `week` numbers as the regular season,
+ * and some leave `seasonType` null. Measured on production 2026-11-09: 2026 weeks 1–4 each carried 16–32
+ * August preseason rows (`api_sports`/`rolling_insights` tagged `pre`; `espn` week 2 and `espn_live`
+ * weeks 3–4 untagged), and 2025 weeks 1–3 carried 16 untagged August rows each. A team's lock is its
+ * EARLIEST game that week, so every team in those weeks "kicked off" in August — players locked the
+ * whole week, and `firstKickoff` (the trade deadline) read as long past.
+ *
+ * So: rows tagged `pre`/`post` are dropped, and when the week has tagged `regular` rows, an untagged row
+ * counts only within a week of them — the same week's games from a source that does not tag (in-season
+ * the untagged sources carry the same kickoffs, so nothing real is lost). Two days was tried first and
+ * dropped Sunday and Monday games whenever only Thursday's game was tagged (e2e zombie rehearsal). A week with NO tagged regular row
+ * keeps every untagged row: there is nothing to judge them against, and dropping the whole slate would
+ * leave every player unlocked.
+ */
+export function nflRegularSlate<T extends { startTime: Date | null; seasonType?: string | null }>(rows: readonly T[]): T[] {
+  const typed = (t: string | null | undefined) => String(t ?? '').trim().toLowerCase()
+  const kept = rows.filter((r) => r.startTime && typed(r.seasonType) !== 'pre' && typed(r.seasonType) !== 'post')
+  const regular = kept.filter((r) => typed(r.seasonType) === 'regular').map((r) => r.startTime!.getTime())
+  if (regular.length === 0) return kept
+  const from = Math.min(...regular) - NFL_SLATE_MARGIN_MS
+  const to = Math.max(...regular) + NFL_SLATE_MARGIN_MS
+  return kept.filter((r) => typed(r.seasonType) === 'regular' || (r.startTime!.getTime() >= from && r.startTime!.getTime() <= to))
 }
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }

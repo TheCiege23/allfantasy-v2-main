@@ -6,7 +6,7 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
-import { navLabel } from '@/lib/core-app/navLabels'
+import { CORE_NAV_LABELS, navLabel } from '@/lib/core-app/navLabels'
 import { themeNavItems, themeSectionHeading, type LeagueTheme } from '@/lib/core-app/survivorTheme'
 import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
@@ -18,6 +18,7 @@ import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
+import { PaymentIssueBanner } from '@/components/billing/PaymentIssueBanner'
 import { SmsOptInCard } from '@/components/notifications/SmsOptInCard'
 import { TeamFollowPrompt } from '@/components/follows/TeamFollowPrompt'
 import CommsDock from '@/components/core-app/comms/CommsDock'
@@ -36,6 +37,7 @@ import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProv
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
+import { canRefreshInBackground, primeDeployBaseline } from '@/lib/core-app/deployGuard'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
 import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
@@ -45,7 +47,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
-import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { ScopeResetLink, ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
 import {
   FAVORITES_SECTION,
@@ -94,6 +96,13 @@ import '@/components/core-app/af-core-redraft.css'
 import '@/components/core-app/af-core-dynasty.css'
 import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import {
+  LEAGUE_CHIP_SECTION,
+  LEAGUE_RAIL_OMITTED_SECTIONS,
+  NAV_SECTION_ORDER,
+  NAV_SECTION_ORDER_NO_LEAGUE,
+  leagueDestinationHidden,
+} from '@/lib/core-app/leagueDestinations'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
@@ -110,7 +119,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  *      that must pass it cannot forget to show it.
  */
 
-export type PlatformId = 'sleeper' | 'espn' | 'yahoo'
+type PlatformId = 'sleeper' | 'espn' | 'yahoo'
 
 /** Sport sections folded in the league list on this device (AfCoreShell `foldedSports`). */
 const RAIL_FOLDED_KEY = 'af-rail-folded-sports'
@@ -252,15 +261,20 @@ export type CoreNavKey =
   // route as everything else here — the repo is at Vercel's 2048-route ceiling.
   | 'week'
   | 'season-outlook'
+  // League views that lived only in the in-league tab row until 2026-11-05 (lib/core-app/leagueDestinations.ts).
+  | 'schedule'
+  | 'moves'
   | 'share'
   | 'notifications'
+  // My Leagues (21a) at /core/leagues. It was an exit to /leagues (the global site shell) until
+  // 2026-11-12; /leagues now redirects here so the screen keeps the rail, nav and topbar.
+  | 'my-leagues'
   // Full pages OUTSIDE /core, listed in the shell so the cutover to /core does
   // not orphan them. No /core segment maps to these keys, so they are never the
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'brackets'
   | 'find-league'
-  | 'my-leagues'
   | 'settings'
   | 'plans'
   /*
@@ -292,9 +306,11 @@ export type CoreNavKey =
    * which is the "not built yet" panel problem this rail already learned once.
    */
   | 'defense-hub'
+  /* One league's own settings — the League Settings hub, read-only for an imported league (2026-11-15). */
+  | 'league-settings'
   /*
    * The admin command center at /admin. A full page OUTSIDE /core, like
-   * `settings` and `my-leagues` above, so it is an exit and never the active item.
+   * `settings` above, so it is an exit and never the active item.
    *
    * ⚠ CONDITIONAL, AND THE GATE IS THE PREDICATE /admin ITSELF ENFORCES.
    * `navItems` omits it unless `isAdmin`, which the page resolves with
@@ -335,7 +351,7 @@ function urgencyBadge(count: number | null | undefined): NavItem['badge'] {
  */
 type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
-export type AfCoreShellProps = {
+type AfCoreShellProps = {
   nativeLeague?: boolean
   /**
    * The redraft identity's sport theme for a native redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts).
@@ -561,32 +577,6 @@ export type AfCoreShellProps = {
  * the rail stops being scannable anyway.
  */
 
-/**
- * The rail groups, and why it has them: twenty flat entries ran the column past
- * a thousand pixels, so Settings and Contact support sat below the fold, and
- * league-scoped tools were interleaved with cross-league screens under no
- * heading that said which was which.
- *
- * Membership is declared here rather than on each item so adding a nav entry
- * stays a one-line change — and an entry missing from every group still renders
- * (see the leftovers rule) rather than silently disappearing from the product.
- */
-const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
-  { label: null, keys: ['home'] },
-  {
-    label: 'This league',
-    keys: ['my-team', 'matchup', 'war-room', 'trades', 'waivers', 'devy-league', 'draft-hq'],
-  },
-  {
-    label: 'Across leagues',
-    keys: ['week', 'live-scores', 'players', 'devy', 'season-outlook', 'portfolio', 'my-leagues'],
-  },
-  {
-    label: 'You',
-    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings', 'plans'],
-  },
-]
-
 
 /**
  * A count badge's text, capped at 99+ (2026-11-02 nav redesign). "1735" beside Notifications was
@@ -625,26 +615,24 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
    * tabs away because one count failed. Permissive on absence, strict on a
    * measured zero.
    */
-  const unscored = props.leagueHasScoredWeek === false
-  /* Keeps the four scored-week entries out of the list without four copies of
-     the same spread, so they cannot drift apart. */
+  /*
+   * The scored-week, trades and draft gates are lib/core-app/leagueDestinations.ts's, the same
+   * ones the in-league tab row applies, so the two surfaces cannot disagree about what a league offers.
+   */
+  const caps = {
+    hasScoredWeek: props.leagueHasScoredWeek,
+    trades: props.importCapabilities?.trades,
+    draft: props.importCapabilities?.draft,
+  }
   /* Typed as NavItem rather than generic: a generic erases the literal `key`
      narrowing, so every entry degrades to `string` and stops matching CoreNavKey. */
-  const ifScored = (item: NavItem): NavItem[] => (unscored ? [] : [item])
+  const gated = (item: NavItem): NavItem[] => (leagueDestinationHidden(item.key, caps) ? [] : [item])
   /*
-   * Hides a nav entry the source platform cannot fill.
-   *
-   * Product decision: an unusable tab is worse than an absent one. A Fleaflicker
-   * league has no trade history at all, so offering a Trades tab promises a screen
-   * that can only ever be empty — and an empty screen reads as our bug rather than
-   * as the platform's limit. The league dashboard banner says which platform and
-   * what it does not publish, so the absence is explained rather than mysterious.
-   *
-   * ⚠ `!== false`, NOT truthiness. `undefined` is "we have no coverage block" and
-   * must show the item; only an explicit `false` hides it.
+   * Product decision behind the trades and draft gates: an unusable tab is worse than an absent
+   * one. A Fleaflicker league has no trade history at all, so a Trades tab promises a screen that
+   * can only ever be empty — and an empty screen reads as our bug rather than the platform's limit.
+   * The league page lists which views are absent and why (LeagueTabs `describeHiddenTabs`).
    */
-  const ifImported = (flag: boolean | undefined, item: NavItem): NavItem[] =>
-    flag === false ? [] : [item]
 
   return [
     { key: 'home', label: navLabel('home'), glyph: '▣', href: inLeague('/core') },
@@ -652,18 +640,26 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
     // Top level rather than only in the Play sheet: finding a league to join is how a
     // new player starts, and the sheet is two taps deep.
     { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
-    // My team is league-scoped in the handoff, so the link carries the selected
-    // league rather than dropping the user on a screen that has to ask which one.
-    {
-      key: 'my-team',
-      label: navLabel('my-team'),
-      glyph: '◈',
-      href: props.selectedLeagueId
-        ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/my-team',
-      /* Leagues with an empty starting slot or a starter ruled out — see urgencyBadges. */
-      badge: urgencyBadge(props.urgencyBadges?.myTeam),
-    },
+    /*
+     * ⚠ MY TEAM AND WAIVERS ARE LEAGUE-ONLY IN THE NAV SINCE 2026-11-12 (owner's call). With no
+     * league selected they were cross-league boards ("10 lineups need a look", "processing in the
+     * next 24 hours") that repeated what Your week already shows: its blueprint reads the same
+     * `getMyTeamPulse` and its calendar carries every league's next waiver run. The no-league
+     * routes now redirect to /core/week (app/core/(shell)/[[...screen]]/page.tsx). Inside a league
+     * both stay — they are the only in-app roster and free-agent screens a league has.
+     */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'my-team' as const,
+            label: navLabel('my-team'),
+            glyph: '◈',
+            href: `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`,
+            /* Leagues with an empty starting slot or a starter ruled out — see urgencyBadges. */
+            badge: urgencyBadge(props.urgencyBadges?.myTeam),
+          },
+        ]
+      : []),
     /* Only for leagues that actually roster defenders — see the CoreNavKey note. */
     ...(props.hasIdpDefense && props.selectedLeagueId
       ? [
@@ -675,16 +671,19 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
           },
         ]
       : []),
-    /* Reads a scored week — hidden until this league has one. */
-    ...ifScored({
-      key: 'matchup',
-      label: navLabel('matchup'),
-      glyph: '⚔',
-      href: props.selectedLeagueId
-        ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/matchup',
-    }),
-    ...ifImported(props.importCapabilities?.trades, {
+    /*
+     * Reads a scored week — hidden until this league has one. League-only since 2026-11-12: with no
+     * league its "where you stand" board repeated Your week's leading/trailing columns.
+     */
+    ...(props.selectedLeagueId
+      ? gated({
+          key: 'matchup',
+          label: navLabel('matchup'),
+          glyph: '⚔',
+          href: `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`,
+        })
+      : []),
+    ...gated({
       key: 'trades',
       label: navLabel('trades'),
       glyph: '⇄',
@@ -694,14 +693,17 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
       /* Leagues with an offer waiting on you, from a trade scan in the last 10 minutes. */
       badge: urgencyBadge(props.urgencyBadges?.trades),
     }),
-    {
-      key: 'waivers',
-      label: navLabel('waivers'),
-      glyph: '◷',
-      href: props.selectedLeagueId
-        ? `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/waivers',
-    },
+    /* League-only, like My team above — see the note there. */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'waivers' as const,
+            label: navLabel('waivers'),
+            glyph: '◷',
+            href: `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
     {
       key: 'players',
       label: navLabel('players'),
@@ -723,13 +725,15 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * parameter; the cross-league board is still what renders without it.
      */
     /* Reads a scored week — hidden until this league has one. */
-    ...ifScored({
+    ...gated({
       key: 'week',
       label: navLabel('week'),
       glyph: '◱',
       href: props.selectedLeagueId
         ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/week',
+      /* With no league, My team is off the nav and Your week carries its lineup check — and its badge. */
+      badge: props.selectedLeagueId ? undefined : urgencyBadge(props.urgencyBadges?.myTeam),
     }),
     /*
      * 38a — the live slate, inside the shell. Cross-league by definition: the
@@ -748,15 +752,22 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
         ? { text: String(props.liveGameCount), tone: 'live' }
         : undefined,
     },
-    {
-      key: 'war-room',
-      label: navLabel('war-room'),
-      glyph: '◆',
-      href: props.selectedLeagueId
-        ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/war-room',
-    },
-    {
+    /*
+     * League-only since 2026-11-12: with no league it was a league picker under three panels that
+     * repeated Your week, Season Outlook and Home's injury check.
+     */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'war-room' as const,
+            label: navLabel('war-room'),
+            glyph: '◆',
+            href: `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
+    /* Gated on the import's draft coverage, as the tab row always was (leagueDestinations.ts). */
+    ...gated({
       key: 'draft-hq',
       label: navLabel('draft-hq'),
       glyph: '▤',
@@ -780,7 +791,7 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
        * counts leagues with a draft live or starting within a day (see urgencyBadges).
        */
       badge: props.draftLive ? { text: 'LIVE', tone: 'live' } : urgencyBadge(props.urgencyBadges?.draftHq),
-    },
+    }),
 
     ...(props.devyInScope
       ? [
@@ -804,7 +815,11 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
           },
         ]
       : []),
-    { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: inLeague('/core/portfolio') },
+    /*
+     * ⚠ NO 'portfolio' ENTRY SINCE 2026-11-12 — it and My Leagues listed the same leagues. The one
+     * "My Leagues" entry below leads to both: each screen opens with a Leagues | Portfolio switch
+     * (LeaguesPortfolioSwitch), and `navActive` lights My Leagues on either.
+     */
     /*
      * ⚠ LEAGUE SYNC IS GONE FROM THE RAIL, AND FROM THE APP. /leagues/sync was
      * the account-wide connect/re-sync dashboard; it is retired because it was a
@@ -819,7 +834,7 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * home again, /core/sync already owns "is THIS league current" — reached from
      * in-page links, not the rail (see the note where its rail entry used to be).
      */
-    { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/leagues' },
+    { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/core/leagues' },
     /*
      * Restored: 'career' was pulled from the rail while it rendered "this screen
      * has not been built yet" — an apology occupying prime real estate. The
@@ -849,17 +864,46 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * is not a thing, because two leagues' scoring settings make their point
      * values incomparable.
      */
-    /* Ranks by points scored, so it needs a scored week. */
-    ...ifScored({
-      key: 'standings',
-      label: navLabel('standings'),
-      glyph: '≡',
-      href: props.selectedLeagueId
-        ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/standings',
-    }),
+    /*
+     * Ranks by points scored, so it needs a scored week. League-only since 2026-11-12: with no league
+     * its playoff-picture board was a shorter Season Outlook, read from the same simulation.
+     */
+    ...(props.selectedLeagueId
+      ? gated({
+          key: 'standings',
+          label: navLabel('standings'),
+          glyph: '≡',
+          href: `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`,
+        })
+      : []),
+    /*
+     * Schedule and Moves lived only in the in-league tab row, which is gone on desktop and phone
+     * since 2026-11-05 — so they join the rail, and with it the tablet icon nav and the phone More
+     * sheet. League-scoped only: neither means anything without a league.
+     */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'schedule' as const,
+            label: navLabel('schedule'),
+            glyph: '▦',
+            href: `/core/schedule?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+          /* No Moves (2026-11-14): it folded into Trades, and /core/moves lands there (next.config.js). */
+          /*
+           * The league's rules (2026-11-15): the League Settings hub, which mirrors an imported
+           * league's own settings read-only and lets an AllFantasy league's commissioner edit.
+           */
+          {
+            key: 'league-settings' as const,
+            label: navLabel('league-settings'),
+            glyph: '⚙',
+            href: `/core/league-settings?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
     /* Projects from played weeks — nothing to project from yet. */
-    ...ifScored({
+    ...gated({
       key: 'season-outlook',
       label: navLabel('season-outlook'),
       glyph: '◎',
@@ -925,7 +969,11 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * the commissioner hub's "Re-sync this league"; only the rail entry went. The
      * `urgencyBadges.sync` count it used to show now has no reader here.
      */
-    { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
+    /*
+     * ⚠ NO 'tools' ENTRY SINCE 2026-11-12. Most of the Tools hub's cards repeated a nav entry; the
+     * rest moved to the screen each belongs to (lib/core-app/moreTools.ts — "More tools" at the foot
+     * of Trades, Draft HQ, Rankings and Player Finder). /core/tools still renders for old links.
+     */
     // Full page outside /core, like My Leagues and League Sync above. The rail's
     // bottom profile tile was the only way there — a single-letter tile nobody
     // reads as "settings". Not ⚙: Tools owns that glyph, and two identical marks
@@ -963,22 +1011,16 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
  * Any key not named here still renders, in a trailing unheaded group, so adding
  * a nav item can never silently drop it off the rail.
  */
-const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> = [
-  { id: 'top', heading: null, keys: ['home', 'brackets'] },
-  {
-    id: 'league',
-    heading: 'This league',
-    keys: ['my-team', 'defense-hub', 'matchup', 'war-room', 'waivers', 'trades', 'players', 'draft-hq', 'devy', 'devy-league'],
-  },
-  { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
-  { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
-  {
-    id: 'manage',
-    heading: 'Manage',
-    /* No sync entry: both the account-wide page and the per-league rail item are gone. */
-    keys: ['commissioner', 'notifications', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
-  },
-]
+/*
+ * Grouped by job since 2026-11-05 — This week · League · Plan ahead · Commish · All leagues ·
+ * Manage — from lib/core-app/leagueDestinations.ts, the one list the in-league tab row reads too.
+ * No sync entry: both the account-wide page and the per-league rail item are gone.
+ */
+const toNavSections = (order: typeof NAV_SECTION_ORDER): Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> =>
+  order.map((s) => ({ id: s.id, heading: s.heading, keys: s.keys as CoreNavKey[] }))
+const NAV_SECTIONS = toNavSections(NAV_SECTION_ORDER)
+/* With no league held — see NAV_SECTION_ORDER_NO_LEAGUE for why the groups differ. */
+const NAV_SECTIONS_NO_LEAGUE = toNavSections(NAV_SECTION_ORDER_NO_LEAGUE)
 
 /** Manage entries folded under "More" in the rail; only when at least two of them are present. */
 const NAV_MORE_KEYS = new Set<CoreNavKey>(['plans', 'tools', 'admin'])
@@ -988,7 +1030,7 @@ function navSections(props: AfCoreShellProps): NavSection[] {
   const byKey = new Map(items.map((i) => [i.key, i]))
   const placed = new Set<CoreNavKey>()
 
-  const sections: NavSection[] = NAV_SECTIONS.map((s) => {
+  const sections: NavSection[] = (props.selectedLeagueId ? NAV_SECTIONS : NAV_SECTIONS_NO_LEAGUE).map((s) => {
     const picked = s.keys.flatMap((k) => {
       const item = byKey.get(k)
       if (!item) return []
@@ -1017,26 +1059,47 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  * `home` is included even when a league is selected: on a phone the league
  * switcher is off-screen, so the way back to the league list has to be here.
  */
-const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'matchup', 'trades']
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'waivers', 'my-team', 'matchup', 'trades']
 
 /*
- * ⚠ "LEAGUES" IS A BAR SLOT, NOT A LINK, AND IT TOOK LIVE'S PLACE (2026-10-29). A user on Android
- * reported that getting into their leagues was "too complicated and not straightforward": the bar
- * had no Leagues entry, the floating pill (`.af-rail-handle`, since removed) read as an action
- * button rather than navigation, and the text route was the last group of More. The tab opens the
- * league tray in place — not /leagues, whose ProductShell chrome swaps the whole header and bar and
- * was itself part of the confusion. Trades stays pinned (see mobile-trade-access.test.ts); Live moves
- * to More → This week, one tap further.
+ * The bar with NO league selected (2026-11-12). My team, Waivers and Matchup are league-only now
+ * (see the notes in `navItems`), so their slots go to Your week — which took over the cross-league
+ * lineup check, waiver times and matchup columns — Live scores and Player Finder. Inside a league
+ * the bar above is unchanged.
  */
-const MOBILE_BAR_LEAGUES_AFTER_INDEX = 0
+const MOBILE_BAR_KEYS_NO_LEAGUE: CoreNavKey[] = ['home', 'week', 'live', 'players', 'trades']
+
+/*
+ * ⚠ WAIVERS TOOK THE "LEAGUES" SLOT (2026-11-07, owner's call). Waivers is a weekly in-season job and
+ * was two taps away under More; Leagues duplicated the switcher at the top of every screen, which
+ * changes league in one tap. The league TRAY is still one tap from More: the first entry there,
+ * "Leagues" (`af-more-leagues`), opens it in place.
+ *
+ * History, so this is not undone by accident: a Leagues tab was added 2026-10-29 because an Android
+ * user found getting into their leagues "too complicated and not straightforward" — at the time the
+ * bar had no league entry at all and the only labelled one was a floating pill read as a button. The
+ * header switcher has since become that entry on every screen, which is what made the slot free.
+ */
 
 /**
  * Stand-ins, in order, for bar slots whose item is hidden. Matchup (and Your week)
- * only exist once the selected league has a scored week (`ifScored`), and Trades
+ * only exist once the selected league has a scored week (`gated`), and Trades
  * only where the platform publishes trades, so without these the bar shrank to
  * four. Player Finder is unconditional, so the bar stays at five in every state.
  */
 const MOBILE_BAR_FALLBACK_KEYS: CoreNavKey[] = ['week', 'players']
+
+/**
+ * The phone bar's label for a nav item: its short form where it has one ("Live", "Players").
+ *
+ * ⚠ ONLY WHEN THE LABEL IS STILL THE DEFAULT. Since 2026-11-12 the no-league bar carries Live scores
+ * and Player Finder, whose full labels wrapped to two lines at 390px. A themed league renames items
+ * (Survivor's "Your shelter"), and a renamed label is kept as the theme wrote it.
+ */
+function tabbarLabel(item: NavItem): string {
+  const entry = (CORE_NAV_LABELS as Record<string, { label: string; short?: string }>)[item.key]
+  return entry?.short && item.label === entry.label ? entry.short : item.label
+}
 
 /** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
 const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
@@ -1287,7 +1350,7 @@ export function syncChipText(ageLabel: string, language = 'en'): string {
   return never ? m.syncNever : m.synced(ageLabel)
 }
 
-export function AfCoreShell(incoming: AfCoreShellProps) {
+function AfCoreShell(incoming: AfCoreShellProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const msg = useMessages(coreShellMessages)
@@ -1305,18 +1368,31 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
   useLineupAutoSync(props.selectedLeagueId)
   const sections = useMemo(() => navSections(props), [props])
+  /* The desktop and tablet rail inside a league: the league's own groups only — see LEAGUE_RAIL_OMITTED_SECTIONS. */
+  const navRailSections = useMemo(
+    () => (props.selectedLeagueId ? sections.filter((s) => !LEAGUE_RAIL_OMITTED_SECTIONS.has(s.id)) : sections),
+    [sections, props.selectedLeagueId],
+  )
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
+    const primary = props.selectedLeagueId ? MOBILE_BAR_KEYS : MOBILE_BAR_KEYS_NO_LEAGUE
+    /* A stand-in already on the bar would appear twice — the no-league bar holds both of them. */
     const fallbacks = MOBILE_BAR_FALLBACK_KEYS.flatMap((k) => {
-      const item = byKey.get(k)
+      const item = primary.includes(k) ? undefined : byKey.get(k)
       return item ? [item] : []
     })
-    return MOBILE_BAR_KEYS.flatMap((k) => {
+    return primary.flatMap((k) => {
       const item = byKey.get(k) ?? fallbacks.shift()
       return item ? [item] : []
     })
   }, [props])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
+  /*
+   * The nav entry to light for this screen. Portfolio has no entry of its own since 2026-11-12; it
+   * is the second view behind My Leagues, so that entry stays lit on it. Everything that is about
+   * the SCREEN rather than the nav (refresh cadence, prompts) still reads `active`.
+   */
+  const navActive: CoreNavKey = active === 'portfolio' ? 'my-leagues' : active
 
   /*
    * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
@@ -1493,6 +1569,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     // Per SCREEN: a screen with no live value keeps the idle cadence on game days too.
     const refreshMs = shellRouteRefreshMs(active, Boolean(props.gameDayActive), props.liveGameCount ?? 0)
     let lastRefreshAt=Date.now()
+    let alive=true
+    void primeDeployBaseline()
     const refreshRoute=()=>{
       if (document.visibilityState !== 'visible') return
       if (Date.now()-lastRefreshAt<1000 || shellRefreshPendingRef.current) return
@@ -1503,7 +1581,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       // timers on one route paid for two full renders every period.
       if (routeRefreshClaimed()) return
       lastRefreshAt=Date.now()
-      startShellRefresh(() => router.refresh())
+      // 🛑 After a deploy this refresh would be a FULL PAGE RELOAD under the reader — see
+      // lib/core-app/deployGuard. The guard skips it; NewVersionReload picks the build up unseen.
+      void canRefreshInBackground().then((ok)=>{
+        if (!ok || !alive || navPendingRef.current || shellRefreshPendingRef.current) return
+        startShellRefresh(() => router.refresh())
+      })
     }
     const refresh = window.setInterval(refreshRoute, refreshMs)
     // Resume/reconnect must read a fresh roster and schedule, even between timer ticks.
@@ -1515,6 +1598,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     window.addEventListener('online',resume)
     document.addEventListener('visibilitychange',resume)
     return () => {
+      alive=false
       window.clearInterval(clock)
       window.clearInterval(refresh)
       window.removeEventListener('pageshow',resume)
@@ -1606,7 +1690,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * The tray's own header row: its ✕ close control on a phone, and the DESKTOP
    * collapse toggle above 720px. So it is where focus starts when the tray
    * opens, and the only sane place for focus to land when the viewport widens
-   * with the tray open — the phone's opener (the bar's Leagues tab) is
+   * with the tray open — the phone's opener (More's Leagues entry, then the More button) is
    * `display: none` by then, still mounted, which is exactly why the overlay
    * hook's old `isConnected` check waved such an opener through and focus fell
    * to <body>.
@@ -1695,7 +1779,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   }
   // "More" is current whenever the screen you are on is not one of the five
   // pinned ones — otherwise the bar shows nothing as active and reads broken.
-  const activeInBar = mobileItems.some((i) => i.key === active)
+  const activeInBar = mobileItems.some((i) => i.key === navActive)
   /*
    * ⚠ SAME-NAMED LEAGUES READ AS ONE. Measured 2026-09-28: one account's rail held two
    * "…8-Team NFL Redraft League (manual)" and four "…12-Team NFL Redraft League (manual)" rows,
@@ -1916,7 +2000,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/*
         ⚠ THERE IS NO FLOATING "LEAGUES" PILL ANY MORE (2026-10-29). The phone opens the league tray
-        from the bar's Leagues tab (`af-tabbar-leagues`), or the league name in the league-first
+        from More → Leagues (`af-more-leagues`; the bar tab went to Waivers 2026-11-07), or the league name in the league-first
         top bar; the tray closes from its own ✕ header row (`.af-rail-toggle`). The pill was the
         tray's only labelled entry for a long time, and users read it as an action button.
       */}
@@ -2348,7 +2432,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           support") were the two furthest from the fold.
         */}
         <div className="af-nav-scroll">
-        {sections.map((section) => (
+        {navRailSections.map((section) => (
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
@@ -2361,7 +2445,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-hidden because it is repeated as the list's accessible name —
               announcing it twice is worse than not styling it at all.
             */}
-            {section.id === 'league' && selectedLeagueName ? (
+            {section.id === LEAGUE_CHIP_SECTION && selectedLeagueName ? (
               /*
                 Which league "This league" means (2026-11-02 nav redesign). The heading said "This
                 league" and never named one, so the six tabs under it read as generic until you
@@ -2381,8 +2465,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     className="af-nav-item"
                     data-core-nav=""
                     prefetch={false}
-                    data-active={item.key === active}
-                    aria-current={item.key === active ? 'page' : undefined}
+                    data-active={item.key === navActive}
+                    aria-current={item.key === navActive ? 'page' : undefined}
                   >
                     <span className="af-nav-glyph" aria-hidden>
                       <CoreNavIcon navKey={item.key} size={16} />
@@ -2409,7 +2493,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   {shown.map(renderItem)}
                   {folded.length > 1 ? (
                     <li>
-                      <details className="af-nav-more" open={folded.some((i) => i.key === active) || undefined}>
+                      <details className="af-nav-more" open={folded.some((i) => i.key === navActive) || undefined}>
                         <summary className="af-nav-item">
                           <span className="af-nav-glyph" aria-hidden>
                             <CoreNavIcon navKey="more" size={16} />
@@ -2426,6 +2510,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             })()}
           </div>
         ))}
+
+        {/*
+          Inside a league, ONE way out to everything account-wide (2026-11-15) instead of the "All
+          leagues" and "Manage" groups: Your week, My Leagues, Rankings, Your career, Brackets and Find
+          a League are on the all-leagues view this opens. It clears the remembered home filter, like
+          the scope switcher's own "All leagues".
+        */}
+        {props.selectedLeagueId ? (
+          <div className="af-nav-group af-nav-group-exit">
+            <ul className="af-nav-items" aria-label={copy('All leagues')}>
+              <li>
+                <ScopeResetLink className="af-nav-item af-nav-all-leagues">
+                  <span className="af-nav-glyph" aria-hidden>
+                    <CoreNavIcon navKey="portfolio" size={16} />
+                  </span>
+                  <span className="af-nav-label">{copy('All leagues')}</span>
+                  <span className="af-nav-all-arrow" aria-hidden>→</span>
+                </ScopeResetLink>
+              </li>
+            </ul>
+          </div>
+        ) : null}
 
         </div>
 
@@ -2514,7 +2620,19 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 /* The rail row's own rule: a field race's line is its place among the survivors, so no W-L there. */
                 const m = row ? railRowState(row).m : null
                 const record = m?.guillotine || m?.standing?.elimination ? null : props.railRecords?.[league.id] ?? null
-                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf, record }
+                /*
+                  …and in its place, where you stand among the survivors — the rail row's own line, so a
+                  Guillotine league on the phone list says something instead of nothing.
+                */
+                const g = m?.guillotine
+                const field: ScopeSwitcherField | null = g
+                  ? g.state === 'eliminated'
+                    ? { state: 'chopped', week: g.choppedWeek ?? null }
+                    : g.state === 'preseason' ? null : { state: 'alive', rank: g.rank, outOf: g.aliveCount }
+                  : m?.standing?.elimination
+                    ? { state: 'alive', rank: m.standing.rank, outOf: m.standing.outOf }
+                    : null
+                return { ...league, imageUrl: row?.imageUrl, exileOf: row?.exileOf, record, field }
               })}
               scopeValue={props.scope.value}
               label={props.scope.label}
@@ -2529,6 +2647,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             The search icon. Phone only in both modes (hidden above 720px by af-core-shell.css): the
             phone header folds the full-width search behind it so the topbar stays one row.
           */}
+          {active === 'players' ? null : (
           <button
             type="button"
             className="af-lf-search-btn"
@@ -2546,6 +2665,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           >
             <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
           </button>
+          )}
           {/*
             League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
             from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
@@ -2571,7 +2691,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ) : null}
             </Link>
           ) : null}
-          <TopSearch leagues={searchLeagues} />
+          {/*
+            Not on the Player Finder (2026-11-13 guide): that page IS a player search, and two search
+            boxes one above the other read as two different things to fill in.
+          */}
+          {active === 'players' ? <span className="af-search-wrap" aria-hidden /> : <TopSearch leagues={searchLeagues} />}
 
           <div className="af-topbar-right">
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
@@ -2637,6 +2761,34 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 </div>
               </div>
             </details>
+
+            {/*
+              Notifications, with its count, while a league is open (2026-11-15). The rail drops its
+              "Manage" group inside a league, and this count was only ever there. Not on a phone
+              (af-core-shell.css): there the More sheet keeps Notifications.
+            */}
+            {props.selectedLeagueId ? (
+              <Link
+                href={`/core/notifications?league=${encodeURIComponent(props.selectedLeagueId)}`}
+                className="af-topbar-inbox"
+                prefetch={false}
+                data-testid="topbar-inbox"
+                data-active={active === 'notifications'}
+                aria-label={
+                  props.notificationCount && props.notificationCount > 0
+                    ? `${copy('Notifications')}, ${props.notificationCount}`
+                    : copy('Notifications')
+                }
+              >
+                <span aria-hidden>✉</span>
+                <span className="af-topbar-inbox-label">{copy('Notifications')}</span>
+                {props.notificationCount && props.notificationCount > 0 ? (
+                  <span className="af-topbar-inbox-badge af-num" aria-hidden>
+                    {badgeText(navCountText(props.notificationCount), language)}
+                  </span>
+                ) : null}
+              </Link>
+            ) : null}
 
             {/*
               ⚠ ONE ACCOUNT MENU, NOT FIVE PEER CHIPS (2026-11-02 nav redesign). The top bar carried
@@ -2707,23 +2859,6 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
-          {active === 'home' ? (
-            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
-              <div className="af-core-bracket-promo-copy">
-                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
-                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
-                <p>{msg.bracketBody}</p>
-              </div>
-              <div className="af-core-bracket-promo-actions">
-                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
-                  {msg.bracketExplore}
-                </Link>
-                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
-                  {msg.bracketJoin}
-                </Link>
-              </div>
-            </section>
-          ) : null}
           {/*
             Game-day nudge, in the shell for the same reason the notice above is: every
             /core screen inherits it rather than each one remembering. It renders itself to
@@ -2736,6 +2871,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
             up to four deep above the content. Off home the slot is disabled; the tour shows on home only.
           */}
+          {/* A failing card, on every screen (lib/billing/retention.ts). Renders nothing unless past due. */}
+          <PaymentIssueBanner />
           <HomePromptSlot enabled={active === 'home'}>
             {active === 'home' ? <GameDayAlertsBanner /> : null}
             {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
@@ -2785,6 +2922,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               <PlayerCardProvider>{children}</PlayerCardProvider>
             </CoreNavPendingContext.Provider>
           </ShellSignalsContext.Provider>
+          {/*
+            The bracket promo sits AFTER the screen on home (2026-11-06 phone pass). It used to open
+            the page, so on a phone the first screen was a promo and the setup guide while "16
+            lineups to fix" waited below the fold. Work first, offers after.
+          */}
+          {active === 'home' ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
+              <div className="af-core-bracket-promo-copy">
+                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
+                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
+                <p>{msg.bracketBody}</p>
+              </div>
+              <div className="af-core-bracket-promo-actions">
+                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {msg.bracketExplore}
+                </Link>
+                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
+                  {msg.bracketJoin}
+                </Link>
+              </div>
+            </section>
+          ) : null}
         </main>
       </div>
 
@@ -2872,37 +3031,21 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         </nav>
       ) : (
         <nav className="af-tabbar" aria-label={msg.mainNavAria}>
-          {mobileItems.map((item, index) => (
+          {mobileItems.map((item) => (
             <Fragment key={item.key}>
               <Link
                 href={item.href}
                 className="af-tabbar-item"
                 data-core-nav=""
-                data-active={item.key === active}
-                aria-current={item.key === active ? 'page' : undefined}
+                data-active={item.key === navActive}
+                aria-current={item.key === navActive ? 'page' : undefined}
               >
                 <span className="af-tabbar-glyph" aria-hidden>
                   <CoreNavIcon navKey={item.key} size={20} />
                   {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
                 </span>
-                <span className="af-tabbar-label">{copy(item.label)}</span>
+                <span className="af-tabbar-label">{copy(tabbarLabel(item))}</span>
               </Link>
-              {index === MOBILE_BAR_LEAGUES_AFTER_INDEX ? (
-                <button
-                  type="button"
-                  className="af-tabbar-item"
-                  data-testid="af-tabbar-leagues"
-                  data-active={mobileRailOpen}
-                  aria-expanded={railOpen}
-                  aria-controls="af-rail"
-                  onClick={toggleRail}
-                >
-                  <span className="af-tabbar-glyph" aria-hidden>
-                    <CoreNavIcon navKey="my-leagues" size={20} />
-                  </span>
-                  <span className="af-tabbar-label">{copy('Leagues')}</span>
-                </button>
-              ) : null}
             </Fragment>
           ))}
           <button
@@ -2970,6 +3113,45 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             ) : (
             <div className="af-mobile-more-list">
+              {/* The league tray, which had its own bar tab until Waivers took the slot (see MOBILE_BAR_KEYS). */}
+              <div className="af-mobile-more-group">
+                <button
+                  type="button"
+                  className="af-mobile-more-link"
+                  data-testid="af-more-leagues"
+                  aria-controls="af-rail"
+                  onClick={() => {
+                    /*
+                     * Close More FIRST, and open the tray on the next tick. More's own cleanup hands focus
+                     * back to the bar's More button; the tray then records THAT as where to return on
+                     * close. Opening both in one render left the tray restoring focus to this entry,
+                     * which is gone by then, so focus fell to <body>.
+                     */
+                    setMobileMoreOpen(false)
+                    window.setTimeout(() => {
+                      mobileMoreButtonRef.current?.focus()
+                      setRailChoice('open')
+                    }, 0)
+                  }}
+                >
+                  <span className="af-mobile-more-icon" aria-hidden>
+                    <CoreNavIcon navKey="my-leagues" />
+                  </span>
+                  <span>{copy('Leagues')}</span>
+                </button>
+                {/*
+                  The rail's way out of a league (2026-11-15), here too: on a tablet the rail is hidden
+                  and this sheet stands in for it, so its "All leagues" row has to be reachable from here.
+                */}
+                {props.selectedLeagueId ? (
+                  <ScopeResetLink className="af-mobile-more-link">
+                    <span className="af-mobile-more-icon" aria-hidden>
+                      <CoreNavIcon navKey="portfolio" />
+                    </span>
+                    <span>{copy('All leagues')}</span>
+                  </ScopeResetLink>
+                ) : null}
+              </div>
               {sections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
                   {section.heading ? <span className="af-label">{copy(section.heading)}</span> : null}
@@ -2979,7 +3161,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       href={item.href}
                       className="af-mobile-more-link"
                       data-core-nav=""
-                      data-active={item.key === active}
+                      data-active={item.key === navActive}
                       onClick={() => setMobileMoreOpen(false)}
                     >
                       {/*

@@ -138,7 +138,7 @@ function CopyButton({ text }: { text: string }) {
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
-export type WorldCupChatMessageBubbleProps = {
+type WorldCupChatMessageBubbleProps = {
   message: WorldCupPoolChatMessage
   /** Whether the current user is voting on this message's poll */
   isVoting?: boolean

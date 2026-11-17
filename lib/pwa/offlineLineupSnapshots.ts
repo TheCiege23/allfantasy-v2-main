@@ -25,8 +25,8 @@ import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplay
  * meets a version it does not know must skip the record rather than guess at it.
  */
 export const OFFLINE_LINEUP_CACHE = 'AllFantasy-pages-offline-lineups'
-export const OFFLINE_LINEUP_KEY_PREFIX = '/__offline/lineups/'
-export const OFFLINE_LINEUP_SNAPSHOT_VERSION = 1
+const OFFLINE_LINEUP_KEY_PREFIX = '/__offline/lineups/'
+const OFFLINE_LINEUP_SNAPSHOT_VERSION = 1
 
 export type OfflineLineupRow = {
   /** Slot label for a starter (QB, FLEX…); BN / IR / TX otherwise. */
@@ -109,7 +109,7 @@ export function buildOfflineLineupSnapshot(input: {
   }
 }
 
-export function isOfflineLineupSnapshot(value: unknown): value is OfflineLineupSnapshot {
+function isOfflineLineupSnapshot(value: unknown): value is OfflineLineupSnapshot {
   const v = value as Partial<OfflineLineupSnapshot> | null
   return Boolean(
     v &&

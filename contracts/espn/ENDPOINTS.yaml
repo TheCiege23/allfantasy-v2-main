@@ -60,6 +60,8 @@ support_matrix:
       status: probed
       captured: 2026-11-01
       fixtures: [fixtures/scoreboard.NFL.20260110.json, fixtures/scoreboard.NFL.20260117.json, fixtures/scoreboard.NFL.20260125.json, fixtures/scoreboard.NFL.20260208.json]
+    fantasy_league: { status: probed, fixture: fixtures/fantasy-league.NFL.2026.json, captured: 2026-11-08, see: fantasy_nfl }
+    fantasy_communication: { status: http_401_without_cookies, captured: 2026-11-08, see: fantasy_nfl.communication }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
@@ -230,3 +232,44 @@ fantasy_mlb:
     - Scoring items include reverse flags; raw settings must be preserved.
     - This custom 20-category league includes pitching qualifications and slot stat limits; do not silently convert it to native points.
     - Current-season only. Private cookie access, activity communication and prior seasons have not been live-verified.
+
+# Public fantasy FOOTBALL contract captured 2026-11-08 (owner-chosen league, read without cookies).
+fantasy_nfl:
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  query: view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mMatchupScore&view=mStandings&view=mDraftDetail&view=mTransactions2
+  captured_season: 2026
+  captured_at_week: 9            # status.currentMatchupPeriod; finalScoringPeriod 17
+  http_status: 200
+  full_body_bytes: {pretty: 17889072, compact: 6589424}
+  full_counts: {members: 10, teams: 10, roster_entries: 163, draft_picks: 160, schedule_entries: 70, matchup_periods: 14, transactions: 8, scoring_items: 46}
+  fixture: fixtures/fantasy-league.NFL.2026.json
+  fixture_bytes: 2414526
+  sanitization: >
+    scripts/redact-fantasy.mjs, run by probe.sh before the file is reported written: synthetic member
+    ids (fixture-manager-N, every SWID remapped across the whole document), names, team
+    names/locations/nicknames/abbrevs/logos, league name and id (123456); refuses to write if any
+    original value survives.
+  trim: Key-union-preserving trimmer (contracts/fleaflicker/scripts/trim-fixture.mjs, 3345 key paths before and after); teams/entries/scoringItems/members/eligibleSlots/picks/schedule kept in full. JSON compacted afterwards.
+  scoring_type: H2H_POINTS
+  lineup_slots_used: {0: QB, 2: RB, 4: WR, 6: TE, 16: D/ST, 17: K, 20: BE, 21: IR, 23: FLEX}
+  positions_seen: {1: QB, 2: RB, 3: WR, 4: TE, 5: K, 16: D/ST}
+  fields:
+    members[]: { note: "🛑 READ WITHOUT COOKIES, A MEMBER IS ONLY {id, notificationSettings} — no displayName/firstName/lastName. Owner names fall back to the team name (EspnLeagueFetchService resolveEspnOwners), by design." }
+    teams[].rankCalculatedFinal / rankFinal: { type: integer, note: "🛑 0 for EVERY team until the season ends. 0 is a number: `??` takes it. Treat <= 0 as 'not ranked yet'." }
+    teams[].playoffSeed: { type: integer, note: "The CURRENT standing, 1..size, already ordered by the league tiebreak (settings.scheduleSettings.playoffSeedingRule = TOTAL_POINTS_SCORED here)." }
+    teams[].currentProjectedRank: { type: integer, note: "A PROJECTION of the final finish (currentSimulationResults), not the standing: seed 8 projected 9, seed 9 projected 8." }
+    teams[].record: { note: "overall / home / away / division, each {wins, losses, ties, percentage, pointsFor, pointsAgainst, gamesBack, streakType, streakLength}. Only overall is imported; pointsFor/pointsAgainst are 0 in the split records." }
+    teams[].playoffClinchType: { example: UNKNOWN }
+    schedule[].winner: { values: [HOME, AWAY, UNDECIDED], note: "🛑 UNDECIDED (future or in progress) carries totalPoints 0 on both sides. Never derive a result from those points." }
+    schedule[].playoffTierType: { values_seen: [NONE], note: "Regular season only at week 9; playoff matchups are not in the schedule yet." }
+    draftDetail.picks[]: { keys: [autoDraftTypeId, bidAmount, id, keeper, lineupSlotId, memberId, nominatingTeamId, overallPickNumber, playerId, reservedForKeeper, roundId, roundPickNumber, teamId, tradeLocked], note: "A pick carries only playerId; a drafted-then-dropped player (17 of 160 here) has no name/position anywhere in this response." }
+    transactions[]: { types_seen: {ROSTER/EXECUTED: 7, FREEAGENT/EXECUTED: 1}, note: "mTransactions2 here returned only 8 recent moves and no trade." }
+    settings.draftSettings.keeperCount: { example: 0 }
+  communication:
+    path: /seasons/{season}/segments/0/leagues/{league_id}/communication/?view=kona_league_communication
+    http_status: 401
+    body_type: AUTH_COMMUNICATION_NOT_VISIBLE
+    note: The activity feed needs a signed-in ESPN account even for a PUBLIC league. Not captured.
+  notes:
+    - Public read only. A private league, prior seasons, keepers, IDP, EDR and trades are not in this capture (GAPS.md).

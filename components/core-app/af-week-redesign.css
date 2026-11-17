@@ -6,7 +6,7 @@
  * the board's 16px corners and 17px section titles. af-core tokens only, so every mode follows.
  */
 
-.af-core .af-wk .af-wk-title { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
 .af-core .af-wk .af-wk-headactions { align-items: center; }
 
 /* Header progress: "N of M decided" over an 8px bar, as the board draws it. */
@@ -18,38 +18,8 @@
 .af-core .af-wk .af-wk-progress-bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; }
 .af-core .af-wk .af-wk-progress-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 
-/* Glance tiles: four counts in one row, two on a phone. */
-.af-core .af-wk .af-wk-glance {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0 0 28px;
-}
-.af-core .af-wk .af-wk-glance-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  min-width: 0;
-}
-.af-core .af-wk .af-wk-glance-label {
-  color: var(--muted);
-  font: 600 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.af-core .af-wk .af-wk-glance-value {
-  color: var(--text);
-  font: 800 28px/1.05 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  letter-spacing: -0.03em;
-}
-.af-core .af-wk .af-wk-glance-tile[data-tone='warn'] .af-wk-glance-value { color: var(--warn); }
-.af-core .af-wk .af-wk-glance-tile[data-tone='accent'] .af-wk-glance-value { color: var(--accent); }
-.af-core .af-wk .af-wk-glance-tile[data-tone='good'] .af-wk-glance-value { color: var(--good); }
-.af-core .af-wk .af-wk-glance-sub { color: var(--text2); font-size: 12px; }
+/* Glance tiles: the shared StatStrip (primitives/af-primitives.css); only the spacing below is the screen's. */
+.af-core .af-wk .af-wk-glance { margin: 0 0 28px; }
 
 /* Sections and cards: the board's 17px titles, 16px corners and roomier rows. */
 .af-core .af-wk .af-wk-sectiontitle { font-size: 17px; letter-spacing: -0.01em; }
@@ -63,7 +33,5 @@
 .af-core .af-wk .af-wk-empty { border-radius: 16px; }
 
 @media (max-width: 760px) {
-  .af-core .af-wk .af-wk-title { font-size: 26px; }
   .af-core .af-wk .af-wk-progress { flex: 1 1 100%; margin-right: 0; }
-  .af-core .af-wk .af-wk-glance { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 }

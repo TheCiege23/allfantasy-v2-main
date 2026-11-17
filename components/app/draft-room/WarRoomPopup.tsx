@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
-export interface WarRoomPopupProps {
+interface WarRoomPopupProps {
   /** Content to render inside the popup body — typically <DraftTeamPanel /> + recommendations. */
   children: ReactNode
   /** When true, the trigger button shows a pulsing amber dot (Sleeper-style notification). */

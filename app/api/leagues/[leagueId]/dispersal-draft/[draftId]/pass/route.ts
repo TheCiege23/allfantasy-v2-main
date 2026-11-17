@@ -1,7 +1,7 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { requireDispersalDraftForLeague } from '@/lib/league/dispersal-draft-route-helpers'
 import { DispersalDraftEngine } from '@/lib/dispersal-draft/DispersalDraftEngine'
 import { prisma } from '@/lib/prisma'
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     if (!rosterId) return NextResponse.json({ error: 'rosterId required' }, { status: 400 })
 
     const remove = body.remove === true
-    const comm = await isCommissioner(leagueId, userId)
+    const comm = await canCommissionerAct(leagueId, userId, 'league')
 
     if (remove) {
       if (!comm) return NextResponse.json({ error: 'Only the commissioner can remove pass status.' }, { status: 403 })

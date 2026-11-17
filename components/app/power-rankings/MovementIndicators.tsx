@@ -3,7 +3,7 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { PowerRankingTeam } from '@/lib/league-power-rankings/types';
 
-export interface MovementIndicatorsProps {
+interface MovementIndicatorsProps {
   team: PowerRankingTeam;
   className?: string;
 }

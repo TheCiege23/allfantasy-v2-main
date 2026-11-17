@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { resolveLockedFeature } from '@/lib/monetization/lockedFeature'
+import { BACK_PARAM, safeBackPath } from '@/lib/monetization/lockReturn'
 import type { PostPurchaseSyncPhase } from '@/hooks/usePostPurchaseSync'
 import '@/components/monetization/af-monetization.css'
 
@@ -48,6 +49,12 @@ export function CheckoutOutcomePanel({
 }: CheckoutOutcomePanelProps) {
   const searchParams = useSearchParams()
   const feature = resolveLockedFeature(searchParams?.get('feature'))
+  /*
+   * `back=` is the page the lock was on (lib/monetization/lockReturn.ts), carried through Stripe's success
+   * URL. It beats the feature's listed href: it is the exact page, league id and tab included, where the
+   * listed href is a guess at a section or null.
+   */
+  const back = safeBackPath(searchParams?.get(BACK_PARAM))
 
   // 'idle' is "the user did not come back from checkout" — the ordinary case on a
   // pricing page, and it must render nothing at all.
@@ -59,8 +66,8 @@ export function CheckoutOutcomePanel({
    * is league- or bracket-scoped we do not hold the id, so `href` is null and this
    * degrades to a generic destination rather than guessing at a league.
    */
-  const resumeHref = feature?.href ?? null
-  const resumeLabel = feature ? `Back to ${feature.label}` : null
+  const resumeHref = back ?? feature?.href ?? null
+  const resumeLabel = resumeHref ? (feature ? `Back to ${feature.label}` : 'Back to where you were') : null
 
   if (phase === 'success') {
     return (
@@ -173,6 +180,13 @@ export function CheckoutOutcomePanel({
           ? 'Pick a plan below whenever you are ready.'
           : 'You can try again below, or use tokens for one-off access instead.'}
       </p>
+      {back ? (
+        <div className="af-mz-outcome-actions">
+          <Link href={back} className="af-mz-btn">
+            {feature ? `Back to ${feature.label}` : 'Back to where you were'}
+          </Link>
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -103,7 +103,14 @@ describe('stored draft board', () => {
     expect(written.claims).toEqual([{ type: 'claim', player: 'Kept Export' }])
     const draft = readStoredFantraxDraft(written)
     expect(draft?.picks).toHaveLength(156)
-    expect(draft?.picks[0]).toMatchObject({ playerId: firstMade.playerId, playerName: 'Drafted, First' })
+    // Fantrax's directory says "Drafted, First"; the board stores what a manager reads.
+    expect(draft?.picks[0]).toMatchObject({ playerId: firstMade.playerId, playerName: 'First Drafted' })
+  })
+
+  it(`stores roster names in "First Last" order, not Fantrax's "Last, First"`, async () => {
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+    const roster = h.updateMany.mock.calls[0][0].data.roster as Array<{ fantraxId: string; name: string | null }>
+    expect(roster.map((p) => [p.fantraxId, p.name])).toEqual([['p1', 'Player One'], ['p3', 'Player Three'], ['p4', 'Player Four']])
   })
 
   it('a draft read that FAILED keeps the board already on file instead of erasing it', async () => {

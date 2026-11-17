@@ -14,9 +14,9 @@
  */
 import { gameStage, type GameStage } from '@/lib/live/gameStage'
 
-export type BugTone = GameStage
+type BugTone = GameStage
 
-export type LiveBugInput = {
+type LiveBugInput = {
   sport: string
   isLive: boolean
   completed: boolean

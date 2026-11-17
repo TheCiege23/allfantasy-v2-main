@@ -1,7 +1,7 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { finalizeImportedCarryover } from '@/lib/league-creation/canonical/finalizeImportedCarryover'
 
 export const maxDuration = 120
@@ -11,7 +11,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ league
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
   try {
-    await assertCommissioner(leagueId, session.user.id)
+    await assertCommissionerAccess(leagueId, session.user.id, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

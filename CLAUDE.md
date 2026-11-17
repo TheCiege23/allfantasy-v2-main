@@ -194,6 +194,15 @@ provider call is the cache-MISS path, exactly as this file already sanctions for
 | `app/api/music/track-info/route.ts:66` | `theaudiodb.com` |
 | `server/api-route-modules/legacy/trade/analyze/route.ts:434` | `thesportsdb.com` |
 
+✅ **RESOLVED — re-measured 2026-11-15 on `origin/main`: none of the six is a request-path finding any more.**
+`app/api/mfl/leagues/route.ts` no longer exists; `app/api/mfl/import` now goes through the import pipeline
+(ingestion, an explicit user action); the trade-analyze route no longer calls TheSportsDB. The music routes
+read `lib/music/musicCatalog.ts` (30-day `sportsDataCache` read-through) over the adapter
+`lib/music/theAudioDbFetch.ts`, the ONLY place TheAudioDB's key-in-path URL is built; live-roster reads
+`lib/sleeper/liveLeagueFeed.ts` (short shared cache: rosters 60s, picks 10s) over `lib/sleeper/liveLeagueFetch.ts`.
+Both adapters are allowlisted by exact path on a caller census. The only request-path findings left are the
+three accepted read-through caches above. The table below is kept as the 2026-09-12 record.
+
 ⚠ **THE TWO MFL ONES ALSO PUT A CREDENTIAL ON THE WIRE FROM A REQUEST PATH**, sending
 `Cookie: MFL_USER_ID=${connection.mflCookie}`. That is the `RSC_token`-in-a-query-parameter
 shape reached a different way — and note the `db-first-auth-exchange:` marker correctly
@@ -361,10 +370,11 @@ caught them.
     dead: nothing imported it, its own header declared its path as
     `weather/route.js`, and that path now holds a `route.ts` using
     `lib/weather/weatherService`. Next.js does not route a `X.route.js` sitting
-    beside the directory. Five identical strays remain in `app/api/start-sit/`
-    (`chimmy`, `injuries`, `leagues`, `matchups`, `roster`), each superseded by
-    a live directory route; they trip no guard and were left for a deliberate
-    dead-code pass.
+    beside the directory. The five identical strays beside it (`chimmy`,
+    `injuries`, `leagues`, `matchups`, `roster`) went the same day, and on
+    2026-09-30 the directory routes they shadowed went too, with their only
+    caller, `StartSitPopup`. `app/api/start-sit/` no longer exists — checked
+    against `origin/main` 2026-11-13, so there is nothing left to sweep.
   - `lib/weather/weatherService.ts` (geocode) — **resolved.** A geocode is
     immutable, so it is now a durable `sportsDataCache` entry with the vendor
     call isolated in `lib/weather/openWeatherGeocode.ts` (allowlisted).

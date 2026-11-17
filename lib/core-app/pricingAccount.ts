@@ -12,6 +12,8 @@ export type PricingAccount = {
   renewsAt: string | null
   /** Spendable tokens; null when the read did not return one. */
   tokenBalance: number | null
+  /** Tokens spent per week, net of refunds, oldest first (lib/tokens/weeklyTokenSpend.ts); null when unread. */
+  weeklySpend?: { weekStart: string; spent: number }[] | null
 }
 
 const FAMILY_BY_PLAN: Record<string, string> = {

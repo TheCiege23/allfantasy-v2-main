@@ -1,4 +1,5 @@
 import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, loadSeasonDraftPlayers } from '@/lib/tournament/seasonDraftRuntime'
 import { nextSeasonNominator } from '@/lib/tournament/seasonAuctionPolicy'
@@ -15,7 +16,6 @@ import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISetting
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
-import { canPlaceAuctionBid } from '@/lib/mock-draft/draft-engine'
 import { getLiveADP } from '@/lib/adp-data'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
@@ -26,7 +26,6 @@ import {
   getAuctionNominationOrder,
   getBudgetsFromSession,
   nominatePlayer,
-  placeBid,
   resolveAuctionWin,
 } from './AuctionEngine'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -137,6 +136,38 @@ async function appendLatestAuctionPickToRoster(
 }
 
 /**
+ * The nominator's saved draft queue (`DraftQueue.order`, keyed by session and user — the same queue a
+ * snake draft's autopick reads), minus anyone already drafted. An empty seat or an orphan team has
+ * no queue.
+ */
+async function loadNominatorQueue(sessionId: string, rosterId: string, draftedNames: Set<string>): Promise<AuctionNomination[]> {
+  let order: Array<Record<string, unknown>> = []
+  try {
+    const roster = await prisma.roster.findFirst({ where: { id: rosterId }, select: { platformUserId: true } })
+    const userId = roster?.platformUserId && !String(roster.platformUserId).startsWith('orphan-') ? String(roster.platformUserId) : null
+    if (!userId) return []
+    const row = await prisma.draftQueue.findUnique({ where: { sessionId_userId: { sessionId, userId } }, select: { order: true } })
+    if (Array.isArray(row?.order)) order = row.order as Array<Record<string, unknown>>
+  } catch {
+    return [] // An unreadable queue falls back to the player pool rather than stalling the nomination.
+  }
+  const out: AuctionNomination[] = []
+  for (const entry of order) {
+    const playerName = String(entry?.playerName ?? '').trim()
+    const position = String(entry?.position ?? '').trim().toUpperCase()
+    if (!playerName || !position || draftedNames.has(normalizeName(playerName))) continue
+    out.push({
+      playerName,
+      position,
+      team: (entry.team as string | null | undefined) ?? null,
+      playerId: (entry.playerId as string | null | undefined) ?? null,
+      byeWeek: (entry.byeWeek as number | null | undefined) ?? null,
+    })
+  }
+  return out
+}
+
+/**
  * Run one deterministic automation pass for auction drafts.
  * Safe to call on every poll/reconnect; when no condition is met it is a no-op.
  */
@@ -188,31 +219,13 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
    */
   const nominatorIsChimmy = currentNominator != null && await chimmyRunsRoster(leagueId, currentNominator.rosterId)
 
-  // Tournament expiry preserves the winning bid; no synthetic late bids.
+  /*
+   * The bid clock ran out. Tournament expiry preserves the winning bid; no synthetic late bids. An
+   * unbid lot needs no bid placed here either: the nominator opened it at the minimum, and
+   * resolveAuctionWin awards an unbid lot to its nominator. (A late bid could not land anyway —
+   * placeBid refuses once the clock has run out.)
+   */
   if (state.currentNomination && isExpired(session.timerEndAt, now)) {
-    if (!season && state.currentBid <= 0 && currentNominator && (uiSettings.autoPickEnabled || nominatorIsChimmy)) {
-      const nominatorBudget = budgets[currentNominator.rosterId] ?? 0
-      const nominatorPicks = session.picks.filter((pick) => pick.rosterId === currentNominator.rosterId).length
-      const rosterSlotsRemaining = Math.max(0, session.rounds - nominatorPicks)
-      const autoBidAmount = config.minBid
-      const canAutoBid = canPlaceAuctionBid({
-        budget: nominatorBudget,
-        bid: autoBidAmount,
-        rosterSlotsRemaining,
-        minimumBid: config.minBid,
-      })
-      if (canAutoBid) {
-        const autoBid = await placeBid(leagueId, currentNominator.rosterId, autoBidAmount)
-        if (autoBid.success) {
-          actions.push({
-            type: 'auto_bid',
-            rosterId: currentNominator.rosterId,
-            amount: autoBidAmount,
-          })
-        }
-      }
-    }
-
     const resolve = await resolveAuctionWin(leagueId, { now })
     if (resolve.success) {
       if (resolve.sold && resolve.winnerRosterId) {
@@ -252,9 +265,18 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
         byeWeek: null,
       } : undefined
     } else {
-      const candidates = await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames)
+      // The nominator's own draft queue first, in their order; then the player pool.
+      const candidates = [
+        ...(await loadNominatorQueue(session.id, currentNominator.rosterId, draftedNames)),
+        ...(await loadAutoNominationCandidates(leagueId, normalizedSport, draftedNames)),
+      ]
       const resolve = isRookieRestrictedPlayerPool(session.playerPool) ? await loadServerRookieStatusResolver(leagueId) : null
-      const available = session.draftModeLabel === 'rookie' ? await loadRookieAuctionAvailability(leagueId) : () => true
+      // Mirrors nominatePlayer's roster check, so an automatic nomination is never one it would refuse.
+      const isDispersal = session.draftModeLabel === 'dispersal' || (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig != null
+      const rostered = session.draftModeLabel === 'rookie' || isDispersal ? null : await loadLeagueRosteredPlayers(leagueId)
+      const available = session.draftModeLabel === 'rookie'
+        ? await loadRookieAuctionAvailability(leagueId)
+        : (candidate: AuctionNomination) => !rostered || !rosteredHolder(rostered, candidate)
       first = candidates.find(candidate => available(candidate) && isEligibleForPlayerPool(session.playerPool, resolve?.({ playerId: candidate.playerId, playerName: candidate.playerName }) ?? null))
     }
     if (!first) return { changed: false, actions }

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { LeagueWeekBoard, LeagueSideline } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-week-league.css'
 /* After af-week-league.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
@@ -123,6 +124,9 @@ function recordOf(board: LeagueWeekBoard, rosterId: string | null | undefined): 
   return r ? `${r.wins}—${r.losses}${r.ties ? `—${r.ties}` : ''}` : null
 }
 
+/** Sports played in weeks, where "Period 10" is jargon for "Week 10". */
+const WEEKLY_SPORTS = new Set(['NFL', 'NCAAF'])
+
 export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueProps) {
   const { language } = useOptionalLanguage()
   const msg = useMessages(yourWeekLeagueMessages)
@@ -143,42 +147,67 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
     yours?.opponent.rosterId,
     ...sidelines.flatMap((m) => [m.a.rosterId, m.b.rosterId]),
   ])
+  /* "Week 10" in a weekly sport; anything else (or an unknown sport) keeps "Period 10". */
+  const weekWord = WEEKLY_SPORTS.has(String(board.sport ?? '').toUpperCase()) ? msg.week : msg.period
+  /*
+   * 2026-11-14: the h1 is your game in words — "Week 10: you trail Dolphins 0.0 to 13.0." A scoreboard with
+   * no points on it yet reads as "you vs", never as a 0–0 tie.
+   */
+  const started = live ? live.you > 0 || live.them > 0 || live.final : false
+  const title = yours
+    ? msg.headline(
+        `${weekWord} ${board.week}`,
+        yours.opponent.name ?? copy('Unnamed team'),
+        live && started ? (live.final ? 'final' : 'live') : 'none',
+        live?.you ?? 0,
+        live?.them ?? 0,
+      )
+    : msg.yourWeek
 
   return (
     <div className="af-wl">
-      <header className="af-wl-head">
-        <p className="af-label af-wl-eyebrow">
-          {board.leagueName} · {board.season} · {msg.period} {board.week}
-        </p>
-        <div className="af-wl-title-row">
-          <h1 className="af-display af-wl-title">{copy('Your week')}</h1>
+      <PageHeader
+        className="af-wl-head"
+        eyebrowClassName="af-wl-eyebrow"
+        titleRowClassName="af-wl-title-row"
+        titleClassName="af-wl-title"
+        actionsClassName="af-wl-headactions"
+        eyebrow={
+          <>
+            {msg.yourWeek} · {board.leagueName} · {board.season}
+          </>
+        }
+        title={title}
+        titleAside={
           <Link href={allWeeksHref} className="af-wl-allweeks">
             {copy('Every league at once')} →
           </Link>
-        </div>
-        {/*
-          The season-race line: the week, your record, your place by record. Each piece only when it is
-          real — no record before a scored game, no place unless every team in the week has a record.
-        */}
-        {yourRecord || raceRank ? (
-          <p className="af-wl-race" data-testid="week-season-race" aria-label={copy('Season race')}>
-            <span className="af-wl-race-chip af-num" data-kind="week">
-              {msg.period} {board.week}
-            </span>
-            {yourRecord ? (
-              <span className="af-wl-race-chip af-num" data-kind="record">
-                <span className="af-wl-race-k">{copy('Record')}</span> {yourRecord}
+        }
+        actions={
+          /*
+            The season-race line: the week, your record, your place by record. Each piece only when it is
+            real — no record before a scored game, no place unless every team in the week has a record.
+          */
+          yourRecord || raceRank ? (
+            <p className="af-wl-race" data-testid="week-season-race" aria-label={copy('Season race')}>
+              <span className="af-wl-race-chip af-num" data-kind="week">
+                {weekWord} {board.week}
               </span>
-            ) : null}
-            {raceRank ? (
-              <span className="af-wl-race-chip af-num" data-kind="rank">
-                {seasonRaceOrdinal(raceRank)} {copy('of')} {raceRank.of}{' '}
-                <span className="af-wl-race-k">{copy('by record')}</span>
-              </span>
-            ) : null}
-          </p>
-        ) : null}
-      </header>
+              {yourRecord ? (
+                <span className="af-wl-race-chip af-num" data-kind="record">
+                  <span className="af-wl-race-k">{copy('Record')}</span> {yourRecord}
+                </span>
+              ) : null}
+              {raceRank ? (
+                <span className="af-wl-race-chip af-num" data-kind="rank">
+                  {seasonRaceOrdinal(raceRank)} {copy('of')} {raceRank.of}{' '}
+                  <span className="af-wl-race-k">{copy('by record')}</span>
+                </span>
+              ) : null}
+            </p>
+          ) : null
+        }
+      />
 
       {/* An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts). */}
       {board.extraMatchup ? (
@@ -274,7 +303,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
           )}
 
           {/* This week's lineups, projected by AllFantasy's engine and the provider — a different measure from the above. */}
-          <WeekLineupLine lineups={lineups} leagueId={yours.leagueId} season={yours.season} week={yours.week} />
+          <WeekLineupLine lineups={lineups} leagueId={yours.leagueId} season={yours.season} week={yours.week} plain />
 
           {/* ── Rivalry ─────────────────────────────────────────────── */}
           <div
@@ -427,9 +456,8 @@ function describeRivalry(
   msg: YourWeekLeagueMessages,
 ): string {
   const meetings = msg.rivalryMeetings(r.meetings)
-  const margin = `${r.averageMargin >= 0 ? '+' : ''}${r.averageMargin.toFixed(1)}`
   const lead = r.wins > r.losses ? msg.rivalryYouLead : r.losses > r.wins ? msg.rivalryTheyLead(oppName) : msg.rivalryEven
-  return msg.rivalrySentence(lead, meetings, margin)
+  return msg.rivalrySentence(lead, meetings, msg.rivalryPoints(r.averageMargin))
 }
 
 export default YourWeekLeague

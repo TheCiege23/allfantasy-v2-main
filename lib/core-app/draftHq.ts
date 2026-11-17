@@ -16,8 +16,6 @@ import {
   normalizeDraftedNameSet,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine/queue-utils'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -238,7 +236,6 @@ export type DraftHqData = {
 }
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
-
 
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
@@ -771,6 +768,7 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
     platform: boardLeague?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: boardLeague?.settings,
+    sport: boardLeague?.sport,
   })
 
   const teamCount = teams.length
@@ -909,6 +907,7 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     platform: league?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: league?.settings,
+    sport: league?.sport,
   })
 
   return {
@@ -1172,6 +1171,7 @@ export async function getDraftHqData(
     platform: league.platform,
     playerIds: made.map((p) => p.playerId),
     leagueSettings: league.settings,
+    sport: league.sport,
   })
 
   const madePicks: SectionState<MadePick[]> =

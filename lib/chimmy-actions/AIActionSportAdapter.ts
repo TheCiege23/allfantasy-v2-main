@@ -194,7 +194,7 @@ const SPORT_ACTION_MAP: Record<string, AIActionType[]> = {
 /**
  * Returns the set of valid AIActionTypes for the given sport and league format.
  */
-export function getActionsForSport(
+function getActionsForSport(
   sport: Sport,
   leagueType: LeagueFormat,
 ): AIActionType[] {

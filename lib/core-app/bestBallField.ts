@@ -5,6 +5,7 @@ import { bestBallProjectedFinal } from './bestBallForecast'
 import { readPlayerAvailability, type BestBallCandidate } from './matchupProjections'
 import { starterGameStates } from './matchupGameState'
 import { composePlayerIdentities, type ComposedPlayerIdentity } from './playerIdentityCompose'
+import { projectionSportScope } from './playerProjections'
 import { displayPosition } from './positionLabels'
 import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { startingSlotTemplate } from './rosterSlots'
@@ -60,7 +61,8 @@ export async function loadBestBallField(args: {
   const [projections, identityRows, scoreRows, games, availability] = await Promise.all([
     prisma.fantasyProjection.findMany({
       // The same read as the matchup screen: the component stat line, rescored under this league's rules.
-      where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' } },
+      // Sport-scoped like it too: a Sleeper NBA id can equal an NFL player's (`projectionSportScope`).
+      where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
       select: { playerId: true, stats: true },
     }),
     prisma.sportsPlayer.findMany({

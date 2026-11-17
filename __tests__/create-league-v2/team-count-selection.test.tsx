@@ -17,7 +17,9 @@ describe('simple creation team choices agree with the server', () => {
     expect(next.teamCount).toBe(12)
     view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
     // Keeper runs to 20 (free even sizes; the odd ones are AF Commissioner and not in a free stepper).
-    const evens = concept === 'keeper' ? [4, 6, 8, 10, 12, 14, 16, 18, 20] : [4, 6, 8, 10, 12, 14, 16]
+    const evens = [4, 6, 8, 10, 12, 14, 16]
+    if (concept === 'keeper') evens.push(18, 20)
+    if (concept === 'dynasty') evens.push(150)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '4')
     expect(count).toHaveAttribute('max', String(evens.at(-1)))
@@ -42,6 +44,14 @@ describe('simple creation team choices agree with the server', () => {
       expect(patch.bestBall.playoffTeams).toBe(4)
     }
   })
+  it('steps from 16 to 150 in NFL dynasty', () => {
+    const onChange = vi.fn()
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 16, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    fireEvent.click(screen.getByTestId('g30-team-count-increase'))
+    expect(onChange.mock.calls[0][0].teamCount).toBe(150)
+  })
+
   it('preserves the full redraft range and a valid existing selection', () => {
     const onChange = vi.fn()
     const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 32, sport: 'NFL' as const }

@@ -1038,7 +1038,19 @@ export async function loadRailProjections(args: {
   }
   if (sides.length === 0) return NO_PROJECTIONS
 
-  const wanted = [...new Set(sides.flatMap((s) => s.starters).filter(isPriceableId))]
+  /*
+   * 🛑 ONLY AN NFL SIDE IS PRICED FROM THIS FEED (2026-11-06). One read serves every league on the
+   * rail and the result is keyed by player id alone, so a Sleeper NBA league's starters — Sleeper
+   * ids from its NBA namespace, which is independent of the NFL one — matched NFL rows of the same
+   * id and summed NFL strangers into the NBA side's total. Not a foreign-id league (`isForeignIdSpace`
+   * rightly keeps Sleeper's NBA ids), so the strip above never touched it. The feed is NFL-only
+   * (`projectionCoverageFor`: no weekly feed for any other sport), so a non-NFL side is left unpriced
+   * — the same `PROJ —` a category league gets — and its ids never reach the read. A league whose
+   * sport is unknown (no meta row) keeps the old NFL answer, so an NFL rail is byte-identical.
+   */
+  const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
+  const feedPriced = (s: Side) => (sportByLeague.get(s.dbLeagueId) ?? 'NFL') === 'NFL'
+  const wanted = [...new Set(sides.filter(feedPriced).flatMap((s) => s.starters).filter(isPriceableId))]
   if (wanted.length === 0) return NO_PROJECTIONS
 
   /*
@@ -1083,7 +1095,6 @@ export async function loadRailProjections(args: {
       week: args.week,
     })
   }
-  const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
   const eliminationByLeague = new Map<string, boolean>()
   /*
@@ -1123,7 +1134,7 @@ export async function loadRailProjections(args: {
 
   const byLeague = new Map<string, SidesForLeague>()
   for (const side of sides) {
-    if (pointsWithheld.has(side.dbLeagueId)) continue
+    if (pointsWithheld.has(side.dbLeagueId) || !feedPriced(side)) continue
     const scoring = scoringByLeague.get(side.dbLeagueId) ?? null
 
     let vendor = 0

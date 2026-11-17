@@ -6,7 +6,7 @@ import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface LeagueDiscoveryCardProps {
+interface LeagueDiscoveryCardProps {
   league: DiscoveryCard
 }
 
@@ -206,7 +206,9 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
           View details
         </Link>
 
-        {canJoinDirect ? (
+        {league.requiresCareerApproval && !isFull && league.joinUrl ? (
+          <Link href={league.joinUrl} className="rounded-xl border px-3 py-2.5 text-sm font-semibold">Request to join</Link>
+        ) : canJoinDirect && league.joinUrl ? (
           <Link
             href={league.joinUrl}
             data-testid={`league-discovery-join-${league.id}`}

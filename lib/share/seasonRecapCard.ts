@@ -36,7 +36,7 @@ export function isSeasonRecapCardAward(v: unknown): v is SeasonRecapCardAward {
   return typeof v === 'string' && (SEASON_RECAP_CARD_AWARDS as readonly string[]).includes(v)
 }
 
-export type SeasonRecapCardView = {
+type SeasonRecapCardView = {
   award: SeasonRecapCardAward
   /** The banner across the top, e.g. "2026 CHAMPION". */
   kicker: string

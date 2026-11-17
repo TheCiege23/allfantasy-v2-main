@@ -35,6 +35,12 @@ const sportsPlayerFindMany = vi.hoisted(() =>
   ),
 )
 
+const projectionFindMany = vi.hoisted(() =>
+  vi.fn((args: { where: { playerId: { in: string[] } } }) =>
+    args.where.playerId.in.map((playerId: string) => ({ playerId, stats: { stats: { pts: 10 } } })),
+  ),
+)
+
 vi.mock('@/lib/prisma', () => {
   const fallback = (method: string) =>
     method === 'count' ? 0 : method === 'findMany' || method === 'groupBy' ? [] : null
@@ -53,8 +59,7 @@ vi.mock('@/lib/prisma', () => {
       { platformUserId: 'you', playerData: { starters: ['1001', '2002'] } },
       { platformUserId: 'them', playerData: { starters: ['2002'] } },
     ],
-    'fantasyProjection.findMany': (args) =>
-      args.where.playerId.in.map((playerId: string) => ({ playerId, stats: { stats: { pts: 10 } } })),
+    'fantasyProjection.findMany': (args) => projectionFindMany(args),
     'sportsInjury.findMany': (args) => db.injuries.filter((i) => args.where.playerName.in.includes(i.playerName)),
   }
   const modelProxy = (model: string) =>
@@ -148,6 +153,21 @@ describe('Matchup pricing — an NFL namesake’s injury never zeroes an NBA sta
     await load()
     expect(sportsPlayerFindMany).toHaveBeenCalled()
     for (const [args] of sportsPlayerFindMany.mock.calls) expect(args.where.sport).toBe('NBA')
+  })
+
+  it('🛑 every fantasy_projections read names the league sport (an NFL row sharing the id is not his line)', async () => {
+    projectionFindMany.mockClear()
+    await load()
+    expect(projectionFindMany).toHaveBeenCalled()
+    for (const [args] of projectionFindMany.mock.calls) expect((args.where as { sport?: string }).sport).toBe('NBA')
+  })
+
+  it('control: an NFL league sends the projection read it always did — no sport key', async () => {
+    db.sport = 'NFL'
+    projectionFindMany.mockClear()
+    await load()
+    expect(projectionFindMany).toHaveBeenCalled()
+    for (const [args] of projectionFindMany.mock.calls) expect('sport' in args.where).toBe(false)
   })
 
   it('🛑 and so does the Best Ball position read', async () => {

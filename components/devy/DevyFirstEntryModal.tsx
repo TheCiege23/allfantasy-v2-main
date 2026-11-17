@@ -39,7 +39,7 @@ const C2C_TIPS = [
   'Use promotions strategically to move players from college rights into pro impact windows.',
 ]
 
-export interface DevyFirstEntryModalProps {
+interface DevyFirstEntryModalProps {
   leagueId: string
   userId: string
   enabled: boolean

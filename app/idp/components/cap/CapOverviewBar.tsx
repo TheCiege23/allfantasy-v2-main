@@ -73,19 +73,19 @@ export function CapOverviewBar({
           title="Dead money"
         />
         <div
-          className="h-full bg-[color:var(--cap-green)]/90 transition-all"
+          className="h-full bg-cap-green/90 transition-all"
           style={{ width: `${pAvail}%` }}
           title="Available"
         />
       </div>
       <div className="flex flex-wrap gap-2 text-[11px]">
-        <span className="rounded-full border border-[color:var(--cap-contract)]/30 bg-[color:var(--cap-contract)]/10 px-2 py-1 font-semibold text-blue-100">
+        <span className="rounded-full border border-cap-contract/30 bg-cap-contract/10 px-2 py-1 font-semibold text-blue-100">
           Active: ${a.toFixed(1)}M
         </span>
-        <span className="rounded-full border border-[color:var(--cap-dead)]/30 bg-white/[0.04] px-2 py-1 font-semibold text-white/60">
+        <span className="rounded-full border border-cap-dead/30 bg-white/[0.04] px-2 py-1 font-semibold text-white/60">
           Dead: ${d.toFixed(1)}M
         </span>
-        <span className="rounded-full border border-[color:var(--cap-green)]/30 bg-[color:var(--cap-green)]/10 px-2 py-1 font-semibold text-emerald-100">
+        <span className="rounded-full border border-cap-green/30 bg-cap-green/10 px-2 py-1 font-semibold text-emerald-100">
           Available: ${v.toFixed(1)}M
         </span>
       </div>

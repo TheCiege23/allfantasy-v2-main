@@ -88,7 +88,7 @@ export function pickHeadshotCandidate<T>(
  * Every comparison below is three-valued. `unknown` means one side did not say, or the two sides
  * speak different vocabularies we cannot reconcile — it is NOT agreement and NOT contradiction.
  */
-export type HeadshotFieldRelation = 'same' | 'different' | 'unknown'
+type HeadshotFieldRelation = 'same' | 'different' | 'unknown'
 
 /** Football position families. EDGE and OLB straddle the line, so they belong to both. */
 const FOOTBALL_POSITION_FAMILIES: Record<string, readonly string[]> = {
@@ -167,7 +167,7 @@ export function headshotTeamRelation(
   return shortA === shortB ? 'different' : 'unknown'
 }
 
-export interface HeadshotIdentityLookup {
+interface HeadshotIdentityLookup {
   sport: string | null | undefined
   team?: string | null
   position?: string | null
@@ -200,7 +200,7 @@ export function headshotContradicts(
  *      cannot tell apart, and no image beats a stranger's.
  */
 /** One Sleeper player as the Sleeper headshot tier sees him. `id` is the Sleeper player id. */
-export interface SleeperHeadshotCandidate {
+interface SleeperHeadshotCandidate {
   id: string
   name: string
   position?: string | null

@@ -46,9 +46,9 @@ export default function WaiverAI() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncedLeague, setSyncedLeague] = useState<SyncedLeague | null>(null);
 
-  const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
+  const [, setActiveLeagueId] = useState<string | null>(null);
   const [autoRoster, setAutoRoster] = useState('');
-  const [autoLoading, setAutoLoading] = useState(true);
+  const [, setAutoLoading] = useState(true);
 
   const [userRoster, setUserRoster] = useState('');
   const [userContention, setUserContention] = useState<'win-now' | 'contender' | 'rebuild' | 'unknown'>('unknown');

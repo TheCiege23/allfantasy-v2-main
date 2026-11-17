@@ -72,6 +72,9 @@ export async function POST(
   if (!uiSettings.autoPickEnabled) {
     return NextResponse.json({ error: 'Auto-pick is disabled by the commissioner' }, { status: 400 })
   }
+  if (uiSettings.executionMode === 'offline') {
+    return NextResponse.json({ error: 'This is an offline draft: the commissioner enters every pick.', code: 'DRAFT_PICK_OFFLINE_DRAFT' }, { status: 409 })
+  }
 
   const { resolveCurrentOnTheClock } = await import('@/lib/live-draft-engine/CurrentOnTheClockResolver')
   const { resolvePickOwner } = await import('@/lib/live-draft-engine/PickOwnershipResolver')

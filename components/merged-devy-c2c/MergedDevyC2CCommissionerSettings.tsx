@@ -6,6 +6,8 @@
 
 import { useEffect, useState } from 'react'
 
+import { BASKETBALL_C2C_RULE, basketballC2CScoringBlocked } from '@/lib/c2c/basketballC2CRules'
+
 interface C2CConfig {
   leagueId: string
   sport: string
@@ -104,9 +106,19 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
     )
   }
 
+  // Basketball C2C scores only with a set college lineup and unified standings (lib/c2c/basketballC2CRules.ts).
+  const isBasketball = config.sport === 'NBA' || config.sport === 'NCAAB'
+  const scoringBlocked = isBasketball && basketballC2CScoringBlocked(config)
+
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
       <h3 className="text-base font-semibold text-white">C2C commissioner settings</h3>
+      {scoringBlocked && (
+        <p role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          Scoring is paused for this league. Set Standings model to Unified and turn off Best ball (college) to restart it.
+        </p>
+      )}
+      {isBasketball && <p className="text-xs text-white/50">{BASKETBALL_C2C_RULE}</p>}
       {message && (
         <p className={`text-sm ${message.type === 'ok' ? 'text-emerald-400' : 'text-amber-400'}`}>
           {message.text}
@@ -142,8 +154,8 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
             disabled={saving}
           >
             <option value="unified">Unified</option>
-            <option value="separate">Separate college + pro</option>
-            <option value="hybrid">Hybrid championship</option>
+            <option value="separate" disabled={isBasketball}>Separate college + pro</option>
+            <option value="hybrid" disabled={isBasketball}>Hybrid championship</option>
           </select>
         </label>
       </div>
@@ -255,7 +267,8 @@ export function MergedDevyC2CCommissionerSettings({ leagueId }: MergedDevyC2CCom
             type="checkbox"
             checked={config.bestBallCollege}
             onChange={(e) => patch({ bestBallCollege: e.target.checked })}
-            disabled={saving}
+            // Basketball can only turn it OFF (lib/c2c/basketballC2CRules.ts).
+            disabled={saving || (isBasketball && !config.bestBallCollege)}
             className="rounded border-white/20"
           />
           Best ball (college)

@@ -32,7 +32,7 @@ function stable(value: unknown): string {
   throw new Error('League fingerprint requires finite JSON settings')
 }
 
-export interface LeagueFingerprintInput {
+interface LeagueFingerprintInput {
   sport: string
   format: string
   teamCount: number

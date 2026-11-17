@@ -139,6 +139,16 @@ export type WaiverBoardRow = {
   afNetGain?: number
   add: WaiverPlayer
   drop: WaiverPlayer | null
+  /**
+   * What THIS row's numbers were priced on, when it differs from its section's `basis` — a points league
+   * priced on its own value board (`league_value_board`) in a section otherwise on the season rate.
+   */
+  basis?: WaiverValueBasis
+  /**
+   * `categories`: a category league priced on its own value board — `netGain` and `projected` are a
+   * per-game CATEGORY SCORE, never points. Absent means points.
+   */
+  valueKind?: 'points' | 'categories'
   /** FAAB left, when the league runs FAAB and a budget was read. */
   faabRemaining: number | null
   /** "Wednesday 09:00 UTC", when the league publishes a processing time. */
@@ -211,10 +221,10 @@ export type WaiversBoardData = {
    * One kickoff per fixture of the projection week (ISO), so the renderer can say how much of it
    * has already been played. Null when the schedule is unread.
    *
-   * ⚠ KICKOFF TIMES, NOT A "PLAYED" COUNT — THIS MODULE MUST STAY CLOCK-FREE. The board is served
-   * from the screen-summary cache (`waiversBoardSummary`), which is only sound because nothing
-   * here reads `now`; a count taken at build time would freeze in the cache. The first version of
-   * this field did exactly that and the summary's own guard test caught it. The renderer counts.
+   * ⚠ KICKOFF TIMES, NOT A "PLAYED" COUNT — KEEP THIS MODULE CLOCK-FREE. The cross-league board
+   * that served this from a screen-summary cache was removed on 2026-11-12, but a count taken at
+   * build time would freeze in any cached read of it, as the first version of this field did. The
+   * renderer counts.
    *
    * 🛑 THE FEED HOLDS ONE WEEK, AND ON A MONDAY THAT WEEK IS OVER. Production 2026-09-28: the board
    * ranked week-3 projections with 13 of 14 week-3 games played, for claims that process Tuesday for

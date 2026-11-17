@@ -2,7 +2,7 @@
 
 import { IdentityImageRenderer } from "./IdentityImageRenderer"
 
-export interface ProfileImagePreviewControllerProps {
+interface ProfileImagePreviewControllerProps {
   /** When user selects a file, pass object URL here for immediate preview before upload completes. */
   previewObjectUrl?: string | null
   /** Persisted profile image URL (from API). */

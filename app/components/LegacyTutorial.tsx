@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Sparkles, Rocket } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Rocket } from "lucide-react";
 
 type Tab = 'overview' | 'trade' | 'finder' | 'player-finder' | 'waiver' | 'rankings' | 'pulse' | 'compare' | 'chat' | 'share' | 'transfer';
 

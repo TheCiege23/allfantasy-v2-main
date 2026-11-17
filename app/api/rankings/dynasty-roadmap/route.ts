@@ -3,6 +3,7 @@ import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { recordLlmUsage } from '@/lib/telemetry/llm-usage'
 import { buildDynastyRoadmapPrompt } from '@/lib/rankings-engine/dynastyRoadmapPrompt'
@@ -62,6 +63,10 @@ export const POST = withApiUsage({ endpoint: "/api/rankings/dynasty-roadmap", to
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
     const userId = session.user.id
+
+    // Plan gate before any rate-limit spend or AI call: `ai_planning_3_5_year` (lib/monetization/entitlements.ts).
+    const gate = await requireFeatureEntitlement({ userId: userId, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'ai_planning_3_5_year' })
+    if (!gate.ok) return gate.response
 
     // This is the most expensive endpoint in the group (gpt-4o at 2000 completion tokens), so the
     // session gate alone is not enough — bucket per authenticated user AND per IP.

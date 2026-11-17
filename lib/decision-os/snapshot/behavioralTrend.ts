@@ -9,7 +9,7 @@
 
 import type { BehavioralSnapshotRecord } from './behavioralSnapshotCapture'
 
-export interface BehavioralTrendPoint {
+interface BehavioralTrendPoint {
   periodKey: string
   capturedAt: string
   eventCount: number

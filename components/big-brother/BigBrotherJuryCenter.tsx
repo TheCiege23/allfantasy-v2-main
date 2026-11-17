@@ -7,7 +7,7 @@
 import { useCallback, useState } from 'react'
 import type { BigBrotherSummary } from './types'
 
-export interface BigBrotherJuryCenterProps {
+interface BigBrotherJuryCenterProps {
   leagueId: string
   summary: BigBrotherSummary
 }

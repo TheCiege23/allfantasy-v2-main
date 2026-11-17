@@ -9,7 +9,7 @@
  */
 import type { LeagueHomeData, LeagueStanding } from '@/lib/core-app/leagueHome'
 
-export type HomeKpis = {
+type HomeKpis = {
   record: { record: string; rank: number | null; teams: number | null } | null
   pointsFor: { points: number; rank: number | null; teams: number; vsAverage: number | null } | null
   faab: { remaining: number } | null

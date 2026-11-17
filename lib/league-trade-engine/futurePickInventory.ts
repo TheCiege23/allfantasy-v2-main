@@ -21,7 +21,7 @@
  * written in — Sleeper roster numbers, MFL franchise ids. Never `Roster.id`.
  */
 
-export type StoredFuturePick = {
+type StoredFuturePick = {
   pickSeason: number
   round: number
   originalRosterId: string
@@ -29,7 +29,7 @@ export type StoredFuturePick = {
 }
 
 /** One season of a league's draft history: its largest round and how many picks it recorded. */
-export type DraftSeasonSize = { season: number; maxRound: number; picks: number }
+type DraftSeasonSize = { season: number; maxRound: number; picks: number }
 
 export type InventoryPick = {
   season: number

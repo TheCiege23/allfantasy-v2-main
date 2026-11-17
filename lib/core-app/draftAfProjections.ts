@@ -57,8 +57,13 @@ export async function loadDraftAfProjections(args: {
   playerIds: readonly (string | null | undefined)[]
   /** The league's `settings` blob; the scoring is extracted here. */
   leagueSettings: unknown
+  /**
+   * The league's sport. A Sleeper NBA draft's ids are Sleeper's NBA namespace, which collides with
+   * NFL ids, so a known non-NFL sport reads only its own rows (`projectionSportScope`) — none today.
+   */
+  sport?: string | null
 }): Promise<DraftAfProjections> {
-  if (rosterIdSpaceOf(args.platform) !== 'sleeper') return NONE
+  if (rosterIdSpaceOf(args.platform, args.sport) !== 'sleeper') return NONE
   const ids = [...new Set(args.playerIds.filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id)))]
   if (ids.length === 0) return NONE
 
@@ -67,8 +72,8 @@ export async function loadDraftAfProjections(args: {
     if (!when) return NONE
     const scoring = extractScoringSettings(args.leagueSettings)
     const [providers, engine] = await Promise.all([
-      lookupProjections(ids, when).catch((): Awaited<ReturnType<typeof lookupProjections>> => new Map()),
-      lookupAfEngineProjections(ids, when).catch((): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map()),
+      lookupProjections(ids, when, null, args.sport).catch((): Awaited<ReturnType<typeof lookupProjections>> => new Map()),
+      lookupAfEngineProjections(ids, when, args.sport).catch((): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map()),
     ])
     if (engine.size === 0) return NONE
 

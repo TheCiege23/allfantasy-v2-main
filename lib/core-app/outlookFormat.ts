@@ -21,7 +21,7 @@ import { standardByes } from './outlookSim'
 
 export type FormatSource = 'league' | 'standard' | 'default'
 
-export type PlayoffFormat = {
+type PlayoffFormat = {
   playoffTeams: number
   playoffTeamsSource: FormatSource
   byeTeams: number
@@ -31,7 +31,7 @@ export type PlayoffFormat = {
 }
 
 /** Used when a league declares no playoff field at all. */
-export const DEFAULT_PLAYOFF_TEAMS = 6
+const DEFAULT_PLAYOFF_TEAMS = 6
 
 type Obj = Record<string, unknown>
 

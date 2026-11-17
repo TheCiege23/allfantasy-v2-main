@@ -15,7 +15,7 @@ export interface MarketObservationV2 {
   sampleSize: number | null
 }
 
-export interface MarketSnapshotPolicy {
+interface MarketSnapshotPolicy {
   now: string
   maxAgeMs: number
   expectedCohort?: MarketCohortV2

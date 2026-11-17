@@ -5,7 +5,7 @@ import { customScoringStartingPoint, getScoringLabel, LABEL_DEFAULTS, type Label
 import { customScoringFields, customScoringValues, parseCustomOverrides, type CustomOverrides } from '@/lib/league-labels/customScoring'
 
 /** "+0.04", "-2", and an em dash for a stat the option does not score. */
-export function formatScoringValue(v: number): string {
+function formatScoringValue(v: number): string {
   if (v === 0) return '—'
   return v > 0 ? `+${v}` : String(v)
 }

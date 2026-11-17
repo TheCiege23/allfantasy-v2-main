@@ -18,7 +18,7 @@ import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoa
 import { BlockListUnavailableError } from '@/lib/moderation/BlockUserService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
-export type DraftLiveSyncWire = {
+type DraftLiveSyncWire = {
   leagueId: string
   updated: boolean
   updatedAt: string | null

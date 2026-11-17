@@ -20,7 +20,7 @@ import { HOME_TOPICS } from './help-topics/home'
 import { TRADES_TOPICS } from './help-topics/trades'
 import { coreLang } from './messages/coreLocale'
 
-export type HelpText = { title: string; body: string }
+type HelpText = { title: string; body: string }
 export type HelpTopic = { en: HelpText; es: HelpText }
 
 /**

@@ -35,14 +35,14 @@ export type BigBrotherAdminAction =
   | 'pause_week'
   | 'resume_week'
 
-export interface BigBrotherAdminInput {
+interface BigBrotherAdminInput {
   leagueId: string
   action: BigBrotherAdminAction
   /** For extend_vote_window: minutes to add. For update_config: partial config. */
   params?: Record<string, unknown>
 }
 
-export interface BigBrotherAdminResult {
+interface BigBrotherAdminResult {
   ok: boolean
   message?: string
   error?: string

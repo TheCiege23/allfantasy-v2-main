@@ -13,7 +13,7 @@ import { buildFaabPlan } from './guillotineFaabEngine'
 import { buildWaiverRecommendations } from './guillotineWaiverEngine'
 import type { GuillotineWarRoomContext } from './types'
 
-export interface GuillotineWeeklyStep {
+interface GuillotineWeeklyStep {
   order: number
   action: string
   detail: string

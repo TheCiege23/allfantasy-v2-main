@@ -67,7 +67,7 @@ function statusTone(status: string): TimelineEntry['tone'] {
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
-export type ImportRunRow = {
+type ImportRunRow = {
   id: string
   provider: string
   season: number
@@ -95,7 +95,7 @@ export function fromImportRun(r: ImportRunRow, providerLabel: string): TimelineE
   }
 }
 
-export type SyncRunRow = {
+type SyncRunRow = {
   id: string
   status: string
   rowsWritten: number
@@ -122,7 +122,7 @@ export function fromSyncRun(r: SyncRunRow, providerLabel: string): TimelineEntry
   }
 }
 
-export type AuditLogRow = {
+type AuditLogRow = {
   id: string
   actionType: string
   entityType: string
@@ -140,6 +140,8 @@ export type AuditLogRow = {
 const ACTION_WORDING: Record<string, string> = {
   settings_patch: 'Changed league settings',
   commissioner_undo_draft_pick: 'Undid a draft pick',
+  draft_commissioner_action: 'Made a change in the draft room',
+  draft_reset: 'Reset the draft',
   commissioner_run_waivers: 'Ran waivers by hand',
   commissioner_automation_run: 'Ran a league automation',
   commissioner_edit_standings: 'Edited the standings',
@@ -181,7 +183,7 @@ export function fromAuditLog(r: AuditLogRow): TimelineEntry {
   }
 }
 
-export type FeedEventRow = {
+type FeedEventRow = {
   id: string
   type: string
   summary: string
@@ -201,7 +203,7 @@ export function fromFeedEvent(r: FeedEventRow): TimelineEntry {
   }
 }
 
-export type BroadcastRow = { id: string; message: string; createdAt: Date; actorName: string | null }
+type BroadcastRow = { id: string; message: string; createdAt: Date; actorName: string | null }
 
 export function fromBroadcast(r: BroadcastRow): TimelineEntry {
   return {
@@ -215,7 +217,7 @@ export function fromBroadcast(r: BroadcastRow): TimelineEntry {
   }
 }
 
-export type AutomationRunRow = {
+type AutomationRunRow = {
   id: string
   jobType: string
   status: string

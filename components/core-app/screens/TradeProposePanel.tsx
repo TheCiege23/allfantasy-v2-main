@@ -38,7 +38,7 @@ import { parseFuturePickRef, type PickTerms } from '@/lib/league-trade-engine/pi
  */
 
 /** One asset in the shape `TradeAssetInput` accepts. */
-export type ProposalAsset = {
+type ProposalAsset = {
   itemType: 'player' | 'faab' | 'rookie_pick' | 'future_pick'
   itemReference?: string | null
   fromRosterId: string

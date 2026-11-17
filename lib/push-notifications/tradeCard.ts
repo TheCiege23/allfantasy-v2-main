@@ -108,7 +108,7 @@ export function tradeCardPath(card: TradeCard, env?: Record<string, string | und
   return `/api/push-card/trade?d=${d}&s=${sign(d, key)}`
 }
 
-export type VerifyResult = { ok: true; card: TradeCard } | { ok: false; reason: "no_key" | "bad_signature" | "bad_payload" }
+type VerifyResult = { ok: true; card: TradeCard } | { ok: false; reason: "no_key" | "bad_signature" | "bad_payload" }
 
 export function verifyTradeCard(
   d: string | null,

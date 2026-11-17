@@ -75,7 +75,7 @@ function getTeamGrade(picks: MockDraftPick[], manager: string) {
   }
 }
 
-export interface MockDraftRecapProps {
+interface MockDraftRecapProps {
   /** All picks in order */
   results: MockDraftPick[]
   /** Optional config for header */
@@ -149,15 +149,6 @@ export function MockDraftRecap({
     () => Array.from(new Set(results.map((p) => p.manager))).filter(Boolean).sort(),
     [results],
   )
-
-  const byRound = useMemo(() => {
-    const maxRound = Math.max(0, ...results.map((p) => p.round))
-    const map: Record<number, MockDraftPick[]> = {}
-    for (let r = 1; r <= maxRound; r++) {
-      map[r] = results.filter((p) => p.round === r).sort((a, b) => a.pick - b.pick)
-    }
-    return map
-  }, [results])
 
   const teamGrades = useMemo(() => {
     const grades: Record<string, ReturnType<typeof getTeamGrade>> = {}

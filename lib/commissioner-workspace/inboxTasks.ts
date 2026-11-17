@@ -3,6 +3,8 @@ import { readClassJoinRequests } from '@/lib/class-rating/exceptions'
 import { getOrphanAdoptionRequests } from '@/lib/orphan-marketplace/settings'
 import { openDisputes, readDisputes } from '@/lib/disputes/disputeStore'
 import type { WorkspaceTaskCandidate } from './taskSources'
+import { isTracking, readDuesConfig } from '@/lib/dues/duesTracker'
+import { isLeagueEntryFeeProcessingEnabled } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 
 /**
  * Commish Inbox detectors (docs/AF_COMMISSIONER_SETTINGS_SPEC.md §3.1): the rest of what waits on a
@@ -15,8 +17,11 @@ import type { WorkspaceTaskCandidate } from './taskSources'
  *   integrity  open integrity flags (duplicate managers, collusion signals)
  *   joins      division-gate join requests waiting on a decision
  *   adoptions  pending orphan-team adoption requests
- *   dues       teams that have not paid this season's dues (dues tracker on)
- *   payouts    payout requests waiting for approval
+ *   dues       teams that have not paid this season's dues (the league tracks dues)
+ *   dues-claim managers who said "I paid" and are waiting for the commissioner to confirm
+ *   rules      member rule proposals waiting for the commissioner's approval
+ *   draft-time an open draft-time poll — everyone has answered, or it closes within a day
+ *   payouts    payout requests waiting for approval — only while AllFantasy holds league money
  *   disputes   disputes filed on the dispute desk with no ruling yet (critical after 3 days)
  */
 
@@ -31,6 +36,8 @@ export type InboxConditionInput = {
   settings: unknown
   teams: Array<{ id: string; teamName: string | null }>
   payouts: Array<{ id: string }>
+  /** Whether AllFantasy holds league money (lib/monetization/leagueEntryFeeKillSwitch.ts). Defaults to the live switch. */
+  moneyHoldingEnabled?: boolean
 }
 
 const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -66,17 +73,44 @@ export function detectInboxConditions(input: InboxConditionInput, now: Date): Wo
   const adoptions = getOrphanAdoptionRequests(input.settings).filter((r) => r.status === 'pending')
   for (const r of adoptions) add(`operational:adoption:${r.id}:v1`, 'Orphan team adoption request', `${r.requesterName} asked to take over an open team. Approve or reject the request.`, settingsHref)
 
-  const dues = asRecord(asRecord(input.settings).dues_tracker)
-  if (dues.enabled === true && input.teams.length > 0) {
-    const entries = new Map((Array.isArray(dues.entries) ? dues.entries : []).map((e) => [String(asRecord(e).teamId), asRecord(e)]))
-    const unpaid = input.teams.filter((t) => {
-      const e = entries.get(t.id)
-      return !(e && (e.paid === true || (Array.isArray(e.paidSeasons) && e.paidSeasons.map(Number).includes(input.season))))
-    })
+  /*
+   * ⚠ THROUGH THE TRACKER'S OWN RULES. This gated on `dues_tracker.enabled === true`, a switch the dues
+   * panel never showed, so no league that tracked dues ever got the task. `isTracking` counts a league
+   * with an amount set, as the tracker itself does.
+   */
+  const dues = readDuesConfig(asRecord(input.settings).dues_tracker)
+  if (isTracking(dues) && input.teams.length > 0) {
+    const entries = new Map(dues.entries.map((e) => [e.teamId, e]))
+    const paidThisSeason = (teamId: string) => {
+      const e = entries.get(teamId)
+      return Boolean(e && (e.paid || e.paidSeasons.includes(input.season)))
+    }
+    const unpaid = input.teams.filter((t) => !paidThisSeason(t.id))
     if (unpaid.length > 0) add(`operational:dues:${input.season}:v1`, 'League dues are unpaid', `${unpaid.length} of ${input.teams.length} teams have not paid ${input.season} dues: ${unpaid.slice(0, 4).map((t) => t.teamName ?? 'Unnamed team').join(', ')}${unpaid.length > 4 ? ', …' : ''}.`, settingsHref, 'standard')
+    // "I paid" is a claim; confirming it is the commissioner's job, and a claim nobody confirms reads as ignored.
+    const claims = input.teams.filter((t) => !paidThisSeason(t.id) && entries.get(t.id)?.selfReportedAt)
+    if (claims.length > 0) add(`operational:dues-claims:${input.season}:v1`, 'Managers say they paid dues', `${claims.slice(0, 4).map((t) => t.teamName ?? 'A team').join(', ')}${claims.length > 4 ? ', …' : ''} ${claims.length === 1 ? 'says it' : 'say they'} paid. Confirm it in the dues tracker once the money has arrived.`, settingsHref, 'elevated')
   }
 
-  for (const p of input.payouts) add(`operational:payout:${p.id}:v1`, 'Payout request awaits approval', 'A league payout request is waiting for commissioner approval.', settingsHref)
+  // Member rule proposals (lib/constitution): nothing reaches the league vote until the commissioner acts.
+  const amendments = Array.isArray(asRecord(input.settings).constitution_amendments) ? (asRecord(input.settings).constitution_amendments as unknown[]) : []
+  for (const raw of amendments) {
+    const a = asRecord(raw)
+    if (a.status !== 'pending_approval' || typeof a.id !== 'string') continue
+    add(`operational:amendment-pending:${a.id}:v1`, 'A rule change is waiting for you', `A member proposed “${typeof a.title === 'string' ? a.title : 'a rule change'}”. Approve it to open the league vote, or decline it with a reason.`, `/league/${id}/constitution`, 'elevated')
+  }
+
+  // An open draft-time poll (lib/draft-schedule): ready to lock once it closes soon.
+  const poll = asRecord(asRecord(input.settings).draft_schedule_poll)
+  if (poll.status === 'open' && typeof poll.closesAt === 'string' && typeof poll.id === 'string') {
+    const closes = Date.parse(poll.closesAt)
+    if (Number.isFinite(closes) && closes - now.getTime() <= 24 * 3600_000) {
+      add(`operational:draft-time-poll:${poll.id}:v1`, 'Lock a draft time', closes <= now.getTime() ? 'The draft-time poll has closed. Lock the time most managers can make.' : 'The draft-time poll closes within a day. Lock the time most managers can make.', settingsHref, closes <= now.getTime() ? 'critical' : 'elevated', new Date(closes))
+    }
+  }
+
+  // While AllFantasy holds no league money every payout route refuses, so a payout task could not be acted on.
+  if (input.moneyHoldingEnabled ?? isLeagueEntryFeeProcessingEnabled()) for (const p of input.payouts) add(`operational:payout:${p.id}:v1`, 'Payout request awaits approval', 'A league payout request is waiting for commissioner approval.', settingsHref)
 
   for (const d of openDisputes(readDisputes(input.settings))) {
     const stale = now.getTime() - Date.parse(d.createdAt) >= 3 * 86_400_000

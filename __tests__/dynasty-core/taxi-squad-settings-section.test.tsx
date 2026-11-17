@@ -16,6 +16,8 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
   useOptionalLanguage: () => ({ t: (key: string) => key, tInterpolate: (key: string) => key, language: lang.language }),
 }))
 vi.mock('next/navigation', () => ({ useParams: () => ({ leagueId: 'L1' }) }))
+// The roster slot editor in the same tab loads its own settings; these tests count the taxi requests only.
+vi.mock('@/components/league-settings/RosterSettingsEditor', () => ({ RosterSettingsEditor: () => null }))
 
 import { RosterComplianceSettingsPanel } from '@/app/league/[leagueId]/components/settings/RosterComplianceSettingsPanel'
 import { DynastyFormatPresetSection } from '@/app/league/[leagueId]/components/settings/DynastyFormatPresetSection'

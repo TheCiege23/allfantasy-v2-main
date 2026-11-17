@@ -1,16 +1,5 @@
 import { prisma } from './prisma';
-import {
-  fetchNFLRoster,
-  fetchNFLTeams,
-  fetchNFLSchedule,
-  searchNFLPlayer,
-  getCurrentNFLSeason,
-  fetchNFLDepthCharts,
-  fetchNFLTeamsFull,
-  type RIPlayer,
-  type RITeam,
-  type RIScheduleGame,
-} from './rolling-insights';
+import { fetchNFLTeams, fetchNFLSchedule, searchNFLPlayer, getCurrentNFLSeason, fetchNFLDepthCharts, fetchNFLTeamsFull, type RIPlayer, type RITeam, type RIScheduleGame } from './rolling-insights';
 import {
   fetchAPISportsTeams,
   fetchAPISportsPlayerBySearch,

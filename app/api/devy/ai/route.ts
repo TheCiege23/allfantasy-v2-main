@@ -1,24 +1,9 @@
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { isCommissioner } from '@/lib/commissioner/permissions'
-import {
-  assertCommissioner,
-  buildDevyAiCacheContextSummary,
-  generateAnnualTransitionReport,
-  generateImportSummary,
-  generateLeagueConstitution,
-  getBreakoutAlerts,
-  getDraftStrategyAdvice,
-  getDevyRankings,
-  getPipelineHealthAnalysis,
-  getSetupRecommendation,
-  getShouldIPromoteAnalysis,
-  handleCommissionerQuery,
-  suggestPlayerMatches,
-  evaluateDevyProspect,
-} from '@/lib/devy/ai/devyChimmy'
+import { buildDevyAiCacheContextSummary, generateAnnualTransitionReport, generateImportSummary, generateLeagueConstitution, getBreakoutAlerts, getDraftStrategyAdvice, getDevyRankings, getPipelineHealthAnalysis, getSetupRecommendation, getShouldIPromoteAnalysis, handleCommissionerQuery, suggestPlayerMatches, evaluateDevyProspect } from '@/lib/devy/ai/devyChimmy'
 import {
   buildAiCacheKey,
   createSmokeAiResult,
@@ -130,7 +115,7 @@ export async function POST(req: NextRequest) {
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
         const m = await assertLeagueMember(leagueId, userId)
         if (!m.ok) return NextResponse.json({ error: 'Forbidden' }, { status: m.status })
-        if (managerId !== userId && !(await isCommissioner(leagueId, userId))) {
+        if (managerId !== userId && !(await canCommissionerAct(leagueId, userId, 'league'))) {
           return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
         let rid = rosterId
@@ -488,7 +473,7 @@ export async function POST(req: NextRequest) {
         if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
         const g = await assertLeagueMember(row.leagueId, userId)
         if (!g.ok) return NextResponse.json({ error: 'Forbidden' }, { status: g.status })
-        await assertCommissioner(row.leagueId, userId)
+        await assertCommissionerAccess(row.leagueId, userId, 'league')
         const cacheInputs = {
           action,
           leagueId: row.leagueId,
@@ -553,7 +538,7 @@ export async function POST(req: NextRequest) {
         }
         const m = await assertLeagueMember(leagueId, userId)
         if (!m.ok) return NextResponse.json({ error: 'Forbidden' }, { status: m.status })
-        if (!(await isCommissioner(leagueId, userId))) {
+        if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
           return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
         }
         const cacheInputs = {

@@ -122,7 +122,7 @@ export function C2CPlayerModal({
                 </p>
               ) : null}
               <p className="text-[11px] text-white/40">
-                Season stats and weekly breakdown wire to PlayerWeeklyScore when available.
+                Season stats and a weekly breakdown appear here once this player has scored games.
               </p>
             </>
           ) : (
@@ -228,10 +228,10 @@ export function C2CPlayerModal({
               className="mt-2 inline-flex justify-center rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-cyan-200 hover:bg-cyan-500/15 disabled:opacity-50"
               data-testid="c2c-player-modal-ai"
             >
-              {aiLoading ? 'Analyzing…' : 'AI Analysis (AfSub)'}
+              {aiLoading ? 'Analyzing…' : 'AI Analysis (AF Commissioner)'}
             </button>
           ) : campus ? (
-            <p className="text-center text-[11px] text-white/35">AI analysis requires AfSub.</p>
+            <p className="text-center text-[11px] text-white/35">AI analysis requires AF Commissioner.</p>
           ) : (
             <p className="text-center text-[11px] text-white/35">Campus AI evaluates college prospects (open a campus player).</p>
           )}

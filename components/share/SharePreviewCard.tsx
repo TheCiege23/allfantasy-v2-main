@@ -14,7 +14,7 @@ const SPORT_ACCENT: Record<string, string> = {
   SOCCER: "from-green-500/20 to-emerald-600/10 border-green-500/30",
 };
 
-export interface SharePreviewCardProps {
+interface SharePreviewCardProps {
   payload: SharePayload;
   className?: string;
 }

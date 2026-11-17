@@ -34,7 +34,9 @@ import { CHIMMY_TOOL_SPECS, executeChimmyTool } from '@/lib/chimmy/tools/chimmyT
  * context — the membership-proven id — and never from anything the model put in its arguments.
  */
 
-const CTX = { leagueId: 'L1', userId: 'u1' }
+// `depth: 'pro'`: the playoff simulator and trade ideas are AF Pro tools (lib/chimmy/chimmyDepth.ts);
+// this suite is about where their league comes from. The free-plan refusal is pinned in paid-depth.test.ts.
+const CTX = { leagueId: 'L1', userId: 'u1', depth: 'pro' as const }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -45,7 +47,7 @@ const LEAGUE_GATED = ['optimize_my_lineup', 'compare_start_options', 'evaluate_t
 
 describe('league-gated analyst tools', () => {
   it.each(LEAGUE_GATED)('%s refuses with no league in scope and runs nothing', async (name) => {
-    const out = await executeChimmyTool(name, {}, { leagueId: null, userId: 'u1' })
+    const out = await executeChimmyTool(name, {}, { leagueId: null, userId: 'u1', depth: 'pro' })
     expect(out).toMatch(/NO LEAGUE IS SELECTED/)
     for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled()
   })
@@ -112,7 +114,7 @@ describe('cross-league analyst tools', () => {
     ['get_playoff_outlook', h.outlook],
     ['get_my_matchup', h.matchup],
   ] as const)('%s answers across every league when none is in scope', async (name, fn) => {
-    expect(await executeChimmyTool(name, {}, { leagueId: null, userId: 'u1' })).toBe('BLOCK')
+    expect(await executeChimmyTool(name, {}, { leagueId: null, userId: 'u1', depth: 'pro' })).toBe('BLOCK')
     expect(fn).toHaveBeenCalledWith({ leagueId: null, userId: 'u1' })
   })
 
@@ -125,7 +127,7 @@ describe('cross-league analyst tools', () => {
   })
 
   it.each(['get_playoff_outlook', 'get_my_matchup'])('%s looks nothing up without a signed-in user', async (name) => {
-    expect(await executeChimmyTool(name, {}, { leagueId: 'L1', userId: null })).toMatch(/cannot tell who is signed in/)
+    expect(await executeChimmyTool(name, {}, { leagueId: 'L1', userId: null, depth: 'pro' })).toMatch(/cannot tell who is signed in/)
     expect(h.outlook).not.toHaveBeenCalled()
     expect(h.matchup).not.toHaveBeenCalled()
   })

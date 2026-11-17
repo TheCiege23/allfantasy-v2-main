@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { SettingsPanelHeading, SettingsSectionLabel, SettingsHelper, SettingsToggleRow } from './settings-ui'
+import { SettingsPanelHeading, SettingsSectionLabel, SettingsToggleRow } from './settings-ui'
 
 type Prefs = {
   tradeAlerts?: boolean
@@ -27,19 +27,10 @@ export function NotificationsSettingsPanel({
 }) {
   const disabled = !canEdit
   const p = readPrefs(settingsSnapshot)
-  const [tradeAlerts, setTradeAlerts] = useState(p.tradeAlerts !== false)
-  const [waiverResults, setWaiverResults] = useState(p.waiverResults !== false)
-  const [lineupLockReminders, setLineupLockReminders] = useState(p.lineupLockReminders !== false)
-  const [playoffRace, setPlayoffRace] = useState(p.playoffRace !== false)
   const [commissionerBroadcasts, setCommissionerBroadcasts] = useState(p.commissionerBroadcasts !== false)
 
   useEffect(() => {
-    const n = readPrefs(settingsSnapshot)
-    setTradeAlerts(n.tradeAlerts !== false)
-    setWaiverResults(n.waiverResults !== false)
-    setLineupLockReminders(n.lineupLockReminders !== false)
-    setPlayoffRace(n.playoffRace !== false)
-    setCommissionerBroadcasts(n.commissionerBroadcasts !== false)
+    setCommissionerBroadcasts(readPrefs(settingsSnapshot).commissionerBroadcasts !== false)
   }, [settingsSnapshot])
 
   const push = (next: Prefs) => {
@@ -61,48 +52,20 @@ export function NotificationsSettingsPanel({
         subtitle="League-level notification defaults. Delivery still respects each member’s account and device settings."
       />
 
-      <p className="mb-2 text-[11px] leading-relaxed text-white/40">
-        Toggles are stored on the league settings snapshot and can be read by notification routers and in-league surfaces.
+      {/*
+        🛑 FOUR OF THESE FIVE SWITCHES DID NOTHING (2026-11-15). Trade alerts, waiver results, lineup lock reminders and
+        playoff race were saved and never read by any sender. The first three are each manager's own alerts (an offer
+        to them, their claim, their lineup), so a league-wide switch would hide things members must act on; members
+        already turn them on or off per league in their own notification settings. Only the broadcast switch, which
+        the announcement sender reads, is offered here.
+      */}
+      <p className="mb-2 text-[11px] leading-relaxed text-white/40" data-testid="notifications-member-owned">
+        Trade, waiver and lineup alerts belong to each manager, who can turn them on or off for this league in their own
+        notification settings.
       </p>
 
       <div className="space-y-2">
-        <SettingsSectionLabel>League activity</SettingsSectionLabel>
-        <SettingsToggleRow
-          label="Trade alerts"
-          checked={tradeAlerts}
-          disabled={disabled}
-          onChange={(v) => {
-            setTradeAlerts(v)
-            push({ tradeAlerts: v })
-          }}
-        />
-        <SettingsToggleRow
-          label="Waiver results"
-          checked={waiverResults}
-          disabled={disabled}
-          onChange={(v) => {
-            setWaiverResults(v)
-            push({ waiverResults: v })
-          }}
-        />
-        <SettingsToggleRow
-          label="Lineup lock reminders"
-          checked={lineupLockReminders}
-          disabled={disabled}
-          onChange={(v) => {
-            setLineupLockReminders(v)
-            push({ lineupLockReminders: v })
-          }}
-        />
-        <SettingsToggleRow
-          label="Playoff race & clinch"
-          checked={playoffRace}
-          disabled={disabled}
-          onChange={(v) => {
-            setPlayoffRace(v)
-            push({ playoffRace: v })
-          }}
-        />
+        <SettingsSectionLabel>League announcements</SettingsSectionLabel>
         <SettingsToggleRow
           label="Commissioner broadcasts"
           checked={commissionerBroadcasts}

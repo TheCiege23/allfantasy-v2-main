@@ -20,6 +20,7 @@
  *    merge naming → League.settings.mergeNamingMode (the late-season reader); co-commissioner mode,
  *    jury and tribe chats → the foundation settings.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
@@ -114,6 +115,9 @@ async function authorize(ctx: Ctx) {
   const access = await resolveSurvivorAccessContext(leagueId, userId)
   if (!access) return { error: refuse(await leagueLang(leagueId), 'leagueNotFound', 404) }
   if (!access.isLeagueMember || !access.decisions.canUpdateSettings) return { error: refuse(await leagueLang(leagueId), 'commissionerOnly', 403) }
+  // Survivor setup is league setup: a co-commissioner also needs that area (lib/league/commissionerAccess.ts).
+  const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refusedScope) return { error: refusedScope }
   return { leagueId, userId, access }
 }
 

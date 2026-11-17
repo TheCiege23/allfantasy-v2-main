@@ -25,8 +25,13 @@ import type { PendingProviderTrade } from './scanPendingSleeperTrades'
  * viewer — a completed trade has no roster need to price), same Sleeper-id asset keys
  * (`gradeInputsFromPending`), one read and one insert for the whole list.
  *
+ * 🛑 EVERY PROVIDER IS FROZEN SINCE 2026-11-16 (Trade OS). Yahoo and the other providers' completed rows were
+ * left on today's values because "the frozen table is keyed on Sleeper's transaction id" — but it is keyed on
+ * (AllFantasy league row, the source's own id), and one league row has one provider, so a Yahoo transaction key
+ * is as good a key as a Sleeper one (`completedTradeOriginals.ts`). Only a Sleeper id is ever decoded as a
+ * timestamp when the row carries no completion time.
+ *
  * Not frozen, and graded exactly as before:
- *  - a non-Sleeper trade — the frozen table is keyed on Sleeper's transaction id;
  *  - a side that received nothing — the shared completed path withholds a giveaway rather than
  *    grading it, so this surface must not write an original nobody else would ever read.
  * A write that fails leaves the letter as today's: it must not claim to be an original that is not stored.
@@ -42,8 +47,7 @@ export async function gradeProviderCompletedTrades(args: {
   const out = new Map<string, TradeGradeView>()
   if (args.trades.length === 0) return out
   const grader = await (args.graderFor ?? completedTradeGraderFor)(args.afLeagueId)
-  const freezable = (t: PendingProviderTrade) =>
-    (t.provider ?? 'sleeper') === 'sleeper' && t.assetsGiven.length > 0 && t.assetsReceived.length > 0
+  const freezable = (t: PendingProviderTrade) => t.assetsGiven.length > 0 && t.assetsReceived.length > 0
   const frozen = await loadFrozenCompletedGrades(
     args.afLeagueId,
     args.trades.filter(freezable).map((t) => t.transactionId),
@@ -63,7 +67,7 @@ export async function gradeProviderCompletedTrades(args: {
       // These rows carry picks as picks already: the same inputs price the deal at the time of the trade.
       const { view, toFreeze: row } = await completedOriginal({
         grader, tradeId: t.transactionId, inputs, tradeTimeInputs: inputs,
-        tradeAt: tradeTimeOf({ completedAt: t.completedAt ?? null, tradeId: t.transactionId }),
+        tradeAt: tradeTimeOf({ completedAt: t.completedAt ?? null, tradeId: provider === 'sleeper' ? t.transactionId : null }),
         current, frozen: frozen.get(sleeperTradeKey(t.transactionId)), now, deps: args.tradeTime,
       })
       if (row) toFreeze.push({ row, transactionId: t.transactionId, current })

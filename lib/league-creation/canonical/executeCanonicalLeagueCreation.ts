@@ -18,6 +18,9 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { computeStartupDraftCapacity, formatCountsTaxiAndDevy } from '@/lib/draft/draftSettingsPolicy'
+import { resolveSGCreateConfig, sgSetupHref } from '@/lib/survivor-guillotine/createFit'
+import { writeSGRulesInTransaction } from '@/lib/survivor-guillotine/rulesWrite'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -85,6 +88,19 @@ export async function executeCanonicalLeagueCreation(args: {
     return { ok: false, status: 400, response: { success: false, error: message,
       errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] } }
   }
+  // Survivor Guilly: the season rules are fitted and validated here, before anything is written, and
+  // committed in the same transaction as the league below. A request that cannot be fitted is refused
+  // whole rather than leaving a plain redraft league behind without its rules.
+  const sgCreate = resolveSGCreateConfig({
+    concept: body.concept,
+    sport: body.sport,
+    teamCount: body.teamCount,
+    conceptSetup: body.conceptSetup,
+  })
+  if (sgCreate.kind === 'invalid') {
+    return { ok: false, status: 400, response: { success: false, error: sgCreate.message,
+      errors: [{ path: sgCreate.path, message: sgCreate.message }] } }
+  }
   let createdLeagueId = ''
   let homepageUrl = ''
   let universeId: string | undefined
@@ -118,6 +134,11 @@ export async function executeCanonicalLeagueCreation(args: {
             teamCount: body.teamCount,
             acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
           })
+        }
+        if (sgCreate.kind === 'ok') {
+          await writeSGRulesInTransaction(tx as Prisma.TransactionClient, created.leagueId, sgCreate.config)
+          // Land on the season setup page: tribes, powers and the calendar are tuned there.
+          return { ...created, homepageUrl: sgSetupHref(created.leagueId), universeId: undefined, children: [] }
         }
         return { ...created, universeId: undefined, children: [] }
       },
@@ -203,19 +224,67 @@ async function finishCreatedLeague(
     console.warn(`${LOG_PREFIX} post_create_bootstrap_non_fatal`, e)
   }
 
+  // The tanking monitor starts on (lib/integrity/integrityDefaults.ts). Non-fatal: a league is never
+  // refused over its integrity settings, and the integrity page creates the same row on first visit.
+  try {
+    const { NEW_LEAGUE_INTEGRITY_DEFAULTS } = await import('@/lib/integrity/integrityDefaults')
+    await prisma.leagueIntegritySettings.upsert({
+      where: { leagueId: createdLeagueId },
+      create: { leagueId: createdLeagueId, ...NEW_LEAGUE_INTEGRITY_DEFAULTS },
+      update: {},
+    })
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} integrity_defaults_non_fatal`, e)
+  }
+
   // Post-create roster bootstrap can install a sport/format roster smaller than the generic
   // draft preset (NHL guillotine was 18 rounds for a 14-slot roster). Reconcile the actual
   // draft gate's template before returning a league whose first draft cannot finish.
   if (!args.sourceLeagueId) {
     try {
-      const capacity = (await getLeagueDraftTemplatePayload(createdLeagueId)).totalRosterSlots
+      const template = await getLeagueDraftTemplatePayload(createdLeagueId)
+      // Dynasty-family startups: only the spots a drafted player is placed in (starters + bench + devy).
+      // The total also holds IR and taxi, which finalization never fills — a board that size left every
+      // team over its active roster limit, and every trade was refused (computeStartupDraftCapacity).
+      const startupCapacity = formatCountsTaxiAndDevy([engine.leagueFormatId])
+        ? computeStartupDraftCapacity(template.template?.slots ?? [])
+        : 0
+      const capacity = startupCapacity > 0 ? Math.min(template.totalRosterSlots, startupCapacity) : template.totalRosterSlots
       if (capacity > 0) {
         const session = await prisma.draftSession.findFirst({
           where: { leagueId: createdLeagueId, status: 'pre_draft' },
           orderBy: { createdAt: 'desc' },
-          select: { id: true, rounds: true },
+          select: { id: true, rounds: true, devyConfig: true },
         })
-        if (session && session.rounds > capacity) {
+        /*
+         * A plain dynasty startup also GROWS to its active roster. The sport presets' startup depth is
+         * not chosen in the form and lagged the default rosters — NHL 26 rounds for 27 active spots,
+         * MLB 34 for 41 — so every team finished the startup with empty spots, while the first roster
+         * edit resized the draft to the full roster (syncDraftRoundsToRoster). Not when college rounds
+         * sit at the end of the draft (devyConfig): they are numbered from the last round.
+         */
+        const devyRounds = (session?.devyConfig as { enabled?: unknown } | null)?.enabled === true
+        /*
+         * A plain REDRAFT draft grows the same way, to the spots a drafted player is placed in (starters +
+         * bench; IR is never filled by a draft). College basketball's preset was 12 rounds for 13 such
+         * spots, so every team finished the draft one player short — while the first roster edit already
+         * resizes a redraft draft to that same count (syncDraftRoundsToRoster). Found by the redraft
+         * simulation, 2026-11-09.
+         *
+         * A KEEPER league's first draft grows too. It was left alone on the reasoning that "keepers fill the
+         * rest", but a new league has no keepers, and in later years each keeper takes a pick on the board in
+         * the round he cost (createNextLeagueDraft) rather than a spot beside it. So the first draft left
+         * every team short — NFL 16 rounds for 17 spots — while the first roster edit resized it anyway
+         * (keeper simulation, 2026-11-10: 26 of 27 leagues).
+         */
+        const redraftActive = engine.leagueFormatId === 'redraft' || engine.leagueFormatId === 'keeper'
+          ? computeStartupDraftCapacity(template.template?.slots ?? [])
+          : 0
+        const growTo = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
+          ? capacity
+          : redraftActive > 0 && !devyRounds ? Math.min(template.totalRosterSlots, redraftActive) : 0
+        const target = session && session.rounds > capacity ? capacity : session && growTo > session.rounds ? growTo : null
+        if (session && target != null) {
           await prisma.$transaction(async (tx) => {
             const league = await tx.league.findUniqueOrThrow({ where: { id: createdLeagueId }, select: { settings: true } })
             const settings = (league.settings ?? {}) as Record<string, unknown>
@@ -228,16 +297,16 @@ async function finishCreatedLeague(
                 rosterSize: capacity,
                 settings: {
                   ...settings,
-                  draftSettings: { ...draftSettings, rounds: capacity },
-                  foundation_defaults: { ...foundation, draft: { ...foundationDraft, rounds: capacity } },
+                  draftSettings: { ...draftSettings, rounds: target },
+                  foundation_defaults: { ...foundation, draft: { ...foundationDraft, rounds: target } },
                 } as Prisma.InputJsonValue,
               },
             })
-            await tx.draftSession.update({ where: { id: session.id }, data: { rounds: capacity } })
-            await tx.leagueSettings.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: capacity } })
-            await tx.redraftLeagueDraftProfile.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: capacity } })
+            await tx.draftSession.update({ where: { id: session.id }, data: { rounds: target } })
+            await tx.leagueSettings.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: target } })
+            await tx.redraftLeagueDraftProfile.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: target } })
           })
-          log('draft_rounds_fit_roster', { leagueId: createdLeagueId, requestedRounds: session.rounds, rounds: capacity })
+          log('draft_rounds_fit_roster', { leagueId: createdLeagueId, requestedRounds: session.rounds, rounds: target })
         }
       }
     } catch (e) {

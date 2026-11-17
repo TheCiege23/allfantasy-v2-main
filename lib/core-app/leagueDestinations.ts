@@ -1,0 +1,120 @@
+/**
+ * The one list of where the /core navigation can take you, and which group each destination sits in.
+ *
+ * Before 2026-11-05 two lists answered that question: the rail's (AfCoreShell `NAV_SECTIONS`, which
+ * the tablet icon nav and the phone More sheet also read) and the in-league tab row's own `TABS`
+ * (LeagueTabs.tsx). They disagreed — Schedule and Moves lived only in the tab row, Draft HQ was
+ * gated in one and not the other — so the tab row could not be dropped without losing destinations,
+ * and every page carried both. Every surface now reads the groups and the gates from here.
+ *
+ * ⚠ AN ENTRY'S PRESENCE HERE IS NOT A PROMISE THE ROW RENDERS. Labels, hrefs, badges and the
+ * per-prop visibility (Devy, Admin, Commissioner) stay with the shell's `navItems`, which knows the
+ * selected league. This file owns ORDER, GROUP and the league-capability gates both surfaces share.
+ */
+
+/** Rail section ids. `now` and `league` keep their ids so the Survivor theme's renames still apply. */
+type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
+
+/**
+ * The rail's sections, in order. The league-scoped groups come first: with a league held — which
+ * is how most sessions run — those are the destinations a visit is for. "All leagues" follows.
+ *
+ * Headings are English and pass through `coreUiCopy`, like every rail label.
+ */
+export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
+  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'now', heading: 'This week', keys: ['my-team', 'matchup', 'live', 'waivers'] },
+  /* No Moves (2026-11-14): it folded into Trades; /core/moves redirects there (next.config.js). */
+  /* League settings (2026-11-15): the league's rules, read-only for an imported league. */
+  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades', 'league-settings'] },
+  {
+    id: 'plan',
+    heading: 'Plan ahead',
+    keys: ['season-outlook', 'war-room', 'players', 'draft-hq', 'defense-hub', 'devy-league'],
+  },
+  { id: 'commish', heading: 'Commish', keys: ['commissioner'] },
+  {
+    id: 'all',
+    heading: 'All leagues',
+    // No 'portfolio' (2026-11-12): it is the second view behind My Leagues — see AfCoreShell `navItems`.
+    keys: ['week', 'my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
+  },
+  // No 'tools' (2026-11-12): its links moved to their screens — see AfCoreShell `navItems`.
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
+]
+
+/**
+ * The rail's sections with NO league held (2026-11-12).
+ *
+ * My team, Waivers, Matchup, Standings and War Room are league-only now, so "This week" and
+ * "League" would otherwise be headings over cross-league leftovers — Live alone under one, Trades
+ * alone under the other — while Your week, which took over the cross-league week, sat down under
+ * "All leagues". Same ids, so the shell treats them like the league-held groups.
+ *
+ * ⚠ KEEP THE TWO LISTS' KEYS IN STEP. A key in one but not the other still renders (the shell
+ * appends unplaced keys in a trailing group), but in the wrong place.
+ */
+export const NAV_SECTION_ORDER_NO_LEAGUE: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
+  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'now', heading: 'This week', keys: ['week', 'live', 'trades'] },
+  { id: 'plan', heading: 'Plan ahead', keys: ['season-outlook', 'players', 'draft-hq'] },
+  { id: 'commish', heading: 'Commish', keys: ['commissioner'] },
+  {
+    id: 'all',
+    heading: 'All leagues',
+    keys: ['my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
+  },
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
+]
+
+/**
+ * The sections the DESKTOP AND TABLET RAIL leaves out while a league is held (2026-11-15).
+ *
+ * "All leagues" and "Manage" are about the account, not the league on screen: eleven rows under a
+ * league's own tabs that read as part of it. Inside a league the rail ends with one "All leagues"
+ * row instead (AfCoreShell), Notifications moves to the top bar with its count, and Settings and
+ * Plans are in the account menu.
+ *
+ * ⚠ THE PHONE'S MORE SHEET KEEPS THEM. A phone hides the account menu, so More is the only way to
+ * Settings, Plans and the inbox there — which is why this is a rail filter and not a change to
+ * NAV_SECTION_ORDER, which the More sheet reads too.
+ */
+export const LEAGUE_RAIL_OMITTED_SECTIONS: ReadonlySet<string> = new Set(['all', 'manage'])
+
+/** The section the rail names the selected league above — the first league-scoped one. */
+export const LEAGUE_CHIP_SECTION: NavSectionId = 'now'
+
+/**
+ * What a league's data can support, as the shell and the tab row each read it.
+ *
+ * ⚠ ONLY A MEASURED `false` HIDES. `undefined` and `null` mean "not determined" — no coverage block
+ * on file, or a read that failed — and hiding on an unknown would take a working league's views away.
+ */
+type LeagueCapabilities = {
+  hasScoredWeek?: boolean | null
+  trades?: boolean
+  draft?: boolean
+}
+
+/** Which capability a destination needs. A destination absent from this map has no gate here. */
+export const LEAGUE_DESTINATION_GATES: Readonly<Record<string, keyof LeagueCapabilities>> = {
+  matchup: 'hasScoredWeek',
+  week: 'hasScoredWeek',
+  standings: 'hasScoredWeek',
+  'season-outlook': 'hasScoredWeek',
+  trades: 'trades',
+  'draft-hq': 'draft',
+}
+
+/** True when this league's measured capabilities rule the destination out. */
+export function leagueDestinationHidden(key: string, caps: LeagueCapabilities | null | undefined): boolean {
+  const gate = LEAGUE_DESTINATION_GATES[key]
+  if (!gate || !caps) return false
+  return caps[gate] === false
+}
+
+/** The section a key belongs to, or null for one no section names (it renders in a trailing group). */
+export function navSectionFor(key: string): NavSectionId | null {
+  for (const section of NAV_SECTION_ORDER) if (section.keys.includes(key)) return section.id
+  return null
+}

@@ -12,7 +12,7 @@
  * - NFL pools never mix with NCAAF pools (sport carried through).
  */
 
-export type DataState = 'available' | 'stale' | 'missing'
+type DataState = 'available' | 'stale' | 'missing'
 
 export interface BestBallDataAvailability {
   scoringRules: DataState
@@ -31,7 +31,7 @@ export interface BestBallDataAvailability {
   standings: DataState
 }
 
-export interface BestBallFreshness {
+interface BestBallFreshness {
   generatedAt: string
   scoresAsOf: string | null
   injuriesAsOf: string | null
@@ -141,14 +141,3 @@ export interface BestBallWarRoomContext {
   }
 }
 
-export type BestBallWarRoomAction =
-  | 'roster-construction'
-  | 'depth'
-  | 'upside'
-  | 'draft-plan'
-  | 'stacks'
-  | 'risk'
-  | 'waivers'
-  | 'trade-analyze'
-  | 'trade-find'
-  | 'ask'

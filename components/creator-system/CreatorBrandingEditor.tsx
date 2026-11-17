@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { CreatorBranding } from '@/lib/creator-system/types'
 
-export interface CreatorBrandingEditorProps {
+interface CreatorBrandingEditorProps {
   initialBranding: CreatorBranding | null
   creatorIdOrSlug: string
   onSaved?: (branding: CreatorBranding) => void

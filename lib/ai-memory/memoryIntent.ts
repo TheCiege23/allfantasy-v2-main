@@ -35,7 +35,7 @@ const COMPLETED_TRADE_RE =
 const TRADE_MENTION_RE =
   /\btrad(?:e|es|ed|ing)\b|\boffer(?:ed|s|ing)?\b|\bcounter(?:ed|s)?\b|\baccept(?:ed|ing)?\b|\bdeclin(?:e|es|ed|ing)\b/i
 
-export type TradeMentionKind = 'completed' | 'explored' | 'none'
+type TradeMentionKind = 'completed' | 'explored' | 'none'
 
 /**
  * `completed` is the ONLY kind that may be persisted as trade history.
@@ -53,8 +53,8 @@ export function classifyTradeMention(message: string): TradeMentionKind {
   return 'explored'
 }
 
-export type DirectionStance = 'declared' | 'explored'
-export type TeamDirection = 'contender' | 'rebuilder'
+type DirectionStance = 'declared' | 'explored'
+type TeamDirection = 'contender' | 'rebuilder'
 
 const CONTENDER_RE = /\bcontend(?:er|ing)?\b|win[-\s]?now|playoff push|all-?in\b/i
 const REBUILD_RE = /\brebuild(?:ing)?\b|tank(?:ing)?\b|future assets|retool\b/i

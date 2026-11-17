@@ -39,7 +39,7 @@
  */
 export const STARVED_RESERVE = 15
 
-export type RotationSelection = {
+type RotationSelection = {
   leagueIds: string[]
   fromStarved: number
   fromDemand: number

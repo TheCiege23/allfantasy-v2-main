@@ -64,6 +64,19 @@ describe('form-completion', () => {
     expect(analyzeCreateLeagueCompletion(s).some((i) => i.code === 'dynasty_draft_date')).toBe(true)
   })
 
+  it('Dynasty: an Offline startup draft can be chosen', () => {
+    for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
+      expect(getDraftTypeOptions('dynasty', sport).map((o) => o.id)).toContain('offline')
+    }
+    const s = {
+      ...baseValidRedraft(),
+      leagueType: 'dynasty' as const,
+      draftType: 'offline' as const,
+      dynasty: getDefaultDynastySetup('NFL', 'offline' as never),
+    }
+    expect(analyzeCreateLeagueCompletion(s).map((i) => i.code)).not.toContain('draft_invalid')
+  })
+
   it('tournament pool must match team tier', () => {
     const s = {
       ...baseValidRedraft(),

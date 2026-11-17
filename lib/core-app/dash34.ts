@@ -5,7 +5,11 @@ import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLink
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
-import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
+import { isForeignIdSpace, isKnownNonNflSport, sleeperReadableRosters } from './rosterIdSpace'
+import { importedChoppedLeagues, type ChopCandidate } from './importedChopInference'
+import { leagueWeekFromSettings } from './seasonTimeline'
+import { importedGuillyFormat } from '@/lib/guillotine/importedGuillyHealth'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { lineupActionability } from './lineupActionability'
 import { getByeWeeks } from './byeWeeks'
 import { isRuledOut } from './injuryStatus'
@@ -1163,6 +1167,59 @@ async function loadDash34Data(
    * 2026-10-08). The provider's live flag is one signal; `isBestBallLeagueRow` reads the column,
    * `leagueType` and the `settings.best_ball` flag imports actually carry.
    */
+  /*
+   * ⚠ WHICH LEAGUES YOU ARE OUT OF, DECIDED BEFORE THE BOOK (user report, 2026-11-08). The book below
+   * is "Starters in doubt", and it counted every roster — so a team knocked out of a league still had
+   * its injured starters listed there, and in Top decisions, as lineups to fix. A knocked-out team has
+   * no lineup. The per-league signals that used to be read only further down are read here, once, and
+   * used by both: the provider's flag, a recorded chop or elimination, a guillotine roster the chop has
+   * emptied — and, for an IMPORTED guillotine league, which records none of those, the rail's own
+   * score-based rule (importedChopInference.ts).
+   */
+  const choppedImported = await (async () => {
+    const candidates: ChopCandidate[] = []
+    for (const row of active) {
+      const format = formatByLeague.get(row.id)
+      const platform = platformByLeague.get(row.id)
+      if (isNativePlatform(platform)) continue // native leagues record their chops; see choppedTeams
+      const settings = format?.settings ?? row.settings
+      /*
+       * The imported-Guilly rule (importedGuillyHealth.ts): a commissioner's confirmation decides, ahead of
+       * the `leagueType` column, which a later sync can guess back to "redraft". So a league someone marked
+       * Guilly stays Guilly here even after its importer forgets.
+       */
+      if (importedGuillyFormat({ leagueType: row.leagueType ?? null, guillotineMode: format?.guillotineMode ?? null, settings }) == null) continue
+      const team = teamByLeague.get(row.id)
+      const seasonYear = Number(row.season)
+      const currentWeek = leagueWeekFromSettings(settings)
+      if (!row.platformLeagueId || !team?.externalId || !Number.isFinite(seasonYear) || currentWeek == null) continue
+      candidates.push({ leagueId: row.id, platformLeagueId: row.platformLeagueId, seasonYear, currentWeek, rosterId: String(team.externalId) })
+    }
+    if (candidates.length === 0) return new Set<string>()
+    const rows = await timing.read('elimination', () => prisma.weeklyMatchup.findMany({
+      where: { OR: candidates.map((c) => ({ leagueId: c.platformLeagueId, seasonYear: c.seasonYear })) },
+      select: { leagueId: true, seasonYear: true, week: true, rosterId: true, pointsFor: true },
+    }).catch(() => []))
+    return importedChoppedLeagues(candidates, rows)
+  })()
+  const eliminationByLeague = new Map<string, { eliminated: boolean; rosterEmpty: boolean }>()
+  for (const row of active) {
+    const team = teamByLeague.get(row.id) ?? null
+    const roster = rosterByLeague.get(row.id)
+    const format = formatByLeague.get(row.id)
+    const storedRosterId = storedRosters.find(r => r.leagueId === row.id)?.id
+    const eliminated = Boolean(roster?.eliminated) || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
+      || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
+      || choppedImported.has(row.id)
+    const rosterEmpty = !eliminated && (format?.guillotineMode === true || String(row.leagueType).toLowerCase() === 'guillotine' || format?.leagueVariant === 'guillotine') && roster != null && roster.all.length === 0
+      && !isForeignIdSpace(platformByLeague.get(row.id), sportByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
+    eliminationByLeague.set(row.id, { eliminated, rosterEmpty })
+  }
+  const outOfLeague = (leagueId: string) => {
+    const e = eliminationByLeague.get(leagueId)
+    return Boolean(e && (e.eliminated || e.rosterEmpty))
+  }
+
   const leagueRowById = new Map(active.map((l) => [l.id, l]))
   const bestBallLeagues = new Set(
     [...rosterByLeague.keys()].filter((id) => {
@@ -1181,6 +1238,8 @@ async function loadDash34Data(
   }
 
   for (const [leagueId, roster] of rosterByLeague) {
+    // A league you are out of has no lineup, so none of its players are "in doubt" for you.
+    if (outOfLeague(leagueId)) continue
     const bestBallHere = bestBallLeagues.has(leagueId)
     let total = 0
     let starting = 0
@@ -1296,11 +1355,9 @@ async function loadDash34Data(
       settings: format?.settings,
     })
     if (roster) roster.bestBall = bestBall
-    const storedRosterId = storedRosters.find(r => r.leagueId === row.id)?.id
-    const eliminated = roster?.eliminated || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
-      || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
-    const eliminationRosterEmpty = (format?.guillotineMode === true || String(row.leagueType).toLowerCase() === 'guillotine' || format?.leagueVariant === 'guillotine') && roster != null && roster.all.length === 0
-      && !isForeignIdSpace(platformByLeague.get(row.id), sportByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
+    // Decided once, before the book (see `eliminationByLeague`).
+    const eliminated = eliminationByLeague.get(row.id)?.eliminated === true
+    const eliminationRosterEmpty = eliminationByLeague.get(row.id)?.rosterEmpty === true
     const eligibility = lineupActionability({
       stage: stage ?? 'unknown', eliminated: eliminated || eliminationRosterEmpty, bestBall,
       waiversEnabled: roster?.waiversEnabled, slots: roster?.verification?.slots,
@@ -1402,7 +1459,8 @@ async function loadDash34Data(
       bestBallMissing: eligibility.bestBallMissing,
       needsWaivers: eligibility.needsWaivers,
       lineupVerification: rosterByLeague.get(row.id)?.verification ?? null,
-      flaggedStarters: (rosterByLeague.get(row.id)?.orderedStarters ?? []).flatMap((pid, index) => {
+      // A league you are out of has no lineup to flag (see `eliminationByLeague`).
+      flaggedStarters: (eliminated || eliminationRosterEmpty ? [] : rosterByLeague.get(row.id)?.orderedStarters ?? []).flatMap((pid, index) => {
         const d = designationOf(pid)
         const settled = d && starterWeek(d.sport, d.team, rosterByLeague.get(row.id)?.verification?.week).verdict === 'done'
         return d && isUnavailable(d.status) && !settled ? [{ playerId: pid, name: d.name, status: d.status, slot: rosterByLeague.get(row.id)?.verification?.slots[index] ?? 'Starter', index }] : []
@@ -1721,6 +1779,9 @@ async function loadDash34Data(
     : new Map()
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
   function pointsIn(leagueId: string, pid: string): number | null {
+    // The feed is NFL rows keyed by Sleeper id. A Sleeper NBA league's ids are another namespace and
+    // match NFL strangers, so a non-NFL league's cover is never priced from it (market order instead).
+    if (isKnownNonNflSport(sportByLeague.get(leagueId))) return null
     const proj = projectionById.get(pid)
     if (!proj) return null
     if (!scoringByLeague.has(leagueId)) {

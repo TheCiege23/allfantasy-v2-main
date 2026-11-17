@@ -77,7 +77,7 @@ let _ownerSeq = 0
 /** Thrown when execution is aborted (lease lost or hard deadline) before a result is persisted. Carries the
  *  AGGREGATE provider settlement so the owner records the honest outcome — a CONFIRMED cancellation (safe retry)
  *  vs an UNKNOWN outcome (block automatic re-execution). Defaults to `confirmed_cancelled` (nothing was issued). */
-export class IntelligenceAbortedError extends Error {
+class IntelligenceAbortedError extends Error {
   constructor(readonly settlement: OwnerExecutionSettlement = 'confirmed_cancelled') {
     super('intelligence_execution_aborted')
     this.name = 'IntelligenceAbortedError'

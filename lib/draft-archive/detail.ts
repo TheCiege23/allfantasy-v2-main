@@ -146,6 +146,16 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const order = Array.isArray(object(nativeSnap.session).slotOrder) ? object(nativeSnap.session).slotOrder as Record<string, unknown>[] : [];
     const sourceSlotMap = object(providerSnap.slotToRosterId);
     const providerRosters = Array.isArray(providerSnap.observedSeasonRosters) ? providerSnap.observedSeasonRosters.map(object) : [];
+    // An imported draft records provider user ids (each pick's picked_by, each roster's owner_id that season)
+    // and usually no names, so the table read "100561289762" under Selected by and a bare roster number as
+    // the team (live /core, 2026-11-06). Those ids are matched to this league's managers: the person is the
+    // season's own owner, only the display name is current. Native drafts keep their recorded names.
+    const providerManagers = native ? new Map<string, { ownerName: string; teamName: string }>() : new Map((await prisma.leagueTeam.findMany({ where: { leagueId, platformUserId: { not: null } }, select: { platformUserId: true, ownerName: true, teamName: true }, take: 501 })).flatMap(t => t.platformUserId ? [[t.platformUserId, t] as const] : []));
+    const providerTeamName = (rosterId: string | null) => {
+        const owner = rosterId ? string(providerRosters.find(t => string(t.roster_id) === rosterId)?.owner_id) : null;
+        const team = owner ? providerManagers.get(owner) : undefined;
+        return string(team?.teamName) ?? string(team?.ownerName);
+    };
     const picks: ArchivePick[] = rows.map(r => {
         const meta = object(r.metadata), archive = object(object(r.pickMetadata).archive), player = object(meta.playerSnapshot), timing = object(archive.timing);
         const overall = number(native ? r.overall : r.pickNumber) ?? 0, round = number(r.round) ?? 0;
@@ -176,9 +186,13 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         pick.onClockAt = iso(timing.openedAt);
         pick.originalTeamName = native
             ? string(order.find(t => string(t.rosterId) === pick.originalRosterId)?.displayName)
-            : string(object(providerRosters.find(t => string(t.roster_id) === pick.originalRosterId)?.metadata).team_name);
+            : string(object(providerRosters.find(t => string(t.roster_id) === pick.originalRosterId)?.metadata).team_name) ?? providerTeamName(pick.originalRosterId);
+        if (!native)
+            pick.teamName ??= providerTeamName(pick.rosterId);
         const recordedTeams = Array.isArray(nativeSnap.teams) ? nativeSnap.teams.map(object) : [];
-        pick.actorName = native && pick.actor ? string(recordedTeams.find(t => string(t.claimedByUserId) === pick.actor || string(t.platformUserId) === pick.actor)?.ownerName) : null;
+        pick.actorName = !pick.actor ? null : native
+            ? string(recordedTeams.find(t => string(t.claimedByUserId) === pick.actor || string(t.platformUserId) === pick.actor)?.ownerName)
+            : string(providerManagers.get(pick.actor)?.ownerName);
         const entry = pick.playerId ? entries.get(preparationPlayerKey(pick.playerName, pick.position, pick.playerId)) : null;
         pick.adp = entry?.adp ?? null;
         pick.adpDifference = entry ? pick.overall - entry.adp : null;
@@ -304,7 +318,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     let resultsObservedAt: string | null = null;
     let weeklyOutcomes:ReturnType<typeof import('./weeklyOutcomeModel').weeklyOutcomes>|undefined;
     if (choice.source === 'imported' && choice.sport === 'NFL') {
-        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
+        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = { ...observation.report, teams: observation.report.teams.map(t => t.name === 'Team ' + t.rosterId ? { ...t, name: providerTeamName(t.rosterId) ?? t.name } : t) }; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);

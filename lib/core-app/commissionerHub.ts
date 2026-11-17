@@ -72,6 +72,7 @@ import { readDynastyRolloverView, type DynastyRolloverView } from '@/lib/season-
 import type { DynastyRolloverStep } from '@/lib/season-rollover/dynastyRolloverWizard'
 import type { DynastyPickBalance, DynastyTaxiOverLimit } from '@/lib/commissioner-hub/dynastyHealthSignals'
 import { pickBalanceFlag, rookieOrderFlag, taxiOverLimitFlag } from './commissioner/dynastyHealthFlags'
+import { isBestBallLeagueRow } from './leagueBestBall'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -379,23 +380,6 @@ export type CommissionerHubDynasty = {
     /** The wizard itself is on this screen, so the checklist can link to it. */
     wizardHref: string | null
   } | null
-}
-
-/**
- * ⚠ COLLUSION AND TANKING DO NOT RUN ON IMPORTED LEAGUES, SO THE DESIGN'S
- * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` scans
- * settled `AfLeagueTrade` / `RedraftTradeProposal` trades and
- * `TankingDetectionEngine` reads `RedraftMatchup` — all AF-native-only tables —
- * so an imported Sleeper league is never scanned.
- *
- * A tile reading "0 open disputes" off a scan that structurally cannot find one
- * is the most confident wrong number this screen could show a commissioner, so
- * the tile states the gap instead. The "Resolve a dispute" guide is the
- * replacement: it works the same way whether or not a scan exists.
- */
-const ROLE_LABEL: Record<'commissioner' | 'co_commissioner', string> = {
-  commissioner: 'Commissioner',
-  co_commissioner: 'Co-commissioner',
 }
 
 function initialsOf(name: string): string {
@@ -1254,7 +1238,7 @@ export async function getCommissionerHub(input: {
     recipes: {
       ...recipeSettings,
       sendEnabled,
-      catalog: RECIPES.map((r) => recipeCatalogEntry(r, { platform, sport }, language)),
+      catalog: RECIPES.map((r) => recipeCatalogEntry(r, { platform, sport, bestBall: isBestBallLeagueRow(league) }, language)),
       chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {

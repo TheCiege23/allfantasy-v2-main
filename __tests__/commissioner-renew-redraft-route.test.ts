@@ -45,6 +45,7 @@ vi.mock('@/lib/redraft/offseason/renewNativeRedraft', async (importOriginal) => 
   ...(await importOriginal<typeof import('@/lib/redraft/offseason/renewNativeRedraft')>()),
   renewNativeRedraft: m.nativeRenew,
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromOwner(() => 'commish'))
 
 function redraftLeague(overrides: Record<string, unknown> = {}) {
   return {

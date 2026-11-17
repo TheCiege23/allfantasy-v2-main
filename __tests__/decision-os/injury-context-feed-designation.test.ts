@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
- * 🛑 `resolveInjuryContext` — behind the lineup signal facts (`lineup/signalFacts.ts`) and the Decision OS
- * injury-enriched world — derived availability from `SportsPlayer.status`. On Sleeper's row that is the
+ * 🛑 `resolveInjuryContext` — behind the Decision OS injury-enriched world (and, until 2026-11-17, the
+ * retired lineup engine's signal facts) — derived availability from `SportsPlayer.status`. On Sleeper's row that is the
  * ROSTER status ("Active", "Injured Reserve"), so an Out player read "Active" → 'available'; and a stray
  * 'out' that `PlayerStatusAggregator` stamped on a provider row (and never clears) read 'unavailable'
  * forever. The designation now comes from the injury FEED (`resolveCurrentInjuryDesignations`), matched
@@ -44,7 +44,6 @@ vi.mock('@/lib/prisma', () => {
 })
 
 import { resolveInjuryContext, resolveInjuryEnrichedCanonicalWorld, defaultInjuryEnrichedWorldDeps } from '@/lib/decision-os/world/injuryEnrichedWorld'
-import { loadLineupSignalFacts } from '@/lib/decision-os/lineup/signalFacts'
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000)
 const inDays = (d: number) => new Date(Date.now() + d * 24 * 3_600_000)
@@ -158,25 +157,7 @@ describe('resolveInjuryContext — the designation is the injury feed’s, never
   })
 })
 
-describe('the consumers', () => {
-  it('🛑 lineup signal facts flag an Out starter whose roster status reads "Active"', async () => {
-    db.players = [sleeperRow('9001', 'Ja’Marr Chase', 'WR', 'CIN', 'Active'), sleeperRow('9010', 'Healthy Guy', 'RB', 'CIN', 'Active')]
-    db.feed = [feed({ playerName: 'Ja’Marr Chase', team: 'Cincinnati Bengals', position: 'WR', status: 'Out' })]
-    const facts = await loadLineupSignalFacts({
-      leagueId: 'lg',
-      sport: 'NFL',
-      week: 6,
-      players: [
-        { playerId: '9001', playerName: 'Ja’Marr Chase', team: 'CIN' },
-        { playerId: '9010', playerName: 'Healthy Guy', team: 'CIN' },
-      ],
-    })
-    expect(facts.injury?.flagged).toEqual([
-      { playerId: '9001', playerName: 'Ja’Marr Chase', status: 'Out', availabilityCategory: 'unavailable' },
-    ])
-    expect(facts.injury?.resolvedCount).toBe(2)
-  })
-
+describe('the consumer', () => {
   it('🛑 the injury-enriched world counts an Out player as unavailable', async () => {
     db.players = [sleeperRow('9001', 'Ja’Marr Chase', 'WR', 'CIN', 'Active')]
     db.feed = [feed({ playerName: 'Ja’Marr Chase', team: 'Cincinnati Bengals', position: 'WR', status: 'Out' })]

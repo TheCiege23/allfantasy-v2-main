@@ -6,6 +6,9 @@
  * rule. Survivor tribes keep 2/4/8 and are not validated as divisions.
  * Handles AI naming requests.
  */
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { logAction } from '@/server/services/auditService'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -101,7 +104,7 @@ export async function GET(
 
   return NextResponse.json({
     config,
-    isCommissioner: league.userId === session.user.id,
+    isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'league'),
     isSurvivor,
     sport: league.sport,
     leagueVariant: league.leagueVariant,
@@ -121,7 +124,12 @@ export async function PUT(
     select: { userId: true, settings: true, leagueVariant: true, teams: { select: { id: true, teamName: true, ownerName: true, avatarUrl: true, lifecycleState: true } } },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
+  // 🛑 Divisions decide the schedule and playoff seeding, and this save skipped the settings lock and the league log
+  // (2026-11-15). They are locked with the playoffs.
+  const locked = await settingsLockedResponse(leagueId, 'playoffs')
+  if (locked) return locked
 
   const body = await req.json().catch(() => ({}))
   const currentSettings = (league.settings as Record<string, unknown>) ?? {}
@@ -218,6 +226,14 @@ export async function PUT(
   }
   if (changes.length > 0) {
     await notifyCommissionerChange(leagueId, session.user.id, isSurvivor ? 'Tribe Settings' : 'Division Settings', changes).catch(() => {})
+    await logAction({
+      leagueId,
+      userId: session.user.id,
+      actionType: 'settings_patch',
+      entityType: 'league',
+      entityId: leagueId,
+      metadata: { section: 'divisions', source: 'division-settings', fields: changes.map((c) => c.field).slice(0, 20) },
+    }).catch(() => {})
   }
 
   return NextResponse.json({

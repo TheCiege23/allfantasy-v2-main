@@ -23,7 +23,7 @@ export async function buildC2CContextForChimmy(
   if (!isC2C) return ''
   const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
 
-  const [config, roster, rights, standings] = await Promise.all([
+  const [config, roster, rights] = await Promise.all([
     getC2CConfig(leagueId),
     prisma.roster.findFirst({
       where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },

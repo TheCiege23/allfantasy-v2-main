@@ -115,7 +115,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 // Screen loaders: the spies whose silence during the page function is the whole point.
-vi.mock('@/lib/core-app/trades', () => ({ getTradesData: (screens.trades = vi.fn(async () => null)) }))
+vi.mock('@/lib/core-app/trades', () => ({ startTradesRead: (screens.trades = vi.fn(async () => null)) }))
 vi.mock('@/lib/core-app/dash34', () => ({ getDash34Data: (screens.dash34 = vi.fn(async () => null)), imageOf: () => null }))
 vi.mock('@/lib/core-app/urgencyBadges', () => ({
   getUrgencyBadges: (screens.urgency = vi.fn(async () => null)),
@@ -480,6 +480,30 @@ describe('/core with an unknown segment', () => {
   })
 
   /*
+   * 2026-11-12: five screens need a league. Their no-league views repeated Your week or Season
+   * Outlook, so with no `?league=` they redirect there — before the session read, like the unknown
+   * segment above. With a league they render as before.
+   */
+  it('redirects the league-only screens when no league is held, and only then', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    const { getServerSession } = await import('next-auth')
+    vi.mocked(getServerSession).mockClear()
+
+    for (const screen of ['my-team', 'waivers', 'matchup', 'war-room']) {
+      expect(await redirectTarget(AfCorePage(pageArgs([screen], {}))), screen).toBe('/core/week')
+    }
+    expect(await redirectTarget(AfCorePage(pageArgs(['standings'], {})))).toBe('/core/season-outlook')
+    // An alias resolves first: /core/roster is My team.
+    expect(await redirectTarget(AfCorePage(pageArgs(['roster'], {})))).toBe('/core/week')
+    expect(getServerSession).not.toHaveBeenCalled()
+
+    // With a league held, the same screen renders.
+    expect(await redirectTarget(AfCorePage(pageArgs(['my-team'], { league: 'L1' })))).toBeNull()
+  })
+
+  /*
    * 🛑 THE FRAME'S FIRST READ ASKS FOR ROSTER IDS ONLY. Every lineup on a /core screen is read by
    * the loader that shows it; this list's rosters were ~1.1 MB of payload on every click for the
    * heaviest test account and nothing on the page read them. See `rosterDetail` in the loader.
@@ -522,7 +546,8 @@ describe('/core when the league list cannot be read', () => {
     const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
     const AfCorePage = await loadPage()
     vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('db down'))
-    await expect(AfCorePage(pageArgs(['my-team'], {}))).resolves.toBeTruthy()
+    // Trades, not My team: since 2026-11-12 /core/my-team with no league redirects to Your week.
+    await expect(AfCorePage(pageArgs(['trades'], {}))).resolves.toBeTruthy()
   })
 })
 

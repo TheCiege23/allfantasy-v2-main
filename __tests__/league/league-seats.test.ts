@@ -102,6 +102,7 @@ function nativeLeague() {
     ]),
     leagueEntrySlot: table([1, 2, 3, 4].map((n) => ({ id: `s${n}`, leagueId: 'L', slotNumber: n, rosterId: `r${n}`, status: n === 1 ? 'FILLED' : 'OPEN' }))),
     redraftLeagueMember: table([{ leagueId: 'L', userId: 'commish', role: 'COMMISSIONER', teamNumber: 1 }]),
+    draftSession: table([]),
     redraftRoster: table([
       { id: 'rr1', leagueId: 'L', seasonId: 'S', ownerId: 'commish', ownerName: 'Commish' },
       ...[2, 3, 4].map((n) => ({ id: `rr${n}`, leagueId: 'L', seasonId: 'S', ownerId: `open-slot-L-${n}`, ownerName: `Open Team ${n}` })),
@@ -134,6 +135,29 @@ describe('countSeatsHeldByPeopleByLeague', () => {
 })
 
 describe('assignLeagueSeat', () => {
+  // The dynasty simulation (2026-11-09) found every joined manager still labelled "Open Team N" in a
+  // dynasty draft room: the relabel ran for Survivor leagues only.
+  it('updates the reserved draft slot in a native league that is NOT Survivor, on join and on leave', async () => {
+    const db = nativeLeague()
+    expect(db.league.rows[0].survivorMode).toBeFalsy()
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'pre_draft',
+      slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }, { slot: 3, rosterId: 'r3', displayName: 'Open Team 3', open: true }] }])
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Amy', open: false })
+    // Only the claimed seat changes.
+    expect(db.draftSession.rows[0].slotOrder[1]).toMatchObject({ rosterId: 'r3', displayName: 'Open Team 3', open: true })
+    expect((await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
+  })
+
+  it('leaves a draft that has started alone', async () => {
+    const db = nativeLeague()
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'in_progress',
+      slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }] }])
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ displayName: 'Open Team 2', open: true })
+  })
+
   it('updates the reserved Survivor draft slot when a manager joins or leaves before the draft', async () => {
     const db = nativeLeague()
     db.league.rows[0].survivorMode = true

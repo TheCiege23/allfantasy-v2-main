@@ -6,8 +6,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /**
- * Full stat-correction *replay* (reverse chop, waiver recall, re-run `runEliminationCheck` with
- * `skipIfAlreadyProcessed: false`) lives in `handleStatCorrection` — wire when scores stabilize.
+ * Manually re-check one chopped period's stat corrections (`handleStatCorrection`): the same pass
+ * score-sync runs hourly, past its window and throttle. By the published policy it updates the
+ * period's scores, running totals and survival history and NEVER reverses the chop or a champion —
+ * `reversed` is always false; a chop the corrected scores would have changed is logged for the
+ * commissioner instead.
  */
 
 export async function POST(req: NextRequest) {

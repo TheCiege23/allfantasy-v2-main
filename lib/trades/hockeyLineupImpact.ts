@@ -1,4 +1,4 @@
-export type HockeyLineupPlayer = { playerId: string; position: string; pointsPerGame: number }
+type HockeyLineupPlayer = { playerId: string; position: string; pointsPerGame: number }
 
 const PLAYER_POSITIONS = new Set(['C', 'LW', 'RW', 'D', 'G', 'F'])
 const STARTER_SLOTS = new Set(['C', 'LW', 'RW', 'D', 'G', 'F', 'FLEX_CW', 'W', 'SKT', 'UTIL'])

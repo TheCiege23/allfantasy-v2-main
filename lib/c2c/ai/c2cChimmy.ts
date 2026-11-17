@@ -14,7 +14,7 @@ Leagues score BOTH college (campus) and pro (canton) sides. Label projections vs
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-export type C2CSetupRec = {
+type C2CSetupRec = {
   scoringMode: string
   draftFormat: string
   reasonings: string[]
@@ -30,7 +30,7 @@ export type CampusPlayerEval = {
   verdict: string
 }
 
-export type CampusRanking = {
+type CampusRanking = {
   rank: number
   playerId: string
   name: string
@@ -38,7 +38,7 @@ export type CampusRanking = {
   note: string
 }
 
-export type BreakoutAlert = {
+type BreakoutAlert = {
   playerId: string
   name: string
   alertType: string
@@ -55,7 +55,7 @@ export type RosterBalanceReport = {
   recommendations: string[]
 }
 
-export type TransitionDecision = {
+type TransitionDecision = {
   recommendation: string
   timing: string
   targetCantonSlot: string
@@ -64,7 +64,7 @@ export type TransitionDecision = {
   verdict: string
 }
 
-export type C2CDraftAdvice = {
+type C2CDraftAdvice = {
   topOptions: string[]
   recommendation: string
   tierBreakAlert: string
@@ -72,7 +72,7 @@ export type C2CDraftAdvice = {
   sideBalance: string
 }
 
-export type ChimmyResponse = { reply: string }
+type ChimmyResponse = { reply: string }
 
 export async function buildC2CAiCacheContextSummary(input: {
   leagueId?: string

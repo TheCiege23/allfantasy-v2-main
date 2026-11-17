@@ -21,7 +21,7 @@ export function hasMidSeasonConfirmation(body: unknown): boolean {
 }
 
 /** The JSON body of `init` with the confirmation flag merged in (an absent body becomes `{flag}`). */
-export function withMidSeasonConfirmation(init: RequestInit | undefined): RequestInit {
+function withMidSeasonConfirmation(init: RequestInit | undefined): RequestInit {
   let parsed: Record<string, unknown> = {}
   if (typeof init?.body === 'string' && init.body.trim() !== '') {
     try {
@@ -37,7 +37,7 @@ export function withMidSeasonConfirmation(init: RequestInit | undefined): Reques
 }
 
 /** The server's message when `res` is a confirmation-required 409; `null` for any other response. */
-export async function midSeasonConfirmationMessage(res: Response): Promise<string | null> {
+async function midSeasonConfirmationMessage(res: Response): Promise<string | null> {
   if (res.status !== 409) return null
   const data = (await res.clone().json().catch(() => null)) as { code?: unknown; message?: unknown } | null
   if (!data || data.code !== MID_SEASON_CONFIRMATION_CODE) return null

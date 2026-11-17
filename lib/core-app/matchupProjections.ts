@@ -5,7 +5,7 @@ import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { isAtRisk, isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
-import { afEngineForLeague, lookupAfEngineProjections } from './playerProjections'
+import { afEngineForLeague, lookupAfEngineProjections, projectionSportScope } from './playerProjections'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import {
   computeLeagueProjectedPoints,
@@ -213,7 +213,9 @@ export async function loadSideProjections(args: {
   const lookupIds = [...new Set(rosterIds.map(lookupOf).filter((x): x is string => x != null))]
   const projections = await prisma.fantasyProjection.findMany({
     // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.
-    where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' } },
+    // `projectionSportScope`: a Sleeper NBA starter's id can equal an NFL player's, so a non-NFL
+    // league reads only rows of its own sport (none today) rather than an NFL stranger's line.
+    where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' }, ...projectionSportScope(league?.sport) },
     // `stats` carries the FULL component stat line the import cron preserves so
     // consumers can rescore under league settings (see app/api/cron/
     // import-projections). The generic `projectedPoints` total is deliberately
@@ -224,7 +226,7 @@ export async function loadSideProjections(args: {
   /* AllFantasy's own engine, same week — the second number beside the provider's on the board.
      Never feeds the totals or the win probability, which stay on the provider line they were
      built for. A failed read leaves the AF cells blank and nothing else. */
-  const afEngineRows = await lookupAfEngineProjections(lookupIds, { season: String(season), week }).catch(
+  const afEngineRows = await lookupAfEngineProjections(lookupIds, { season: String(season), week }, league?.sport).catch(
     (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
   )
   /* Spread, not a key set to null: a starter the engine never wrote carries no `afEngine` at all. */

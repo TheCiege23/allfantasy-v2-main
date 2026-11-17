@@ -25,7 +25,8 @@ export const finderScreenMessages = defineMessages<FinderCopy>({
     compareWithName: (name) => `Compare with ${name}`,
     recentlySearched: 'Recently searched',
     trendHeading: 'Most added this week',
-    trendSub: (n, through) => `of ${n} ${n === 1 ? 'league' : 'leagues'} adding${through ? ` · through ${through}` : ''}`,
+    /* 2026-11-14: "of 50 leagues adding · through Nov 14" did not read as a sentence. */
+    trendSub: (n, through) => `Added most in ${n} ${n === 1 ? 'league' : 'leagues'}${through ? ` · through ${through}` : ''}`,
     trendAddedIn: (n) => `added in ${n} leagues`,
     otherMatches: 'Other matches',
     alsoMatched: 'Also matched',
@@ -131,7 +132,7 @@ export const finderScreenMessages = defineMessages<FinderCopy>({
     recentlySearched: 'Búsquedas recientes',
     trendHeading: 'Los más añadidos esta semana',
     // «altas», as the app says for adds elsewhere ("altas y bajas").
-    trendSub: (n, through) => `de ${n} ${n === 1 ? 'liga' : 'ligas'} con altas${through ? ` · hasta el ${kickoffText(through, 'es')}` : ''}`,
+    trendSub: (n, through) => `Los más añadidos en ${n} ${n === 1 ? 'liga' : 'ligas'}${through ? ` · hasta el ${kickoffText(through, 'es')}` : ''}`,
     trendAddedIn: (n) => `añadido en ${n} ${n === 1 ? 'liga' : 'ligas'}`,
     otherMatches: 'Otras coincidencias',
     alsoMatched: 'También coinciden',

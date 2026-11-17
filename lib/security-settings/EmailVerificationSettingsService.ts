@@ -3,7 +3,7 @@
  * Calls existing /api/auth/verify-email/send.
  */
 
-export interface SendVerificationEmailResult {
+interface SendVerificationEmailResult {
   ok: boolean
   alreadyVerified?: boolean
   error?: string

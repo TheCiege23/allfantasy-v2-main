@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { assertWaiverClaimEligibility } from './transaction-eligibility'
 import { addPlayerToRosterData, removePlayerFromRosterData, getRosterPlayerIds } from './roster-utils'
 import { applyRedraftRosterMoves } from '@/lib/league-runtime/redraftRosterMoveSync'
+import { WAIVER_RUN_IN_PROGRESS_MESSAGE, withLeagueWaiverLock } from './leagueWaiverLock'
+import { redraftHolderOtherThan } from './redraftRosterHolder'
+import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 /**
  * Immediate free-agent add/drop (Step 3B).
@@ -31,6 +34,16 @@ export interface ImmediateAddDropResult {
   rosterPlayerIds: string[]
 }
 
+/** Refusal while a waiver run (or another instant add) holds the league's lock past the short wait. */
+export { WAIVER_RUN_IN_PROGRESS_MESSAGE }
+
+/**
+ * 🛑 AN INSTANT ADD AND A WAIVER RUN COULD BOTH TAKE ONE PLAYER. The availability check runs in
+ * `assertWaiverClaimEligibility`, BEFORE this function's transaction, and the transaction re-checks only
+ * that the player is not already on THIS roster — so two teams' simultaneous adds, or an add racing a
+ * waiver run's award, could each see him free and each write him. The whole check-then-write now holds
+ * the league's waiver lock (leagueWaiverLock.ts), the same one every waiver run holds.
+ */
 export async function executeImmediateAddDrop(
   leagueId: string,
   rosterId: string,
@@ -39,6 +52,17 @@ export async function executeImmediateAddDrop(
     /** The commissioner opened the offseason as first-come free agency (season-phase-policy.ts). */
     offseasonFreeAgency?: boolean
   } = {},
+): Promise<ImmediateAddDropResult> {
+  const out = await withLeagueWaiverLock(leagueId, 'instant-add', () => executeImmediateAddDropLocked(leagueId, rosterId, input, opts))
+  if (!out.ran) throw new Error(WAIVER_RUN_IN_PROGRESS_MESSAGE)
+  return out.value
+}
+
+async function executeImmediateAddDropLocked(
+  leagueId: string,
+  rosterId: string,
+  input: { addPlayerId: string; dropPlayerId?: string | null },
+  opts: { offseasonFreeAgency?: boolean },
 ): Promise<ImmediateAddDropResult> {
   const addPlayerId = String(input.addPlayerId)
   const dropPlayerId = input.dropPlayerId ? String(input.dropPlayerId) : null
@@ -55,6 +79,15 @@ export async function executeImmediateAddDrop(
   })
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
+  // Outside the transaction (it writes the Roster rows this one locks): an unlinked team's add/drop
+  // would never reach the season roster lineups and scoring read.
+  await ensureSeasonRosterLinksBeforeMove(leagueId)
+
+  // The redraft engine awards into `RedraftRosterPlayer` only, which the check above never reads
+  // (redraftRosterHolder.ts). Read outside the transaction, still inside the league lock.
+  if (await redraftHolderOtherThan(prisma, { leagueId, genericRosterId: rosterId, playerId: addPlayerId })) {
+    throw new Error('This player is already on another roster in this league.')
+  }
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const roster = await tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, playerData: true } })

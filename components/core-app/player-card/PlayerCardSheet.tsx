@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import type {
   PlayerCardComp,
+  PlayerCardDailySchedule,
   PlayerCardData,
   PlayerCardNews,
   PlayerCardTrade,
@@ -15,6 +16,8 @@ import PlayerHighlights from './PlayerHighlights'
 import PlayerRecentClips from '../highlights/PlayerRecentClips'
 import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
 import { scheduleProjectionNote, scheduleRowValue } from '@/lib/core-app/scheduleProjectionNote'
+import { gameDayAndClock } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -121,6 +124,28 @@ function ScheduleRows({ weeks, language }: { weeks: PlayerCardWeek[]; language: 
           </div>
         )
       })}
+    </>
+  )
+}
+
+/**
+ * A daily sport's next games: "Thu 11/12 · vs BOS" and the clock, on the US Eastern clock every /core
+ * screen uses, the day in the reader's language. Then the week's count when the loader could tell it.
+ */
+function DailyGameRows({ schedule, language }: { schedule: PlayerCardDailySchedule; language: string }) {
+  const c = playerCardCopy(language)
+  return (
+    <>
+      {schedule.games.map((g) => {
+        const when = gameDayAndClock(g.startTime)
+        return (
+          <div key={`${g.startTime}-${g.opponent}`} className="af-pc-row" data-testid="af-pc-daily-game">
+            <span className="af-pc-row-k">{c.gameRow(when ? kickoffText(when.day, language) : '—', g.home, g.opponent)}</span>
+            <span className="af-pc-row-v af-num">{when?.time ?? ''}</span>
+          </div>
+        )
+      })}
+      {schedule.gamesThisWeek != null ? <p className="af-pc-basis">{c.gamesThisWeek(schedule.gamesThisWeek)}</p> : null}
     </>
   )
 }
@@ -693,7 +718,35 @@ export default function PlayerCardSheet({
             <div className="af-pc-tiles">
               {league ? (
                 <>
-                  {league.price.available ? (
+                  {league.boardValue?.available ? (
+                    <>
+                      <Tile
+                        label={c.leagueValue}
+                        value={Math.round(league.boardValue.data.value).toLocaleString(getAppIntlLocale())}
+                        tone="accent"
+                        sub={
+                          <span className="af-pc-faint">
+                            {c.leagueValueSub(
+                              league.boardValue.data.perGame.toFixed(1),
+                              league.boardValue.data.unit,
+                              league.boardValue.data.gamesRemaining,
+                              league.boardValue.data.scheduleKnown,
+                            )}
+                          </span>
+                        }
+                      />
+                      {league.boardValue.data.dynastyValue != null ? (
+                        <Tile
+                          label={c.dynastyValue}
+                          value={Math.round(league.boardValue.data.dynastyValue).toLocaleString(getAppIntlLocale())}
+                          tone="plain"
+                          sub={<span className="af-pc-faint">{c.dynastyValueSub(league.boardValue.data.age)}</span>}
+                        />
+                      ) : null}
+                    </>
+                  ) : league.boardValue ? (
+                    <Tile label={c.leagueValue} value="—" tone="plain" sub={<span className="af-pc-faint">{c.notPriced}</span>} />
+                  ) : league.price.available ? (
                     <Tile
                       label={c.leaguePrice}
                       value={league.price.data.value.toLocaleString(getAppIntlLocale())}
@@ -758,6 +811,24 @@ export default function PlayerCardSheet({
             </div>
           ) : null}
 
+          {/* A league-value-board value says what it is, and what it rests on (games, at-bats or innings). */}
+          {data && league?.boardValue?.available ? (
+            <p className="af-pc-basis">
+              {c.boardBasis({
+                sport: league.boardValue.data.sport,
+                perGame: league.boardValue.data.perGame.toFixed(1),
+                unit: league.boardValue.data.unit,
+                replacement: league.boardValue.data.replacementPerGame.toFixed(1),
+                replacementName: league.boardValue.data.replacementName,
+                gamesLeft: league.boardValue.data.gamesRemaining,
+                scheduleKnown: league.boardValue.data.scheduleKnown,
+                sample: league.boardValue.data.sample,
+                baseline: league.boardValue.data.baselineSeasonLabel,
+              })}
+            </p>
+          ) : null}
+          {data && league?.boardValue && !league.boardValue.available ? <Absent reason={reason(league.boardValue.reason)} /> : null}
+
           {/* the price basis, which the tile above deliberately does not hide */}
           {data && market?.available && !league ? (
             <p className="af-pc-basis">{c.marketBasis(market.data.format, market.data.qbFormat, market.data.source)}</p>
@@ -777,6 +848,10 @@ export default function PlayerCardSheet({
                 {/* Rendered "SCHEDULE · SCHEDULE" in the league flavour before. */}
                 <Label>{league ? c.schedule : c.nextUp}</Label>
                 {data.schedule.available ? (
+                  data.schedule.data.kind === 'daily' ? (
+                    /* NBA / NHL / MLB: next games by date, no week strip and no bye. */
+                    <DailyGameRows schedule={data.schedule.data} language={language} />
+                  ) : (
                   <>
                     <ScheduleRows weeks={data.schedule.data.weeks} language={language} />
                     {/*
@@ -789,6 +864,7 @@ export default function PlayerCardSheet({
                       <p className="af-pc-basis">{c.projNote(PROJECTION_PROVIDER_LABEL)}</p>
                     ) : null}
                   </>
+                  )
                 ) : (
                   <Absent reason={reason(data.schedule.reason)} />
                 )}

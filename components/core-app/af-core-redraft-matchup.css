@@ -66,7 +66,7 @@
 /* The head-to-head is the score bug: sport frame, a state band across the top, broadcast numbers. */
 .af-core.af-shell[data-format=redraft] .af-mu-h2h {
   border: 1px solid var(--rd-accent-line);
-  border-radius: 20px;
+  border-radius: var(--af-radius-card, 16px);
   /* Over a solid ground: the -soft ends are translucent, and the board is dark in every theme. */
   background-color: var(--surface);
   background-image: linear-gradient(90deg, var(--rd-accent-soft), var(--surface) 46%, var(--surface) 54%, var(--rd-accent-soft));

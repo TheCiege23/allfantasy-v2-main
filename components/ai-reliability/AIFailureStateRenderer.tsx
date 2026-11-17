@@ -4,7 +4,7 @@ import React from 'react'
 import { AlertTriangle, RefreshCw, ChevronDown, ChevronUp, Info } from 'lucide-react'
 import type { ReliabilityMetadata } from '@/lib/ai-reliability/types'
 
-export interface AIFailureStateRendererProps {
+interface AIFailureStateRendererProps {
   /** When true, show fallback banner and optional deterministic result */
   usedDeterministicFallback?: boolean
   /** Short explanation (e.g. "AI analysis is temporarily unavailable. Showing data-only result.") */

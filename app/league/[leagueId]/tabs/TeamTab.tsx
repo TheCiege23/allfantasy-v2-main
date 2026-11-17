@@ -11,14 +11,13 @@ import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGat
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
-import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { isBestBallGuillotine, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import type { LeagueTeam } from '@prisma/client'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import type { UserLeague } from '@/app/dashboard/types'
-import { type PlayerMap, useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
+import { useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
 import { getStarterSlotLabels } from '@/lib/league/rosterSlots'
 import { IDPTeamDashboard } from '@/app/idp/components/IDPTeamDashboard'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
@@ -109,7 +108,7 @@ const RESERVE_SWAP_TITLE: Record<'bench' | 'ir' | 'taxi' | 'devy', string> = {
   devy: 'Devy',
 }
 
-export type TeamTabProps = {
+type TeamTabProps = {
   league: UserLeague
   userTeam: LeagueTeam | null
   onPlayerClick: (playerId: string) => void
@@ -1112,9 +1111,10 @@ export function TeamTab({
   const proEnt = useEntitlement('pro_autocoach')
   const gateOptional = useSubscriptionGateOptional()
   const hasProAutoCoach = proEnt.hasAccess('pro_autocoach')
-  // A best ball Guilly league sets its own lineups (lib/guillotine/guillotineBestBall.ts): nothing to edit.
+  // A Best Ball league and a best ball Guilly league set their own lineups (lib/guillotine/guillotineBestBall.ts
+  // `lineupSetsItself`, the test the lineup saves refuse by): nothing to edit.
   const bestBallGuillotine = isBestBallGuillotine(league)
-  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null) || bestBallGuillotine
+  const isBestBall = lineupSetsItself(league)
 
   const nflRedraftCoreRoster = useMemo(
     () => isNflRedraftCoreDashboardFromUserLeague(league),
@@ -1454,7 +1454,7 @@ const maxWeekMenu = useMemo(() => {
   }, [dbRosterMeta, resolvedSport, week])
 
   const lineupEditable =
-    !bestBallGuillotine &&
+    !isBestBall &&
     !isSleeper &&
     Boolean(dbRosterMeta) &&
     dbRosterMeta?.canEditLineup !== false &&
@@ -1839,6 +1839,13 @@ const maxWeekMenu = useMemo(() => {
         >
           Best ball league: your lineup sets itself. After each week your highest scorers fill your starting spots, and
           that score is what faces the chop.
+        </p>
+      ) : isBestBall ? (
+        <p
+          data-testid="team-tab-best-ball"
+          className="rounded-lg border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-100/90"
+        >
+          Best ball league: your lineup sets itself. After each week your highest scorers fill your starting spots.
         </p>
       ) : null}
 

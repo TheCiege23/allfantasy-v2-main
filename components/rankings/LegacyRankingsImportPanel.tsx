@@ -14,8 +14,9 @@ import {
 } from '@/lib/legacy-import-settings'
 import { StepHelp } from '@/components/league-creation-wizard/StepHelp'
 import { SLEEPER_IMPORT_SPORTS } from '@/lib/league-import/sleeper/import-sports'
+import { getImportPlatforms } from '@/lib/league-import/provider-ui-config'
 
-export type LegacyRankingsImportPanelProps = {
+type LegacyRankingsImportPanelProps = {
   onImportSuccess: () => void
   /** Optional compact layout for dashboard (single column on mobile, tighter grid). */
   variant?: 'default' | 'dashboard'
@@ -179,7 +180,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
                 ) : (
                   <>
                     <p className="text-[11px] leading-snug text-white/45">
-                      ESPN, Yahoo, MFL, Fantrax, and Fleaflicker use the same secure import flow as the main Import page
+                      {getImportPlatforms().filter((p) => p.status === 'live' && p.provider !== 'sleeper').map((p) => p.name).join(', ')} use the same secure import flow as the main Import page
                       (league id / key and account access).
                     </p>
                     {importError[providerId] ? (

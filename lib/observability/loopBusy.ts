@@ -25,7 +25,7 @@ type Elu = { idle: number; active: number; utilization: number }
 /** Node's signature: no argument is the running total; one argument is the delta from it to now. */
 type EluFn = (since?: Elu) => Elu
 
-export type LoopMark = Elu | null
+type LoopMark = Elu | null
 
 function elu(): EluFn | null {
   const perf = (globalThis as { performance?: { eventLoopUtilization?: EluFn } }).performance

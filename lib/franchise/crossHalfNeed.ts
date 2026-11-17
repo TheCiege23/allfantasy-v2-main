@@ -49,7 +49,7 @@ const BEYOND_ARRIVAL_WEIGHT = 0
  * prices a player who can start THIS WEEK. A prospect cannot, however well he
  * fits, so the same deficit is worth less here.
  */
-export const CROSS_HALF_PREMIUM_PER_DEFICIT = 0.04
+const CROSS_HALF_PREMIUM_PER_DEFICIT = 0.04
 
 /** Ceiling regardless of how many slots are open. */
 export const CROSS_HALF_PREMIUM_CAP = 0.2
@@ -73,7 +73,7 @@ export type CrossHalfNeed = {
   gaps: string[]
 }
 
-export const CROSS_HALF_GAPS = {
+const CROSS_HALF_GAPS = {
   noProNeed:
     'we could not read the pro side of this franchise, so nothing about your NFL roster is priced into this college asset',
   noHorizon:

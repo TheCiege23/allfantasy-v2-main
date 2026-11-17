@@ -10,10 +10,10 @@
  * ESPN's `EDR` (slot 24) is deliberately absent — what an ESPN edge slot accepts is not established
  * (see `importedLineupTemplate.ts` and contracts/espn/GAPS.md).
  */
-export const IDP_ROSTER_SLOTS: ReadonlySet<string> = new Set(['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX', 'IDP', 'DP'])
+const IDP_ROSTER_SLOTS: ReadonlySet<string> = new Set(['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX', 'IDP', 'DP'])
 
 /** `lb:2` → `LB`. */
-export const rosterSlotToken = (slot: unknown): string => String(slot).trim().toUpperCase().replace(/:\d+$/, '')
+const rosterSlotToken = (slot: unknown): string => String(slot).trim().toUpperCase().replace(/:\d+$/, '')
 
 export function hasIdpRosterSlot(rosterPositions: readonly unknown[]): boolean {
   return rosterPositions.some((p) => IDP_ROSTER_SLOTS.has(rosterSlotToken(p)))

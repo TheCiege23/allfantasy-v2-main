@@ -42,8 +42,9 @@ export const liveScoresMessages = defineMessages({
     finalCount: (n: number) => `Final · ${n} ${plural(n, 'game', 'games')}`,
     starterCount: (n: number) => `${n} ${plural(n, 'starter', 'starters')}`,
     topPrefix: ' · top ',
+    /** `leagues` 0 drops the league count (one league held: the count is always 1). */
     yourStartersHead: (players: number, leagues: number) =>
-      `Your starters · ${players} ${plural(players, 'player', 'players')} · ${leagues} ${plural(leagues, 'league', 'leagues')}`,
+      `Your starters · ${players} ${plural(players, 'player', 'players')}${leagues > 0 ? ` · ${leagues} ${plural(leagues, 'league', 'leagues')}` : ''}`,
     showAllStarters: (n: number) => `Show all ${n} starters`,
     leagueCount: (n: number) => `${n} ${plural(n, 'league', 'leagues')}`,
     projectionTitle: (leagueName: string | null) =>
@@ -63,6 +64,27 @@ export const liveScoresMessages = defineMessages({
     chipYours: (n: number) => `${n} ${plural(n, 'starter', 'starters')}`,
     chipYoursNames: (names: string) => `Your starters in this game: ${names}`,
     winChance: (pct: number) => `${pct}% to win`,
+    // The standing strip (LiveMatchupStrip): your place against the field when there is no opponent.
+    // English is byte-for-byte what the strip printed before it was translated.
+    standingAria: 'Your standing',
+    standingRank: (rank: number): string => {
+      const teens = rank % 100
+      if (teens >= 11 && teens <= 13) return `${rank}th`
+      const unit = rank % 10
+      return `${rank}${unit === 1 ? 'st' : unit === 2 ? 'nd' : unit === 3 ? 'rd' : 'th'}`
+    },
+    standingOf: (outOf: number) => `of ${outOf}`,
+    standingAtBottom: (elimination: boolean): string => (elimination ? 'On the block' : 'Last place'),
+    standingOverCut: (points: string, elimination: boolean) => `+${points} over ${elimination ? 'the cut' : 'last place'}`,
+    standingInCut: (elimination: boolean): string => (elimination ? 'You are in the cut position' : 'Bottom of the league this week'),
+    standingPlacesClear: (n: number, elimination: boolean) =>
+      `${n} ${plural(n, 'place', 'places')} clear of ${elimination ? 'the cut' : 'last place'}`,
+    standingCutLine: (line: string) => ` · cut line ${line}`,
+    standingBasis: (basis: 'points' | 'projected' | 'best_ball', provisional: boolean): string =>
+      basis === 'best_ball'
+        ? provisional ? ' · ranked on projected best-ball finals until the last game is final' : ' · ranked on final best-ball points'
+        : basis === 'projected' ? ' · ranked on projection until most of the field has played' : ' · ranked on points',
+    standingSeeField: 'See the field',
     // liveScoresCopy's exact-match table entry, and the label localisers
     exact: (english: string, _translation: string | undefined): string => english,
     starterStageDetail: (english: string, _impact: StageImpact): string => english,
@@ -92,7 +114,7 @@ export const liveScoresMessages = defineMessages({
     starterCount: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
     topPrefix: ' · mejor ',
     yourStartersHead: (players, leagues) =>
-      `Tus titulares · ${players} ${plural(players, 'jugador', 'jugadores')} · ${leagues} ${plural(leagues, 'liga', 'ligas')}`,
+      `Tus titulares · ${players} ${plural(players, 'jugador', 'jugadores')}${leagues > 0 ? ` · ${leagues} ${plural(leagues, 'liga', 'ligas')}` : ''}`,
     showAllStarters: (n) => `Mostrar los ${n} titulares`,
     leagueCount: (n) => `${n} ${plural(n, 'liga', 'ligas')}`,
     projectionTitle: (leagueName) =>
@@ -109,6 +131,20 @@ export const liveScoresMessages = defineMessages({
     chipYours: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
     chipYoursNames: (names) => `Tus titulares en este partido: ${names}`,
     winChance: (pct) => `${pct}% de ganar`,
+    standingAria: 'Tu posición',
+    standingRank: (rank) => `${rank}.º`,
+    standingOf: (outOf) => `de ${outOf}`,
+    standingAtBottom: (elimination) => (elimination ? 'En zona de corte' : 'Último lugar'),
+    standingOverCut: (points, elimination) => `+${points} sobre ${elimination ? 'el corte' : 'el último lugar'}`,
+    standingInCut: (elimination) => (elimination ? 'Estás en la posición de corte' : 'Último de la liga esta semana'),
+    standingPlacesClear: (n, elimination) =>
+      `${n} ${plural(n, 'puesto', 'puestos')} por encima ${elimination ? 'del corte' : 'del último lugar'}`,
+    standingCutLine: (line) => ` · línea de corte ${line}`,
+    standingBasis: (basis, provisional) =>
+      basis === 'best_ball'
+        ? provisional ? ' · según los finales proyectados de best ball hasta que termine el último partido' : ' · según los puntos finales de best ball'
+        : basis === 'projected' ? ' · según la proyección hasta que juegue la mayoría' : ' · según los puntos',
+    standingSeeField: 'Ver la clasificación',
     exact: (english, translation) => translation ?? english,
     starterStageDetail: (_english, impact) => {
       const parts: string[] = []

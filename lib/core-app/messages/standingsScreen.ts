@@ -66,8 +66,9 @@ export const standingsScreenMessages = defineMessages({
     historyNote: (seasons: number) => `Imported final standings. ${seasons} ${seasons === 1 ? 'season' : 'seasons'} on file.`,
     historyTableLabel: (season: number) => `${season} final standings`,
     // ── Standings ──
-    subtitle: (p: { platform: string; season: number; seasonComplete: boolean; week: number; throughWeek: number }) =>
-      `${p.platform === 'the platform' ? 'The league table' : `${p.platform}’s table`}, and AllFantasy’s own power ranking beside it — record decides the seeding, all-play says who is actually good. ${p.season} · ${p.seasonComplete ? `season complete after week ${p.week}` : `results through week ${p.throughWeek}`}.`,
+    /** `headToHead: false` — a points-only league has no records, so points, not record, set the order. */
+    subtitle: (p: { platform: string; season: number; seasonComplete: boolean; week: number; throughWeek: number; headToHead: boolean }) =>
+      `${p.platform === 'the platform' ? 'The league table' : `${p.platform}’s table`}, and AllFantasy’s own power ranking beside it — ${p.headToHead ? 'record decides the seeding' : 'points decide the order'}, all-play says who is actually good. ${p.season} · ${p.seasonComplete ? `season complete after week ${p.week}` : `results through week ${p.throughWeek}`}.`,
     /** `ord` is the component's English ordinal of `n`. */
     seedPlace: (n: number, ord: string): string => ord,
     pfRankInLeague: (n: number, ord: string) => `${ord} in the league`,
@@ -80,6 +81,8 @@ export const standingsScreenMessages = defineMessages({
     barsWeekPrefix: 'W',
     barsCaption: (best: number, now: number, ordinal: (n: number) => string) =>
       `Taller bar = better rank. Best ${ordinal(best)} · now ${ordinal(now)}. Positions only move on final results, never estimated between weeks.`,
+    emptyTitle: 'No standings to show yet',
+    emptyHintScores: 'The table fills in here once the first week of the season has been scored.',
   },
   es: {
     gamesUnit: (abs) => (abs === 1 ? 'partido' : 'partidos'),
@@ -113,7 +116,7 @@ export const standingsScreenMessages = defineMessages({
       `Clasificaciones finales importadas. ${seasons} ${seasons === 1 ? 'temporada registrada' : 'temporadas registradas'}.`,
     historyTableLabel: (season) => `Clasificación final de ${season}`,
     subtitle: (p) =>
-      `${p.platform === 'the platform' ? 'Tabla de la liga' : `Tabla de ${p.platform}`} y clasificación de rendimiento de AllFantasy. El récord determina los puestos de playoffs; el rendimiento contra todos muestra la fuerza de cada equipo. ${p.season} · ${p.seasonComplete ? `temporada terminada tras la semana ${p.week}` : `resultados hasta la semana ${p.throughWeek}`}.`,
+      `${p.platform === 'the platform' ? 'Tabla de la liga' : `Tabla de ${p.platform}`} y clasificación de rendimiento de AllFantasy. ${p.headToHead ? 'El récord determina los puestos de playoffs' : 'Los puntos determinan el orden'}; el rendimiento contra todos muestra la fuerza de cada equipo. ${p.season} · ${p.seasonComplete ? `temporada terminada tras la semana ${p.week}` : `resultados hasta la semana ${p.throughWeek}`}.`,
     seedPlace: (n) => `${n}.º`,
     pfRankInLeague: (n) => `${n} de la liga`,
     trendNeedsTwoWeeks: (finalWeeks) =>
@@ -123,6 +126,8 @@ export const standingsScreenMessages = defineMessages({
     barsWeekPrefix: 'S',
     barsCaption: (best, now) =>
       `Una barra más alta indica mejor posición. Mejor: ${best}; ahora: ${now}. Las posiciones solo cambian con resultados finales.`,
+    emptyTitle: 'Todavía no hay clasificación',
+    emptyHintScores: 'La tabla aparecerá aquí en cuanto se puntúe la primera semana de la temporada.',
   },
 })
 

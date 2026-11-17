@@ -46,7 +46,7 @@ export type LeagueMemberActivity = SectionState<{
   basis: string
 }>
 
-export type ImportedActivityInput = {
+type ImportedActivityInput = {
   kind: 'imported'
   /** `readManagerActivity(leagueId, windowDays)` — current-window and prior-window move counts per manager. */
   managers: Array<{ managerName: string; currentCount: number; priorCount: number; lastActionAt?: Date | null }>
@@ -63,7 +63,7 @@ export type ImportedActivityInput = {
   eventCount: number
 }
 
-export type NativeActivityInput = {
+type NativeActivityInput = {
   kind: 'native'
   /** `getLeagueManagerHealth(leagueId).rows`, or null when that read failed. */
   rows: Array<{
@@ -254,7 +254,7 @@ export function staleActivityReason(input: {
 
 // ── Team identity helpers ────────────────────────────────────────────────────
 
-export type TeamIdentityRow = {
+type TeamIdentityRow = {
   teamName?: string | null
   ownerName?: string | null
   platformUserId?: string | null

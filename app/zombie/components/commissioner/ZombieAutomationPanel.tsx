@@ -201,7 +201,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
                         className={clsx(
                           'rounded px-1.5 py-0.5 text-[11px] font-bold',
                           r.status === 'complete'
-                            ? 'bg-[var(--zombie-green)]/15 text-[var(--zombie-green)]'
+                            ? 'bg-zombie-green/15 text-[var(--zombie-green)]'
                             : 'bg-amber-500/15 text-amber-300',
                         )}
                       >

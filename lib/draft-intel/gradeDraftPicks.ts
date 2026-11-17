@@ -75,7 +75,7 @@ export function median(values: number[]): number | null {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
 }
 
-export type GradedDraft = {
+type GradedDraft = {
   rounds: number
   gradedPicks: DraftPickGrade[]
   managers: DraftManagerCard[]

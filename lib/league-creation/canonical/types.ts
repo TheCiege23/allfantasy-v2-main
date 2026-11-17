@@ -2,40 +2,9 @@
  * Canonical Create League API — request/response types (concept-first preset pipeline).
  */
 
-import type { LeagueSport } from '@prisma/client'
 import type { LeagueFormatResolution } from '@/lib/league/format-engine'
 import type { SettingsSnapshot } from '@/lib/league-contract/types'
 import type { MetaEventPayload } from '@/lib/meta-events'
-
-export type CanonicalDraftType =
-  | 'snake'
-  | 'linear'
-  | 'auction'
-  | 'slow_draft'
-  | 'mock_draft'
-  | 'devy_snake'
-  | 'devy_auction'
-  | 'c2c_snake'
-  | 'c2c_auction'
-  | 'offline'
-  | 'auto'
-  | 'team'
-
-export interface CreateLeagueRequestBody {
-  concept: string
-  sport: LeagueSport | string
-  scoringPreset: string
-  teamCount: number
-  draftType: CanonicalDraftType | string
-  leagueName: string
-  conceptSetup?: Record<string, unknown> | null
-  /** Required when sport is SOCCER */
-  soccerPipeline?: 'mls' | 'euro' | null
-  /** Defaults applied server-side if omitted */
-  timezone?: string
-  language?: 'en' | 'es'
-  tradeReviewMode?: 'commissioner' | 'league_vote' | 'instant' | 'none'
-}
 
 export interface DerivedLeagueFlags {
   isDynasty: boolean
@@ -92,6 +61,8 @@ export interface CreateLeagueSuccessResponse {
   /** Non-fatal preset warnings (e.g. odd team count). */
   warnings?: ValidationIssue[]
   metaEvent?: MetaEventPayload
+  /** Present for a "Create a test league" request: open seats filled with placeholder AI managers. */
+  testLeague?: { placeholdersFilled: number }
 }
 
 export interface CreateLeagueErrorResponse {

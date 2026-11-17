@@ -5,9 +5,9 @@
  *
  * 1. "How waivers run here": `flex: 1 1 240px` is a WIDTH in the row and became a 240px HEIGHT
  *    when the 720px band turns each rule into a column — 261px per one-line rule on a phone.
- * 2. The four header tiles: `minmax(190px, 1fr)` fit one column in a 343px row; two by two now.
- * 3. The all-leagues board: Add and Drop side by side on a phone — for Waivers ONLY. Trades and
- *    Draft HQ share the swap layout and keep their stack, so every rule must carry `--waivers`.
+ * 2. The four header tiles: `minmax(190px, 1fr)` fit one column in a 343px row; two by two now —
+ *    since 2026-11 from the shared StatStrip (primitives/af-primitives.css).
+ * (3. The all-leagues board's Add/Drop phone layout went with that board, 2026-11-12.)
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -45,32 +45,15 @@ describe('"How waivers run here" on a phone', () => {
 })
 
 describe('the header tiles on a phone', () => {
-  it('sit two by two at 560px and below', () => {
-    expect(rules('af-waivers.css', '.af-wv-tiles').find((r) => r.media === '(max-width: 560px)')?.decls['grid-template-columns']).toBe(
+  // The tiles are the shared StatStrip now (2026-11): its phone layout is the base rule, two by two.
+  it('sit two by two at phone width, from the shared strip', () => {
+    expect(rules('primitives/af-primitives.css', '.af-core .af-pg-stats').find((r) => r.media === '')?.decls['grid-template-columns']).toBe(
       'repeat(2, minmax(0, 1fr))',
     )
   })
+  it('and Waivers no longer lays its own tiles out', () => {
+    expect(rules('af-waivers.css', '.af-wv-tiles')).toEqual([])
+  })
 })
 
-describe('the all-leagues board on a phone', () => {
-  it('puts Add and Drop side by side for Waivers', () => {
-    const sel = '.af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap'
-    expect(rules('af-core-boards.css', sel).find((r) => r.media === '(max-width: 720px)')?.decls['grid-template-columns']).toBe(
-      'minmax(0, 1fr) minmax(0, 1fr)',
-    )
-  })
-  it('🛑 changes nothing for the boards that share the swap: no unscoped phone rule goes two-column', () => {
-    // Every rule in the phone band that lays out the swap grid: unscoped ones must keep the shared
-    // single-column stack Trades and Draft HQ rely on; only a `--waivers` rule may go side by side.
-    const swapGrids: { selector: string; cols: string }[] = []
-    parse('af-core-boards.css').walkRules((rule: Rule) => {
-      const inPhoneBand = rule.parent?.type === 'atrule' && (rule.parent as AtRule).params === '(max-width: 720px)'
-      if (!inPhoneBand || !/\.af-bd-swap$/.test(rule.selector)) return
-      rule.walkDecls('grid-template-columns', (d) => swapGrids.push({ selector: rule.selector, cols: d.value }))
-    })
-    const unscoped = swapGrids.filter((g) => !g.selector.includes('--waivers'))
-    expect(unscoped.length).toBeGreaterThan(0)
-    for (const g of unscoped) expect(g.cols).toBe('minmax(0, 1fr)')
-    expect(swapGrids.some((g) => g.selector.includes('--waivers') && g.cols === 'minmax(0, 1fr) minmax(0, 1fr)')).toBe(true)
-  })
-})
+/* The all-leagues board's Add/Drop phone layout went with that board (removed 2026-11-12). */

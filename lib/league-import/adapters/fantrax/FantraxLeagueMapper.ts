@@ -1,4 +1,5 @@
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { usesFantraxPeriodCalendar } from '@/lib/league-import/fantrax/fantraxProSports'
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
 import type { NormalizedLeagueSettings } from '../../types'
 import type { FantraxImportPayload } from './types'
@@ -43,6 +44,7 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
             : 'in_season',
       playoff_team_count: undefined,
       regular_season_length: source.schedule.length > 0 ? source.schedule.length : undefined,
+      ...(usesFantraxPeriodCalendar(source.league.sport) ? { current_week: source.league.currentWeek ?? undefined } : {}),
       schedule_unit: 'week',
       matchup_frequency: 'head_to_head',
       waiver_type: undefined,

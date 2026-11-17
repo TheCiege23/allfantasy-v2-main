@@ -116,7 +116,7 @@ export function IDPAIPanel({
       {afSubDenied ? (
         <div className="mx-4 mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
-          <span>AF Commissioner Subscription gates IDP AI execution — preview below requires AfSub.</span>
+          <span>IDP AI runs with AF Commissioner. The preview below needs it too.</span>
           <SubscriptionGateBadge
             featureId="commissioner_idp_analysis"
             onClick={() => gate('commissioner_idp_analysis')}
@@ -126,7 +126,7 @@ export function IDPAIPanel({
 
       <SettingsSection
         title="IDP AI toggles"
-        description="Preferences sync to this device; commissioners also persist to the league (AfSub)."
+        description="Preferences save to this device; with AF Commissioner, a commissioner's also save to the league."
       >
         <SettingsRow label="Start/Sit recommendations">
           <input

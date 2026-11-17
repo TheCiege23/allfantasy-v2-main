@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
 import { SOCIAL_PULSE_SIGNAL_VALUES, type SocialPulseResponse, type SocialPulseSignal } from '@/lib/social-pulse-schema'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type SocialPulseSport = 'NFL' | 'NBA'
 type SocialPulseFormat = 'dynasty' | 'redraft'
@@ -591,7 +592,7 @@ export default function SocialPulsePage() {
         const normalized = normalizeSocialPulseResult(payload)
         const payloadRecord = isRecord(payload) ? payload : null
         const rateLimitRecord = isRecord(payloadRecord?.rate_limit) ? payloadRecord.rate_limit : null
-        const payloadErrorMessage = extractErrorMessage(payload)
+        const payloadErrorMessage = readPlanRefusal(response.status, payload)?.message ?? extractErrorMessage(payload)
         const retryValue = rateLimitRecord?.retryAfterSec
         const topLevelRetry = payloadRecord?.retryAfterSec
         const parsedRetry =

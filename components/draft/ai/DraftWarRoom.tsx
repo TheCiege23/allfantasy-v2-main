@@ -60,7 +60,7 @@ function WarRoomSkeleton() {
   )
 }
 
-export type DraftWarRoomProps = {
+type DraftWarRoomProps = {
   sport: string
   leagueId: string
   expanded?: boolean

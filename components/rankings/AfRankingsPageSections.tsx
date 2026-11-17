@@ -21,7 +21,7 @@ import {
   XpProgressPremium,
 } from '@/components/rankings/af-rankings-ui/AfRankingsUiKit'
 
-export type PlayerRankLite = {
+type PlayerRankLite = {
   careerTier: number
   careerTierName: string
   careerLevel: number

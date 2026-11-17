@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Sparkles, Users, Pencil, RotateCcw } from 'lucide-react'
+import { ChevronDown, Sparkles, Users, RotateCcw } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   DEFAULT_DIVISION_PLAYOFF_RULE,

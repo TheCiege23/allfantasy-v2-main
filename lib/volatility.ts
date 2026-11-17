@@ -1,6 +1,6 @@
 import { PricedAsset } from './hybrid-valuation';
 
-export interface VolatilityCoefficients {
+interface VolatilityCoefficients {
   [key: string]: number;
 }
 
@@ -25,7 +25,7 @@ const POSITION_VOLATILITY: VolatilityCoefficients = {
   'DEFAULT': 1.0,
 };
 
-export function getAssetVolatility(asset: PricedAsset, age?: number): number {
+function getAssetVolatility(asset: PricedAsset, age?: number): number {
   if (asset.type === 'pick') {
     const round = asset.details?.round ?? 1;
     const tier = asset.details?.tier?.toLowerCase() ?? '';
@@ -114,10 +114,6 @@ export function computeTradeVolatility(assets: PricedAsset[]): number {
   const stdDev = Math.sqrt(variance);
   
   return weightedAvg + stdDev;
-}
-
-export function getRiskAdjustedDelta(rawDelta: number, volatilityScore: number): number {
-  return rawDelta / (1 + volatilityScore * 0.1);
 }
 
 export function getVolatilityLabel(score: number): 'Low' | 'Medium' | 'High' {

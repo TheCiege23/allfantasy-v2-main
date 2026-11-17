@@ -12,7 +12,7 @@ class PlatformIdentityRaceError extends Error {
   }
 }
 
-export type LinkAfUserToLegacyOptions = {
+type LinkAfUserToLegacyOptions = {
   /** When true, skip calling `computeAndSaveRank` (caller will sync leagues first). */
   skipComputeRank?: boolean
 }

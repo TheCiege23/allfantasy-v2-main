@@ -1,3 +1,4 @@
+import { isTrialStartInvoice } from "@/lib/monetization/freeTrial"
 import type Stripe from "stripe"
 import { prisma } from "@/lib/prisma"
 import {
@@ -357,12 +358,19 @@ export async function refreshSubscriptionPeriod(
   // The line items' service period — NOT invoice.period_end, which looks back a
   // period (see invoiceServicePeriodEnd).
   const currentPeriodEnd = invoiceServicePeriodEnd(invoice)
+  /*
+   * 🛑 THE $0 INVOICE A FREE TRIAL OPENS WITH IS NOT A PAYMENT (2026-11-15, lib/monetization/freeTrial.ts).
+   * Stamping `active` on it turned the row the checkout had just written as `trialing` into a paying
+   * subscriber — in the MRR estimate and the admin counts — for the whole trial. Its status is left to
+   * the checkout and subscription handlers; the period is still refreshed.
+   */
+  const keepStatus = isTrialStartInvoice(invoice)
 
   if (subId) {
     await prisma.userSubscription.updateMany({
       where: { userId, stripeSubscriptionId: subId },
       data: {
-        status: "active",
+        ...(keepStatus ? {} : { status: "active" }),
         gracePeriodEnd: null,
         ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
         metadata: {
@@ -385,7 +393,7 @@ export async function refreshSubscriptionPeriod(
       ...(customerId ? { stripeCustomerId: customerId } : {}),
     },
     data: {
-      status: "active",
+      ...(keepStatus ? {} : { status: "active" }),
       gracePeriodEnd: null,
       ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
       metadata: {

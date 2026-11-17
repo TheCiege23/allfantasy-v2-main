@@ -11,7 +11,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import {
   SpecialtyCard,
   SpecialtyCountdown,
@@ -34,7 +33,7 @@ import type { BigBrotherHomeExtras } from '@/lib/league-specialty/bigBrotherHome
 import type { BigBrotherSummary, BigBrotherUserStatus } from './types'
 import bb from './big-brother-specialty.module.css'
 
-export const BB_PHASE_STEPS = ['HOH', 'Nominations', 'Veto comp', 'Veto meeting', 'Eviction vote', 'Live eviction'] as const
+const BB_PHASE_STEPS = ['HOH', 'Nominations', 'Veto comp', 'Veto meeting', 'Eviction vote', 'Live eviction'] as const
 
 export type BigBrotherSpecialtySummary = BigBrotherSummary & { home?: BigBrotherHomeExtras | null }
 

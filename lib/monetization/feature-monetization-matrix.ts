@@ -3,16 +3,16 @@ import type { TokenSpendRuleCode } from "@/lib/tokens/constants"
 import { getTokenSpendRuleMatrixEntry } from "@/lib/tokens/pricing-matrix"
 import { upgradePathForPlan } from "@/lib/monetization/upgradeDestination"
 
-export type MonetizationAccessType = "free" | "subscription_only" | "subscription_or_tokens"
+type MonetizationAccessType = "free" | "subscription_only" | "subscription_or_tokens"
 
-export type MonetizationUnavailableBehavior = "show" | "disable_with_fallback" | "hide"
+type MonetizationUnavailableBehavior = "show" | "disable_with_fallback" | "hide"
 
-export type MonetizationSurfaceHints = {
+type MonetizationSurfaceHints = {
   routes: string[]
   components: string[]
 }
 
-export type PremiumFeatureMonetizationEntry = {
+type PremiumFeatureMonetizationEntry = {
   key: SubscriptionFeatureId
   title: string
   accessType: Exclude<MonetizationAccessType, "free">
@@ -25,7 +25,7 @@ export type PremiumFeatureMonetizationEntry = {
   surfaceHints: MonetizationSurfaceHints
 }
 
-export type FreeFeatureMonetizationEntry = {
+type FreeFeatureMonetizationEntry = {
   key: string
   title: string
   accessType: "free"
@@ -38,7 +38,7 @@ export type FreeFeatureMonetizationEntry = {
   surfaceHints: MonetizationSurfaceHints
 }
 
-export type FeatureMonetizationEntry =
+type FeatureMonetizationEntry =
   | PremiumFeatureMonetizationEntry
   | FreeFeatureMonetizationEntry
 
@@ -324,7 +324,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "pro",
     tokenRuleCode: "ai_weekly_planning_session",
     lockedReason: "Planning tools are part of AF Pro.",
-    backendEnforcement: "requireFeatureEntitlement(planning_tools) on premium planning actions.",
+    backendEnforcement: "requireFeatureEntitlement(planning_tools) on POST /api/legacy/season-strategy; client FeatureGate around StrategyPlanner.",
     frontendGateBehavior: "FeatureGate + InContextMonetizationCard.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -536,7 +536,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "commissioner",
     tokenRuleCode: "commissioner_ai_collusion_detection_scan",
     lockedReason: "Collusion detection is part of AF Commissioner.",
-    backendEnforcement: "requireFeatureEntitlement(ai_collusion_detection) with allowTokenFallback on scan endpoints.",
+    backendEnforcement: "NOT enforced under this key (audit 2026-11-10): integrity scans are gated by commissioner_integrity_monitoring (lib/integrity/leagueEntitlement.ts).",
     frontendGateBehavior: "InContextMonetizationCard + token preview + upgrade/token CTA.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -551,7 +551,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "commissioner",
     tokenRuleCode: "commissioner_ai_tanking_detection_scan",
     lockedReason: "Tanking detection is part of AF Commissioner.",
-    backendEnforcement: "requireFeatureEntitlement(ai_tanking_detection) with allowTokenFallback on scan endpoints.",
+    backendEnforcement: "NOT enforced under this key (audit 2026-11-10): tanking flags are gated by commissioner_integrity_monitoring (lib/integrity/leagueEntitlement.ts).",
     frontendGateBehavior: "InContextMonetizationCard + token preview + upgrade/token CTA.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -596,11 +596,11 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "commissioner",
     tokenRuleCode: "ai_draft_rankings_explanation",
     lockedReason: "Draft rankings intelligence is part of AF Commissioner.",
-    backendEnforcement: "requireFeatureEntitlement(draft_rankings) with allowTokenFallback on ranking explanation endpoints.",
+    backendEnforcement: "requireFeatureEntitlement(draft_rankings) on the AI explanations of GET /api/leagues/[leagueId]/draft-results (?aiExplain=1); the deterministic rankings stay free and aiExplainLocked carries the refusal.",
     frontendGateBehavior: "Premium link + in-context card where draft-ranking actions execute.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
-      routes: ["/app/league/[leagueId]?tab=Draft"],
+      routes: ["/league/[leagueId]/draft-results"],
       components: ["CommissionerTab"],
     },
   },
@@ -641,7 +641,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_draft_helper_session_recommendation",
     lockedReason: "Draft strategy builder is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(draft_strategy_build) with token fallback on metered session actions.",
+    backendEnforcement: "Client FeatureGate on the draft helper's War Room; server: requireFeatureEntitlement(draft_strategy_build) on the AI narrative of POST /api/war-room/recommend (deterministic picks stay open).",
     frontendGateBehavior: "FeatureGate + InContextMonetizationCard + upgrade/token CTA.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -671,7 +671,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_strategy_3_5_year_planning",
     lockedReason: "Future-year planning is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(future_planning) with token fallback where endpoint supports hybrid.",
+    backendEnforcement: "Client FeatureGate only (WarRoomTab link card, LegacyStrategyTab). The roadmap it leads to is server-gated by ai_planning_3_5_year.",
     frontendGateBehavior: "FeatureGate + in-context card where planning runs.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -686,7 +686,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_strategy_3_5_year_planning",
     lockedReason: "Long-range strategy is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(multi_year_strategy) with token fallback where endpoint supports hybrid.",
+    backendEnforcement: "Client FeatureGate only (WarRoomTab link card). The roadmap it leads to is server-gated by ai_planning_3_5_year.",
     frontendGateBehavior: "FeatureGate + in-context card where planning runs.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -701,7 +701,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_war_room_multi_step_planning",
     lockedReason: "AF Legacy board intelligence is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(draft_board_intelligence) with token fallback where endpoint supports hybrid.",
+    backendEnforcement: "NOT enforced under this key (audit 2026-11-10): /api/draft-war-room gates on pro_draft_ai or war_room_draft_strategy.",
     frontendGateBehavior: "FeatureGate + in-context card where board intelligence runs.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -716,7 +716,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_war_room_multi_step_planning",
     lockedReason: "Roster construction planning is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(roster_construction_planning) with token fallback where endpoint supports hybrid.",
+    backendEnforcement: "requireFeatureEntitlement(roster_construction_planning): GET best-ball-war-room omits construction (constructionLocked) and POST roster-construction refuses without the plan.",
     frontendGateBehavior: "FeatureGate + in-context card where planning runs.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -731,7 +731,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_strategy_3_5_year_planning",
     lockedReason: "Long-horizon planning is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(ai_planning_3_5_year) with token fallback where endpoint supports hybrid.",
+    backendEnforcement: "requireFeatureEntitlement(ai_planning_3_5_year) on POST /api/rankings/dynasty-roadmap and /api/franchise-roadmap (no token fallback).",
     frontendGateBehavior: "FeatureGate + in-context card where planning runs.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -749,8 +749,8 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Generating AI trade proposals is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
-    frontendGateBehavior: "FeatureGate around the 'Generate Trade Proposals' button.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_trade_proposals) on POST /api/legacy/trade/proposal-generator (since 2026-11-16), /api/legacy/trade-ideas and /api/legacy/trade/goal-proposals (since 2026-11-17), plus the client FeatureGates around those three buttons in app/af-legacy/page.tsx.",
+    frontendGateBehavior: "FeatureGate around the 'Generate Trade Proposals', Trade Ideas and Goal Proposals buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/legacy?tab=trade"],
@@ -761,10 +761,15 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     key: "legacy_trade_finder",
     title: "Trade Review",
     accessType: "subscription_only",
-    requiredPlanId: "war_room",
+    /*
+     * AF Pro (owner's decision 2026-11-16: "Trade Finder = AF Pro everywhere"). It was AF Legacy here while the
+     * league trade finder and Chimmy's find_trade_ideas were AF Pro, so the same finder asked for two plans. The
+     * key keeps its old name: the API cost gate, /api/trade-finder/matchmaking and TradeFinderV2 all read it.
+     */
+    requiredPlanId: "pro",
     tokenRuleCode: null,
-    lockedReason: "Finding real trade opportunities against your roster is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in components/TradeFinderV2.tsx.",
+    lockedReason: "Finding real trade opportunities against your roster is part of AF Pro.",
+    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
     frontendGateBehavior: "FeatureGate around the 'Find Trades' / 'Find Best Partners' buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -779,7 +784,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Full waiver-wire analysis is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_waiver_analysis) on POST /api/legacy/waiver/analyze (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Analyze Free Agents' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -794,7 +799,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Manager comparison analysis is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_manager_compare) on POST /api/legacy/compare (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Compare Managers' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -809,7 +814,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Full team-direction rankings analysis is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_rankings_analysis) on POST /api/legacy/rankings/analyze (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Show My Rankings' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -824,11 +829,44 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Live social/market pulse search is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_social_pulse) on POST /api/legacy/social-pulse (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Get Social Pulse' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/af-legacy?tab=pulse"],
+      components: [],
+    },
+  },
+  // Owner's decision 2026-11-17: the four AF Legacy AI tools that ran free are locked. Trade Ideas and Goal
+  // Proposals share legacy_trade_proposals (the Trade Command Center); these two get keys of their own so the
+  // purchase funnel (from=lock_<key>) can tell them apart.
+  {
+    key: "legacy_trade_hub",
+    title: "Trade Hub report",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "The full AI trade report is part of AF Legacy.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_trade_hub) on POST /api/legacy/trade/analyze (since 2026-11-17), plus the client FeatureGate around the Trade Hub's generate button in app/af-legacy/page.tsx.",
+    frontendGateBehavior: "FeatureGate around the Trade Hub 'Analyze trade' button; the /af-legacy/trade-analyzer page shows the server's plan sentence.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy?tab=trade", "/af-legacy/trade-analyzer"],
+      components: [],
+    },
+  },
+  {
+    key: "legacy_ai_report",
+    title: "Chimmy Analysis",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Chimmy's read of your whole fantasy career is part of AF Legacy.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_ai_report) on POST /api/legacy/ai/run (since 2026-11-17), plus a FeatureGate where the report renders in app/af-legacy/page.tsx.",
+    frontendGateBehavior: "A locked card in place of the Chimmy Analysis report.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy"],
       components: [],
     },
   },
@@ -841,7 +879,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX_BY_KEY: Record<
   PREMIUM_FEATURE_MONETIZATION_MATRIX.map((entry) => [entry.key, entry])
 ) as Record<SubscriptionFeatureId, PremiumFeatureMonetizationEntry>
 
-export const FEATURE_MONETIZATION_MATRIX: readonly FeatureMonetizationEntry[] = [
+const FEATURE_MONETIZATION_MATRIX: readonly FeatureMonetizationEntry[] = [
   ...FREE_FEATURE_MONETIZATION_MATRIX,
   ...PREMIUM_FEATURE_MONETIZATION_MATRIX,
 ]
@@ -863,7 +901,7 @@ export function getPremiumMonetizationForFeature(
   return PREMIUM_FEATURE_MONETIZATION_MATRIX_BY_KEY[featureId] ?? null
 }
 
-export function getFeatureTokenFallbackRuleFromMatrix(
+function getFeatureTokenFallbackRuleFromMatrix(
   featureId: SubscriptionFeatureId
 ): TokenSpendRuleCode | null {
   return getPremiumMonetizationForFeature(featureId)?.tokenRuleCode ?? null

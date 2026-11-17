@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, context: Context) {
   const userId = (await getServerSession(authOptions as never) as { user?: { id?: string } } | null)?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await context.params
-  const access = await assertLeagueCommissioner(leagueId, userId)
+  const access = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
   const body = await req.json().catch(() => null) as { period?: number; action?: string } | null
   if (body?.action === 'reconcile_correction') {

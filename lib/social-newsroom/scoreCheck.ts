@@ -5,7 +5,7 @@
  * most writers, and TheSportsDB's own `FT`, `AOT` (after overtime) and `AP` (after penalties /
  * shootout). The last two are also how an overtime finish is known.
  */
-export const FINAL_STATUS = /^(final|ft|aot|aet|ap|status_final)$/i
+const FINAL_STATUS = /^(final|ft|aot|aet|ap|status_final)$/i
 export const OVERTIME_STATUS = /^(aot|aet|ap)$/i
 
 export function isFinalStatus(status: string | null | undefined): boolean {

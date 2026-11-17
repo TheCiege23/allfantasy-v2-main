@@ -1,4 +1,4 @@
-export type BestBallPowerRankings = {
+type BestBallPowerRankings = {
   tiers: { label: string; rosterIds: string[] }[]
   weightsNote: string
 }

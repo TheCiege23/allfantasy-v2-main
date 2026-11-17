@@ -10,7 +10,7 @@
  * would put a broken <video> on a working create flow.
  */
 
-export type BracketChallengeHero = {
+type BracketChallengeHero = {
   video: string
   poster: string
   /** Used for the accessible label; the visible copy already names the sport. */

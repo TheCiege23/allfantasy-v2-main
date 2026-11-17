@@ -38,9 +38,9 @@ describe('wizard league types for an imported team count', () => {
   })
 
   it('a native create still offers only the listed sizes', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 16, sport: 'NFL' as const }
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 150, sport: 'NFL' as const }
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
-    // 16 is the top of the native dynasty list, so there is nothing larger to step to.
+    // 150 is the largest NFL dynasty size.
     expect(screen.getByTestId('g30-team-count-increase')).toBeDisabled()
   })
 })

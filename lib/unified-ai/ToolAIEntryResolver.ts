@@ -5,7 +5,7 @@
 
 import type { ToolAIEntryKey } from "./types"
 
-export interface ToolAIEntry {
+interface ToolAIEntry {
   key: ToolAIEntryKey
   label: string
   apiPath: string

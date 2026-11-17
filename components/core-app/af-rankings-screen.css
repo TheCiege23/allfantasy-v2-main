@@ -29,12 +29,7 @@
   min-height: 60px;
   padding: 0 2px;
 }
-.af-rk-title {
-  font: 900 22px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif;
-  letter-spacing: -0.03em;
-  margin: 0;
-  color: var(--text);
-}
+/* Page titles (the hero, Compare, How ranking works) are the shared PageHeader's (primitives/af-primitives.css). */
 .af-rk-sub {
   font-size: 12.5px;
   color: var(--muted);
@@ -47,7 +42,7 @@
   align-items: center;
   gap: 6px;
   padding: 9px 15px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--text);
@@ -65,7 +60,7 @@
 .af-rk-card {
   background: var(--surface);
   border: 1px solid var(--line2);
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   padding: 18px;
   min-width: 0;
 }
@@ -112,7 +107,7 @@
   color: var(--warn);
   background: var(--warn-soft);
   border: 1px solid var(--warn);
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   padding: 10px 12px;
 }
 
@@ -121,7 +116,7 @@
   gap: 14px;
   padding: 18px;
   border: 1px solid var(--accent-line);
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft));
 }
 .af-rk-scope-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -130,10 +125,10 @@
 .af-rk-scope-head h2 { margin: 0; color: var(--text); font: 900 20px/1.15 var(--font-archivo, Archivo), system-ui, sans-serif; }
 .af-rk-scope-head p:not(.af-rk-eyebrow) { max-width: 720px; margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .af-rk-scope-counts { display: flex; gap: 8px; flex-wrap: wrap; }
-.af-rk-scope-counts b { min-width: 88px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--accent); background: var(--surface2); font: 800 19px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; }
+.af-rk-scope-counts b { min-width: 88px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--af-radius-inner, 12px); color: var(--accent); background: var(--surface2); font: 800 19px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; }
 .af-rk-scope-counts small { display: block; margin-top: 6px; color: var(--faint); font: 700 11px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
 .af-rk-scope-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); gap: 14px; }
-.af-rk-league-board { list-style: none; margin: 0; padding: 7px; border: 1px solid var(--line2); border-radius: 14px; background: var(--surface); }
+.af-rk-league-board { list-style: none; margin: 0; padding: 7px; border: 1px solid var(--line2); border-radius: var(--af-radius-card, 16px); background: var(--surface); }
 .af-rk-league-board li { min-height: 38px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 54px 70px; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--text2); }
 .af-rk-league-board li:last-child { border-bottom: 0; }
 .af-rk-league-board li[data-you='true'] { border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
@@ -169,7 +164,7 @@
   display: grid;
   place-items: center;
   font-size: 26px;
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   border: 1px solid var(--line2);
   background: var(--chip);
 }
@@ -243,7 +238,7 @@
   align-items: center;
   gap: 13px;
   padding: 13px 15px;
-  border-radius: 13px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--rung-color, var(--line2));
@@ -288,7 +283,7 @@
   flex-wrap: wrap;
   margin-top: 14px;
   padding: 12px 15px;
-  border-radius: 13px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--line);
   font-size: 12.5px;
@@ -320,7 +315,7 @@
   align-items: center;
   gap: 11px;
   padding: 9px 10px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   min-width: 0;
 }
 .af-rk-lrow--you { background: var(--accent-soft); border: 1px solid var(--accent-line); }
@@ -374,7 +369,7 @@
 
 .af-rk-empty {
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px dashed var(--line2);
   font-size: 12.5px;
@@ -425,7 +420,7 @@
 }
 .af-rk-tiercell {
   padding: 12px 10px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
   text-align: center;
@@ -451,7 +446,7 @@
   align-items: center;
   gap: 11px;
   padding: 10px 12px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -580,7 +575,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--surface2);
   min-width: 210px;
@@ -624,7 +619,6 @@
   /* The VS column becomes a divider row rather than disappearing — the
      head-to-head record lives in it and is not repeated anywhere else. */
   .af-rk-vsmid { flex-direction: row; padding: 4px 0; }
-  .af-rk-title { font-size: 19px; }
   .af-rk-table td.n { width: auto; }
 }
 
@@ -694,7 +688,7 @@
   gap: 4px;
   min-height: 44px;
   padding: 11px 14px;
-  border-radius: 13px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--text);
@@ -725,7 +719,7 @@
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid var(--line2);
-  border-radius: 14px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
 }
 .af-rk-field { display: flex; flex-direction: column; gap: 5px; min-width: 132px; flex: 1 1 132px; }
@@ -741,7 +735,7 @@
   min-height: 44px;
   width: 100%;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--surface2);
   color: var(--text);
@@ -755,7 +749,7 @@
    (absolutely positioned) sort labels. Without it they escape the scroller and the whole
    page scrolled sideways on a tablet — 1087px on an 820px iPad (2026-09-25). Same trap
    the Standings table hit. */
-.af-rk-tablewrap { position: relative; overflow: auto; border-radius: 12px; border: 1px solid var(--line); }
+.af-rk-tablewrap { position: relative; overflow: auto; border-radius: var(--af-radius-inner, 12px); border: 1px solid var(--line); }
 .af-rk-tablewrap--virtual { overscroll-behavior: contain; }
 .af-rk-grid-table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .af-rk-caption { caption-side: top; text-align: left; padding: 10px 12px 4px; font-size: 12px; color: var(--muted); }
@@ -829,7 +823,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   gap: 4px;
   min-width: 92px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface2);
 }
@@ -856,7 +850,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 
 .af-rk-trends { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .af-rk-pgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.af-rk-trend { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); min-width: 0; }
+.af-rk-trend { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--af-radius-inner, 12px); background: var(--surface2); min-width: 0; }
 .af-rk-trend-title { display: flex; justify-content: space-between; gap: 8px; font: 700 11.5px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif; color: var(--text); }
 .af-rk-trend-now { font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
 .af-rk-trend-empty { margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--faint); }
@@ -890,7 +884,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   gap: 3px;
   min-height: 44px;
   padding: 9px 12px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--surface2);
   color: var(--text);
@@ -907,7 +901,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-share .af3a-share-btn {
   min-height: 44px;
   padding: 9px 15px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--text);
@@ -965,7 +959,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--line2);
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 .af-rk-rival-who { min-width: 0; display: flex; flex-direction: column; }
 .af-rk-rival-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1108,7 +1102,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
     margin: 0 -4px;
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     border: 1px solid var(--line2);
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--af-radius-inner, 12px) var(--af-radius-inner, 12px) 0 0;
     background: var(--surface);
     box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.18);
   }
@@ -1134,7 +1128,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
  * `min-h-screen` (Tailwind) — inside the hub that would push the footer a full viewport down,
  * so the wrapper neutralises it here instead of editing four shells in each page. */
 .af-rk-paneltabs { margin: 0; }
-.af-rk-powerpanel { border-radius: 16px; overflow: hidden; border: 1px solid var(--line2); }
+.af-rk-powerpanel { border-radius: var(--af-radius-card, 16px); overflow: hidden; border: 1px solid var(--line2); }
 .af-rk-powerpanel .min-h-screen { min-height: 0; }
 @media (max-width: 720px) {
   .af-rk-paneltabs .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
@@ -1295,7 +1289,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
     min-height: 44px;
     padding: 8px 14px;
     border: 1px solid var(--line2);
-    border-radius: 12px;
+    border-radius: var(--af-radius-inner, 12px);
     background: var(--chip);
     color: var(--text);
     font: 700 13px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif;
@@ -1372,16 +1366,9 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   gap: 16px 24px;
 }
 .af-rk-hero-main { flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.af-rk-hero-eyebrow {
-  margin: 0;
-  color: var(--faint);
-  font: 600 11px/1.3 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
+/* The hero's eyebrow, title and intro are the shared PageHeader; the head stacks so the title row spans the column. */
+.af-rk-hero-head { flex-direction: column; }
 .af-rk-hero-titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.af-rk-hero .af-rk-title { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
-.af-rk-hero-intro { margin: 0; max-width: 62ch; color: var(--text2); font-size: 14px; line-height: 1.5; }
 .af-rk-hero-intro strong { color: var(--text); }
 .af-rk-pills { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .af-rk-pills li {
@@ -1409,7 +1396,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   gap: 10px;
   padding: 18px 20px;
   border: 1px solid var(--mu-sb-line);
-  border-radius: 18px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--mu-sb-bg);
   color: var(--mu-sb-text);
   box-sizing: border-box;
@@ -1443,8 +1430,8 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-levelcard-note { margin: 0; color: var(--mu-sb-muted); font-size: 12px; line-height: 1.45; }
 
 /* Scope tabs: one segmented control instead of four separate cards. */
-.af-rk-scopes { gap: 4px; padding: 4px; border-radius: 14px; background: var(--chip); }
-.af-rk-scope-tab { border-color: transparent; background: transparent; border-radius: 11px; padding: 9px 14px; }
+.af-rk-scopes { gap: 4px; padding: 4px; border-radius: var(--af-radius-card, 16px); background: var(--chip); }
+.af-rk-scope-tab { border-color: transparent; background: transparent; border-radius: var(--af-radius-inner, 12px); padding: 9px 14px; }
 .af-rk-scope-tab:hover { background: var(--surface); }
 .af-rk-scope-tab[aria-current="page"] { border-color: var(--line2); background: var(--surface); box-shadow: 0 1px 2px var(--line); }
 
@@ -1549,7 +1536,6 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 }
 
 @media (max-width: 720px) {
-  .af-rk-hero .af-rk-title { font-size: 26px; }
   .af-rk-levelcard { max-width: none; }
   .af-rk-av { display: none; }
   .af-rk-namecell { display: inline; }

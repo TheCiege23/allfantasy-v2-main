@@ -33,27 +33,6 @@ import {
   type NflRedraftTradeVoteInput,
 } from './canonicalNflRedraftTradeRuntime'
 
-type ResolvedRosterRow = {
-  id: string
-  teamName: string | null
-  ownerName: string | null
-  ownerId: string | null
-  faabBalance: number | null
-  waiverPriority: number | null
-  players: Array<{
-    playerId: string
-    playerName: string
-    position: string
-    team: string | null
-    sport: string | null
-    slotType: string | null
-    isLocked: boolean | null
-    injuryStatus: string | null
-    byeWeek: number | null
-    acquisitionType: string | null
-  }>
-}
-
 export type NflRedraftTradeRuntimeResolved =
   | {
       ok: true
@@ -108,7 +87,6 @@ function positiveHours(value: unknown, fallback: number): number {
   const parsed = numberOrNull(value)
   return parsed == null || parsed <= 0 ? fallback : Math.max(1, Math.floor(parsed))
 }
-
 
 async function resolveSeason(input: { seasonId?: string | null; leagueId?: string | null }) {
   return prisma.redraftSeason.findFirst({

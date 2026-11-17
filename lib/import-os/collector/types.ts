@@ -102,7 +102,7 @@ export function providerNeedsCredential(provider: ImportProvider): boolean {
  * Sleeper and Fleaflicker stay out: their reads are public AND their refresh is unowned, so a
  * league whose only importing user was deleted must still refresh.
  */
-export const USER_SCOPED_PROVIDERS = new Set<ImportProvider>([
+const USER_SCOPED_PROVIDERS = new Set<ImportProvider>([
   ...CREDENTIALED_PROVIDERS,
   'fantrax',
 ])
@@ -226,12 +226,3 @@ export function emptyApplyResult(): ApplyScopeResult {
   return { imported: 0, unchanged: 0, rejected: 0, removed: 0, notes: [] }
 }
 
-export function mergeApplyResults(a: ApplyScopeResult, b: ApplyScopeResult): ApplyScopeResult {
-  return {
-    imported: a.imported + b.imported,
-    unchanged: a.unchanged + b.unchanged,
-    rejected: a.rejected + b.rejected,
-    removed: a.removed + b.removed,
-    notes: [...a.notes, ...b.notes],
-  }
-}

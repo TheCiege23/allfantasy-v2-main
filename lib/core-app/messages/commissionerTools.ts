@@ -134,6 +134,7 @@ export const commissionerToolsMessages = defineMessages({
     recipesUnavailableNflOnly: 'Game-day timing is only known for NFL leagues today.',
     recipesUnavailableMflLineups: 'MFL imports can’t tell an empty lineup from an unreported one.',
     recipesUnavailableFantraxLineups: 'Fantrax imports can’t tell an empty lineup from an unreported one.',
+    recipesUnavailableBestBall: 'Best ball lineups set themselves, so there is nothing to remind anyone to set.',
     recipesUnavailableWeeklyRecap: 'Weekly recaps require a Sleeper week feed or finalized AllFantasy matchups.',
     // ── calendar.ts ──
     calendarWeek: (week: number) => `Week ${week}`,
@@ -313,6 +314,7 @@ export const commissionerToolsMessages = defineMessages({
     recipesUnavailableNflOnly: 'Por ahora solo se conoce el horario de los días de partido en las ligas de la NFL.',
     recipesUnavailableMflLineups: 'Las importaciones de MFL no distinguen una alineación vacía de una no reportada.',
     recipesUnavailableFantraxLineups: 'Las importaciones de Fantrax no distinguen una alineación vacía de una no reportada.',
+    recipesUnavailableBestBall: 'En best ball la alineación se arma sola, así que no hay nada que recordarle a nadie.',
     recipesUnavailableWeeklyRecap: 'Los resúmenes semanales necesitan los datos semanales de Sleeper o enfrentamientos finalizados de AllFantasy.',
     // ── calendar.ts ──
     calendarWeek: (week) => `Semana ${week}`,

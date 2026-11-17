@@ -8,6 +8,7 @@ import { MlbScoringSettingsPanel } from '@/components/league-settings/MlbScoring
 import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoringSettingsPanel'
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
+import { SharedScoringCard } from '@/components/league-settings/SharedScoringCard'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
@@ -15,7 +16,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
  * Exactly ONE sport's editor renders — the league's own sport. There is no football fallback:
  * an NBA league gets the NBA panel (no Passing/Rushing), and an unsupported sport gets a message.
  */
-function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string; leagueId: string; isCommissioner: boolean }) {
+export function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string; leagueId: string; isCommissioner: boolean }) {
   const { t } = useLanguage()
   const props = { leagueId, isCommissioner }
   switch (String(sport ?? '').trim().toUpperCase()) {
@@ -50,6 +51,9 @@ export function ScoringTab({ ctx }: LeagueSettingsTabProps) {
         leagueId={ctx.league.id}
         isCommissioner={ctx.isCommissioner}
       />
+      {/* Shared scoring (2026-11-16): a commissioner of an AllFantasy-run league can use this league's scoring in
+          their other leagues of the sport. A host-linked league's scoring follows the host, so it has nothing to share. */}
+      {ctx.isCommissioner && !sleeperSettingsHref ? <SharedScoringCard leagueId={ctx.league.id} /> : null}
       {/* The host's raw scoring_settings mirror only means something for a host-linked league;
           for a native league it was an empty "no rules" list beside the real editor. */}
       {sleeperSettingsHref ? (

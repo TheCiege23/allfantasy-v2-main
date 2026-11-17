@@ -137,7 +137,7 @@ function normalizeName(name: string): string {
  * Note there is a bet in the live list whose `name` is literally `null` (id 86).
  * It is handled by the caller's empty-name guard rather than here.
  */
-export function classifyBet(bet: { id?: number; name?: string }): Market | null {
+function classifyBet(bet: { id?: number; name?: string }): Market | null {
   if (bet.id === BET_ID_MONEYLINE) return 'moneyline'
   if (bet.id === BET_ID_SPREAD) return 'spread'
   if (bet.id === BET_ID_TOTAL) return 'total'
@@ -212,7 +212,7 @@ export function parsePoints(value: string | null | undefined): number | null {
 }
 
 /** Options for resolving which side of a two-way market a value refers to. */
-export interface SideOpts {
+interface SideOpts {
   /** Home team IDENTIFIER as stored — an abbreviation like "KC" in practice. */
   homeTeam?: string | null
   awayTeam?: string | null

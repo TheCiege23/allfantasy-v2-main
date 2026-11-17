@@ -15,7 +15,7 @@
 
 export type ChecklistSlot = { slot: number; name: string; reason: string; status: 'locked' | 'provisional' }
 export type Phase = 'regular_season' | 'playoffs' | 'final'
-export type Lang = 'en' | 'es'
+type Lang = 'en' | 'es'
 
 const PLATFORM: Record<string, { label: string; where: Record<Lang, string> }> = {
   sleeper: {
@@ -59,7 +59,7 @@ export function platformLabel(platform: string | null | undefined): string {
   return PLATFORM[String(platform ?? '').toLowerCase()]?.label ?? 'your league’s platform'
 }
 
-export type DraftOrderChecklist = {
+type DraftOrderChecklist = {
   platform: string
   /** Every slot is locked — safe to set on the platform now. */
   final: boolean

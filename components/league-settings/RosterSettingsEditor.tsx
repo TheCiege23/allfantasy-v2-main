@@ -209,7 +209,12 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
       setConfig(data.config)
-      setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
+      // Best ball: a seat layout that saved but leaves the player pool tight (lib/bestball/poolCapacity.ts).
+      // Saved lineups that no longer fit the new spots (lib/roster-legality/recheckLeagueLineups.ts).
+      const needFix = typeof data.lineupsNeedingFixes === 'number' && data.lineupsNeedingFixes > 0
+        ? [t('lsEd.ro.lineupsNeedFix').replace('{{n}}', String(data.lineupsNeedingFixes))]
+        : []
+      setWarnings([...(data.unifiedConfig?.rosterWarnings ?? []), ...(data.bestBallPoolWarnings ?? []), ...needFix])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
       applyPayload({ ...data, sport: rosterSport }, slotDefs)
       setSuccess(true)
@@ -246,7 +251,11 @@ export function RosterSettingsEditor({ leagueId, sport: leagueSport }: { leagueI
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('lsEd.ro.resetFailed')); return }
       setConfig(data.config)
-      setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
+      // Best ball: the default seats saved but leave the player pool tight (lib/bestball/poolCapacity.ts).
+      const resetNeedFix = typeof data.lineupsNeedingFixes === 'number' && data.lineupsNeedingFixes > 0
+        ? [t('lsEd.ro.lineupsNeedFix').replace('{{n}}', String(data.lineupsNeedingFixes))]
+        : []
+      setWarnings([...(data.unifiedConfig?.rosterWarnings ?? []), ...(data.bestBallPoolWarnings ?? []), ...resetNeedFix])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
       applyPayload({ ...data, sport: data.sport ?? rosterSport, templates }, slotDefs)
       if (!data.config?.templateKey) setSelectedTemplateKey(defaultTemplateKey ?? 'custom')

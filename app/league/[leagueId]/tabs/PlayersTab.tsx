@@ -10,7 +10,6 @@ import type { SlimPlayer } from '@/lib/hooks/useSleeperPlayers'
 import { useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
 import { ProjectionValue } from '@/components/league/ProjectionValue'
-import { resolveProjectionAvailability } from '@/lib/league/dataHonesty'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo, isNcaafPlayerPoolPending } from '@/lib/league/ncaaf-beta-guard'
@@ -40,7 +39,7 @@ type RiBatchEntry = {
   source: 'rolling_insights'
 }
 
-export type PlayersTabProps = {
+type PlayersTabProps = {
   league: UserLeague
   onPlayerClick: (playerId: string) => void
   sport?: string

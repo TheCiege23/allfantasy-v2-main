@@ -11,7 +11,7 @@ import { getDefaultOgImagePath } from "./SEOPageResolver"
 const SITE_NAME = "AllFantasy"
 const INSTALL_PATH = "/install"
 
-export interface MetadataInput extends SEOPageConfig {
+interface MetadataInput extends SEOPageConfig {
   imagePath?: string
 }
 
@@ -63,19 +63,3 @@ export function buildMetadata(input: MetadataInput): Metadata {
   }
 }
 
-/** Merge partial metadata with defaults (e.g. from layout). */
-export function mergeMetadata(
-  base: Metadata,
-  override: Partial<Metadata>
-): Metadata {
-  return {
-    ...base,
-    ...override,
-    openGraph: override?.openGraph
-      ? { ...base.openGraph, ...override.openGraph }
-      : base.openGraph,
-    twitter: override?.twitter
-      ? { ...base.twitter, ...override.twitter }
-      : base.twitter,
-  }
-}

@@ -3,18 +3,7 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import {
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Copy,
-  Flame,
-  Lock,
-  Share2,
-  Trophy,
-  Users,
-} from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle2, Flame, Lock, Share2, Trophy, Users } from "lucide-react"
 import { signupUrlWithIntent, loginUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
 import {
   trackWcGuestPoolStarted,

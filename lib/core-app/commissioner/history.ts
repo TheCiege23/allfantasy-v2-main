@@ -24,7 +24,7 @@ export type CommissionerHistory = {
 
 const MAX_TRADE_ASSETS = 6
 
-export function recordedLottery(row: { id: string; createdAt: Date; afterState: unknown }): NonNullable<CommissionerHistory['lotteries']>[number] | null {
+function recordedLottery(row: { id: string; createdAt: Date; afterState: unknown }): NonNullable<CommissionerHistory['lotteries']>[number] | null {
   const data = row.afterState && typeof row.afterState === 'object' && !Array.isArray(row.afterState) ? row.afterState as Record<string, unknown> : null
   if (!data || !Array.isArray(data.slotOrder)) return null
   const odds = new Map<string, number>()

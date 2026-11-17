@@ -22,9 +22,9 @@ import { scheduledLookback } from './periodCalendar'
  *               long enough to move the window. The held status is what applies.
  *   refused   — required evidence is missing or stale. No window, no adjustment.
  */
-export type WindowDecisionState = 'evidenced' | 'held' | 'refused'
+type WindowDecisionState = 'evidenced' | 'held' | 'refused'
 
-export interface WindowTeamFit {
+interface WindowTeamFit {
   /** Multiplier on win-now team fit. 1 is neutral. Never applied to market value. */
   winNowWeight: number
   /** Multiplier on long-term/timeline team fit. 1 is neutral. */
@@ -109,7 +109,7 @@ export interface WindowDecision {
   evidence: WindowEvidence
 }
 
-export interface WindowDecisionOptions {
+interface WindowDecisionOptions {
   /**
    * The league's scheduled periods, ascending, from `resolveScheduledPeriods`.
    *
@@ -164,7 +164,7 @@ export const SCHEDULE_UNAVAILABLE_GAP = 'schedule_unavailable_lookback_assumed_c
 export const INVALID_SCOPE_GAP = 'window_scope_invalid'
 
 /** Matches `twobs_ordinal_chk` in the observation schema. */
-export const MAX_PERIOD_ORDINAL = 25
+const MAX_PERIOD_ORDINAL = 25
 
 /**
  * Rejects a scope before ANY lookback is built.

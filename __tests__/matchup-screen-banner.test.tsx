@@ -111,10 +111,11 @@ describe('Matchup banner — unplayed week', () => {
     expect(container.querySelectorAll('.af-mu-score-tag')).toHaveLength(2)
   })
 
-  it('says the margin is projected, not a lead', () => {
+  it('says the margin is projected, not a lead — in the headline, the one place it is said (2026-11-14)', () => {
     render(<Matchup data={data()} />)
-    expect(screen.getByText(/Projected ahead by/)).toBeTruthy()
-    expect(screen.queryByText(/^You lead by/)).toBeNull()
+    expect(document.getElementById('af-mug-title')?.textContent ?? '').toMatch(/^Projected to win/)
+    expect(document.getElementById('af-mug-title')?.textContent ?? '').not.toMatch(/Ahead by|You lead by/)
+    expect(document.querySelector('.af-mu-margin')).toBeNull()
   })
 
   it('keeps the unscored-week reason on screen', () => {
@@ -134,7 +135,7 @@ describe('Matchup banner — unplayed week', () => {
       '—',
       '—',
     ])
-    expect(screen.getByText('No margin yet')).toBeTruthy()
+    expect(container.querySelector('.af-mu-margin')).toBeNull()
     expect(container.querySelectorAll('.af-mu-score-tag')).toHaveLength(0)
   })
 })
@@ -181,6 +182,8 @@ describe('Matchup banner — scored week', () => {
    */
   it('measures the margin off the scores while a projection is also on file', () => {
     render(<Matchup data={scored} />)
+    expect(document.getElementById('af-mug-title')?.textContent ?? '').toBe('You won 131.4–118.2')
+    // A finished week keeps the result tag in the scoreboard (the redraft board shows only it there).
     expect(screen.getByText(/You lead by/)).toBeTruthy()
     expect(screen.getByText(/13\.2/)).toBeTruthy()
   })

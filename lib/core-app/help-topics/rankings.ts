@@ -129,12 +129,12 @@ export const RANKINGS_TOPICS = {
   },
   scoreboardWinChance: {
     en: {
-      title: 'WIN and MARGIN',
-      body: 'WIN is a pre-game chance from the two projected totals, assuming each lineup’s score varies by about 26 points, capped between 3% and 97%. It shows only before anything is scored, and only when both lineups are fully projected. MARGIN is the points gap. On your own game the percentage is the Matchup screen’s forecast instead.',
+      title: 'WIN and Lead',
+      body: 'WIN is a pre-game chance from the two projected totals, assuming each lineup’s score varies by about 26 points, capped between 3% and 97%. It shows only before anything is scored, and only when both lineups are fully projected. Lead is the points gap; a 0–0 game says Not started. On your own game the percentage is the Matchup screen’s forecast instead.',
     },
     es: {
-      title: 'WIN y MARGIN',
-      body: 'WIN es una probabilidad previa al partido a partir de los dos totales proyectados, suponiendo que el puntaje de cada alineación varía unos 26 puntos, limitada entre 3% y 97%. Solo aparece antes de que se anote nada y cuando ambas alineaciones están proyectadas por completo. MARGIN es la diferencia de puntos. En tu propio partido, el porcentaje es el pronóstico de la pantalla de Matchup.',
+      title: 'WIN y Ventaja',
+      body: 'WIN es una probabilidad previa al partido a partir de los dos totales proyectados, suponiendo que el puntaje de cada alineación varía unos 26 puntos, limitada entre 3% y 97%. Solo aparece antes de que se anote nada y cuando ambas alineaciones están proyectadas por completo. Ventaja es la diferencia de puntos; un partido 0–0 dice Sin empezar. En tu propio partido, el porcentaje es el pronóstico de la pantalla de Matchup.',
     },
   },
   liveImpactTotal: {
@@ -155,6 +155,16 @@ export const RANKINGS_TOPICS = {
     es: {
       title: 'Lo último para ti',
       body: 'La jugada destacada más reciente de uno de tus titulares en un partido que se juega ahora, con cuánto hace que ocurrió. Es el momento más nuevo, no una clasificación de quién anotó más.',
+    },
+  },
+  livePage: {
+    en: {
+      title: 'Live scores',
+      body: 'Open this while games are on: see who’s scoring for you and which matchups could still flip. It only reads your leagues — it never changes them.',
+    },
+    es: {
+      title: 'Marcadores en vivo',
+      body: 'Ábrelo mientras hay partidos: mira quién suma para ti y qué enfrentamientos aún pueden cambiar. Solo lee tus ligas; nunca las modifica.',
     },
   },
   liveGameWinEstimate: {

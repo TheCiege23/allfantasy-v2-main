@@ -27,7 +27,7 @@ import { prisma } from "@/lib/prisma"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core/ChatRoomResolver"
 import { challengeIdFromWorldCupThread, draftIdFromMockDraftThread, sessionKeyFromDraftRoomThread } from "./reportRooms"
 
-export type ReportedMessageStore = "league" | "bracket" | "platform" | "draft_room" | "mock_draft" | "world_cup"
+type ReportedMessageStore = "league" | "bracket" | "platform" | "draft_room" | "mock_draft" | "world_cup"
 
 export interface ReportForReview {
   id: string
@@ -185,7 +185,7 @@ export async function listReportsForReview(opts: { status?: "pending" | "all"; l
 
 export type ReviewAction = "remove" | "dismiss"
 
-export type ReviewResult =
+type ReviewResult =
   | { ok: true; action: ReviewAction; reportsClosed: number }
   | { ok: false; status: 404 | 409; error: string }
 

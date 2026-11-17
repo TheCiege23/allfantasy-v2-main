@@ -24,10 +24,10 @@ import { coreLang } from './messages/coreLocale'
  * PURE, client- and server-safe (CommissionerHub is a server component).
  */
 
-export type CoreDepthLockLang = 'en' | 'es'
+type CoreDepthLockLang = 'en' | 'es'
 
 /** Anything that is not Spanish reads English — the same rule every /core copy module uses. */
-export function lockLang(language: string | null | undefined): CoreDepthLockLang {
+function lockLang(language: string | null | undefined): CoreDepthLockLang {
   return coreLang(language)
 }
 
@@ -70,6 +70,8 @@ export function depthLabelText(depth: CoreDepth, english: string, language: stri
  * there rather than shipping half Spanish.
  */
 const SUBJECT_ES: Record<string, string> = {
+  // The manager card (components/core-app/manager-record/ManagerRecordSheet.tsx), 2026-11-16
+  'A manager’s full record': 'El historial completo de un mánager',
   // Player Finder (components/core-app/screens/PlayerFinder.tsx and player-finder/)
   'Side-by-side compare': 'Comparación lado a lado',
   'Recommended moves': 'Movimientos recomendados',
@@ -83,6 +85,7 @@ const SUBJECT_ES: Record<string, string> = {
   'Who to trade with': 'Con quién intercambiar',
   'The full trade breakdown': 'Desglose completo de cambios',
   'The trade finder': 'Buscador de intercambios',
+  'Your rebuild plan': 'Tu plan de reconstrucción',
   // Competitive Edge (Draft HQ, Trade Center) — the product name stays
   'Competitive Edge': 'Competitive Edge',
 }

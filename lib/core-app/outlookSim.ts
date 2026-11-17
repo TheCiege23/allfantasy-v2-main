@@ -22,7 +22,7 @@
  * browser. A percentage that moves when nothing changed reads as instability in the league.
  */
 
-export type SimProfile = { mu: number; sigma: number; n: number }
+type SimProfile = { mu: number; sigma: number; n: number }
 
 export type SimTeam = {
   rosterId: string
@@ -43,7 +43,7 @@ export type SimTeam = {
  * Monday night a 5.6-point lead with every starter done was simulated as the 29% game it looked like
  * before kickoff (HailShiva, week 4 of 2026): the card read 51.9% while the settled result gave 65.1%.
  */
-export type SimLiveScore = { a: number; b: number; restA: number; restB: number }
+type SimLiveScore = { a: number; b: number; restA: number; restB: number }
 
 export type SimGame = { week: number; a: string; b: string; live?: SimLiveScore }
 
@@ -78,7 +78,7 @@ export type SimAdjustment = {
 /** A result fixed in advance. Points are still sampled, so points-for tiebreaks stay realistic. */
 export type ForcedResult = { week: number; a: string; b: string; winner: string }
 
-export type SimRunView = {
+type SimRunView = {
   /** Roster ids that made the field in this run. */
   field: ReadonlySet<string>
   finalWins: (rosterId: string) => number
@@ -91,7 +91,7 @@ export type SimRunView = {
   winnerOf: (week: number, a: string, b: string) => string | null
 }
 
-export type SimOptions = {
+type SimOptions = {
   iterations: number
   seed: number
   adjustments?: readonly SimAdjustment[]
@@ -103,7 +103,7 @@ export type SimOptions = {
 
 export type OddsCounts = { playoff: number; bye: number; title: number }
 
-export type TeamFinish = {
+type TeamFinish = {
   /** Index = final regular-season wins; value = runs that ended there. */
   winsHist: number[]
   /** Of the runs ending on that many wins, how many made the field. */
@@ -627,7 +627,7 @@ export function simulateSeason(input: SimInput, opts: SimOptions): SimTally {
   }
 }
 
-export type OddsBand = { lo: number; hi: number }
+type OddsBand = { lo: number; hi: number }
 export type TeamBands = { playoff: OddsBand; bye: OddsBand; title: OddsBand }
 
 /** How many times each team's average is re-drawn for the range. */
@@ -717,7 +717,7 @@ export const pctOf = (count: number, iterations: number) => (iterations > 0 ? (c
  * Regular-season games a team has left: its remaining head-to-head games, plus — in a median league —
  * one median game for every remaining week it plays.
  */
-export function gamesLeftFor(input: SimInput, rosterId: string): number {
+function gamesLeftFor(input: SimInput, rosterId: string): number {
   const games = input.remaining.filter((g) => g.a === rosterId || g.b === rosterId)
   return games.length + (input.medianGame ? new Set(games.map((g) => g.week)).size : 0)
 }
@@ -896,7 +896,7 @@ export type RootingGame = {
 /** Below this many runs on either side of a game, its conditional percentage is noise. */
 const MIN_ROOTING_RUNS = 200
 /** A game whose two outcomes move you by less than this many points is not worth naming. */
-export const MIN_ROOTING_GAP = 3
+const MIN_ROOTING_GAP = 3
 
 /**
  * The other games in one week, ranked by how much their result moves YOUR playoff odds.

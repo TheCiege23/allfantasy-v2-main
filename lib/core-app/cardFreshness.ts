@@ -38,7 +38,7 @@ export type CardFreshnessStamp = {
   parts?: StampSourceParts
 }
 
-export type StampSourceParts =
+type StampSourceParts =
   | { kind: 'injuries' }
   | { kind: 'summary' }
   | { kind: 'scores' }
@@ -52,7 +52,7 @@ export type StampSourceParts =
  *   'none-yet'   — nothing has happened to stamp: no scored week yet, no injury reported. Not a
  *                  fault, so no warning; "not read yet" there would accuse a read that did happen.
  */
-export type MissingMeaning = 'never-read' | 'none-yet'
+type MissingMeaning = 'never-read' | 'none-yet'
 
 export function freshnessStamp(
   source: string,

@@ -11,7 +11,7 @@ const MODE_LABELS: Record<AIMode, string> = {
   unified_brain: 'Unified brain',
 }
 
-export interface AIModeSelectorProps {
+interface AIModeSelectorProps {
   value: AIMode
   onChange: (mode: AIMode) => void
   /** Only these modes will be shown. If length 1, selector can be hidden by parent. */

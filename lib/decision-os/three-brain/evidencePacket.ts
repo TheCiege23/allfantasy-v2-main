@@ -17,7 +17,7 @@ import {
 } from './types'
 
 /** Deterministic fingerprint over the decision-relevant evidence (NOT over volatile fields like requestId). */
-export function computeEvidenceFingerprint(input: {
+function computeEvidenceFingerprint(input: {
   canonicalLeagueId?: string
   decisionType: string
   signals: DecisionOSSignal[]

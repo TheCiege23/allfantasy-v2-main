@@ -4,7 +4,7 @@ import type { WaiverClaimRecommendation } from './decision'
  * The shape the AI waiver panel (components/waivers/AIWaiverRecommendationsPanel.tsx) renders — the
  * contract /api/ai/waivers/recommend has always returned, so the panel does not change.
  */
-export interface WaiverPanelRecommendation {
+interface WaiverPanelRecommendation {
   addPlayerId: string
   addPlayerName: string
   dropPlayerId: string | null

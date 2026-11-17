@@ -130,7 +130,7 @@ describe('Player Finder — "My players" home', () => {
 
   it('leads with My players and Following, with no empty Matches card and no "pick a match" card', () => {
     render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={65} shares={SHARES} following={FOLLOWING} />)
-    expect(screen.getByRole('heading', { name: 'My players' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Find any player across all your leagues' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Following' })).toBeInTheDocument()
     expect(screen.queryByText(/Matches ·/)).toBeNull()
     expect(screen.queryByText(/Pick a match/)).toBeNull()

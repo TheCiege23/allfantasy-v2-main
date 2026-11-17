@@ -55,13 +55,15 @@ function initials(row: ManagerHealthRow): string {
   return trimmed ? trimmed.slice(0, 1).toUpperCase() : '·'
 }
 
-export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
+function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
   if (rows.length === 0) {
     return <p className="af-cm-empty">No rosters found for this league yet.</p>
   }
 
   const inactive = rows.filter((r) => r.status === 'inactive').length
   const atRisk = rows.filter((r) => r.status === 'at_risk').length
+  // Only a league where some team has a FAAB balance gets the column.
+  const showFaab = rows.some((r) => typeof r.faabRemaining === 'number')
 
   return (
     <div className="af-card" style={{ padding: 18 }} data-testid="manager-health-table">
@@ -83,6 +85,7 @@ export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
               <th scope="col">Lineups</th>
               <th scope="col">Moves</th>
               <th scope="col">Trades</th>
+              {showFaab ? <th scope="col">FAAB</th> : null}
               <th scope="col">Last action</th>
               <th scope="col">Status</th>
             </tr>
@@ -128,6 +131,11 @@ export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
                   </td>
                   <td className="af-num">{row.moves}</td>
                   <td className="af-num">{row.trades}</td>
+                  {showFaab ? (
+                    <td className="af-num" data-testid="manager-faab">
+                      {row.faabRemaining == null ? '—' : `$${row.faabRemaining}`}
+                    </td>
+                  ) : null}
                   <td style={{ color: 'var(--muted)' }}>{ago(row.lastActionAt)}</td>
                   <td>
                     <span className="af-cm-mstatus af-num" data-tone={tone === 'none' ? undefined : tone}>

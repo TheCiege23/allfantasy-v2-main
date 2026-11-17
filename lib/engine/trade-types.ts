@@ -1,7 +1,7 @@
-export type TradeConfidenceState = "HIGH" | "MODERATE" | "LEARNING";
+type TradeConfidenceState = "HIGH" | "MODERATE" | "LEARNING";
 
-export type LeagueFormat = "dynasty" | "redraft" | "keeper";
-export type QbFormat = "1QB" | "superflex";
+type LeagueFormat = "dynasty" | "redraft" | "keeper";
+type QbFormat = "1QB" | "superflex";
 
 export type SportKey =
   | "NFL"
@@ -18,12 +18,12 @@ export type SportKey =
   | "CRICKET"
   | "CUSTOM";
 
-export interface SleeperUserIdentity {
+interface SleeperUserIdentity {
   username: string;
   userId: string;
 }
 
-export interface LeagueScoringSettings {
+interface LeagueScoringSettings {
   ppr?: number;
   ppCarry?: number;
   ppCompletion?: number;
@@ -33,7 +33,7 @@ export interface LeagueScoringSettings {
   qbFormat?: QbFormat;
 }
 
-export interface LeagueRosterSettings {
+interface LeagueRosterSettings {
   slots?: Record<string, number>;
   limits?: Record<string, number | null>;
 }
@@ -81,7 +81,7 @@ export interface TradePlayerAsset {
   draftProjectionScore?: number;
 }
 
-export interface TradePickAsset {
+interface TradePickAsset {
   year: number;
   round: number;
   pickNumber?: number;
@@ -106,7 +106,7 @@ export interface TeamContext {
   directionConfidence?: TradeConfidenceState;
 }
 
-export interface MarketContext {
+interface MarketContext {
   ldiByPos?: Record<string, number>;
   partnerTendencies?: Record<
     string,
@@ -129,7 +129,7 @@ export interface MarketContext {
   };
 }
 
-export interface NflContext {
+interface NflContext {
   asOf?: string;
   players?: Record<
     string,

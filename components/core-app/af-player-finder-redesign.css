@@ -14,7 +14,7 @@
 
 .af-core.af-pf .af-pf-search {
   height: 46px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2, var(--line));
   background: var(--surface);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
@@ -36,7 +36,7 @@
 }
 
 .af-core.af-pf .af-pf-match {
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 
 .af-core.af-pf .af-pf-match-pos {
@@ -67,48 +67,15 @@
 
 /* ── Position filter ─────────────────────────────────────────────────── */
 
+/* The shared FilterChips (primitives/af-primitives.css); only the spacing around the row is ours. */
 .af-core.af-pf .af-pf-posfilter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   margin: 2px 0 8px;
-}
-
-.af-core.af-pf .af-pf-posfilter-chip {
-  min-width: 44px;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text2);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.af-core.af-pf .af-pf-posfilter-chip:hover {
-  border-color: var(--accent-line);
-  color: var(--text);
-}
-
-.af-core.af-pf .af-pf-posfilter-chip[aria-pressed='true'] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.af-core.af-pf .af-pf-posfilter-chip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* ── Player card ─────────────────────────────────────────────────────── */
 
 .af-core.af-pf .af-pf-detail {
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
 }
 
 /* ── The phone sheet ─────────────────────────────────────────────────── */
@@ -157,7 +124,7 @@
     overscroll-behavior: contain;
     padding-bottom: 96px;
     border-top: 1px solid var(--line);
-    border-radius: 20px 20px 0 0;
+    border-radius: var(--af-radius-card, 16px) var(--af-radius-card, 16px) 0 0;
     background: var(--bg);
     box-shadow: 0 -16px 40px rgba(2, 4, 12, 0.32);
   }

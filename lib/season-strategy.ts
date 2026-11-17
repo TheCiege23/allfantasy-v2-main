@@ -792,7 +792,6 @@ function buildDeterministicPlan(
   const tradeWindows: TradeWindow[] = [];
   const riskPoints: RiskPoint[] = [];
 
-  const remainingWeeks = Math.max(0, 14 - currentWeek);
   const tradeDeadlineWeek = 12;
   const weeksToDeadline = Math.max(0, tradeDeadlineWeek - currentWeek);
 

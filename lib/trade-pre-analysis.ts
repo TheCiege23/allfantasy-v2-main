@@ -5,17 +5,8 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { 
   findPlayerTier
 } from './dynasty-tiers';
-import { getComprehensiveLearningContext } from './comprehensive-trade-learning';
-import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
 import { resolveNflAges, ageOf } from './player-age';
-import {
-  getLeagueInfo,
-  getLeagueRosters,
-  getLeagueTransactions,
-  getLeagueUsers,
-  getTradedDraftPicks,
-  SleeperDraftPick,
-} from './sleeper-client';
+import { getLeagueInfo, getLeagueRosters, getLeagueTransactions, getLeagueUsers, getTradedDraftPicks } from './sleeper-client';
 import {
   getCanonicalPlayerMapForSport,
   DECISION_FRESHNESS_MS,
@@ -355,7 +346,6 @@ async function computeDraftPickInventory(
     
     const originalPickPos = pickPositionMap.get(originalRosterId) || Math.ceil(numTeams / 2);
     const originalOwnerName = rosterNameMap.get(originalRosterId) || `Team ${originalRosterId}`;
-    const currentOwnerName = rosterNameMap.get(currentOwnerId) || `Team ${currentOwnerId}`;
     
     const roundName = round === 1 ? '1st' : round === 2 ? '2nd' : round === 3 ? '3rd' : '4th';
     const isTraded = originalRosterId !== currentOwnerId;

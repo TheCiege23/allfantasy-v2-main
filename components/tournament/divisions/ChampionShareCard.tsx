@@ -17,7 +17,7 @@ import { DivisionCrest } from './DivisionArt'
 
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
-export function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareCard; view: HubView; size: ShareSize; showPath: boolean; showStats: boolean }) {
+function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareCard; view: HubView; size: ShareSize; showPath: boolean; showStats: boolean }) {
   const { width, height } = SHARE_SIZES[size]
   const division = view.identity.divisions[card.divisionIndex]
   const conference = view.identity.conferences[card.conferenceIndex] ?? view.identity.conferences[0]!
@@ -61,7 +61,7 @@ export function ShareCardFace({ card, view, size, showPath, showStats }: { card:
   )
 }
 
-export type ChatShareTarget = { tournamentId: string; entryId: string }
+type ChatShareTarget = { tournamentId: string; entryId: string }
 
 export function ChampionShareStudio({ card, view, shareUrl, chatShare }: { card: ShareCard; view: HubView; shareUrl: string; chatShare?: ChatShareTarget | null }) {
   const [size, setSize] = useState<ShareSize>('story')
@@ -117,7 +117,7 @@ export function ChampionShareStudio({ card, view, shareUrl, chatShare }: { card:
   }
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+    <div className="af-draft-dark grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
       <section className="grid min-h-[600px] place-items-center overflow-hidden rounded-2xl border border-white/10 bg-[repeating-linear-gradient(135deg,#0b0d14_0_14px,#0e1018_14px_28px)] p-5" aria-label="Share card preview">
         <div style={{ width: width * scale, height: height * scale }} className="overflow-hidden rounded-3xl border border-[#e8b84a]/40">
           <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width, height }}>

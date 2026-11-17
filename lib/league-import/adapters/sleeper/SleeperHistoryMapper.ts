@@ -1,5 +1,4 @@
 import type { IExternalHistoryMapper } from '../../mappers/ExternalHistoryMapper'
-import type { NormalizedHistory } from '../../mappers/ExternalHistoryMapper'
 import type { NormalizedDraftPick, NormalizedTransaction, NormalizedStandingsEntry } from '../../types'
 import type { SleeperImportPayload } from './types'
 import { sleeperPointsAgainst } from './SleeperPointsAgainst'

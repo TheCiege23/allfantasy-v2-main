@@ -78,7 +78,7 @@ export type DecisionOSEvidencePacket = {
 
 export type SpecialistProvider = 'deepseek' | 'grok'
 /** completed = valid output; degraded = partial/over-claimed (some findings dropped); failed = no usable output. */
-export type SpecialistStatus = 'completed' | 'degraded' | 'failed'
+type SpecialistStatus = 'completed' | 'degraded' | 'failed'
 
 export type SpecialistFinding = {
   claim: string

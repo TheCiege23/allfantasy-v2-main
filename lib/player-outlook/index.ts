@@ -3,9 +3,7 @@
 export {
   getPlayerOutlook,
   getPlayerOutlookBatch,
-  invalidateOutlookCache,
 } from './player-outlook-service'
-export type { GetPlayerOutlookParams } from './player-outlook-service'
 
 export { computePlayerOutlookScores } from './player-outlook-engine'
 
@@ -15,13 +13,7 @@ export {
 } from './player-outlook-prompt'
 
 export {
-  PlayerOutlookSchema,
-  PlayerOutlookRequestSchema,
   PlayerOutlookBatchRequestSchema,
-  TrendDirectionEnum,
-  RiskLevelEnum,
-  TimeHorizonEnum,
-  FormatFitEnum,
   TIER_LABELS,
 } from './player-outlook-types'
 

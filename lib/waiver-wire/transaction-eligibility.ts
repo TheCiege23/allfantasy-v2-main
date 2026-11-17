@@ -271,6 +271,15 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
     // of whether the move ever touched a starter slot.
     const blocking = ev.result.blockingReasons.filter((r) => {
       if (r.code === 'LEAGUE_LINEUP_LOCK_ACTIVE') return false
+      // An empty starting slot never blocks a claim. A roster that is ALREADY short (an auction team that
+      // won no catcher, a QB lost to injury) could otherwise claim no one at all — not even the player who
+      // fills the gap — and the request failed as an unhandled 500 (dynasty simulation, 2026-11-09: MLB,
+      // "Not enough starters (22/23)"). A claim whose DROP opens the gap is already the manager's call:
+      // the claims route asks once (lib/waiver-wire/lineup-fill-warning.ts) — a warning, never a block.
+      if (r.code === 'STARTER_SLOT_EMPTY_WHEN_REQUIRED') {
+        notices.push(r.message)
+        return false
+      }
       if (imported && isImportedProviderStateIssue(r)) {
         notices.push(r.message)
         return false

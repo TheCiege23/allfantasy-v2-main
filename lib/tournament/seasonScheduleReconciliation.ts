@@ -1,6 +1,6 @@
 import type { SeasonScheduleChange } from './seasonScheduleDrift'
 
-export type SeasonReconciliationPreview = {
+type SeasonReconciliationPreview = {
   gameId: string
   case: 'period_change' | 'time_change' | 'cancellation' | 'identity_change' | 'feed_conflict'
   requiresActualStartEvidence: true

@@ -5,9 +5,9 @@ import type { ChimmyAnswerContract } from "@/lib/chimmy-chat/response-contract"
 
 export type { ChimmyAnswerContract }
 
-export type AIInsightType = "matchup" | "playoff" | "dynasty" | "trade" | "waiver" | "draft"
+type AIInsightType = "matchup" | "playoff" | "dynasty" | "trade" | "waiver" | "draft"
 
-export type AIContextSource =
+type AIContextSource =
   | "messages_ai"
   | "messages_dm_ai"
   | "trade_analyzer"
@@ -70,7 +70,7 @@ export type AIChatContext = {
   }
 }
 
-export type ChimmyProviderStatus = Record<string, string> | undefined
+type ChimmyProviderStatus = Record<string, string> | undefined
 
 /** Optional UI labels for structured Chimmy cards (default: evidence-style copy). */
 export type ChimmyResponseSectionTitles = {

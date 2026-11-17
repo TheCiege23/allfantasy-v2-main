@@ -3,13 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(async () => ({})),
+  locked: vi.fn(async () => [] as string[]),
+  log: vi.fn(async () => ({ id: 'a' })),
 }))
+vi.mock('@/lib/league/settingsLockService', () => ({ lockedGroups: h.locked, lockedGroupsForPatch: vi.fn(async () => []) }))
+vi.mock('@/server/services/auditService', () => ({ logAction: h.log }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.findUnique, update: h.update } } }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'commish' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/commissioner/CommissionerChangeNotifier', () => ({ notifyCommissionerChange: vi.fn(async () => undefined) }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromOwner(() => 'commish'))
 
 import { PUT } from '@/app/api/commissioner/leagues/[leagueId]/division-settings/route'
 
@@ -95,5 +100,29 @@ describe('PUT division-settings', () => {
     const { status, json } = await put({ count: 2, names: ['East', 'West'], teamAssignments: { ...split(4, [0, 0, 1, 1]), gone: 1 } })
     expect(status).toBe(200)
     expect(json.config.teamAssignments).toEqual(split(4, [0, 0, 1, 1]))
+  })
+})
+
+describe('division settings honour the settings lock and are logged (2026-11-15)', () => {
+  beforeEach(() => {
+    h.findUnique.mockReset()
+    h.update.mockClear()
+    h.log.mockClear()
+    h.locked.mockResolvedValue([])
+  })
+
+  it('a league with its playoffs locked refuses a division change and writes nothing', async () => {
+    h.findUnique.mockResolvedValue(league(6))
+    h.locked.mockResolvedValue(['playoffs'])
+    const { status, json } = await put({ count: 2, names: ['East', 'West'], teamAssignments: split(6, [0, 0, 0, 1, 1, 1]) })
+    expect(status).toBe(423)
+    expect(json.code).toBe('settings_locked')
+    expect(h.update).not.toHaveBeenCalled()
+  })
+
+  it('a change is written to the league log with who made it', async () => {
+    h.findUnique.mockResolvedValue(league(6))
+    await put({ count: 2, names: ['East', 'West'], teamAssignments: split(6, [0, 0, 0, 1, 1, 1]) })
+    expect(h.log).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'lg', userId: 'commish', actionType: 'settings_patch', metadata: expect.objectContaining({ section: 'divisions' }) }))
   })
 })

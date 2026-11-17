@@ -1,6 +1,6 @@
 import type { FleaflickerStandingsResponse } from '@/lib/league-import/fleaflicker/types'
 
-export type FleaflickerRotoCategoryRow = {
+type FleaflickerRotoCategoryRow = {
   teamId: string
   teamName: string
   rank: number | null

@@ -69,9 +69,9 @@ describe('the tile is live, and the flow behind it exists', () => {
     expect(supportsImportProviderDiscovery('fantrax')).toBe(true)
   })
 
-  it('claims both sports, which the measured sport detection backs up', () => {
+  it('lists the seven sports Fantrax import supports', () => {
     const fantrax = IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === 'fantrax')
-    expect(fantrax?.supportedSports).toEqual(['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'])
+    expect(fantrax?.supportedSports).toEqual(['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'])
   })
 })
 

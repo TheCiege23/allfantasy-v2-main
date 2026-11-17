@@ -14,9 +14,9 @@ export const LIFECYCLE_HOOK_NAMES = [
   'onSeasonRolledOver',
 ] as const satisfies readonly (keyof PluginLifecycleHooks)[]
 
-export type LifecycleHookName = (typeof LIFECYCLE_HOOK_NAMES)[number]
+type LifecycleHookName = (typeof LIFECYCLE_HOOK_NAMES)[number]
 
-export type LifecycleHookRunResult = PluginHookResult & {
+type LifecycleHookRunResult = PluginHookResult & {
   pluginId: string
   hook: LifecycleHookName
   skipped?: boolean

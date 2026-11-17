@@ -159,13 +159,17 @@ export function nbaCupLockedReason(game: Pick<PlayoffSeriesView, "startsAt" | "s
 }
 
 /** A first submission after tipoff cannot turn an earlier draft pick into earned points. */
-export function eligibleNbaCupPicks<T extends { seriesId: string }>(
+export function eligibleNbaCupPicks<T extends { seriesId: string; confirmedAt?: string | Date | null }>(
   games: Array<{ id: string; startsAt?: string | Date | null }>, picks: T[], finalizedAt: string | Date | null | undefined,
 ): T[] {
   const submitted = finalizedAt ? new Date(finalizedAt).getTime() : Number.NaN
   if (!Number.isFinite(submitted)) return []
   const starts = new Map(games.map((game) => [game.id, game.startsAt ? new Date(game.startsAt).getTime() : Number.NaN]))
-  return picks.filter((pick) => (starts.get(pick.seriesId) ?? Number.NaN) > submitted)
+  return picks.filter((pick) => {
+    // Undefined supports older callers; null means a saved but unconfirmed draft.
+    const confirmed = pick.confirmedAt === undefined ? submitted : pick.confirmedAt ? new Date(pick.confirmedAt).getTime() : Number.NaN
+    return Number.isFinite(confirmed) && (starts.get(pick.seriesId) ?? Number.NaN) > confirmed
+  })
 }
 
 /**

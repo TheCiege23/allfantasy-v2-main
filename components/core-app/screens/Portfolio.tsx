@@ -13,6 +13,8 @@ import '@/components/core-app/af-core-boards.css'
 import '@/components/core-app/af-portfolio-redesign.css'
 import { useMessages } from '@/components/i18n/useMessages'
 import { portfolioHeaderMessages } from '@/lib/core-app/messages/portfolioHeader'
+import { EmptyState } from '@/components/core-app/primitives/EmptyState'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 
 /**
  * Portfolio — every league you are in.
@@ -102,20 +104,24 @@ export function Portfolio({
   if (!data.leagues.available) {
     return (
       <div className="af-pf">
-        <header className="af-pf-head">
-          <h1 className="af-pf-title">{m.title}</h1>
-        </header>
-        <div className="af-pf-empty">
-          <p className="af-pf-empty-title">{data.leagues.reason}</p>
-          <div className="af-pf-empty-actions">
-            <Link href={importHref} className="af-pf-btn af-pf-btn--primary">
-              {m.importLeague}
-            </Link>
-            <Link href="/create-league" className="af-pf-btn">
-              {m.createOne}
-            </Link>
-          </div>
-        </div>
+        <PageHeader className="af-pf-head" titleClassName="af-pf-title" title={m.title} />
+        <EmptyState
+          testId="portfolio-empty"
+          mark="+"
+          title={m.emptyTitle}
+          body={m.emptyBody}
+          hint={m.emptyHint}
+          actions={
+            <>
+              <Link href={importHref} className="af-pf-btn af-pf-btn--primary">
+                {m.importLeague}
+              </Link>
+              <Link href="/create-league" className="af-pf-btn">
+                {m.createOne}
+              </Link>
+            </>
+          }
+        />
       </div>
     )
   }
@@ -124,28 +130,27 @@ export function Portfolio({
 
   return (
     <div className="af-pf">
-      <header className="af-pf-head">
-        <div>
-          {/* The board's mono eyebrow over the title; the count line below is unchanged in meaning. */}
-          <p className="af-pf-eyebrow" data-testid="portfolio-eyebrow">
-            {m.teams(leagues.length)}
-            {data.commissionedCount > 0 ? ` · ${m.commission(data.commissionedCount)}` : ''}
-          </p>
-          <h1 className="af-pf-title">{m.title}</h1>
-          {/*
-            ⚠ "CLAIMED TEAMS", NOT "LEAGUES", AND THE DIFFERENCE IS REAL. This
-            screen is one row per team you have CLAIMED — `getPortfolio` reads
-            `LeagueTeam WHERE claimedByUserId`. A league with no claimed team is
-            absent however healthy its import, and two claimed teams in one
-            league render as two rows BY DESIGN (a 32-team league is often two
-            conferences). Calling the count "leagues" is what makes both of those
-            look like bugs. (Since the 2026-11-05 restyle the count is the eyebrow above the title.)
-          */}
-        </div>
-        <Link href={importHref} className="af-pf-btn af-pf-btn--primary">
-          {m.importLeague}
-        </Link>
-      </header>
+      {/*
+        ⚠ "CLAIMED TEAMS", NOT "LEAGUES", AND THE DIFFERENCE IS REAL. This
+        screen is one row per team you have CLAIMED — `getPortfolio` reads
+        `LeagueTeam WHERE claimedByUserId`. A league with no claimed team is
+        absent however healthy its import, and two claimed teams in one
+        league render as two rows BY DESIGN (a 32-team league is often two
+        conferences). Calling the count "leagues" is what makes both of those
+        look like bugs. (Since the 2026-11-05 restyle the count is the eyebrow above the title.)
+      */}
+      <PageHeader
+        className="af-pf-head"
+        titleClassName="af-pf-title"
+        eyebrowTestId="portfolio-eyebrow"
+        eyebrow={`${m.teams(leagues.length)}${data.commissionedCount > 0 ? ` · ${m.commission(data.commissionedCount)}` : ''}`}
+        title={m.title}
+        actions={
+          <Link href={importHref} className="af-pf-btn af-pf-btn--primary">
+            {m.importLeague}
+          </Link>
+        }
+      />
 
       {insights && insights.leagues.length > 0 ? (
         <PortfolioBoard

@@ -82,14 +82,14 @@ const createSchema = z.object({
   format: z.string().max(32).optional(),
   modifiers: z.array(z.string().max(32)).optional(),
   /** League creation wizard: merged into League.settings (AI, automation, privacy, draft defaults) */
-  settings: z.record(z.unknown()).optional(),
-  rosterSettings: z.record(z.unknown()).optional(),
-  scoringSettings: z.record(z.unknown()).optional(),
-  rules: z.record(z.unknown()).optional(),
-  introVideo: z.record(z.unknown()).optional(),
-  keeperSettings: z.record(z.unknown()).optional(),
-  salaryCapSettings: z.record(z.unknown()).optional(),
-  inviteSettings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+  rosterSettings: z.record(z.string(), z.unknown()).optional(),
+  scoringSettings: z.record(z.string(), z.unknown()).optional(),
+  rules: z.record(z.string(), z.unknown()).optional(),
+  introVideo: z.record(z.string(), z.unknown()).optional(),
+  keeperSettings: z.record(z.string(), z.unknown()).optional(),
+  salaryCapSettings: z.record(z.string(), z.unknown()).optional(),
+  inviteSettings: z.record(z.string(), z.unknown()).optional(),
   /** Soccer only: MLS vs European data pipeline (stored in `settings.soccer_pipeline`). */
   soccerPipeline: z.enum(['mls', 'euro']).optional(),
   /** Create League v2 unified flow — validated against `lib/league-creation-preset/scoring-presets`. */
@@ -1266,11 +1266,6 @@ export async function POST(req: Request) {
     const isSurvivorLeague =
       String(leagueVariantEffective ?? '').toLowerCase() === 'survivor' ||
       String(requestedLeagueType ?? '').toLowerCase() === 'survivor';
-    const survivorTribeCountColumn =
-      isSurvivorLeague &&
-      typeof (initialSettings as Record<string, unknown>).survivor_suggested_tribe_count === 'number'
-        ? Math.max(2, Math.min(4, Math.round(Number((initialSettings as Record<string, unknown>).survivor_suggested_tribe_count))))
-        : 4;
     const survivorTribeNamingColumn =
       isSurvivorLeague &&
       String((initialSettings as Record<string, unknown>).survivor_tribe_name_mode ?? 'auto') === 'custom'
@@ -1380,7 +1375,6 @@ export async function POST(req: Request) {
             where: { leagueId: league.id, claimedByUserId: userId },
           });
           if (!hasTeam) {
-            const leagueName = String(name ?? 'League').trim();
             await tx.leagueTeam.create({
               data: {
                 leagueId: league.id,

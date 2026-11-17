@@ -1,5 +1,5 @@
 import { capLegality, contractSurplus } from '@/lib/trade-intel/salaryCap'
-import type { FormatValueInput, FormatValueModel } from './types'
+import type { FormatValueModel } from './types'
 
 const object = (v: unknown): Record<string, unknown> | null =>
   v != null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null

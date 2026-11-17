@@ -16,7 +16,7 @@ import { IDEA_STATUS_COPY, type IdeaStatus } from './ideas'
  * is already saved.
  */
 
-export const MAX_MENTION_NOTIFICATIONS = 10
+const MAX_MENTION_NOTIFICATIONS = 10
 
 function snippet(text: string, max = 140): string {
   const flat = text.replace(/\s+/g, ' ').trim()

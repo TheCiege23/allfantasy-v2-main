@@ -4,7 +4,6 @@
  */
 
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
-import type { LeagueSport } from "@prisma/client"
 import type { LeagueSettingsPatch } from "./types"
 
 export type ValidationResult = { valid: true } | { valid: false; error: string }

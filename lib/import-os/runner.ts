@@ -15,7 +15,7 @@ import type { SeasonState } from './season'
 
 export type SyncScope = string
 
-export type Accounting = {
+type Accounting = {
   requestAttempts: number
   logicalRequests: number
   retries: number
@@ -28,7 +28,7 @@ export type Accounting = {
   rejected: number
 }
 
-export type RunStatus = 'completed' | 'partial' | 'failed' | 'skipped' | 'locked'
+type RunStatus = 'completed' | 'partial' | 'failed' | 'skipped' | 'locked'
 
 export type RunResult = {
   runKey: string
@@ -95,7 +95,7 @@ export interface SyncStore {
   setLastSuccessfulSyncAt(runKey: string, iso: string): Promise<void>
 }
 
-export type RunSyncOptions = {
+type RunSyncOptions = {
   runKey: string
   seasonState: SeasonState
   scopes: SyncScope[]
@@ -125,7 +125,7 @@ function emptyAccounting(): Accounting {
 }
 
 /** Deterministic backoff with jitter: base * 2^attempt * (1 + rng()). */
-export function backoffMs(base: number, attempt: number, rng: Rng): number {
+function backoffMs(base: number, attempt: number, rng: Rng): number {
   return Math.round(base * Math.pow(2, attempt) * (1 + rng.next()))
 }
 

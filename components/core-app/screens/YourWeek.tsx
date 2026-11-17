@@ -22,6 +22,7 @@ import '@/components/core-app/af-week.css'
 // The Your Week board restyle (2026-11-05), layered over af-week.css.
 import '@/components/core-app/af-week-redesign.css'
 import { YourWeekGlance, YourWeekProgressBar } from '@/components/core-app/YourWeekGlance'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import { yourWeekProgress } from '@/lib/core-app/yourWeekProgress'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -170,20 +171,15 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
 
   return (
     <div className="af-wk">
-      <header className="af-wk-head">
-        <div>
-          <p className="af-wk-eyebrow af-label">
-            <WeekDateRange />
-          </p>
-          <h1 className="af-display af-wk-title">{copy('Your week, every matchup')}</h1>
-          <p className="af-wk-sub">
-            {total > 0
-              ? msg.matchupsSummary(total)
-              : copy('No matchups are on file for this week.')}
-          </p>
-        </div>
-
-        <div className="af-wk-headactions">
+      <PageHeader
+        className="af-wk-head"
+        titleClassName="af-wk-title"
+        actionsClassName="af-wk-headactions"
+        eyebrow={<WeekDateRange />}
+        title={copy('Your week, every matchup')}
+        sub={total > 0 ? msg.matchupsSummary(total) : copy('No matchups are on file for this week.')}
+        actions={
+          <>
           <YourWeekProgressBar progress={progress} />
           <Link href={rivalriesHref} className="af-btn af-wk-btn">
             {copy('Rivalry Radar')}
@@ -203,8 +199,9 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
               ]}
             />
           ) : null}
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <YourWeekGlance progress={progress} />
 

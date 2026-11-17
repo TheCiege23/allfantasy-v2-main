@@ -1,4 +1,5 @@
 import 'server-only'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { withControlLock } from '@/lib/draft/draftLock'
 import { assessSeasonDraftCompletion } from './seasonDraftReview'
@@ -31,37 +32,48 @@ export async function prepareSeasonOpeningRosters(userId: string, tournamentId: 
     if (!shell || shell.commissionerId !== userId || shell.status !== 'rules_published') throw new BlueprintOperationError('Tournament roster preparation is unavailable.', 409)
     const review = await assessSeasonDraftCompletion(league.leagueId!, tx)
     if (!review || review.state !== 'completed' || review.context.tournamentId !== tournamentId || review.context.freezeId !== freezeId || review.context.pool.key !== key || !review.session || !review.boardHash) throw new BlueprintOperationError('Verify the completed tournament draft before preparing rosters.', 409)
-    const { context, session, boardHash } = review
-    const picks = await tx.draftPick.findMany({ where: { sessionId: session.id }, orderBy: { overall: 'asc' } })
-    const rosters = await tx.roster.findMany({ where: { leagueId: league.leagueId! } })
-    const prepared = context.rosterIds.map(id => {
-      const row = rosters.find(r => r.id === id)!
-      const players = picks.filter(p => p.rosterId === id).map(p => ({ playerId: p.playerId!, playerName: p.playerName, position: p.position, team: p.team }))
-      return { row, payload: buildSeasonPreparedRoster(context.config, session.id, players) }
-    })
-    const rosterHash = seasonContractHash(prepared.map(p => ({ rosterId: p.row.id, ...p.payload })))
-    const prior = await tx.tournamentAuditLog.findFirst({ where: { tournamentId, targetId: league.leagueId!, action: 'season_rosters_prepared' } })
-    if (prior) {
-      const receipt = prior.data as Record<string, unknown>
-      const currentHash = seasonContractHash(prepared.map(p => ({ rosterId: p.row.id, ...projection(p.row.playerData as Record<string, unknown>) })))
-      if (receipt.version !== 1 || receipt.sessionId !== session.id || receipt.manifestHash !== context.manifestHash || receipt.boardHash !== boardHash || receipt.rosterHash !== rosterHash || currentHash !== rosterHash) throw new BlueprintOperationError('Prepared rosters differ from their audit checkpoint. Review is required.', 409)
-      return { key, prepared: true, repeated: true, teams: rosters.length, launchReady: false }
-    }
-    for (const { row } of prepared) {
-      const data = row.playerData as Record<string, unknown> | null
-      if (!data || Array.isArray(data) || [data.players, data.starters, data.reserve, data.taxi, data.devy].some(v => v != null && (!Array.isArray(v) || v.length > 0)) || (data.lineup_sections != null && Object.values(data.lineup_sections as object).some(v => !Array.isArray(v) || v.length > 0))) throw new BlueprintOperationError('Existing roster assignments require review before preparation.', 409)
-    }
-    const claim = await tx.draftSession.updateMany({ where: { id: session.id, version: session.version, status: 'completed' }, data: { version: { increment: 1 } } })
-    if (claim.count !== 1) throw new BlueprintOperationError('The draft changed. Refresh and retry.', 409)
-    for (const { row, payload } of prepared) {
-      const saved = await tx.roster.updateMany({ where: { id: row.id, leagueId: league.leagueId!, platformUserId: row.platformUserId, playerData: { equals: row.playerData! } }, data: { playerData: { ...(row.playerData as object), ...payload } as any } })
-      if (saved.count !== 1) throw new BlueprintOperationError('A roster changed. Refresh and retry.', 409)
-    }
-    await tx.tournamentAuditLog.create({ data: { tournamentId, actorId: userId, actorType: 'user', action: 'season_rosters_prepared', targetType: 'league', targetId: league.leagueId!, data: { version: 1, manifestHash: context.manifestHash, sessionId: session.id, boardHash, rosterHash, rosterIds: context.rosterIds, teams: rosters.length, launchReady: false } } })
-    return { key, prepared: true, repeated: false, teams: rosters.length, launchReady: false }
+    return persistSeasonPreparedRosters(tx, league.leagueId!, review, userId)
   }))
   if (!locked.acquired) throw new BlueprintOperationError('Roster preparation is busy. Retry shortly.', 409)
   return locked.value
+}
+
+/** Shared by the owner action and the worker after the same draft checkpoint. */
+export async function persistSeasonPreparedRosters(
+  tx: Prisma.TransactionClient, leagueId: string, review: NonNullable<Awaited<ReturnType<typeof assessSeasonDraftCompletion>>>, actorId?: string,
+) {
+  if (review.state !== 'completed' || !review.session || !review.boardHash) {
+    throw new BlueprintOperationError('Verify the completed tournament draft before preparing rosters.', 409)
+  }
+  const { tournamentId, pool: { key } } = review.context
+  const { context, session, boardHash } = review
+  const picks = await tx.draftPick.findMany({ where: { sessionId: session.id }, orderBy: { overall: 'asc' } })
+  const rosters = await tx.roster.findMany({ where: { leagueId: leagueId } })
+  const prepared = context.rosterIds.map(id => {
+    const row = rosters.find(r => r.id === id)!
+    const players = picks.filter(p => p.rosterId === id).map(p => ({ playerId: p.playerId!, playerName: p.playerName, position: p.position, team: p.team }))
+    return { row, payload: buildSeasonPreparedRoster(context.config, session.id, players) }
+  })
+  const rosterHash = seasonContractHash(prepared.map(p => ({ rosterId: p.row.id, ...p.payload })))
+  const prior = await tx.tournamentAuditLog.findFirst({ where: { tournamentId, targetId: leagueId, action: 'season_rosters_prepared' } })
+  if (prior) {
+    const receipt = prior.data as Record<string, unknown>
+    const currentHash = seasonContractHash(prepared.map(p => ({ rosterId: p.row.id, ...projection(p.row.playerData as Record<string, unknown>) })))
+    if (receipt.version !== 1 || receipt.sessionId !== session.id || receipt.manifestHash !== context.manifestHash || receipt.boardHash !== boardHash || receipt.rosterHash !== rosterHash || currentHash !== rosterHash) throw new BlueprintOperationError('Prepared rosters differ from their audit checkpoint. Review is required.', 409)
+    return { key, prepared: true, repeated: true, teams: rosters.length, launchReady: false }
+  }
+  for (const { row } of prepared) {
+    const data = row.playerData as Record<string, unknown> | null
+    if (!data || Array.isArray(data) || [data.players, data.starters, data.reserve, data.taxi, data.devy].some(v => v != null && (!Array.isArray(v) || v.length > 0)) || (data.lineup_sections != null && Object.values(data.lineup_sections as object).some(v => !Array.isArray(v) || v.length > 0))) throw new BlueprintOperationError('Existing roster assignments require review before preparation.', 409)
+  }
+  const claim = await tx.draftSession.updateMany({ where: { id: session.id, version: session.version, status: 'completed' }, data: { version: { increment: 1 } } })
+  if (claim.count !== 1) throw new BlueprintOperationError('The draft changed. Refresh and retry.', 409)
+  for (const { row, payload } of prepared) {
+    const saved = await tx.roster.updateMany({ where: { id: row.id, leagueId: leagueId, platformUserId: row.platformUserId, playerData: { equals: row.playerData! } }, data: { playerData: { ...(row.playerData as object), ...payload } as any } })
+    if (saved.count !== 1) throw new BlueprintOperationError('A roster changed. Refresh and retry.', 409)
+  }
+  await tx.tournamentAuditLog.create({ data: { tournamentId, actorId: actorId ?? null, actorType: actorId ? 'user' : 'system', action: 'season_rosters_prepared', targetType: 'league', targetId: leagueId, data: { version: 1, manifestHash: context.manifestHash, sessionId: session.id, boardHash, rosterHash, rosterIds: context.rosterIds, teams: rosters.length, launchReady: false } } })
+  return { key, prepared: true, repeated: false, teams: rosters.length, launchReady: false }
 }
 
 export async function readPreparedSeasonRosterState(leagueId: string, manifestHash: string, boardHash: string, sessionId: string, db: Pick<typeof prisma, 'roster' | 'tournamentAuditLog'> = prisma) {

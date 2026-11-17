@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 
-export interface BigBrotherCommissionerPanelProps {
+interface BigBrotherCommissionerPanelProps {
   leagueId: string
   onAction?: () => void
   nominees?: { id: string; name: string }[]
@@ -120,7 +120,7 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
           <select
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full max-w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white sm:w-auto"
           >
             {AUTOMATION_ACTIONS.map((a: { value: string; label: string }) => (
               <option key={a.value} value={a.value}>{a.label}</option>
@@ -130,7 +130,7 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
             type="button"
             onClick={runAutomation}
             disabled={running}
-            className="ml-2 rounded-xl bg-amber-500/20 px-4 py-2 text-sm text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+            className="mt-2 rounded-xl bg-amber-500/20 px-4 py-2 text-sm text-amber-200 sm:ml-2 sm:mt-0 hover:bg-amber-500/30 disabled:opacity-50"
           >
             {running ? 'Running…' : 'Run'}
           </button>
@@ -145,7 +145,7 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
           <select
             value={adminAction}
             onChange={(e) => setAdminAction(e.target.value)}
-            className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full max-w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white sm:w-auto"
           >
             {ADMIN_ACTIONS.map((a) => (
               <option key={a.value} value={a.value}>{a.label}</option>
@@ -207,7 +207,10 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
         )}
       </div>
 
-      <p className="text-xs text-white/40">Schedule controls and inactivity overrides are in Settings → Big Brother Settings. Emergency timing extensions can be added as config overrides.</p>
+      {/* This pointed to "Settings → Big Brother Settings", a tab that does not exist. */}
+      <p className="text-xs text-white/40">
+        Your league&apos;s rules (eviction tie-break, HOH challenge, finale and jury start) are the ones chosen when the league was created. Pause and resume above to hold the week.
+      </p>
     </div>
   )
 }

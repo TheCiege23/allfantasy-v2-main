@@ -8,7 +8,7 @@ import { QUEUE_NAMES } from "@/lib/jobs/types"
 import type { IntegrityJobPayload } from "@/lib/jobs/types"
 import { runIntegrityJob } from "@/lib/integrity/runIntegrityJob"
 
-export type IntegrityJobResult = {
+type IntegrityJobResult = {
   ok: boolean
   skipped?: boolean
   jobId?: string
@@ -60,6 +60,3 @@ export async function stopIntegrityWorker(): Promise<void> {
   integrityWorker = null
 }
 
-export function getIntegrityWorker(): Worker<IntegrityJobPayload, IntegrityJobResult> | null {
-  return integrityWorker
-}

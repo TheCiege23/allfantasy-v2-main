@@ -3,16 +3,17 @@
  * PROMPT 2/6.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   isBigBrotherLeague,
   getBigBrotherConfig,
   upsertBigBrotherConfig,
 } from '@/lib/big-brother/BigBrotherLeagueConfig'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,11 +87,13 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isBB = await isBigBrotherLeague(leagueId)
   if (!isBB) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const body = await req.json().catch(() => ({}))
   const updated = await upsertBigBrotherConfig(leagueId, {
@@ -126,5 +129,6 @@ export async function PATCH(
     ...(body.evictionTieBreakMode !== undefined && { evictionTieBreakMode: String(body.evictionTieBreakMode) }),
     ...(body.weekProgressionPaused !== undefined && { weekProgressionPaused: Boolean(body.weekProgressionPaused) }),
   })
+  await logFormatRulesChange({ leagueId, userId, format: 'big_brother', fields: Object.keys(body) })
   return NextResponse.json({ ok: true, config: updated })
 }

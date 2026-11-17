@@ -17,7 +17,7 @@ import { NBA_ROSTER_TEMPLATES, NBA_SLOT_MAP } from '@/lib/nba-roster/NbaRosterTe
 import { MLB_ROSTER_TEMPLATES, MLB_SLOT_MAP } from '@/lib/mlb-roster/MlbRosterTemplates'
 import { NHL_ROSTER_TEMPLATES, NHL_SLOT_MAP } from '@/lib/nhl-roster/NhlRosterTemplates'
 
-export type CatalogSport = 'NBA' | 'MLB' | 'NHL'
+type CatalogSport = 'NBA' | 'MLB' | 'NHL'
 
 /** Upper-cased sport when it is one of the non-NFL sports this module models, else null. */
 export function catalogSport(sport: string | null | undefined): CatalogSport | null {
@@ -66,7 +66,7 @@ export function positionInSet(position: string | null | undefined, set: Readonly
 }
 
 /** Minimal slot shape (a `RosterTemplateSlotDto` satisfies it). */
-export interface RequirementSlot {
+interface RequirementSlot {
   slotName: string
   allowedPositions?: string[] | null
   starterCount?: number | null
