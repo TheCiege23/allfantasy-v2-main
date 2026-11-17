@@ -5,7 +5,15 @@ import { ChevronDown, Lock, Music2 } from 'lucide-react'
 import { musicBus } from '@/components/app-music/musicBus'
 import { YOUTUBE_STATIONS } from '@/lib/draft-music/youtube'
 import { findStation } from '@/lib/chimmy/musicCards'
-import { draftPlaylistOffered, draftPlaylistPlayKey, followPlaylistChange, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
+import {
+  draftPlaylistOffered,
+  draftPlaylistOptOutKey,
+  draftPlaylistPlayKey,
+  followPlaylistChange,
+  optOutStillHolds,
+  shouldAutoplayDraftPlaylist,
+  type DraftPlaylist,
+} from '@/lib/draft-room/draftPlaylist'
 
 /**
  * Music in the live draft room (2026-11-17). ONE slim row under the top bar, in normal flow — never over the board.
@@ -13,13 +21,15 @@ import { draftPlaylistOffered, draftPlaylistPlayKey, followPlaylistChange, type 
  * a title, one button and "More"; choosing a station and the commissioner's setting live behind "More".
  *
  *  - Everyone: play one of the AllFantasy stations (the same ones Chimmy offers). It plays on THEIR device only.
- *  - If the commissioner set a draft playlist (AF Commissioner / AF Supreme), the row leads with it while the draft
- *    runs, one tap to play. When the draft finishes, the playlist stops if it is what is playing.
+ *  - If the commissioner set a draft playlist (AF Commissioner / AF Supreme), it PLAYS BY ITSELF for every member
+ *    (2026-11-17): at once if they tapped their way into the room, otherwise on their first tap in it — browsers allow
+ *    no sound before that. It never replaces music a member chose, and once they stop it, it stays stopped for this
+ *    league until they tap Play. When the draft finishes, the playlist stops if it is what is playing.
  *  - The commissioner sets or clears it under "More"; without the plan it says which plans include it.
  *  - A change reaches every open room on its next draft settings poll (6–24 s; `livePlaylist`). Someone already
  *    playing the room playlist is switched to the new one, or stopped when it is removed; nobody else hears a thing.
  *
- * 🛑 NOTHING PLAYS WITHOUT A TAP, and nothing is broadcast. See lib/draft-room/draftPlaylist.ts.
+ * 🛑 Nothing is broadcast: each member's own device plays it. See lib/draft-room/draftPlaylist.ts.
  * The player is the app-wide one (AppMusicDock, through musicBus), so music keeps playing after the room.
  *
  * ⚠ ON A PHONE THE PLAYER SITS IN THIS ROW (2026-11-17). Its corner box covered about three columns by three rows of
@@ -37,6 +47,16 @@ function subscribePhone(onChange: () => void): () => void {
   return () => mq.removeEventListener('change', onChange)
 }
 const isPhone = () => window.matchMedia(PHONE_QUERY).matches
+
+/**
+ * Has the person tapped, clicked or typed on this page yet? Browsers allow sound only after that. Where the browser
+ * cannot say (no navigator.userActivation), treat it as "not yet" and wait for a tap — starting a player the browser
+ * then silences would show "Playing" over silence.
+ */
+function pageHasBeenTapped(): boolean {
+  const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation
+  return Boolean(ua?.hasBeenActive)
+}
 
 type Info = { playlist: DraftPlaylist | null; isCommissioner: boolean; canSet: boolean; planRequired: boolean }
 
@@ -136,11 +156,100 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- play() reads only the station it is given
   }, [known, playlist?.stationId, playing?.key])
 
+  // ── Autoplay (2026-11-17) ──────────────────────────────────────────────────────────────────────────────────────
+  // A Stop is remembered for this league (browser storage, DRAFT_PLAYLIST_OPT_OUT_MS), so the room does not restart
+  // music the member just turned off. null until storage is read: nothing autoplays before then.
+  const optOutKey = draftPlaylistOptOutKey(leagueId)
+  const [optedOut, setOptedOut] = useState<boolean | null>(null)
+  // ⚠ Also kept in a ref: a Stop and the autoplay check land in the SAME commit, and the state would still read
+  // "not stopped" there — restarting the music the member had just stopped.
+  const optedOutRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    let stored: string | null = null
+    try {
+      stored = window.localStorage.getItem(optOutKey)
+    } catch {
+      /* storage blocked: no opt-out on record */
+    }
+    const off = optOutStillHolds(stored, Date.now())
+    optedOutRef.current = off
+    setOptedOut(off)
+  }, [optOutKey])
+  const rememberOptOut = useCallback(
+    (off: boolean) => {
+      optedOutRef.current = off
+      setOptedOut(off)
+      try {
+        if (off) window.localStorage.setItem(optOutKey, String(Date.now()))
+        else window.localStorage.removeItem(optOutKey)
+      } catch {
+        /* this visit still honours it */
+      }
+    },
+    [optOutKey],
+  )
+
+  // Music stopping while the playlist is still on offer means the member stopped it — here, in the chat's Music tab,
+  // or on the corner player — so it stays off. A stop because the playlist was removed or the draft finished happens
+  // with no playlist on offer, and is not theirs.
+  const prevKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const key = playing?.key ?? null
+    if (prevKeyRef.current && !key && playlist) rememberOptOut(true)
+    prevKeyRef.current = key
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on the playing key alone, reading this render's playlist
+  }, [playing?.key])
+
+  // Start the playlist in a quiet room. Browsers allow sound only after the person has tapped or clicked something
+  // on the site: if they have (they tapped their way here), it starts now; otherwise on their first tap in the room.
+  // 'click' and not 'pointerdown': on a touch screen only the end of a tap counts as one.
+  const [waitingForTap, setWaitingForTap] = useState(false)
+  useEffect(() => {
+    setWaitingForTap(false)
+    if (!known || optedOutRef.current !== false || !playlist) return
+    if (!shouldAutoplayDraftPlaylist({ offered: playlist, playingKey: playing?.key, optedOut: false, available })) return
+    const start = () => {
+      if (optedOutRef.current !== false) return
+      play(playlist.stationId, draftPlaylistPlayKey(playlist.stationId), `${playlist.label} · draft playlist`)
+    }
+    if (pageHasBeenTapped()) {
+      start()
+      return
+    }
+    setWaitingForTap(true)
+    // ⚠ Started just AFTER the tap, never during it. Starting during it re-renders the row before React delivers the
+    // same click to its button — and on desktop React reuses that <button> node with Stop's handler, so a tap on Play
+    // started the playlist and stopped it again (caught by e2e). The page stays tapped, so the browser still allows it.
+    let timer = 0
+    const onTap = () => {
+      remove()
+      timer = window.setTimeout(start, 0)
+    }
+    const remove = () => {
+      document.removeEventListener('click', onTap, true)
+      document.removeEventListener('keydown', onTap, true)
+    }
+    document.addEventListener('click', onTap, true)
+    document.addEventListener('keydown', onTap, true)
+    return () => {
+      remove()
+      window.clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- play() reads only the station it is given
+  }, [known, optedOut, available, playlist?.stationId, playing?.key])
+
   function play(stationId: string, key: string, label: string) {
+    // Already playing it: a tap on Play also reaches the tap-to-start listener above, and must not start it twice.
+    if (musicBus.getSnapshot().yt?.key === key) return
     const station = findStation(stationId)
     if (station) musicBus.actions()?.playYouTube({ key, label, source: station.source })
   }
-  const playPlaylist = () => playlist && play(playlist.stationId, playlistKey!, `${playlist.label} · draft playlist`)
+  /** The Play button: also lifts a Stop, since tapping Play is the member asking for it back. */
+  const playPlaylist = () => {
+    if (!playlist) return
+    rememberOptOut(false)
+    play(playlist.stationId, playlistKey!, `${playlist.label} · draft playlist`)
+  }
   const playPick = () => play(pick, pick, findStation(pick)?.label ?? 'Music')
 
   async function save() {
@@ -172,12 +281,16 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
     ? 'Music is not available on this page.'
     : playing
       ? `Playing ${playing.label}. Only you hear it.`
-      : playlist
-        ? 'Picked by your commissioner. Only you hear it.'
-        : 'Only you hear it.'
+      : playlist && waitingForTap
+        ? 'Picked by your commissioner. It starts when you tap anywhere in the room.'
+        : playlist && optedOut
+          ? 'Picked by your commissioner. You stopped it — tap Play to turn it back on.'
+          : playlist
+            ? 'Picked by your commissioner. Only you hear it.'
+            : 'Only you hear it.'
 
   const stopButton = (
-    <button type="button" className={quiet} onClick={() => musicBus.actions()?.stop()} data-testid="draft-room-music-stop">
+    <button key="stop" type="button" className={quiet} onClick={() => musicBus.actions()?.stop()} data-testid="draft-room-music-stop">
       Stop
     </button>
   )
@@ -232,11 +345,11 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
         {playing ? (
           stopButton
         ) : playlist ? (
-          <button type="button" className={primary} disabled={!available} onClick={playPlaylist} data-testid="draft-room-music-play-playlist">
+          <button key="play-playlist" type="button" className={primary} disabled={!available} onClick={playPlaylist} data-testid="draft-room-music-play-playlist">
             Play
           </button>
         ) : (
-          <button type="button" className={primary} disabled={!available || !pick} onClick={playPick} data-testid="draft-room-music-play-station">
+          <button key="play-station" type="button" className={primary} disabled={!available || !pick} onClick={playPick} data-testid="draft-room-music-play-station">
             Play
           </button>
         )}
