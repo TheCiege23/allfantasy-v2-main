@@ -18,6 +18,7 @@ import {
 
 const completeDraftSessionMock = vi.fn(async () => true)
 const postDraftPickChatEventMock = vi.fn(async () => {})
+const signRookieContractForPickMock = vi.fn(async (..._args: unknown[]) => null)
 const recordTrendSignalMock = vi.fn(async () => {})
 const resolveTrendPlayerIdsMock = vi.fn(async (lookups: unknown[]) => lookups.map(() => null as string | null))
 const leagueLifecycleTransitionMock = vi.fn(async () => {})
@@ -239,8 +240,10 @@ vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
   getSalaryCapConfig: vi.fn(async () => null),
 }))
 
+// submitPick signs through signRookieContractForPick. A mock without it made the call throw inside
+// submitPick's non-fatal try/catch, so the suite stayed green while asserting nothing about it.
 vi.mock('@/lib/salary-cap/RookieContractService', () => ({
-  assignRookieContract: vi.fn(async () => {}),
+  signRookieContractForPick: (...args: unknown[]) => signRookieContractForPickMock(...args),
 }))
 
 vi.mock('@/lib/draft-room/postDraftPickChatEvent', () => ({
@@ -324,6 +327,10 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     expect(ctx.store.session.timerEndAt!.getTime()).toBeGreaterThan(Date.now())
     expect(ctx.store.session.version).toBe(6)
     expect(completeDraftSessionMock).not.toHaveBeenCalled()
+    // The committed pick asks to sign its rookie contract (the signer decides whether the league signs one).
+    expect(signRookieContractForPickMock).toHaveBeenLastCalledWith({
+      leagueId: 'league-1', rosterId: 'roster-a', playerId: 'player-1', playerName: 'Josh Allen', position: 'QB', overall: 1,
+    })
   })
 
   /**

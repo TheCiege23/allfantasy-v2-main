@@ -27,8 +27,7 @@ import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolv
 import type { SlotOrderEntry } from './types'
 import { buildKeeperLocks } from './keeper/KeeperDraftOrder'
 import type { KeeperConfig, KeeperSelection } from './keeper/types'
-import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
-import { assignRookieContract } from '@/lib/salary-cap/RookieContractService'
+import { signRookieContractForPick } from '@/lib/salary-cap/RookieContractService'
 import { isDraftBoardFull, isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import {
   DRAFT_PICK_DUPLICATE_PLAYER,
@@ -700,26 +699,20 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
 
   // ── Salary cap: auto-assign rookie contract on snake draft picks ──
   try {
-    const capConfig = await getSalaryCapConfig(input.leagueId)
-    if (capConfig?.startupDraftType === 'snake' && effectiveRosterId) {
-      const resolvedPlayerId = pick.playerId ?? input.playerId ?? null
-      const capYear = new Date().getFullYear()
-      await assignRookieContract(
-        input.leagueId,
-        effectiveRosterId,
-        resolvedPlayerId ?? `draft-${overall}`,
-        input.playerName.trim(),
-        input.position,
+    await signRookieContractForPick({
+      leagueId: input.leagueId,
+      rosterId: effectiveRosterId ?? null,
+      playerId: pick.playerId ?? input.playerId ?? null,
+      playerName: input.playerName,
+      position: input.position,
+      overall,
+    }).catch((err: unknown) => {
+      logStructured('error', 'submit_pick', 'salary_cap_contract_failed', {
+        leagueId: input.leagueId,
         overall,
-        capYear
-      ).catch((err: unknown) => {
-        logStructured('error', 'submit_pick', 'salary_cap_contract_failed', {
-          leagueId: input.leagueId,
-          overall,
-          error: String(err),
-        })
+        error: String(err),
       })
-    }
+    })
   } catch {
     // non-fatal: contract assignment failure should never block pick persistence
   }

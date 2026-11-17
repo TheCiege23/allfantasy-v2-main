@@ -24,6 +24,7 @@ import { isDraftPickRowEmpty, PICK_EDITOR_EMPTY_POSITION } from '@/lib/live-draf
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { verifyNcaabCollegeDraftPick } from '@/lib/devy/verifyNcaabDraftPick'
 import { createDraftCollegeRight, removeDraftCollegeRight, transferDraftCollegeRight, type NbaCollegeAssetType } from '@/lib/devy/nbaDraftRights'
+import { moveRookieDraftContract, removeRookieDraftContract, signRookieContractForPick } from '@/lib/salary-cap/RookieContractService'
 
 export const COMMISSIONER_PICK_EDIT_ACTIONS = [
   'REMOVE_PLAYER_FROM_PICK',
@@ -237,7 +238,14 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
 
   const uiSettings = await getDraftUISettingsForLeague(params.leagueId)
 
+  /**
+   * A snake salary-cap pick signs a rookie contract. The editor signs it AFTER its transaction
+   * commits, the way `submitPick` does, so a contract failure can never undo a commissioner's edit.
+   */
+  // A holder, not a `let`: TypeScript does not see an assignment inside the transaction callback.
+  const rookieContract: { toSign: Parameters<typeof signRookieContractForPick>[0] | null } = { toSign: null }
   const audit = await prisma.$transaction(async (tx) => {
+    rookieContract.toSign = null
     // NOTE: default Prisma interactive-tx timeout is 5s; this flow (session
     // load + validations + presentation resolver + pick write + audit + session
     // bump) can exceed that on cold Neon pools. Raise to 30s; real commits
@@ -389,6 +397,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         // The reset happens post-tx so resetTimer reads updated session state.
         shouldResetTimerAfterTx = true
         await removeDraftCollegeRight(tx, params.leagueId, pick)
+        await removeRookieDraftContract(tx, params.leagueId, pick)
         await tx.draftPick.update({
           where: { id: pick.id },
           data: {
@@ -492,6 +501,8 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         })
 
         await removeDraftCollegeRight(tx, params.leagueId, pick)
+        await removeRookieDraftContract(tx, params.leagueId, pick)
+        rookieContract.toSign = { leagueId: params.leagueId, rosterId: pick.rosterId, playerId: presentation.playerId ?? null, playerName, position, overall: pick.overall }
         const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: pick.rosterId, playerId: params.playerId!, assetType: collegeAsset }) : null
         const metadata = pick.pickMetadata && typeof pick.pickMetadata === 'object' && !Array.isArray(pick.pickMetadata) ? { ...pick.pickMetadata as Record<string, unknown> } : {}
         delete metadata.draftCollegeRightsId
@@ -631,6 +642,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
             | undefined
         }
 
+        rookieContract.toSign = { leagueId: params.leagueId, rosterId: onClockRosterId, playerId: presentation.playerId ?? null, playerName, position, overall }
         const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: onClockRosterId, playerId: params.playerId!, assetType: collegeAsset }) : null
         const pickMetadata = rightId ? { draftCollegeRightsId: rightId } : {}
         let savedPickId: string
@@ -754,6 +766,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         }
 
         await transferDraftCollegeRight(tx, params.leagueId, pick, newRosterId)
+        await moveRookieDraftContract(tx, params.leagueId, pick, newRosterId)
         await tx.draftPick.update({
           where: { id: pick.id },
           data: {
@@ -854,6 +867,14 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
       await resetTimer(params.leagueId)
     } catch (err) {
       console.error('[commissionerPickEdit] resetTimer failed (non-fatal)', err)
+    }
+  }
+
+  if (rookieContract.toSign) {
+    try {
+      await signRookieContractForPick(rookieContract.toSign)
+    } catch (err) {
+      console.error('[commissionerPickEdit] rookie contract failed (non-fatal)', err)
     }
   }
 

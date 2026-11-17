@@ -25,6 +25,9 @@ const hm = vi.hoisted(() => ({
   rightsFind: vi.fn(),
   rightsCreate: vi.fn(),
   rightsDelete: vi.fn(),
+  contractDelete: vi.fn(async () => ({ count: 0 })),
+  signRookie: vi.fn(async () => null),
+  contractUpdate: vi.fn(async () => ({ count: 0 })),
   rightsUpdate: vi.fn(),
 }))
 
@@ -67,6 +70,12 @@ vi.mock('@/lib/live-draft-engine/PickValidation', () => ({
 }))
 
 vi.mock('@/lib/devy/verifyNcaabDraftPick', () => ({ verifyNcaabCollegeDraftPick: hm.verifyCollege }))
+
+// The real remove / move run (their where clauses are asserted); only post-commit signing is stubbed.
+vi.mock('@/lib/salary-cap/RookieContractService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/salary-cap/RookieContractService')>()),
+  signRookieContractForPick: hm.signRookie,
+}))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -177,6 +186,7 @@ describe('commissionerPickEdit', () => {
         c2CLeagueConfig: { findUnique: hm.c2cConfig },
         devyLeagueConfig: { findUnique: hm.devyConfig },
         devyRights: { findFirst: hm.rightsFind, create: hm.rightsCreate, deleteMany: hm.rightsDelete, updateMany: hm.rightsUpdate },
+        playerContract: { deleteMany: hm.contractDelete, updateMany: hm.contractUpdate },
       }
       return fn(tx as any)
     })
@@ -201,6 +211,17 @@ describe('commissionerPickEdit', () => {
     expect(hm.rightsUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'right-12', rosterId: 'r1', devyPlayerId: 'espn:ncaab:12' }), data: { rosterId: 'r2' } }))
     expect((await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'REMOVE_PLAYER_FROM_PICK', overallPickNumber: 1 })).ok).toBe(true)
     expect(hm.rightsDelete).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'right-12', rosterId: 'r1', devyPlayerId: 'espn:ncaab:12' }) }))
+  })
+
+  it("a pick's rookie contract follows it: moved with the owner, deleted with the player", async () => {
+    const pick = basePick({ playerName: 'Atlas Runner', position: 'RB', playerId: 'p-77' })
+    hm.txFindUnique.mockResolvedValue(pausedSession([pick]))
+    hm.txRosterCount.mockResolvedValue(1)
+    const where = { leagueId: 'league-1', rosterId: 'r1', playerId: 'p-77', source: 'rookie_draft', metadata: { path: ['draftPickOverall'], equals: 1 } }
+    expect((await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'CHANGE_PICK_OWNER', overallPickNumber: 1, newRosterId: 'r2' })).ok).toBe(true)
+    expect(hm.contractUpdate).toHaveBeenCalledWith({ where, data: { rosterId: 'r2' } })
+    expect((await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'REMOVE_PLAYER_FROM_PICK', overallPickNumber: 1 })).ok).toBe(true)
+    expect(hm.contractDelete).toHaveBeenCalledWith({ where })
   })
   it('rejects an unverified college edit before writing a pick', async () => {
     hm.txFindUnique.mockResolvedValue({ ...pausedSession([]), sportType: 'NBA', league: { id: 'league-1', sport: 'NBA', leagueVariant: 'merged_devy_c2c' } })
@@ -403,6 +424,52 @@ describe('commissionerPickEdit', () => {
         }),
       }),
     )
+  })
+
+  it('assigning or replacing a player signs its rookie contract after the edit commits', async () => {
+    hm.signRookie.mockClear()
+    hm.txFindUnique.mockResolvedValue(
+      pausedSession([{ ...basePick({ overall: 1 }), playerName: '', position: 'EMPTY', pickMetadata: { pickEditorEmpty: true } }]),
+    )
+    hm.validateRosterFitForDraftPick.mockResolvedValue({ valid: true })
+    hm.resolveDraftPickPresentation.mockResolvedValue({ playerId: 'ext-fill', playerImageUrl: null })
+    hm.txUpdatePick.mockResolvedValue({ id: 'pick-1' })
+    hm.txAuditCreate.mockResolvedValue({})
+    hm.txSessionUpdate.mockResolvedValue({})
+    const assigned = await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'ASSIGN_PLAYER_TO_PICK', overallPickNumber: 1, playerName: 'Filled', position: 'QB' })
+    expect(assigned.ok).toBe(true)
+    expect(hm.signRookie).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'league-1', playerId: 'ext-fill', playerName: 'Filled', position: 'QB', overall: 1 }))
+    // After the transaction, never inside it: the audit row is already written when it runs.
+    expect(hm.signRookie.mock.invocationCallOrder[0]).toBeGreaterThan(hm.txAuditCreate.mock.invocationCallOrder.at(-1)!)
+
+    hm.signRookie.mockClear()
+    hm.contractDelete.mockClear()
+    hm.txFindUnique.mockResolvedValue(pausedSession([basePick({ playerId: 'p-old' })]))
+    hm.resolveDraftPickPresentation.mockResolvedValue({ playerId: 'p-new', playerImageUrl: null })
+    const replaced = await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'REPLACE_PLAYER_ON_PICK', overallPickNumber: 1, playerName: 'Beta', position: 'RB' })
+    expect(replaced.ok).toBe(true)
+    expect(hm.contractDelete).toHaveBeenCalledWith({ where: expect.objectContaining({ rosterId: 'r1', playerId: 'p-old' }) })
+    expect(hm.signRookie).toHaveBeenCalledWith(expect.objectContaining({ rosterId: 'r1', playerId: 'p-new', playerName: 'Beta', overall: 1 }))
+  })
+
+  it('a failed edit signs nothing, and a failed signature does not fail the edit', async () => {
+    hm.signRookie.mockClear()
+    hm.txFindUnique.mockResolvedValue(pausedSession([basePick()]))
+    hm.validateRosterFitForDraftPick.mockResolvedValue({ valid: false, error: 'Roster would exceed maximum size (16 slots).' })
+    const blocked = await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'REPLACE_PLAYER_ON_PICK', overallPickNumber: 1, playerName: 'Beta', position: 'RB' })
+    expect(blocked.ok).toBe(false)
+    expect(hm.signRookie).not.toHaveBeenCalled()
+
+    hm.validateRosterFitForDraftPick.mockResolvedValue({ valid: true })
+    hm.resolveDraftPickPresentation.mockResolvedValue({ playerId: 'p-new', playerImageUrl: null })
+    hm.txUpdatePick.mockResolvedValue({})
+    hm.txAuditCreate.mockResolvedValue({})
+    hm.txSessionUpdate.mockResolvedValue({})
+    hm.signRookie.mockRejectedValueOnce(new Error('cap service down'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const ok = await commissionerPickEdit({ leagueId: 'league-1', actorUserId: 'comm-1', action: 'REPLACE_PLAYER_ON_PICK', overallPickNumber: 1, playerName: 'Beta', position: 'RB' })
+    errSpy.mockRestore()
+    expect(ok.ok).toBe(true)
   })
 
   it('ASSIGN_PLAYER_TO_PICK creates missing overall pick with presentation fields', async () => {

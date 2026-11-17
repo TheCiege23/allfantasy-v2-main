@@ -1041,6 +1041,9 @@ export async function undoLastPick(
      */
     const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
     await removeDraftCollegeRight(tx, leagueId, last)
+    // A snake salary-cap pick signed a rookie contract; taking the pick back takes the contract back.
+    const { removeRookieDraftContract } = await import('@/lib/salary-cap/RookieContractService')
+    await removeRookieDraftContract(tx, leagueId, last)
     const refund = session.draftType === 'auction' && last.rosterId && typeof last.amount === 'number' && last.amount > 0 ? last.amount : 0
     const refundedBudgets = refund ? refundAuctionBudget(session.auctionBudgets, last.rosterId!, refund) : null
     await tx.draftPick.delete({ where: { id: last.id } })
@@ -1386,6 +1389,8 @@ export async function resetDraftSession(
     // Remove only rights this draft created; a changed or transferred right aborts the reset.
     const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
     for (const pick of archivedPicks) await removeDraftCollegeRight(tx, leagueId, pick)
+    const { removeRookieDraftContract } = await import('@/lib/salary-cap/RookieContractService')
+    for (const pick of archivedPicks) await removeRookieDraftContract(tx, leagueId, pick)
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })
     await tx.draftSession.update({
       where: { id: session.id },

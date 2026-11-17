@@ -296,8 +296,9 @@ vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
   getSalaryCapConfig: vi.fn(async () => null),
 }))
 
+// submitPick signs through signRookieContractForPick (a mock without it threw inside a non-fatal try).
 vi.mock('@/lib/salary-cap/RookieContractService', () => ({
-  assignRookieContract: vi.fn(async () => {}),
+  signRookieContractForPick: vi.fn(async () => null),
 }))
 
 vi.mock('@/lib/draft-room/postDraftPickChatEvent', () => ({
