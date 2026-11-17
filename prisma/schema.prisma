@@ -3984,6 +3984,11 @@ model PlayerAnalyticsSnapshot {
 }
 
 model AppUser {
+  /// Optional matching hint, never proof of ownership or payment.
+  leaguesafeEmail             String? @db.VarChar(254)
+  leagueSafeConnectionsCreated LeagueSafeConnection[] @relation("LeagueSafeConnectionCreator")
+  leagueSafeLedgerEntriesCreated DuesLedgerEntry[] @relation("LeagueSafeLedgerCreator")
+
   id                                       String                                 @id @default(uuid())
   email                                    String?                                @unique
   emailVerified                            DateTime?
@@ -6300,6 +6305,8 @@ enum LeagueLifecycleState {
 }
 
 model League {
+  leagueSafeConnection LeagueSafeConnection?
+
   id                                    String                                 @id @default(uuid())
   pirateProtectionSets                  PirateProtectionSet[]
   pirateClaims                          PirateClaim[]
@@ -8759,6 +8766,8 @@ enum LeagueTeamManagerKind {
 }
 
 model LeagueTeam {
+  leagueSafeMembers LeagueSafeMember[]
+
   id                   String                    @id @default(uuid())
   leagueId             String
   externalId           String
@@ -8831,6 +8840,8 @@ model LeagueTeam {
   performances         TeamPerformance[]
   aiOpponentAssignment AiOpponentTeamAssignment?
 
+  // Composite key prevents cross-league member mappings.
+  @@unique([id, leagueId])
   @@unique([leagueId, externalId])
   @@index([leagueId, pointsFor])
   @@index([divisionId])
@@ -20489,12 +20500,125 @@ model LeagueSafeRawEmail {
   rawBody            String                         @db.Text
   authResults        Json
   processingStatus   LeagueSafeEmailProcessingStatus @default(captured)
-  /// Reserved nullable scalar; the connection model belongs to Phase 1.
+  /// Nullable until an explicit connection assignment; capture does not assign it.
   leagueConnectionId String?
+  leagueConnection   LeagueSafeConnection? @relation(fields: [leagueConnectionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  ledgerEntries      DuesLedgerEntry[]
+
   rejectionReason    String?
   createdAt          DateTime                       @default(now())
 
+  @@unique([id, leagueConnectionId])
   @@index([createdAt, id])
   @@index([processingStatus, createdAt, id])
   @@index([leagueConnectionId])
+}
+
+/// Phase 1 models only: no email parsing, routing, or automatic ledger writes.
+enum LeagueSafeConnectionStatus {
+  pending_invite
+  active
+  stale
+  disconnected
+}
+
+enum LeagueSafeMatchMethod {
+  exact_email
+  secondary_email
+  name_exact
+  name_fuzzy
+  manual
+}
+
+enum DuesLedgerEntryType {
+  payment
+  late_fee
+  refund
+  payout
+  adjustment
+}
+
+enum DuesLedgerSourceType {
+  email
+  screenshot
+  manual
+}
+
+model LeagueSafeConnection {
+  id              String @id @default(cuid())
+  /// A League row already identifies its season; at most one connection per row.
+  afLeagueId      String @unique
+  /// Preserve plus tags; the shared inbox may serve multiple connections.
+  botAddress      String @default("allfantasysportsapp@gmail.com") @db.VarChar(254)
+  lsLeagueName    String @db.VarChar(256)
+  status          LeagueSafeConnectionStatus @default(pending_invite)
+  lastEmailAt     DateTime?
+  createdBy       String
+  /// Base assessment, not a stored paid/unpaid state. Per-member override is optional.
+  duesAmountCents Int @default(0)
+  currency        String @default("usd") @db.VarChar(3)
+  dueAt           DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  league          League @relation(fields: [afLeagueId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator         AppUser @relation("LeagueSafeConnectionCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  members         LeagueSafeMember[]
+  rawEmails       LeagueSafeRawEmail[]
+  ledgerEntries   DuesLedgerEntry[]
+
+  @@unique([id, afLeagueId])
+  @@index([botAddress])
+  @@index([lsLeagueName])
+  @@index([status, lastEmailAt])
+  @@index([createdBy])
+}
+
+model LeagueSafeMember {
+  id                  String @id @default(cuid())
+  connectionId        String
+  /// Duplicated scope is protected by composite foreign keys, not caller convention.
+  afLeagueId          String
+  lsDisplayName       String @db.VarChar(256)
+  lsEmail             String? @db.VarChar(254)
+  afTeamId            String?
+  /// Null until a matching method is chosen; a suggestion is not a confirmed identity.
+  matchMethod         LeagueSafeMatchMethod?
+  confirmedByCommish  Boolean @default(false)
+  duesAmountCents     Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  connection          LeagueSafeConnection @relation(fields: [connectionId, afLeagueId], references: [id, afLeagueId], onDelete: Restrict, onUpdate: Restrict)
+  team                LeagueTeam? @relation(fields: [afTeamId, afLeagueId], references: [id, leagueId], onDelete: Restrict, onUpdate: Restrict)
+  ledgerEntries       DuesLedgerEntry[]
+
+  @@unique([id, connectionId])
+  @@index([connectionId, lsEmail])
+  @@index([afTeamId, afLeagueId])
+}
+
+model DuesLedgerEntry {
+  id               String @id @default(cuid())
+  connectionId     String
+  memberId         String
+  type             DuesLedgerEntryType
+  /// Positive magnitude except signed adjustments. SQL checks enforce this contract.
+  amountCents      Int
+  occurredAt       DateTime
+  sourceRawEmailId String?
+  sourceType       DuesLedgerSourceType
+  /// Required, globally unique and supplied by the future writer for idempotency.
+  dedupeKey        String @unique @db.VarChar(256)
+  /// Null is reserved for system/email entries; manual/screenshot entries need an actor.
+  createdBy        String?
+  notes            String? @db.Text
+  createdAt        DateTime @default(now())
+  connection       LeagueSafeConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  member           LeagueSafeMember @relation(fields: [memberId, connectionId], references: [id, connectionId], onDelete: Restrict, onUpdate: Restrict)
+  /// A source email must already be assigned to this same connection.
+  sourceRawEmail   LeagueSafeRawEmail? @relation(fields: [sourceRawEmailId, connectionId], references: [id, leagueConnectionId], onDelete: Restrict, onUpdate: Restrict)
+  creator          AppUser? @relation("LeagueSafeLedgerCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([connectionId, memberId, occurredAt, id])
+  @@index([sourceRawEmailId, connectionId])
+  @@index([createdBy])
 }
