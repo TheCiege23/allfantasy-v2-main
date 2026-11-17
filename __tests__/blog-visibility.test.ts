@@ -44,6 +44,7 @@ describe('lander → guide links', () => {
     expect(SPORT_GUIDES['fantasy-football']?.map((g) => g.slug)).toContain('faab-fantasy-football')
     expect(SPORT_GUIDES['fantasy-football']?.[0].slug).toBe('how-to-start-a-fantasy-football-league')
     expect(SPORT_GUIDES['fantasy-basketball']?.map((g) => g.slug)).toContain('fantasy-basketball-streaming')
+    expect(SPORT_GUIDES['fantasy-football']?.[1].slug).toBe('import-fantasy-league')
     expect(blogGuideHref('keeper-league-guide')).toBe('/blog/keeper-league-guide')
   })
 

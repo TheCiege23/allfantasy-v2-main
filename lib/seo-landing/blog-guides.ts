@@ -97,6 +97,10 @@ const NBA_STREAMING: BlogGuideLink = {
   slug: 'fantasy-basketball-streaming',
   title: 'Fantasy Basketball Streaming: How to Win the Waiver Wire',
 }
+const IMPORT_A_LEAGUE: BlogGuideLink = {
+  slug: 'import-fantasy-league',
+  title: 'How to Import Your Fantasy League: Sleeper, ESPN, Fantrax and More',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
@@ -117,8 +121,9 @@ export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGui
 
 /** Guides for /sports/<slug>. */
 export const SPORT_GUIDES: Partial<Record<SportSlug, readonly BlogGuideLink[]>> = {
-  // The checklist leads: this page is where someone deciding to start a league lands.
-  'fantasy-football': [START_A_LEAGUE, DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, IDP, FAAB, TRADE_DEADLINE, GUILLOTINE],
+  // The checklist leads: this page is where someone deciding to start a league lands. The import
+  // guide follows it for the reader who already plays somewhere else.
+  'fantasy-football': [START_A_LEAGUE, IMPORT_A_LEAGUE, DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, IDP, FAAB, TRADE_DEADLINE, GUILLOTINE],
   'fantasy-basketball': [POINTS_VS_CATEGORIES, NBA_STREAMING, NBA_CUP_POOL],
   'fantasy-hockey': [HOCKEY],
   'fantasy-soccer': [SOCCER],
