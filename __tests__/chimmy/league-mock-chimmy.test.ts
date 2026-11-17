@@ -190,6 +190,16 @@ describe('wiring', () => {
     expect(route).not.toMatch(/parseMockDraftBoard\(formData\.get\('mockSessionId'\)\)/)
   })
 
+  it('a question asked from a mock room with its board is never turned away as off-topic', () => {
+    // Found live 2026-11-16: "Put Bijan Robinson at the top of my queue" from a league mock room was
+    // refused as "not a fantasy sports question" — no keyword matched and the room has no opening line.
+    const route = read('app/api/chat/chimmy/route.ts')
+    expect(route).toMatch(/if \(!portfolioReport && !mockDraftBoard && !hasSportsContent\(domainInput, hasImage\)\)/)
+    // The board is resolved before the filter runs, so the exemption can see it.
+    expect(route.indexOf('const mockDraftBoard =')).toBeGreaterThan(0)
+    expect(route.indexOf('const mockDraftBoard =')).toBeLessThan(route.indexOf('!mockDraftBoard && !hasSportsContent'))
+  })
+
   it('the room asks Chimmy with its session, and the card changes the queue only through Confirm, then saves it', () => {
     const chat = read('app/draft/components/ChimmyDraftChat.tsx')
     expect(chat).toMatch(/form\.set\('source', 'mock-draft-room'\)/)
