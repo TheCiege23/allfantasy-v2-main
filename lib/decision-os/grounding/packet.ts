@@ -561,8 +561,9 @@ export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>):
  * of packet.ts's imports, `ChimmyContextEngine` included, on messages that never build a packet.
  * One implementation, two callers, no second copy to drift.
  */
-export { deriveValueFormat, deriveIdpRules, deriveWantsDevyBoard } from './leagueValueFormat'
-import { deriveValueFormat, deriveIdpRules, deriveLeagueSizeAndPpr, deriveWantsDevyBoard } from './leagueValueFormat'
+export { deriveIdpRules, deriveWantsDevyBoard } from './leagueValueFormat'
+import { deriveIdpRules, deriveLeagueSizeAndPpr, deriveWantsDevyBoard } from './leagueValueFormat'
+import { loadLeagueValueFormat } from './leagueValueBook'
 
 export interface GroundingPacketArgs {
   leagueId?: string | null
@@ -796,9 +797,12 @@ export async function buildDecisionOsGroundingPacket(
    * An explicit argument still wins and stays fully parallel, which is why the resolution is a
    * promise rather than an await: a caller that already knows the format pays nothing for this.
    */
+  // 🛑 THE CHART COMES FROM THE LEAGUE ROW, BY THE SAME RULE EVERY SCREEN USES (`valueBookFor`, via
+  // ./leagueValueBook) — not from the rules. Reading it off the rules was a second rule, and it priced
+  // keeper leagues on the dynasty chart that the player card does not (2026-11-17).
   const pValueFormat: Promise<{ format: string; qbFormat: string } | null> = args.valueFormat
     ? Promise.resolve(args.valueFormat)
-    : pRules.then(deriveValueFormat).catch(() => null)
+    : loadLeagueValueFormat(leagueId).catch(() => null)
 
   const pMarket =
     want.values && !marketKill
@@ -1503,7 +1507,7 @@ export async function buildDecisionOsGroundingPacket(
     })
   } else if (want.idpKicker && leagueId) {
     const rulesValue = leagueRules.present ? leagueRules.value : null
-    const fmt = deriveValueFormat(rulesValue)
+    const fmt = await pValueFormat
     const size = deriveLeagueSizeAndPpr(rulesValue)
     /*
      * 🛑 BOUNDED BY THE PACKET'S OWN CLOCK (2026-11-16, re-score item 8). This hop starts only after the context
