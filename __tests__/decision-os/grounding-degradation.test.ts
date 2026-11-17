@@ -816,3 +816,75 @@ describe('the league office (LeagueOfficeContextProvider) through the packet', (
     expect(p.gaps.find((g) => g.slice === 'leagueOffice')?.detail).toBe('The leagueOffice provider failed: db down')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('🛑 one late read costs ITS slice, never the packet (re-score 2026-11-17)', () => {
+  const never = () => new Promise<never>(() => undefined)
+
+  it('a read that never finishes becomes a "did not finish in time" gap, and the packet still lands with the rest', async () => {
+    const { PACKET_SLICE_DEADLINE_MS, SLICE_LATE_GAP } = await import('@/lib/decision-os/grounding/packet')
+    leagueIntel.mockImplementation(never)
+    const started = Date.now()
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    const took = Date.now() - started
+    // Bounded by the packet's own budget — under the chat route's 3,000 ms ceiling, which used to drop EVERYTHING.
+    expect(took).toBeGreaterThanOrEqual(PACKET_SLICE_DEADLINE_MS - 50)
+    expect(took).toBeLessThan(3000)
+    expect(p.leagueIntelligence.present).toBe(false)
+    expect(p.leagueIntelligence.gap).toEqual(SLICE_LATE_GAP)
+    // Everything else arrived.
+    expect(p.leagueRules.present).toBe(true)
+    expect(p.marketValues.present).toBe(true)
+    expect(p.projections.present).toBe(true)
+    expect(p.contextFacts?.roster.present).toBe(true)
+    // And the slow read is named on meta, so a timeout is diagnosable.
+    const late = p.meta.sources.find((s) => s.slice === 'leagueIntelligence')
+    expect(late?.ms).toBeGreaterThanOrEqual(PACKET_SLICE_DEADLINE_MS - 50)
+    expect(serializeDecisionOsGroundingForPrompt(p)).toMatch(/did not finish in time/)
+  }, 10_000)
+
+  it('the context engine going late labels all nine of its slices as late — not "the engine did not return"', async () => {
+    const { SLICE_LATE_GAP } = await import('@/lib/decision-os/grounding/packet')
+    loadContext.mockImplementation(never)
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    const facts = Object.entries(p.contextFacts ?? {})
+    expect(facts.length).toBe(9)
+    for (const [name, s] of facts) {
+      expect(s.present, name).toBe(false)
+      expect(s.gap, name).toEqual(SLICE_LATE_GAP)
+    }
+    expect(p.marketValues.present).toBe(true)
+  }, 10_000)
+
+  it('🛑 roster and matchup no longer wait behind the other reads: the engine starts in the first wave', async () => {
+    let marketDone = false
+    let engineStartedBeforeMarketFinished: boolean | null = null
+    loadMarket.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => { marketDone = true; resolve([{ status: 'ok', value: { playerId: 'p1' } }]) }, 150)),
+    )
+    loadContext.mockImplementation(async () => {
+      engineStartedBeforeMarketFinished = !marketDone
+      return bundle()
+    })
+    await buildDecisionOsGroundingPacket(ARGS)
+    // Before this change the engine was called only after market (and every other early read) had been awaited.
+    expect(engineStartedBeforeMarketFinished).toBe(true)
+  })
+})
+
+describe('no false "missing" or "available" lines (re-score 2026-11-17)', () => {
+  it('🛑 a sport the market never prices is not "available" with nothing in it, and is not a missing-data gap', async () => {
+    loadMarket.mockResolvedValue([{ status: 'no_producer', sport: 'NBA', basis: 'market', detail: 'No market price exists for NBA.' }])
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, sport: 'NBA' })
+    expect(p.marketValues.present).toBe(false)
+    expect(p.marketValues.gap?.reason).toBe('not_requested')
+    expect(p.gaps.find((g) => g.slice === 'marketValues')).toBeUndefined()
+    expect(serializeDecisionOsGroundingForPrompt(p)).not.toMatch(/Market values: available/i)
+  })
+
+  it('a market with at least one priced row is still present', async () => {
+    loadMarket.mockResolvedValue([{ status: 'unresolved', detail: 'x' }, { status: 'ok', value: { playerId: 'p1' } }])
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.marketValues.present).toBe(true)
+  })
+})

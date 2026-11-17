@@ -79,6 +79,68 @@ Collapsing it into `null` is how a sport silently looks broken.
 
 ---
 
+## 0.47 🔄 RE-SCORE ON TODAY'S CODE — 2026-11-17 (supersedes §0.46 marks)
+
+Re-measured from code at `87d6860ba` by four independent read-only audits, every mark cited to a file and line,
+with one load-bearing claim per audit re-checked by hand before it was believed. Nothing carried forward.
+
+⚠ **TWO RULES CHANGED, SO SEVERAL DROPS ARE STRICTER GRADING, NOT REGRESSIONS.** Axis 3 now gives ⚠, not ✅, to an
+outcome stage that only records or reports (or is a no-op) — §0.46 gave Trade and Waiver ✅ there. And Value and
+Projection are scored across every sport and every Chimmy path, not the NFL packet alone. Lineup and Psychology
+rose only because their deliberately retired axes are scored n/a (owner decisions), not because work landed.
+
+⚠ Axis 4 (Cron) and every `isLiveReady` / env-flag dependent mark remain CODE-ONLY UPPER BOUNDS — production tables,
+`platform_config` rows and env values were not read.
+
+| OS | Now | §0.46 | Main remaining gap |
+|---|---|---|---|
+| League | **100%** | ~90% | Two rules readers (`resolveCanonicalLeagueRules` vs `resolveNormalizedLeagueContext`) can disagree |
+| Import | ~93% | ~100% | The import slice renders through the 8-row object cap: scopes, parity, coverage never reach the prompt |
+| Projection | ~93% | ~100% | Offensive projections in Chimmy are canonical-preset, not league-scored (My Team's are) |
+| Manager Psychology (facts only) | ~88% | ~40% | ESPN/Yahoo/MFL/Fantrax/Fleaflicker records carry no trades or drafts; retired label engine still runs in two crons |
+| Waiver | ~86% | ~93% | `recordWaiverDecisionOutcome` is a no-op with no callers; nothing produces decisions on a schedule |
+| Player Value | ~78% | ~83% | Chimmy's value tools read `allFantasyMarketPlayerValue`; the card reads `playerValueSnapshot` + `valueBookFor` |
+| Lineup | ~75% | ~42% | NCAAF: My Team shows a best lineup, Chimmy's lineup path refuses non-NFL |
+| Trade | ~63% | ~70% | Only Sleeper offers are swept; `MAX_PROPOSALS = 3`; trade results never feed back |
+| Draft | ~57% | ~57% | No Decision OS pick before a draft starts; the draft room shows two engines that can disagree |
+| Commissioner | ~52% | ~80%* | 10 of 13 namespaces need `commissioner_os_live_ready_*` rows (default false); Mission Control Manager Highlights calls the 410'd `/league/managers` |
+| **Decision OS hub** | **~36%** | not scored | See below |
+
+\*§0.46's figure assumed the production live-ready rows were set.
+
+**The hub itself (seven hub axes, equal weight):** assembly ⚠ · latency budget ❌ · routing ⚠ · serialization ⚠ ·
+learning loop ⚠ · multi-model ❌ · operability ⚠.
+- **Latency budget ❌ → addressed in the change that adds this section.** The chat route raced the WHOLE packet
+  against 3,000 ms and dropped all of it on a loss; most reads had no clock of their own. Production measured
+  3,261 ms for one league. Every read now has `PACKET_SLICE_DEADLINE_MS` (2,400 ms from the packet's start); a late
+  read becomes one `SLICE_LATE_GAP` slice and the rest lands. The context engine (roster, matchup, standings) now
+  starts in the first wave instead of after every other read was awaited. A late packet logs its slowest slices.
+- **Learning loop ⚠:** graded outcomes move only the start/sit confidence (±10, `learningSnapshot.ts`); decision
+  confidence is a pass-through "placeholder calibration" (`decisionToSlice.ts`); outcome hooks are no-ops.
+- **Multi-model ❌:** `runManagedIntelligence` (three-brain synthesis) has no production caller; live Chimmy picks the
+  first usable model answer (`ResponseAggregator.ts` `firstUsableOutput`). `savedAnalysis` reads a table nothing
+  live writes.
+
+### Ranked build list (2026-11-17)
+
+| # | Item | Size |
+|---|---|---|
+| 1 | Hub: per-slice deadline, context engine in the first wave, late-packet logging | M — **this change** |
+| 2 | No false lines: IDP/kicker `not_requested` for leagues rostering neither; a non-market sport's placeholder row is not "available" | S — **this change** |
+| 3 | One NFL value: Chimmy's value tools read the card's table and chart | S–M |
+| 4 | League-scored offensive projections in the packet, matching My Team | M |
+| 5 | Commissioner: Manager Highlights off the 410 route; owner decides the live-ready rows | S + owner |
+| 6 | Trade reach: summarize offers past 3; provider trades/drafts in manager records | S–M |
+| 7 | Learning loop: outcomes calibrate waiver/trade/commissioner advice | L |
+| 8 | Draft: one engine in the draft room; a pick before the draft | M |
+| 9 | Three-brain: schedule `runManagedIntelligence` or retire `savedAnalysis` | M |
+| 10 | Cleanup: retired label engine in `import-players` / `fantasy-os-exec-sync` | S |
+
+Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
+projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
+
+---
+
 ## 0.46 🔄 RE-SCORE ON TODAY'S CODE — 2026-11-16 (supersedes §3 and §0.36 marks)
 
 Every mark below was re-measured from code at `e6f75628f`, not carried forward. §3 and §0.36 had drifted in
