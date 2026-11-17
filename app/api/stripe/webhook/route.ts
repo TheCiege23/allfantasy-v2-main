@@ -38,10 +38,21 @@ export const runtime = "nodejs"
 
 const SUPPORTED_PURCHASE_TYPES = new Set(["subscription", "tokens"])
 const FINANCE_PURCHASE_TYPES = new Set(["league_entry_fee"])
-// 24-hour window prevents the same event from being processed twice if Stripe
-// retries after a crash. The idempotency key on TokenLedger handles double-grants,
-// but the DB period-update calls also need to be shielded from duplicate execution.
-const PROCESSING_EVENT_STALE_MS = 24 * 60 * 60 * 1000
+/*
+ * How long a "processing" row blocks Stripe's retries (409) before a retry may take
+ * the event over. It only has to outlast a delivery that is GENUINELY still running —
+ * this handler finishes in seconds — so ten minutes is generous.
+ *
+ * 🛑 THIS WAS 24 HOURS, AND THAT TURNED ONE CRASH INTO A DAY WITHOUT THE PLAN. A
+ * container swap mid-request (every push to main redeploys this service) leaves the
+ * row at "processing"; every retry inside the window then got a 409, so a customer who
+ * had paid waited up to a day for their plan or tokens. The window guarded nothing a
+ * replay could hurt: an "error" row is already reprocessed on Stripe's very next retry
+ * with no wait at all, so every step below must be — and is — safe to run twice
+ * (token grants keyed by session, monthly credits by invoice, dues by session, period
+ * updates are sets, reversals check what is already reversed).
+ */
+const PROCESSING_EVENT_STALE_MS = 10 * 60 * 1000
 const LEGACY_PURCHASE_TYPES = new Set([
   "donate",
   "donation",
