@@ -3508,7 +3508,9 @@ html[data-mode='light'] .af-atmo-guillotine-embers:where(:not(.af-draft-dark, .a
  * and tokens through Apple, so links to those pages, and copy marked
  * `data-ios-purchase`, are hidden only in a build WITHOUT it. Donations, the
  * Stripe billing portal and anything marked data-hide-in-ios-app stay hidden in
- * every build. Keep those four hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
+ * every build. Keep those hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
+ * /pro and /all-access are matched exactly (`='/pro'`, `^='/pro?'`, `^='/pro/'`), never by a bare
+ * `^='/pro'` prefix, which would also hide every link to /profile and /projections.
  */
 html[data-ios-app] [data-hide-in-ios-app],
 html[data-ios-app]:not([data-ios-iap]) [data-ios-purchase],
@@ -3529,6 +3531,17 @@ html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
    is an <a> straight to an API that IOS_APP_PURCHASE_API_PREFIXES refuses in
    the app, so a subscriber who tapped it got a raw 403 body. An Apple
    subscriber manages it through "Manage Subscriptions" on the plan pages. */
+/* /pro (AF Pro) and /all-access (AF Supreme) are purchase pages too (IOS_APP_IAP_PAGE_PREFIXES, 2026-11-17).
+   Exact forms only: a bare ^='/pro' would also hide every link to /profile and /projections. */
+html[data-ios-app]:not([data-ios-iap]) a[href='/pro'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro?'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro/'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro#'],
+html[data-ios-app]:not([data-ios-iap]) a[href='/all-access'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/all-access?'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/all-access/'] {
+  display: none !important;
+}
 
 /*
  * The other half: copy that exists ONLY in the app, for a spot where hiding

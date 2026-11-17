@@ -149,7 +149,9 @@ const upgradeCards = [
     price: "$19.99/mo",
     bestFor: "Best for die-hards",
     icon: Star,
-    body: "All AI tools, priority Chimmy access, advanced analytics, league tools, AF Legacy intel, and commissioner features — everything in one plan.",
+    // Supreme bundles AF Pro + AF Commissioner (SUPREME_INCLUDED_PLAN_IDS). AF Legacy is sold on its own since
+    // 2026-10-25; this card promised "AF Legacy intel" until 2026-11-17.
+    body: "Everything in AF Pro and AF Commissioner in one plan — all AI tools, priority Chimmy access, advanced analytics, league tools and commissioner features. AF Legacy is sold separately.",
     href: supremeHref,
     cta: "Go Supreme",
     event: "AFSupremeUpsellViewed",
