@@ -6,7 +6,7 @@ import { createZombieLeague } from '@/lib/zombie/setupEngine'
 import { zombieCreationLeagueCount } from '@/lib/zombie/creationPolicy'
 import { getZombieUniverseLevelPlanForCount } from '@/lib/zombie/zombie-universe-tier'
 
-export type CreatedZombieUniverse = {
+type CreatedZombieUniverse = {
   universeId: string
   leagues: Array<{ leagueId: string; homepageUrl: string; body: ValidatedCreateLeagueBody }>
 }
