@@ -61,6 +61,7 @@ describe.skipIf(!target)("Phase 1 PostgreSQL migration and constraints", () => {
         CASE WHEN i=10 THEN 'rejected' ELSE 'captured' END::"LeagueSafeEmailProcessingStatus"
       FROM generate_series(1,10) i`)
     await query(readFileSync("prisma/migrations/20261116030000_leaguesafe_phase1_models/migration.sql", "utf8"))
+    await query(readFileSync("prisma/migrations/20261117060000_leaguesafe_phase2_parsing/migration.sql", "utf8"))
     await query(`INSERT INTO "LeagueSafeConnection" (id,"afLeagueId","lsLeagueName","createdBy","updatedAt")
       VALUES ('conn1','league1','Synthetic League','creator',now()),('conn2','league2','Synthetic League','creator',now());
       INSERT INTO "LeagueSafeMember" (id,"connectionId","afLeagueId","lsDisplayName","updatedAt")
@@ -89,6 +90,34 @@ describe.skipIf(!target)("Phase 1 PostgreSQL migration and constraints", () => {
     for (const row of connections) expect(row).toEqual({ status: "pending_invite", botAddress: "allfantasysportsapp@gmail.com", lastEmailAt: null })
     expect((await query(`SELECT "afTeamId","lsEmail","matchMethod","confirmedByCommish" FROM "LeagueSafeMember" WHERE id='member1'`)).rows[0])
       .toEqual({ afTeamId: null, lsEmail: null, matchMethod: null, confirmedByCommish: false })
+  })
+  it("adds only null parser metadata to the ten historical rows", async () => {
+    expect((await query(`SELECT count(*)::int AS n FROM "LeagueSafeRawEmail"
+      WHERE "parsedPayload" IS NULL AND "parserVersion" IS NULL AND "parseAttemptedAt" IS NULL
+      AND "parseError" IS NULL AND "parseDedupeKey" IS NULL`)).rows[0].n).toBe(10)
+  })
+  it("preserves multiple source notices for one transaction without creating financial entries", async () => {
+    const key = "leaguesafe:transaction:" + "a".repeat(64)
+    await query(`UPDATE "LeagueSafeRawEmail" SET "processingStatus"='parsed', "parserVersion"='fixture-v1',
+      "parseAttemptedAt"=now(), "parsedPayload"='{"schemaVersion":1}', "parseDedupeKey"=$1 WHERE id IN ('raw1','raw2')`, [key])
+    expect((await query(`SELECT count(*)::int AS n FROM "LeagueSafeRawEmail" WHERE "parseDedupeKey"=$1`, [key])).rows[0].n).toBe(2)
+    expect((await query(`SELECT count(*)::int AS n FROM "DuesLedgerEntry"`)).rows[0].n).toBe(0)
+  })
+  it("allows one durable unparseable alert to become a parsed result", async () => {
+    await query(`UPDATE "LeagueSafeRawEmail" SET "processingStatus"='unparseable', "parserVersion"='fixture-v1',
+      "parseAttemptedAt"=now(), "parseError"='unknown_or_invalid_template' WHERE id='raw3'`)
+    expect((await query(`SELECT count(*)::int AS n FROM "LeagueSafeRawEmail" WHERE "processingStatus"='unparseable'`)).rows[0].n).toBe(1)
+    await query(`UPDATE "LeagueSafeRawEmail" SET "processingStatus"='parsed', "parserVersion"='fixture-v2',
+      "parseError"=NULL, "parsedPayload"='{"schemaVersion":1}', "parseDedupeKey"=$1 WHERE id='raw3'`, ["leaguesafe:message:" + "b".repeat(64)])
+    expect((await query(`SELECT count(*)::int AS n FROM "LeagueSafeRawEmail" WHERE "processingStatus"='unparseable'`)).rows[0].n).toBe(0)
+  })
+  it.each([
+    `UPDATE "LeagueSafeRawEmail" SET "parserVersion"='fixture-v1' WHERE id='raw3'`,
+    `UPDATE "LeagueSafeRawEmail" SET "processingStatus"='unparseable', "parserVersion"='fixture-v1', "parseAttemptedAt"=now() WHERE id='raw3'`,
+    `UPDATE "LeagueSafeRawEmail" SET "parserVersion"='fixture-v1', "parseAttemptedAt"=now(), "parseError"='unknown_or_invalid_template' WHERE id='raw10'`,
+    `UPDATE "LeagueSafeRawEmail" SET "processingStatus"='parsed', "parserVersion"='fixture-v1', "parseAttemptedAt"=now(), "parsedPayload"='[]', "parseDedupeKey"='invalid' WHERE id='raw3'`,
+  ])("rejects inconsistent parser metadata: %s", async (sql) => {
+    await expect(query(sql)).rejects.toMatchObject({ code: "23514" })
   })
   it("preserves plus-addresses and optional secondary emails", async () => {
     await query(`UPDATE "LeagueSafeConnection" SET "botAddress"='allfantasysportsapp+league-1@gmail.com' WHERE id='conn1'`)

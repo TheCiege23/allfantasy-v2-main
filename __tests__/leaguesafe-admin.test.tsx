@@ -4,13 +4,14 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  access: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(),
+  access: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(),
   redirect: vi.fn(() => { throw new Error("REDIRECT") }),
 }))
 vi.mock("@/lib/adminAuth", () => ({ getAdminAccessState: mocks.access }))
 vi.mock("@/lib/prisma", () => ({
-  prisma: { leagueSafeRawEmail: { findMany: mocks.findMany, findUnique: mocks.findUnique } },
+  prisma: { leagueSafeRawEmail: { findMany: mocks.findMany, findUnique: mocks.findUnique, count: mocks.count } },
 }))
+vi.mock("@/app/admin/leaguesafe/raw/actions", () => ({ parseStoredNotification: vi.fn() }))
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => React.createElement("a", props, children),
@@ -26,6 +27,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.access.mockResolvedValue({ status: "admin" })
   mocks.findMany.mockResolvedValue([row])
+  mocks.count.mockResolvedValue(0)
   mocks.findUnique.mockResolvedValue({
     ...row, rfcMessageId: "<fixture@example.invalid>", rejectionReason: null,
     authResults: { dkim: "pass" }, rawBody: '<script>alert("fixture")</script>',
@@ -38,6 +40,7 @@ describe("admin-only LeagueSafe capture viewer", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/admin")
     expect(mocks.findMany).not.toHaveBeenCalled()
     expect(mocks.findUnique).not.toHaveBeenCalled()
+    expect(mocks.count).not.toHaveBeenCalled()
   })
   it("lists only envelope metadata without loading every raw email body", async () => {
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }))
@@ -100,5 +103,23 @@ describe("admin-only LeagueSafe capture viewer", () => {
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: "missing" }) }))
     expect(html).toContain("No emails captured")
     expect(html).toContain("Email not found")
+  })
+  it("surfaces a durable admin review alert even when the current filter hides unparseable messages", async () => {
+    mocks.count.mockResolvedValue(2)
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ status: "captured" }) }))
+    expect(html).toContain('role="alert"')
+    expect(html).toContain("2 email(s) need parser review")
+    expect(html).toContain("status=unparseable")
+  })
+  it("escapes parsed payloads and offers manual parsing only for accepted records", async () => {
+    const accepted = { ...row, rawBody: "MIME", authResults: {}, parsedPayload: { league: "<script>bad</script>" } }
+    mocks.findUnique.mockResolvedValue(accepted)
+    let html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: row.id }) }))
+    expect(html).toContain("Parse stored notification")
+    expect(html).toContain("&lt;script&gt;")
+    expect(html).not.toContain("<script>")
+    mocks.findUnique.mockResolvedValue({ ...accepted, processingStatus: "rejected", rejectionReason: "leaguesafe_dkim_did_not_pass" })
+    html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: row.id }) }))
+    expect(html).not.toContain("Parse stored notification")
   })
 })

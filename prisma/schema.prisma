@@ -20505,6 +20505,14 @@ model LeagueSafeRawEmail {
   leagueConnection   LeagueSafeConnection? @relation(fields: [leagueConnectionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   ledgerEntries      DuesLedgerEntry[]
 
+  /// Phase 2 manual parsing only. Raw MIME and delivery authentication remain immutable.
+  parsedPayload      Json?
+  parserVersion      String?                        @db.VarChar(64)
+  parseAttemptedAt   DateTime?
+  parseError         String?                        @db.VarChar(64)
+  /// Indexed, not unique: preserve every source notification for the same transaction.
+  parseDedupeKey     String?                        @db.VarChar(100)
+
   rejectionReason    String?
   createdAt          DateTime                       @default(now())
 
@@ -20512,6 +20520,7 @@ model LeagueSafeRawEmail {
   @@index([createdAt, id])
   @@index([processingStatus, createdAt, id])
   @@index([leagueConnectionId])
+  @@index([parseDedupeKey])
 }
 
 /// Phase 1 models only: no email parsing, routing, or automatic ledger writes.
