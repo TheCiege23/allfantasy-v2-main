@@ -52,7 +52,12 @@ export async function POST(req: NextRequest, context: Context) {
   }
   try {
     let result: unknown
-    if (body.action === 'preview_calendar') {
+    if (body.action === 'advance_hosted_ceremony' || body.action === 'restart_hosted_ceremony') {
+      if (!Number.isInteger(body.period) || Number(body.period) < 1) throw new Error('Choose a valid ceremony period.')
+      result = body.action === 'advance_hosted_ceremony'
+        ? await advanceSGHostedCeremony(leagueId, userId, Number(body.period))
+        : await restartSGHostedCeremony(leagueId, userId, Number(body.period))
+    } else if (body.action === 'preview_calendar') {
       result = await previewSGCalendar(leagueId)
     } else if (body.action === 'order_choice' || body.action === 'commissioner_order_choice') {
       result = await chooseSGMatchupOrder(leagueId, userId, body.selected as 'bookends' | 'middle', body.action === 'commissioner_order_choice')
