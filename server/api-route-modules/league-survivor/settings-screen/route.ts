@@ -26,6 +26,7 @@ import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import {
   buildSurvivorLeagueColumnPatch,
@@ -240,6 +241,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const lang: Lang = state.language ?? 'en'
   const changed = changedSettingsKeys(state.form, next)
   if (!changed.length) return NextResponse.json({ ok: true, unchanged: true, state })
+  // The commissioner's "Format rules" lock (lib/league/formatRulesGuard.ts), on top of Survivor's own season locks
+  // below: a locked league changes its Survivor rules mid-season only after a vote.
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const locked = lockedChanges(changed, state.locks)
   if (locked.length) return refuse(lang, 'settingsLocked', 409, { locked })
@@ -388,5 +393,6 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       tribalCouncilTimeUtc: f.tribalCouncilTime,
     })
   }
+  await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: changed })
   return NextResponse.json({ ok: true, changed, state: await loadState(leagueId, viewer) })
 }

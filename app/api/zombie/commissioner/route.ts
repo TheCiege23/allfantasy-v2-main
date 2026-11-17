@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { logAuditEntry, getFullAuditTrail } from '@/lib/zombie/auditService'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
+import { OVERRIDABLE_ZOMBIE_STATUSES, STATUS_OVERRIDE_BLOCKING_RESOLUTIONS } from '@/lib/zombie/statusOverride'
+import { readSettlementHold, releaseSettlementHold } from '@/lib/zombie/settlementHoldRelease'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,11 +17,14 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const leagueId = searchParams?.get('leagueId')
   const type = searchParams?.get('type')
-  if (!leagueId || type !== 'audit') return NextResponse.json({ error: 'leagueId and type=audit required' }, { status: 400 })
+  if (!leagueId || (type !== 'audit' && type !== 'settlement_hold')) return NextResponse.json({ error: 'leagueId and type=audit|settlement_hold required' }, { status: 400 })
 
   await requireCommissionerAccess(leagueId, session.user.id, 'view')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // A week held for review, with the reason in words (lib/zombie/settlementHoldRelease.ts).
+  if (type === 'settlement_hold') return NextResponse.json({ hold: await readSettlementHold(z.id) })
 
   const entries = await getFullAuditTrail(z.id)
   return NextResponse.json({ entries })
@@ -70,6 +75,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, documentId: doc.id, version: doc.version })
   }
 
+  // Release a week held for review and run its settlement again (lib/zombie/settlementHoldRelease.ts): refused
+  // unless the week is held and nothing has been applied; a cause that is still there holds it again.
+  if (action === 'retry_settlement') {
+    const week = typeof body.week === 'number' ? body.week : Number(body.week)
+    if (!Number.isInteger(week) || week < 1) return NextResponse.json({ error: 'week required' }, { status: 400 })
+    const result = await releaseSettlementHold({ zombieLeagueId: z.id, week, actorUserId: session.user.id })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({ ok: true, outcome: result.outcome, detail: result.detail })
+  }
+
   if (action === 'override_status') {
     if (z.correctionHoldFromWeek != null) return NextResponse.json({ error: 'Finish the reviewed stat correction before overriding game state.' }, { status: 409 })
     const userId = typeof body.userId === 'string' ? body.userId : null
@@ -82,7 +97,12 @@ export async function POST(req: Request) {
     const prev = await prisma.zombieLeagueTeam.findUnique({
       where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
     })
-    if (!['Survivor', 'Zombie', 'Whisperer', 'Revived', 'Eliminated'].includes(newStatus)) return NextResponse.json({ error: 'Unknown team status' }, { status: 400 })
+    if (!(OVERRIDABLE_ZOMBIE_STATUSES as readonly string[]).includes(newStatus)) return NextResponse.json({ error: 'Unknown team status' }, { status: 400 })
+    // The same guard item grants have: never change a team's status under a week that is settling or held for review.
+    const currentResolution = await prisma.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } }, select: { status: true } })
+    if (currentResolution && (STATUS_OVERRIDE_BLOCKING_RESOLUTIONS as readonly string[]).includes(currentResolution.status)) {
+      return NextResponse.json({ error: 'This week is being settled or is held for review. Change statuses once it is complete.' }, { status: 409 })
+    }
     if (z.sport === 'NFL' && (newStatus === 'Whisperer' || prev?.status === 'Whisperer')) {
       return NextResponse.json({ error: 'Use the reviewed 2025 offer or combat workflow to change the Whisperer. A status-only override cannot transfer the role or its ambushes.' }, { status: 409 })
     }
@@ -104,33 +124,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
+  /*
+   * 🛑 "ADJUST WINNINGS" IS REFUSED, IN EVERY SPORT (owner's decision, 2026-11-17). It only incremented
+   * `zombieLeagueTeam.totalWinnings`; every weekly settlement recomputes that total from the `zombieWeeklyWinnings`
+   * ledger, so the next week silently erased the adjustment — and one made after the last week made the season's
+   * accounting fail ("The winnings total disagrees with the season ledger."). Writing it to the ledger instead is no
+   * better: the settlement snapshot refuses any earlier ledger row it did not write itself
+   * (lib/zombie/weeklySettlementSnapshot.ts `readZombieOpeningState`, all sports) and holds the next week.
+   * A real adjustment needs its own ledger source the settlement accepts; until then, refuse rather than pretend.
+   */
   if (action === 'override_winnings') {
-    const userId = typeof body.userId === 'string' ? body.userId : null
-    const adjustment = typeof body.adjustmentAmount === 'number' ? body.adjustmentAmount : parseFloat(String(body.adjustmentAmount))
-    if (!userId || !Number.isFinite(adjustment)) {
-      return NextResponse.json({ error: 'userId and adjustmentAmount required' }, { status: 400 })
-    }
-
-    const paid = await prisma.zombiePaidConfig.findUnique({ where: { zombieLeagueId: z.id } })
-    if (paid?.potIsLocked) return NextResponse.json({ error: 'Pot is locked' }, { status: 400 })
-
-    const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
-    if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-
-    await prisma.zombieLeagueTeam.update({
-      where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
-      data: { totalWinnings: { increment: adjustment } },
-    })
-    await logAuditEntry(z.id, {
-      category: 'commissioner_override',
-      action: 'WINNINGS_ADJUSTED',
-      description: reason,
-      amount: adjustment,
-      actorUserId: session.user.id,
-      actorRole: 'commissioner',
-      targetUserId: userId,
-    })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      error: z.sport === 'NFL'
+        ? 'Winnings can no longer be adjusted by hand: the next weekly settlement would undo it. Use the reviewed stat correction tool to change a settled week.'
+        : 'Winnings can no longer be adjusted by hand: the next weekly settlement would undo it.',
+    }, { status: 409 })
   }
 
   if (action === 'award_item') {
