@@ -159,7 +159,17 @@ export async function proposeSettingsChange(args: { leagueId: string; userId: st
   const list = shown.map((s) => `${s.label}: ${s.from} → ${s.to}`).join('; ')
   return {
     ok: true,
-    text: `A confirm card is ready: ${list}.${midSeason ? ' The season has started, so the card warns about that and needs a second tap.' : ''} NOTHING has changed yet — it is saved only if the commissioner taps Confirm. Say that, and never say it was changed.`,
+    /*
+     * ⚠ SAY WHICH IT IS, BOTH WAYS. Found live 2026-11-16: with no mid-season sentence the model inferred
+     * one from the date ("the card will warn you… a second tap") for a pre-draft league, and invented a
+     * side effect ("everyone's remaining budget gets re-based"). So the one-tap case is stated too, and
+     * the answer is bounded to what the card shows.
+     */
+    text: `A confirm card is ready: ${list}. ${
+      midSeason
+        ? 'The season has started, so the card warns about that and needs a SECOND tap.'
+        : "This league's season has NOT started, so ONE tap saves it — do not mention a second tap or a mid-season warning."
+    } NOTHING has changed yet — it is saved only if the commissioner taps Confirm. Say that, and never say it was changed. Describe only what is listed here: do NOT claim effects on remaining budgets, rosters, standings, claims or schedules — none were checked.`,
     card,
   }
 }

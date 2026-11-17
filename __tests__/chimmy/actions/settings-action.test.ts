@@ -89,6 +89,9 @@ describe('proposeSettingsChange', () => {
       midSeason: false,
     })
     expect(r.text).toMatch(/NOTHING has changed yet/)
+    // Found live: with nothing said, the model invented a mid-season second tap and a budget side effect.
+    expect(r.text).toMatch(/season has NOT started, so ONE tap saves it — do not mention a second tap/)
+    expect(r.text).toMatch(/do NOT claim effects on remaining budgets/)
     expect(h.patch).not.toHaveBeenCalled()
     expect(payloadOf(r.card.token).spec).toEqual({
       kind: 'settings',
@@ -140,6 +143,8 @@ describe('proposeSettingsChange', () => {
     const r = await card({ tradeReviewHours: 24 })
     expect(r.card.title).toBe('Change the trade review period')
     expect(r.card.settings!.midSeason).toBe(true)
+    expect(r.text).toMatch(/needs a SECOND tap/)
+    expect(r.text).not.toMatch(/ONE tap saves it/)
     expect(r.card.warnings.join(' ')).toMatch(/season has started/)
     expect(payloadOf(r.card.token).spec).toMatchObject({ midSeason: true, section: 'trades' })
   })
