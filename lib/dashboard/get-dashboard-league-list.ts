@@ -9,7 +9,7 @@ import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
-import { isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
+import { IMPORT_CO_COMMISSIONERS_KEY, isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
 import { labelSameNamedLeagues } from '@/lib/dashboard/labelSameNamedLeagues'
@@ -102,6 +102,8 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and one who joined an already-imported league as its commissioner, with no team in it.
+                { settings: { path: [IMPORT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
               ],
             },
             { OR: [{ leagueVariant: null }, { leagueVariant: { notIn: VARIANT_NOT_IN } }] },
@@ -564,6 +566,8 @@ export async function getDashboardLeagueListForUser(
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and one who joined an already-imported league as its commissioner, with no team in it.
+                { settings: { path: [IMPORT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
               ],
             },
             {
