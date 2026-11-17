@@ -24,7 +24,7 @@ export function nativeDraftRosterTemplate(base: RosterTemplateDto, sport: string
 
 /** Maximum starter matching permits a multi-position player to move out of a
  * flex slot when a later pick needs it. Greedy slot counts cannot do that. */
-export function matchedStarterCount(positions: readonly string[], slots: readonly { allowedPositions: readonly string[] }[]): number {
+export function matchStarterSlots(positions: readonly string[], slots: readonly { allowedPositions: readonly string[] }[]): Array<number | null> {
   const assigned = new Map<number, number>()
   const fits = (position: string, allowed: readonly string[]) => redraftPlayerPositionTokens(position)
     .some(p => allowed.some(a => normalizeToken(a) === p))
@@ -37,7 +37,13 @@ export function matchedStarterCount(positions: readonly string[], slots: readonl
     return false
   }
   positions.forEach((_position, index) => { seat(index, new Set()) })
-  return assigned.size
+  const result: Array<number | null> = positions.map(() => null)
+  for (const [slot, player] of assigned) result[player] = slot
+  return result
+}
+
+export function matchedStarterCount(positions: readonly string[], slots: readonly { allowedPositions: readonly string[] }[]): number {
+  return matchStarterSlots(positions, slots).filter(slot => slot !== null).length
 }
 
 export function preservesStarterCompletion(sport: string, settings: unknown, ownPositions: readonly string[], candidatePosition: string, draftRounds: number): boolean {

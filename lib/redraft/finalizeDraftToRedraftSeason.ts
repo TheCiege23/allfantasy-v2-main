@@ -29,6 +29,9 @@ import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeason
 import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
+import { matchStarterSlots } from '@/lib/redraft/nativeDraftRosterTemplate'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -487,7 +490,7 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, survivorMode: true, settings: true },
+    select: { id: true, survivorMode: true, settings: true, leagueVariant: true, sport: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
@@ -574,6 +577,22 @@ export async function syncCompletedDraftToRedraftSeason(
   const draftedBenchRows: DraftedRookieRow[] = []
 
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
+  const survivorSlotsByPick = new Map<string, string>()
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const sport = String(league.sport ?? 'NFL')
+    const config = resolveRedraftRosterConfig(sport, league.settings)
+    const slots = [...config.starterCapacities].flatMap(([slotName, count]) =>
+      Array.from({ length: count }, () => ({ slotName, allowedPositions: allowedPositionsForSlot(sport, slotName) })))
+    const groups = new Map<string, DraftPickForRedraftSync[]>()
+    for (const pick of session.picks as DraftPickForRedraftSync[]) {
+      if (isDraftPickSkipped(pick) || isDraftPickRowEmpty({ playerName: pick.playerName, position: pick.position, pickMetadata: pick.pickMetadata ?? null })) continue
+      groups.set(pick.rosterId, [...(groups.get(pick.rosterId) ?? []), pick])
+    }
+    for (const picks of groups.values()) {
+      const matching = matchStarterSlots(picks.map(pick => pick.position), slots)
+      picks.forEach((pick, index) => survivorSlotsByPick.set(pick.id, matching[index] == null ? 'bench' : slots[matching[index]!].slotName))
+    }
+  }
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
@@ -647,7 +666,7 @@ export async function syncCompletedDraftToRedraftSeason(
       continue
     }
 
-    const slotType = inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
+    const slotType = survivorSlotsByPick.get(pick.id) ?? inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
 
     const createdRow = await prisma.redraftRosterPlayer.create({
       data: {
