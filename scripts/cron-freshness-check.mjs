@@ -431,6 +431,9 @@ export const PROBES = {
    */
   '/api/cron/draft-pool-prewarm': { heartbeat: 'cron-draft-pool-prewarm' },
   '/api/cron/import-backfill-sweeper': { heartbeat: 'cron-import-backfill-sweeper' },
+  // The daily Stripe key check writes nothing but this heartbeat: a check that stopped firing
+  // must not look like a check that keeps finding nothing wrong. A key problem records `failed`.
+  '/api/cron/stripe-key-health': { heartbeat: 'cron-stripe-key-health' },
   '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
   // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
   // the default path (flag off) recorded nothing and the job looked identical whether it ran

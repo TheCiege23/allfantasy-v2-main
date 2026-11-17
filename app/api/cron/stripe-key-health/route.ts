@@ -3,6 +3,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { checkStripeKeyHealth, type StripeKeyHealth } from "@/lib/billing/stripeKeyHealth"
 import { sendNotificationEmail } from "@/lib/resend-client"
 import { OWNER_EMAIL } from "@/lib/notifications/notifyOwnerOfNewSignup"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -77,8 +78,7 @@ async function checkWebService(): Promise<ServiceResult | null> {
 }
 
 function buildEmail(results: ServiceResult[]): { subject: string; bodyHtml: string } {
-  const problems = results.filter((r) => r.health.state === "problem")
-  const lines = problems.map((r) => `${r.service}: ${"reason" in r.health ? r.health.reason : ""}`)
+  const lines = problemLines(results)
   return {
     subject: "⚠ Stripe key problem: AllFantasy checkout may be down",
     bodyHtml: [
@@ -90,18 +90,14 @@ function buildEmail(results: ServiceResult[]): { subject: string; bodyHtml: stri
   }
 }
 
-export async function GET(req: NextRequest) {
-  if (!requireCronAuth(req, "CRON_SECRET")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+function problemLines(results: ServiceResult[]): string[] {
+  return results
+    .filter((r) => r.health.state === "problem")
+    .map((r) => `${r.service}: ${"reason" in r.health ? r.health.reason : ""}`)
+}
 
+async function runCheck() {
   const self: ServiceResult = { service: thisService(), health: await checkStripeKeyHealth() }
-
-  // The web service's half of the check: report only, never email (the worker's run does that).
-  if (req.nextUrl.searchParams.get("scope") === "self") {
-    return NextResponse.json(self, { status: 200 })
-  }
-
   const web = await checkWebService()
   const results = web ? [self, web] : [self]
   const hasProblem = results.some((r) => r.health.state === "problem")
@@ -116,6 +112,41 @@ export async function GET(req: NextRequest) {
     }))
     console.error("[stripe-key-health] problem found", results.map((r) => ({ service: r.service, state: r.health.state, mode: r.health.mode })))
   }
+  return { results, hasProblem, allOk, emailed }
+}
+
+export async function GET(req: NextRequest) {
+  if (!requireCronAuth(req, "CRON_SECRET")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  // The web service's half of the check: report only, never email, never a heartbeat — the
+  // worker's run does both, so a heartbeat here would not prove the scheduled job is firing.
+  if (req.nextUrl.searchParams.get("scope") === "self") {
+    const self: ServiceResult = { service: thisService(), health: await checkStripeKeyHealth() }
+    return NextResponse.json(self, { status: 200 })
+  }
+
+  /*
+   * A heartbeat (sync_job_runs, job `cron-stripe-key-health`), probed by
+   * scripts/cron-freshness-check.mjs. This alert writes nothing else, so without it a check that
+   * had silently stopped firing would look exactly like a check that keeps finding nothing wrong
+   * — the same silence it exists to break. A key problem records `failed`, so the freshness
+   * monitor flags it too; a Stripe or network blip records `partial`, which it does not.
+   */
+  const { results, allOk, emailed } = await withSyncJobRun(
+    { jobName: "cron-stripe-key-health", trigger: "cron", provider: "stripe" },
+    runCheck,
+    (r) => ({
+      status: r.hasProblem ? "failed" : r.allOk ? "success" : "partial",
+      rowsRead: r.results.length,
+      ...(r.hasProblem ? { errors: problemLines(r.results) } : {}),
+      metadata: {
+        results: r.results.map((x) => ({ service: x.service, state: x.health.state, mode: x.health.mode })),
+        emailed: r.emailed?.ok ?? null,
+      },
+    }),
+  )
 
   return NextResponse.json(
     { ok: allOk, results, ...(emailed ? { emailed: emailed.ok, emailError: emailed.error ?? null } : {}) },

@@ -5,8 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * Exists because the live key expired and checkout was down for about a month with nothing saying so.
  */
 
-const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn() }))
+const { sendEmail, heartbeats } = vi.hoisted(() => ({
+  sendEmail: vi.fn(),
+  heartbeats: [] as Array<{ jobName: string; outcome: any }>,
+}))
 vi.mock('@/lib/resend-client', () => ({ sendNotificationEmail: sendEmail }))
+// The real wrapper writes sync_job_runs; here it runs the job and records what it would have written.
+vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
+  withSyncJobRun: async (ctx: { jobName: string }, fn: () => Promise<unknown>, extract?: (r: any) => unknown) => {
+    const result = await fn()
+    heartbeats.push({ jobName: ctx.jobName, outcome: extract ? extract(result) : {} })
+    return result
+  },
+}))
 
 import { checkStripeKeyHealth, stripeKeyMode } from '@/lib/billing/stripeKeyHealth'
 
@@ -98,6 +109,7 @@ describe('GET /api/cron/stripe-key-health', () => {
   beforeEach(() => {
     vi.resetModules()
     sendEmail.mockReset().mockResolvedValue({ ok: true })
+    heartbeats.length = 0
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
     process.env.CRON_SECRET = SECRET
@@ -172,6 +184,32 @@ describe('GET /api/cron/stripe-key-health', () => {
     expect(await res.json()).toMatchObject({ service: 'allfantasy-v2-worker', health: { state: 'problem' } })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('🛑 records a heartbeat for the freshness monitor: success / partial / failed', async () => {
+    webAnswers(OK)
+    await call(OK)
+    expect(heartbeats).toEqual([expect.objectContaining({ jobName: 'cron-stripe-key-health' })])
+    expect(heartbeats[0]!.outcome.status).toBe('success')
+
+    heartbeats.length = 0
+    fetchMock.mockRejectedValueOnce(new Error('timeout'))
+    await call({ state: 'inconclusive', mode: 'live', reason: 'Could not reach Stripe' })
+    expect(heartbeats[0]!.outcome.status).toBe('partial')
+
+    heartbeats.length = 0
+    webAnswers({ state: 'problem', mode: 'live', reason: 'The Stripe secret key has EXPIRED, so checkout is failing.' })
+    await call(OK)
+    expect(heartbeats[0]!.outcome).toMatchObject({
+      status: 'failed',
+      errors: ['allfantasy-v2-main: The Stripe secret key has EXPIRED, so checkout is failing.'],
+    })
+    expect(JSON.stringify(heartbeats)).not.toMatch(/sk_live|sk_test/)
+  })
+
+  it("?scope=self records no heartbeat — only the worker's scheduled run proves the job fires", async () => {
+    await call(OK, '?scope=self')
+    expect(heartbeats).toEqual([])
   })
 
   it('on the web service itself it does not call itself', async () => {
