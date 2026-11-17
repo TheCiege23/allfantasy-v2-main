@@ -86,6 +86,8 @@ const INITIAL: MusicSnapshot = {
 
 let snapshot: MusicSnapshot = INITIAL
 let screen: ScreenRect | null = null
+/** A page's own place for the player — today only the draft room's music row on a phone (2026-11-17). */
+let slot: ScreenRect | null = null
 let actions: MusicActions | null = null
 const listeners = new Set<() => void>()
 
@@ -108,6 +110,8 @@ export const musicBus = {
   getServerSnapshot: (): MusicSnapshot => INITIAL,
   getScreen: (): ScreenRect | null => screen,
   getServerScreen: (): ScreenRect | null => null,
+  getSlot: (): ScreenRect | null => slot,
+  getServerSlot: (): ScreenRect | null => null,
 
   /** Engine only. */
   publish(next: MusicSnapshot): void {
@@ -133,4 +137,29 @@ export const musicBus = {
     screen = next
     emit()
   },
+
+  /**
+   * A page's own place for the player, or null. The draft room's music row reports one on a phone so the player
+   * sits IN the row instead of floating over the board. The chat's Music tab still wins while it is showing.
+   */
+  setSlot(next: ScreenRect | null): void {
+    if (sameRect(slot, next)) return
+    slot = next
+    emit()
+  },
+}
+
+export type YouTubePlacement =
+  | { where: 'chat'; rect: ScreenRect }
+  | { where: 'slot'; rect: ScreenRect }
+  | { where: 'corner'; rect: null }
+
+/**
+ * Where the one YouTube player goes: the chat's Music tab when it is showing, else a page's slot, else the corner box.
+ * ⚠ A slot smaller than 200×200 is refused: YouTube's embed rules want a playing player visible at that size at least.
+ */
+export function placeYouTube(chatScreen: ScreenRect | null, pageSlot: ScreenRect | null): YouTubePlacement {
+  if (chatScreen) return { where: 'chat', rect: chatScreen }
+  if (pageSlot && pageSlot.width >= 200 && pageSlot.height >= 200) return { where: 'slot', rect: pageSlot }
+  return { where: 'corner', rect: null }
 }

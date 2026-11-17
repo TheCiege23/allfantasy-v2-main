@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ChevronDown, Lock, Music2 } from 'lucide-react'
 import { musicBus } from '@/components/app-music/musicBus'
 import { YOUTUBE_STATIONS } from '@/lib/draft-music/youtube'
@@ -19,7 +19,22 @@ import { draftPlaylistOffered, draftPlaylistPlayKey, type DraftPlaylist } from '
  *
  * 🛑 NOTHING PLAYS WITHOUT A TAP, and nothing is broadcast. See lib/draft-room/draftPlaylist.ts.
  * The player is the app-wide one (AppMusicDock, through musicBus), so music keeps playing after the room.
+ *
+ * ⚠ ON A PHONE THE PLAYER SITS IN THIS ROW (2026-11-17). Its corner box covered about three columns by three rows of
+ * the board. While YouTube plays, the row holds a 200×200 slot with the title and buttons beside it and reports the
+ * slot through musicBus.setSlot; the one iframe is laid over it (never moved into it — that would restart the song).
+ * 200×200 is YouTube's floor for a playing player, so the slot cannot be smaller. Wider screens keep the corner box.
  */
+
+/** Same breakpoint as af-app-music.css's phone rule. */
+const PHONE_QUERY = '(max-width: 720px)'
+
+function subscribePhone(onChange: () => void): () => void {
+  const mq = window.matchMedia(PHONE_QUERY)
+  mq.addEventListener('change', onChange)
+  return () => mq.removeEventListener('change', onChange)
+}
+const isPhone = () => window.matchMedia(PHONE_QUERY).matches
 
 type Info = { playlist: DraftPlaylist | null; isCommissioner: boolean; canSet: boolean; planRequired: boolean }
 
@@ -57,6 +72,29 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId:
   const playlist = info?.playlist && draftPlaylistOffered(draftStatus) ? info.playlist : null
   const playlistKey = playlist ? draftPlaylistPlayKey(playlist.stationId) : null
   const playing = snap.yt
+  const phone = useSyncExternalStore(subscribePhone, isPhone, () => false)
+  const inRow = Boolean(playing && phone && available)
+  const slotRef = useRef<HTMLDivElement | null>(null)
+
+  // Report where the slot is, every frame, as the chat's Music tab does: the room can still shift (the top bar wraps,
+  // "More" opens) without the slot resizing. Leaving the room or stopping hands the player back to the corner.
+  useEffect(() => {
+    if (!inRow) return
+    let raf = 0
+    const tick = () => {
+      const el = slotRef.current
+      if (el) {
+        const r = el.getBoundingClientRect()
+        musicBus.setSlot({ left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) })
+      }
+      raf = window.requestAnimationFrame(tick)
+    }
+    tick()
+    return () => {
+      window.cancelAnimationFrame(raf)
+      musicBus.setSlot(null)
+    }
+  }, [inRow])
 
   // The draft is over: the background playlist ends with it. Music a member chose themselves keeps going.
   useEffect(() => {
@@ -103,12 +141,53 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId:
         ? 'Picked by your commissioner. Only you hear it.'
         : 'Only you hear it.'
 
+  const stopButton = (
+    <button type="button" className={quiet} onClick={() => musicBus.actions()?.stop()} data-testid="draft-room-music-stop">
+      Stop
+    </button>
+  )
+  const moreButton = (
+    <button
+      type="button"
+      className={quiet}
+      aria-expanded={open}
+      aria-controls="draft-room-music-more"
+      onClick={() => {
+        setOpen((v) => !v)
+        setNote(null)
+      }}
+      data-testid="draft-room-music-more"
+    >
+      More
+      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+    </button>
+  )
+
   return (
     <section
       className="shrink-0 border-b border-white/10 bg-cyan-500/[0.05] px-3 py-1.5 text-white"
       aria-label="Draft room music"
       data-testid="draft-room-music"
     >
+      {inRow ? (
+        <div className="flex items-stretch gap-2" data-testid="draft-room-music-in-row">
+          {/* The player is laid over this box by AppMusicDock; the box itself is only its place. */}
+          <div ref={slotRef} className="h-[200px] w-[200px] shrink-0 rounded-[10px] bg-black" aria-hidden data-testid="draft-room-music-slot" />
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 py-0.5">
+            <div className="leading-tight">
+              <p className="flex items-center gap-1.5 text-xs font-semibold" data-testid="draft-room-music-title">
+                <Music2 className="h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
+                <span className="line-clamp-2">{title}</span>
+              </p>
+              <p className="mt-1 line-clamp-3 text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {stopButton}
+              {moreButton}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex items-center gap-2">
         <Music2 className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden />
         <div className="min-w-0 flex-1 leading-tight">
@@ -116,9 +195,7 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId:
           <p className="truncate text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
         </div>
         {playing ? (
-          <button type="button" className={quiet} onClick={() => musicBus.actions()?.stop()} data-testid="draft-room-music-stop">
-            Stop
-          </button>
+          stopButton
         ) : playlist ? (
           <button type="button" className={primary} disabled={!available} onClick={playPlaylist} data-testid="draft-room-music-play-playlist">
             Play
@@ -128,21 +205,9 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId:
             Play
           </button>
         )}
-        <button
-          type="button"
-          className={quiet}
-          aria-expanded={open}
-          aria-controls="draft-room-music-more"
-          onClick={() => {
-            setOpen((v) => !v)
-            setNote(null)
-          }}
-          data-testid="draft-room-music-more"
-        >
-          More
-          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
-        </button>
+        {moreButton}
       </div>
+      )}
 
       {open ? (
         <div id="draft-room-music-more" className="mt-1.5 flex flex-col gap-2 border-t border-white/10 pt-2 pb-1">

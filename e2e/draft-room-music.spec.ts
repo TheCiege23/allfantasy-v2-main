@@ -55,6 +55,41 @@ for (const viewport of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 
+  test(`${viewport.name}: the player never sits over the board`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await stubPlaylist(page, { playlist: null, isCommissioner: false, canSet: false, planRequired: false })
+    await page.goto('/e2e/draft-room-music')
+    const bar = page.getByTestId('draft-room-music')
+    await bar.getByTestId('draft-room-music-play-station').click()
+    const player = page.getByTestId('stand-in-player')
+    await expect(player).toBeVisible()
+
+    if (viewport.name === 'phone') {
+      // In the music row, laid exactly over its 200×200 slot, and above the board rather than on it.
+      await expect(player).toHaveAttribute('data-where', 'slot')
+      const slot = await bar.getByTestId('draft-room-music-slot').boundingBox()
+      const box = await player.boundingBox()
+      const board = await page.getByTestId('harness-board').boundingBox()
+      expect(slot && box && board).toBeTruthy()
+      expect(Math.abs(box!.x - slot!.x)).toBeLessThanOrEqual(1)
+      expect(Math.abs(box!.y - slot!.y)).toBeLessThanOrEqual(1)
+      expect(box!.width).toBeGreaterThanOrEqual(200)
+      expect(box!.height).toBeGreaterThanOrEqual(200)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(board!.y)
+      await expect(bar.getByTestId('draft-room-music-stop')).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    } else {
+      // Wide screens keep the corner box; the row stays one line.
+      await expect(player).toHaveAttribute('data-where', 'corner')
+      await expect(bar.getByTestId('draft-room-music-slot')).toHaveCount(0)
+    }
+    await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-player-placed.png`), fullPage: false })
+
+    await bar.getByTestId('draft-room-music-stop').click()
+    await expect(player).toHaveCount(0)
+    await expect(bar.getByTestId('draft-room-music-slot')).toHaveCount(0)
+  })
+
   test(`${viewport.name}: music a member chose keeps playing when the draft finishes`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await stubPlaylist(page, { playlist: null, isCommissioner: false, canSet: false, planRequired: false })
