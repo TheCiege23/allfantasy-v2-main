@@ -260,8 +260,3 @@ export function buildRecommendationPresentationSet(
 
 // ── Batch builder ─────────────────────────────────────────────────────────────
 
-export function buildRecommendationPresentations(
-  recs: Parameters<typeof buildRecommendationPresentation>[0][],
-): RecommendationPresentation[] {
-  return recs.map((r) => buildRecommendationPresentation(r))
-}

@@ -351,26 +351,6 @@ export function buildLeagueBadges(
 
 // ── Commissioner badge builder ────────────────────────────────────────────────
 
-export function buildCommissionerBadges(
-  leagueId: string,
-  input: {
-    workloadLevel: string
-    efficiencyPercentile?: number
-    completeness: number
-  },
-): Badge[] {
-  if (input.completeness < 20) return []
-  const badges: Badge[] = []
-
-  if (input.efficiencyPercentile !== undefined && input.efficiencyPercentile >= 90) {
-    badges.push(makeBadge(leagueId, 'elite_commissioner', [
-      `commissionerEfficiency.percentile=${input.efficiencyPercentile} ≥ 90 → elite_commissioner`,
-    ]))
-  }
-
-  return stableSort(badges)
-}
-
 // ── Platform badge builder ────────────────────────────────────────────────────
 
 export function buildPlatformBadges(

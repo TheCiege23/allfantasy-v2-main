@@ -26,7 +26,6 @@ import type {
   PerformanceEnrichedCanonicalWorld,
   PerformanceEnrichedRosterFacts,
 } from './performanceEnrichedWorld'
-import { resolvePerformanceEnrichedCanonicalWorld } from './performanceEnrichedWorld'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types
@@ -95,10 +94,6 @@ interface MatchupContextResult {
 
 export interface MatchupPort {
   loadMatchupFactRows(leagueId: string): Promise<RawMatchupFactRow[]>
-}
-
-interface MatchupEnrichedWorldDeps {
-  matchup?: MatchupPort
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -291,13 +286,3 @@ export function projectMatchupEnrichedWorld(
 // Resolver
 // ──────────────────────────────────────────────────────────────────────────
 
-export async function resolveMatchupEnrichedCanonicalWorld(
-  leagueId: string,
-  deps?: MatchupEnrichedWorldDeps,
-): Promise<MatchupEnrichedCanonicalWorld | null> {
-  const base = await resolvePerformanceEnrichedCanonicalWorld(leagueId).catch(() => null)
-  if (!base) return null
-
-  const contextResult = await resolveMatchupContext(leagueId, deps?.matchup)
-  return projectMatchupEnrichedWorld(base, contextResult, base.league.season)
-}

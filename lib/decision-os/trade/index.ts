@@ -18,7 +18,6 @@ export * from './rules'
 export * from './decision'
 export * from './parity'
 export * from './tradeCardAdapter'
-export * from './outcome'
 // Phase E.2 — the Canonical Trade Memo (rehosts the pure value engine onto CanonicalAsset inputs).
 export * from './canonicalMemo'
 export * from './canonicalEvaluator'
