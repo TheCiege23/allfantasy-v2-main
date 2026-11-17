@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { getNativeLeagueMock } from '@/lib/mock-draft/native-league'
+import { leagueMockRoomFacts } from '@/lib/mock-draft/leagueMockRoomFacts'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -275,7 +276,12 @@ export async function GET(req: NextRequest) {
 
   if (leagueId) {
     const native = await getNativeLeagueMock(leagueId, userId)
-    if (native) return NextResponse.json(native.body, { status: native.status })
+    if (native) {
+      // Room v2: the league's real type, rule note and slot salaries (lib/mock-draft/leagueMockRoomFacts).
+      const nativeLeague = (native.body as { league?: { leagueId: string | null; draftType: string; rounds: number; teamCount: number } }).league
+      if (native.status === 200 && nativeLeague) Object.assign(nativeLeague, await leagueMockRoomFacts(nativeLeague.leagueId, nativeLeague))
+      return NextResponse.json(native.body, { status: native.status })
+    }
   }
 
   const [league, sleeperLeague] = await Promise.all([
@@ -456,6 +462,9 @@ export async function GET(req: NextRequest) {
     15
 
   const draftType = normalizeDraftType(recordFromUnknown(leagueInfo.settings)?.type)
+  const teamCount = leagueInfo.total_rosters ?? league?.leagueSize ?? sleeperLeague?.totalTeams ?? orderedManagers.length
+  // Room v2: the league's real type, rule note and slot salaries (lib/mock-draft/leagueMockRoomFacts).
+  const roomFacts = await leagueMockRoomFacts(league?.id, { draftType, rounds, teamCount })
 
   return NextResponse.json({
     league: {
@@ -465,13 +474,14 @@ export async function GET(req: NextRequest) {
       sport: normalizedSport,
       scoring: scoringLabel,
       isDynasty: Boolean(league?.isDynasty ?? sleeperLeague?.isDynasty),
-      teamCount: leagueInfo.total_rosters ?? league?.leagueSize ?? sleeperLeague?.totalTeams ?? orderedManagers.length,
+      teamCount,
       rounds,
       draftType,
       superflex: inferSuperflex(league?.settings) || inferSuperflex(leagueInfo.settings),
       managers: orderedManagers,
       detectedUserSlot,
       hasExplicitDraftOrder: Boolean(draftOrder),
+      ...roomFacts,
     },
   })
 }
