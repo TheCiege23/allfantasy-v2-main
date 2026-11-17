@@ -141,10 +141,10 @@ describe("iOS app detection and path lists", () => {
   })
 
   it("matches purchase pages on a segment boundary", () => {
-    for (const p of ["/upgrade", "/upgrade/x", "/pricing", "/commissioner-upgrade", "/tokens", "/donate", "/donate/success", "/support", "/survivor/abc/exile/tokens"]) {
+    for (const p of ["/upgrade", "/upgrade/x", "/pricing", "/commissioner-upgrade", "/tokens", "/pro", "/all-access", "/donate", "/donate/success", "/support", "/survivor/abc/exile/tokens"]) {
       expect(isIosAppPurchasePage(p), p).toBe(true)
     }
-    for (const p of ["/core", "/contact", "/supporters", "/upgraded-feature", "/survivor/abc", IOS_APP_PLANS_PATH]) {
+    for (const p of ["/core", "/contact", "/supporters", "/upgraded-feature", "/profile", "/projections", "/pros", "/survivor/abc", IOS_APP_PLANS_PATH]) {
       expect(isIosAppPurchasePage(p), p).toBe(false)
     }
   })
@@ -211,14 +211,14 @@ describe("guideline 3.1.1 — an IAP build sells plans and tokens through Apple 
   })
 
   it("opens the plan and token pages to an IAP build", async () => {
-    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens"]) {
+    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens", "/pro", "/all-access"]) {
       const res = await middleware(request(p, { ua: IOS_IAP_UA }))
       expect(location(res)?.pathname ?? null, p).not.toBe(IOS_APP_PLANS_PATH)
     }
   })
 
   it("control: the same pages still redirect a 1.0 build with no StoreKit bridge", async () => {
-    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens"]) {
+    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens", "/pro", "/all-access"]) {
       const res = await middleware(request(p, { ua: IOS_UA }))
       expect(res.status, p).toBe(307)
       expect(location(res)?.pathname, p).toBe(IOS_APP_PLANS_PATH)

@@ -53,6 +53,9 @@ vi.mock('@/lib/legacy/requireLegacySleeperIdentity', () => ({
   requireLegacySleeperIdentity: async () => ({ ok: true, identity: { sleeperUsername: 'sam', actorId: 'u1', source: 'session' } }),
 }))
 
+// Two legacy routes check the request's Origin first (CSRF); that is not what these tests are about.
+vi.mock('@/lib/api-auth', async (orig) => ({ ...(await orig<typeof import('@/lib/api-auth')>()), validateRequestOrigin: () => true }))
+
 const post = (body: unknown) =>
   new Request('http://x/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) as never
 
@@ -82,6 +85,11 @@ const CASES: Array<{ name: string; path: string; featureId: string; body: unknow
   { name: 'AF Legacy team direction', path: '@/server/api-route-modules/legacy/rankings/analyze/route', featureId: 'legacy_rankings_analysis', body: { sleeper_username: 'sam', league_id: 'L1' } },
   { name: 'AF Legacy market board', path: '@/server/api-route-modules/legacy/social-pulse/route', featureId: 'legacy_social_pulse', body: { sport: 'NFL', format: 'redraft', players: ['A'] } },
   { name: 'AF Legacy manager comparison', path: '@/server/api-route-modules/legacy/compare/route', featureId: 'legacy_manager_compare', body: { username_a: 'sam', username_b: 'kim' } },
+  // Owner's decision 2026-11-17: the four AF Legacy AI tools that ran free.
+  { name: 'AF Legacy trade ideas', path: '@/server/api-route-modules/legacy/trade-ideas/route', featureId: 'legacy_trade_proposals', body: { leagueId: 'L1', username: 'sam' } },
+  { name: 'AF Legacy goal proposals', path: '@/server/api-route-modules/legacy/trade/goal-proposals/route', featureId: 'legacy_trade_proposals', body: { leagueId: 'L1', username: 'sam', goal: 'rebuild' } },
+  { name: 'AF Legacy Trade Hub report', path: '@/server/api-route-modules/legacy/trade/analyze/route', featureId: 'legacy_trade_hub', body: { sport: 'NFL', format: 'dynasty', sleeper_username_a: 'sam', sleeper_username_b: 'kim', assetsA: [{ type: 'player', player: { id: 'p1', name: 'Player One' } }], assetsB: [{ type: 'player', player: { id: 'p2', name: 'Player Two' } }] } },
+  { name: 'AF Legacy AI career report', path: '@/server/api-route-modules/legacy/ai/run/route', featureId: 'legacy_ai_report', body: { sleeper_username: 'sam' } },
 ]
 
 describe('each paid route refuses a caller without the plan, before anything is spent', () => {
@@ -120,7 +128,7 @@ describe('the keys name the plans the owner chose', () => {
     for (const k of ['ai_waivers', 'pro_draft_ai', 'player_ai_recommendations', 'legacy_trade_finder'] as const) {
       expect([k, getRequiredPlanForFeature(k)]).toEqual([k, 'pro'])
     }
-    for (const k of ['legacy_trade_proposals', 'legacy_waiver_analysis', 'legacy_rankings_analysis', 'legacy_social_pulse', 'legacy_manager_compare'] as const) {
+    for (const k of ['legacy_trade_proposals', 'legacy_waiver_analysis', 'legacy_rankings_analysis', 'legacy_social_pulse', 'legacy_manager_compare', 'legacy_trade_hub', 'legacy_ai_report'] as const) {
       expect([k, getRequiredPlanForFeature(k)]).toEqual([k, 'war_room'])
     }
   })

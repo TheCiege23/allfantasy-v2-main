@@ -25,13 +25,25 @@ const json = (body: unknown, status = 200) =>
  * viewer's rows on the right), a POST appends to it so the real composer can be exercised, and
  * anything else gets an empty 200. Installed once, before the first render's effects run.
  */
-function installFixtureNetwork(sport: string) {
+function installFixtureNetwork(sport: string, withChimmyShare = false) {
   const w = window as unknown as { __rdChatFixture?: string; __rdRealFetch?: typeof fetch }
-  if (w.__rdChatFixture === sport) return
-  w.__rdChatFixture = sport
+  const fixtureKey = `${sport}:${withChimmyShare ? 'share' : ''}`
+  if (w.__rdChatFixture === fixtureKey) return
+  w.__rdChatFixture = fixtureKey
   const real = w.__rdRealFetch ?? window.fetch.bind(window)
   w.__rdRealFetch = real
   const messages = fixtureMessages(sport)
+  /*
+   * ?share=1 — a private @chimmy question and answer (only the viewer sees them), marked shareable as the
+   * chat route marks a general answer, and a fixture for the "Share with league" POST (2026-11-16).
+   */
+  if (withChimmyShare) {
+    const at = new Date(Date.now() - 60_000).toISOString()
+    messages.push(
+      { id: 'fx-chimmy-q', authorId: FIXTURE_VIEWER_ID, authorName: 'Fourth & Long', authorAvatarUrl: null, createdAt: at, messageType: 'text', source: null, parentMessageId: null, text: '@chimmy who should I start at flex, Puka Nacua or Drake London?', metadata: null },
+      { id: 'fx-chimmy-a', authorId: '', authorName: 'Chimmy', authorAvatarUrl: null, createdAt: at, messageType: 'system', source: null, parentMessageId: null, text: 'Start Puka Nacua. He has seen 9+ targets in four straight weeks; London faces a top-three pass defense.', metadata: { isSystem: true, chimmyPrivateReply: true, chimmyShareable: true, questionMessageId: 'fx-chimmy-q' } },
+    )
+  }
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, window.location.origin)
     if (url.origin !== window.location.origin || !url.pathname.startsWith('/api/')) return real(input, init)
@@ -53,6 +65,13 @@ function installFixtureNetwork(sport: string) {
         : messages
       return json({ viewerUserId: FIXTURE_VIEWER_ID, presence: [], includeDraft: false, draft: null, messages: rows })
     }
+    if (url.pathname === '/api/league/chat/chimmy-share' && method === 'POST') {
+      const reply = messages.find((m) => m.id === 'fx-chimmy-a')
+      if (!reply) return json({ error: 'That answer could not be found.' }, 404)
+      reply.metadata = { ...(reply.metadata ?? {}), sharedMessageId: 'fx-chimmy-shared' }
+      messages.push({ id: 'fx-chimmy-shared', authorId: '', authorName: 'Chimmy', authorAvatarUrl: null, createdAt: new Date().toISOString(), messageType: 'system', source: null, parentMessageId: null, text: `Fourth & Long asked Chimmy: "who should I start at flex, Puka Nacua or Drake London?"\n\n${reply.text}`, metadata: { isSystem: true, chimmy: true, sharedChimmyAnswer: { askedByUserId: FIXTURE_VIEWER_ID, askedByName: 'Fourth & Long', sourceMessageId: 'fx-chimmy-a' } } })
+      return json({ ok: true, alreadyShared: false, sharedMessageId: 'fx-chimmy-shared', message: null })
+    }
     if (url.pathname.endsWith('/typing')) return json({ typing: [] })
     if (url.pathname.endsWith('/pinned')) return json({ pinned: [] })
     if (url.pathname === '/api/auth/session') return json({ user: { id: FIXTURE_VIEWER_ID, name: 'Fourth & Long' }, expires: '2099-01-01T00:00:00.000Z' })
@@ -60,10 +79,10 @@ function installFixtureNetwork(sport: string) {
   }
 }
 
-type Props = { sport: string; withScore: boolean }
+type Props = { sport: string; withScore: boolean; withChimmyShare?: boolean }
 
-export default function RedraftChatHarnessClient({ sport, withScore }: Props) {
-  if (typeof window !== 'undefined') installFixtureNetwork(sport.toUpperCase())
+export default function RedraftChatHarnessClient({ sport, withScore, withChimmyShare = false }: Props) {
+  if (typeof window !== 'undefined') installFixtureNetwork(sport.toUpperCase(), withChimmyShare)
   const [activeTab, setActiveTab] = useState('league_chat')
   const league: UserLeague = {
     id: FIXTURE_LEAGUE_ID,

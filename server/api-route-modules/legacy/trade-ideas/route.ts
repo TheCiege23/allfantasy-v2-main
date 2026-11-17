@@ -7,6 +7,7 @@ import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/sleeper-client'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 function formatPlayerValues(values: Record<string, any>): string {
   const lines: string[] = []
@@ -203,6 +204,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-ideas", tool: "L
       rateLimit: { action: 'trade_ideas', maxRequests: 6, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_trade_proposals`, owner's decision 2026-11-17: lock all four free AF Legacy AI tools). Trade Ideas ran its
+     * model for anyone before; the /af-legacy screen now locks it too. A guest actor holds no plan.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_trade_proposals' })
+    if (!plan.ok) return plan.response
     const username = gate.identity.sleeperUsername
     const normalizedLeagueId = String(leagueId || '').trim()
     

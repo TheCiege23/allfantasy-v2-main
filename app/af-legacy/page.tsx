@@ -87,6 +87,7 @@ import type { TrustData } from "@/lib/analytics/confidence-types"
 import { MessageSquareText, HelpCircle, BarChart3, ArrowLeftRight, Target, Search, TrendingUp, Trophy, Radio, Swords, MessageCircle, Share2, PackageOpen, ShoppingBag, Sparkles, Shield, CheckCircle2, Info, ChevronRight, X, LayoutGrid, Lightbulb } from "lucide-react"
 import { useAnalytics } from "@/app/hooks/useAnalytics"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ')
@@ -1578,7 +1579,7 @@ function AFLegacyContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setTradeIdeasError(data.error || 'Failed to generate trade ideas')
+        setTradeIdeasError(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Failed to generate trade ideas'))
         return
       }
       setTradeIdeasResults(data.ideas || [])
@@ -1685,7 +1686,7 @@ function AFLegacyContent() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to generate proposals')
+      if (!res.ok) throw new Error(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Failed to generate proposals'))
       setGoalProposalResult(data)
       if (data.partners?.length > 0) setGoalProposalExpandedPartner(0)
     } catch (err: any) {
@@ -2023,7 +2024,7 @@ function AFLegacyContent() {
       
       const rawResponse = await res.json()
       if (!res.ok) {
-        setInlineTradeError(rawResponse.error || 'Failed to analyze trade')
+        setInlineTradeError(readPlanRefusal(res.status, rawResponse)?.message ?? (rawResponse.error || 'Failed to analyze trade'))
         return
       }
       
@@ -6932,6 +6933,14 @@ function AFLegacyContent() {
                       )
                     })()}
 
+                    {/* AF Legacy (`legacy_ai_report`, 2026-11-17): without a report there is nothing to show but the
+                        lock — /api/legacy/ai/run refuses a caller without the plan. A plan holder sees nothing here
+                        while the report loads (the gate renders its empty children). */}
+                    {!aiReport && (
+                      <FeatureGate featureId="legacy_ai_report" featureNameOverride="Chimmy Analysis">
+                        {null}
+                      </FeatureGate>
+                    )}
                     {aiReport && (
                       <div className="relative rounded-3xl bg-gradient-to-br from-slate-900/80 to-slate-950/80 border border-purple-500/20 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden">
                         <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-purple-500 to-cyan-400" />
@@ -10227,6 +10236,7 @@ function AFLegacyContent() {
                         {/* Generate Trade Button */}
                         {tradeHubManagers.length > 0 && !tradeHubLoading && (
                           <div className="mt-6 space-y-3">
+                            <FeatureGate featureId="legacy_trade_hub" featureNameOverride="Trade Hub report">
                             <button
                               onClick={generateTradeHubReport}
                               disabled={inlineTradeLoading || !tradeHubTeamB || (tradeHubPlayersA.length === 0 && tradeHubPicksA.length === 0 && tradeHubFaabA === 0 && tradeHubPlayersB.length === 0 && tradeHubPicksB.length === 0 && tradeHubFaabB === 0)}
@@ -10244,6 +10254,7 @@ function AFLegacyContent() {
                                 </>
                               )}
                             </button>
+                            </FeatureGate>
 
                             {/* Trade Ideas Link - Lights up when available */}
                             {showTradeHubIdeas && (
@@ -10510,6 +10521,7 @@ function AFLegacyContent() {
                         />
 
                         {/* Generate Button */}
+                        <FeatureGate featureId="legacy_trade_proposals" featureNameOverride="Trade Ideas">
                         <button
                           onClick={generateTradeIdeas}
                           disabled={tradeIdeasLoading || !tradeSelectedLeague}
@@ -10527,6 +10539,7 @@ function AFLegacyContent() {
                             </>
                           )}
                         </button>
+                        </FeatureGate>
 
                         {tradeIdeasError && (
                           <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-400 text-center">
@@ -10806,6 +10819,7 @@ function AFLegacyContent() {
                           </div>
                         </div>
 
+                        <FeatureGate featureId="legacy_trade_proposals" featureNameOverride="Goal Proposals">
                         <button
                           onClick={generateGoalProposals}
                           disabled={goalProposalLoading || !goalProposalGoal}
@@ -10819,6 +10833,7 @@ function AFLegacyContent() {
                             <><span>🧠</span> Find Trade Partners</>
                           )}
                         </button>
+                        </FeatureGate>
 
                         {goalProposalError && (
                           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-400 text-center">

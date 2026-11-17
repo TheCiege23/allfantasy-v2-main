@@ -63,6 +63,7 @@ import { evaluateCommissionerAlert } from '@/lib/legacy-tool/fairness'
 import { normalizeGrokSignalsToDeltaEvents, persistGrokDeltaEvents } from '@/lib/legacy-tool/grok-delta'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 import { loadTradeAnalyzerPlayerContext, type TradeContextResult } from '@/lib/legacy/tradeAnalyzerPlayerContext'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   buildPrivateTradeCoachingNotification,
   buildLeagueTradeProcessedNotification,
@@ -1391,6 +1392,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       rateLimit: { action: 'trade_analyze', maxRequests: 20, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_trade_hub`, owner's decision 2026-11-17: lock all four free AF Legacy AI tools). The Trade Hub report (and /af-legacy/trade-analyzer, which calls this route) ran its
+     * model for anyone before; the /af-legacy screen now locks it too. A guest actor holds no plan.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_trade_hub' })
+    if (!plan.ok) return plan.response
     const viewerSleeperUsername = gate.identity.sleeperUsername
 
     // Client-provided rosters (already prepared by frontend)
