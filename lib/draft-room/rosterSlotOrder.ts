@@ -39,7 +39,8 @@ interface RosterSlotOrderInput {
   idpEnabled?: boolean
 }
 
-function normalizeSlotKey(key: string): string {
+/** Short roster-slot code: FLEX -> FLX, SUPERFLEX -> SF, DST -> DEF, IDP_FLEX -> IDP. */
+export function normalizeSlotKey(key: string): string {
   const value = String(key ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
   if (value === 'FLEX') return 'FLX'
   if (value === 'SUPERFLEX' || value === 'SUPER FLEX' || value === 'SUPER_FLEX') return 'SF'

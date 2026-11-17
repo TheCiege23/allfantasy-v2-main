@@ -226,7 +226,7 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
   /* 3 is Sleeper's third-round reversal. Absent/0 means a plain snake. */
   const thirdRoundReversal = settings.reversal_round === 3
 
-  await prisma.$transaction(async (tx) => {
+  const synced = await prisma.$transaction(async (tx) => {
     /*
      * 🛑 THE MIRROR SEEDS THE ORDER. IT NEVER FIGHTS A HUMAN FOR IT.
      *
@@ -301,6 +301,9 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
       },
     })
 
+    // Read what was on the board BEFORE the rewrite, so the picks that are new this sync can be announced.
+    const before = await tx.draftPick.findMany({ where: { sessionId: session.id }, select: { overall: true, playerId: true } })
+
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })
 
     const rows = picks
@@ -351,5 +354,86 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
     if (rows.length > 0) {
       await tx.draftPick.createMany({ data: rows, skipDuplicates: true })
     }
+    return { leagueId: session.leagueId, sessionId: session.id, status: session.status, teams, before, rows }
   })
+
+  await announceNewMirroredPicks(synced).catch((err) => {
+    console.warn('[sleeperSync] pick chat announce failed (non-fatal)', err instanceof Error ? err.message : String(err))
+  })
+}
+
+type MirroredPickRow = {
+  overall: number
+  round: number
+  slot: number
+  rosterId: string
+  displayName: string | null
+  playerName: string
+  position: string
+  team: string | null
+  playerId: string | null
+}
+
+/**
+ * Which mirrored picks get a chat card this sync: the ones whose seat was empty (or held a different
+ * player) before the rewrite. Returns [] when the gap is bigger than one round — that is a first mirror
+ * of a draft already under way, or a long outage catching up, and a wall of 100 cards helps nobody.
+ */
+export function selectNewMirroredPicks<R extends { overall: number; playerId: string | null }>(input: {
+  status: string
+  teams: number
+  before: Array<{ overall: number; playerId: string | null }>
+  rows: R[]
+}): R[] {
+  if (input.status !== 'in_progress') return []
+  const prior = new Map(input.before.map((p) => [p.overall, p.playerId ?? null]))
+  const fresh = input.rows.filter((r) => !prior.has(r.overall) || prior.get(r.overall) !== (r.playerId ?? null))
+  if (fresh.length > Math.max(1, input.teams)) return []
+  return fresh.sort((a, b) => a.overall - b.overall)
+}
+
+/**
+ * Picks made on Sleeper never pass through `submitPick`, so they never posted the draft-chat pick card
+ * every other pick gets. Post it here for the picks that are new this sync. The card is keyed on the
+ * session + seat + player, so a re-sync — this runs every minute and rewrites every row — cannot post
+ * the same pick twice.
+ */
+async function announceNewMirroredPicks(synced: {
+  leagueId: string
+  sessionId: string
+  status: string
+  teams: number
+  before: Array<{ overall: number; playerId: string | null }>
+  rows: MirroredPickRow[]
+}): Promise<void> {
+  const fresh = selectNewMirroredPicks(synced)
+  if (fresh.length === 0) return
+  const [{ postDraftPickChatEvent }, { buildSleeperUserToRosterIdMap }, league, rosters] = await Promise.all([
+    import('@/lib/draft-room/postDraftPickChatEvent'),
+    import('@/lib/draft/sleeperMirrorRosterIds'),
+    prisma.league.findUnique({ where: { id: synced.leagueId }, select: { sport: true } }),
+    prisma.roster.findMany({ where: { leagueId: synced.leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
+  ])
+  const toRosterId = buildSleeperUserToRosterIdMap(rosters)
+  const nfl = String(league?.sport ?? '').toUpperCase() === 'NFL'
+  for (const p of fresh) {
+    const rosterId = toRosterId.get(p.rosterId) ?? p.rosterId
+    const roundSlot = ((p.overall - 1) % Math.max(1, synced.teams)) + 1
+    await postDraftPickChatEvent({
+      leagueId: synced.leagueId,
+      rosterId,
+      madeByUserId: null,
+      playerName: p.playerName,
+      position: p.position,
+      rosterDisplayName: p.displayName?.trim() || 'Team',
+      overall: p.overall,
+      pickLabel: `${p.round}.${String(roundSlot).padStart(2, '0')}`,
+      round: p.round,
+      roundSlot,
+      playerId: p.playerId,
+      nflTeam: p.team,
+      headshotUrl: nfl && p.playerId ? `https://sleepercdn.com/content/nfl/players/thumb/${encodeURIComponent(p.playerId)}.jpg` : null,
+      idempotencyKey: `draft-pick-mirror:${synced.sessionId}:${p.overall}:${p.playerId ?? p.playerName}`,
+    }).catch(() => {})
+  }
 }

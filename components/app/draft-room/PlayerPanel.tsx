@@ -46,7 +46,7 @@ import { getDraftRoomDisplayHeadshot, getDraftRoomDisplayInjury } from '@/lib/pl
 import { NflRedraftPremiumPlayerCardShells } from '@/components/redraft-premium'
 
 const DRAFT_WATCHLIST_STORAGE_KEY = 'af:draft-room-watchlist-v1'
-const AI_ADP_NOT_READY_COPY = 'AI ADP data not ready'
+const AI_ADP_NOT_READY_COPY = 'Chimmy ADP data not ready'
 
 /** Align with draft room session: drafted name set is normalized lowercase. */
 function isPlayerNameDrafted(name: string, draftedNames: Set<string>): boolean {
@@ -147,11 +147,11 @@ export type PlayerPanelProps = {
   useAiAdp?: boolean
   onUseAiAdpChange?: (value: boolean) => void
   loading?: boolean
-  /** When true, AI ADP is enabled but no data (show message, keep sort controls working) */
+  /** When true, Chimmy ADP is enabled but no data (show message, keep sort controls working) */
   aiAdpUnavailable?: boolean
-  /** Optional message when AI ADP is enabled but unavailable */
+  /** Optional message when Chimmy ADP is enabled but unavailable */
   aiAdpUnavailableMessage?: string | null
-  /** When true, AI ADP snapshot is older than freshness window */
+  /** When true, Chimmy ADP snapshot is older than freshness window */
   aiAdpStaleWarning?: boolean
   /** When true, segment or entries have low sample size (show warning) */
   aiAdpLowSampleWarning?: boolean
@@ -171,17 +171,17 @@ export type PlayerPanelProps = {
   selectedPlayerTarget?: { name: string; position: string; team?: string | null } | null
   /** League context for premium comparison (coach lens when API supports it). */
   leagueId?: string
-  /** War Room AI row hints keyed by `name|position` (lowercase). */
+  /** War Room Chimmy row hints keyed by `name|position` (lowercase). */
   aiRowBadges?: Record<string, 'ai_pick' | 'value' | 'risky'>
-  /** Rich inline AI overlays keyed by `name|position` (lowercase). */
+  /** Rich inline Chimmy overlays keyed by `name|position` (lowercase). */
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
   /** Viewer's next pick — the pool table adds a LEFT @ survival column when set. */
   leftAtPick?: { overall: number; label: string } | null
   /** Player card "draft outlook" for the selected player; null when the draft is not running. */
   getDraftOutlook?: (player: PlayerEntry) => PlayerDraftOutlook | null
-  /** Shared AI overlay visibility state from parent surfaces (queue/helper/top bar). */
+  /** Shared Chimmy overlay visibility state from parent surfaces (queue/helper/top bar). */
   showAiOverlays?: boolean
-  /** Called when user toggles AI overlays from the pool toolbar. */
+  /** Called when user toggles Chimmy overlays from the pool toolbar. */
   onShowAiOverlaysChange?: (value: boolean) => void
   presentationVariant?: 'default' | 'redraft_snake'
   /** D.2 — explicit pool layout opt-out. Defaults to 'auto' which picks
@@ -278,7 +278,7 @@ function PlayerListCards({
               position={p.position}
               team={p.team}
               adp={useAiAdp ? p.aiAdp : p.adp}
-              adpMetricLabel={useAiAdp ? 'AI ADP' : 'ADP'}
+              adpMetricLabel={useAiAdp ? 'Chimmy ADP' : 'ADP'}
               byeWeek={p.byeWeek}
               draftSport={draftSport}
               presentationVariant={presentationVariant}
@@ -1084,7 +1084,7 @@ function PlayerPanelInner({
               don't belong on the table header. */}
           {effectiveUseAiAdp && (
             <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="AllFantasy ADP enabled">
-              AI ADP
+              Chimmy ADP
             </span>
           )}
           {onUseAiAdpChange && (
@@ -1099,9 +1099,9 @@ function PlayerPanelInner({
                   onUseAiAdpChange(e.target.checked)
                 }}
                 className="rounded border-white/20 w-4 h-4 shrink-0"
-                aria-label="Use AI ADP for sort order"
+                aria-label="Use Chimmy ADP for sort order"
               />
-              Use AI ADP
+              Use Chimmy ADP
             </label>
           )}
           {marketAdpUnavailable && (
@@ -1119,7 +1119,7 @@ function PlayerPanelInner({
             </span>
           )}
           {useAiAdp && aiAdpStaleWarning && !aiAdpUnavailable && (
-            <span className="text-[11px] text-amber-300/90" title="AI ADP is stale and will refresh after the daily job">
+            <span className="text-[11px] text-amber-300/90" title="Chimmy ADP is stale and will refresh after the daily job">
               Stale snapshot
             </span>
           )}
@@ -1140,9 +1140,9 @@ function PlayerPanelInner({
               className={`min-h-[30px] rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${SKIN_FOCUS} ${
                 aiOverlaysEnabled ? SKIN_PILL_ACTIVE : SKIN_PILL_IDLE
               }`}
-              title="Toggle inline AI recommendation overlays"
+              title="Toggle inline Chimmy recommendation overlays"
             >
-              AI overlays
+              Chimmy overlays
             </button>
           ) : null}
           <button
@@ -1302,7 +1302,7 @@ function PlayerPanelInner({
             rs && getAssistantRoomContext ? getAssistantRoomContext(selectedPlayer) : null
           }
           presentationVariant={rs ? 'redraft_snake' : 'default'}
-          adpDisplayLabel={effectiveUseAiAdp ? 'AI ADP' : 'ADP'}
+          adpDisplayLabel={effectiveUseAiAdp ? 'Chimmy ADP' : 'ADP'}
           draftUnavailableReason={
             selectedPlayer && isPlayerDraftedEntry(selectedPlayer, draftedNames, draftedIdsForRows)
               ? 'already_drafted'

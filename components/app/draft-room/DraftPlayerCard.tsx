@@ -60,14 +60,14 @@ type DraftPlayerCardProps = {
   onSelect?: () => void
   /** Optional explicit test id */
   testId?: string
-  /** War Room / AI helper badge on list rows */
+  /** War Room / Chimmy helper badge on list rows */
   aiWarRoomBadge?: 'ai_pick' | 'value' | 'risky' | null
   presentationVariant?: 'default' | 'redraft_snake'
   /** List row keyboard/click selection highlight */
   isSelected?: boolean
   /** Matches a player on the user&apos;s draft queue */
   isQueued?: boolean
-  /** Label for the ADP column (e.g. AI ADP when sorting by AI ADP). */
+  /** Label for the ADP column (e.g. Chimmy ADP when sorting by Chimmy ADP). */
   adpMetricLabel?: string
   /** NFL redraft pool: projection + split stats (from `/draft/pool`). */
   compactStats?: string | null
@@ -289,7 +289,7 @@ function DraftPlayerCardInner({
         .join(' · ')
     : ''
   const storedSummary = normalized.stats?.summary
-  const meaningfulSummary = storedSummary && !/^(No stats available$|(?:AI )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
+  const meaningfulSummary = storedSummary && !/^(No stats available$|(?:AI |Chimmy )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
   const statLine = meaningfulSummary ?? (projectedPoints != null ? `Proj ${projectedPoints.toFixed(1)} pts` : '')
   const boxScoreLine = compactStats || nbaRates
   const displayStatLine = boxScoreLine ? [display?.stats?.seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine
@@ -489,8 +489,8 @@ function DraftPlayerCardInner({
             </span>
           )}
           {aiWarRoomBadge === 'ai_pick' && (
-            <span className="rounded bg-emerald-500/30 px-1 py-0.5 text-[11px] font-semibold text-emerald-100 shrink-0" title="AI recommendation">
-              AI Pick
+            <span className="rounded bg-emerald-500/30 px-1 py-0.5 text-[11px] font-semibold text-emerald-100 shrink-0" title="Chimmy recommendation">
+              Chimmy pick
             </span>
           )}
           {aiWarRoomBadge === 'value' && (

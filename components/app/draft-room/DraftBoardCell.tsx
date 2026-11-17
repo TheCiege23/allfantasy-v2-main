@@ -123,6 +123,8 @@ type DraftBoardCellProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   /** Commissioner-only: opens the Pick Editor panel prefilled with this overall. Caller gates by viewer + draft state. */
   onCommissionerEditPick?: () => void
+  /** Filled cells: tap the tile to open the player card. The corner buttons stop propagation. */
+  onOpenPlayer?: () => void
   /**
    * Survivor signature: the column's tribe colour, drawn as a thin edge along the tile's top. The
    * column header names the tribe, so the colour is never the only cue.
@@ -183,9 +185,11 @@ function DraftBoardCellInner({
   onTradeFromCell,
   onViewTradeHistory,
   onCommissionerEditPick,
+  onOpenPlayer,
   tribeColor,
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
+  const openPlayer = !isEmpty && pick.playerName?.trim() && onOpenPlayer ? onOpenPlayer : undefined
   const { tInterpolate, t } = useOptionalLanguage()
   const headerCopy = useMessages(draftRoomHeaderMessages)
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
@@ -300,7 +304,7 @@ function DraftBoardCellInner({
             ? 'bg-[#2a2f45]'
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300' : ''} ${highlightClass(pickHighlight)}`
       }`}
-      style={tileStyle}
+      style={openPlayer ? { ...tileStyle, cursor: 'pointer' } : tileStyle}
       data-overall={pick.overall}
       data-round={pick.round}
       data-slot={pick.slot}
@@ -311,6 +315,19 @@ function DraftBoardCellInner({
       role="group"
       aria-label={ariaLabel}
       data-tribe-color={tribeColor ?? undefined}
+      {...(openPlayer
+        ? {
+            onClick: openPlayer,
+            onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+              if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault()
+                openPlayer()
+              }
+            },
+            tabIndex: 0,
+            title: `View ${pick.playerName} player card`,
+          }
+        : {})}
     >
       {tribeColor ? (
         <span
@@ -546,9 +563,15 @@ function DraftBoardCellInner({
                     ? `Taken ${pick.adpDelta} picks after ADP`
                     : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
                 }
+                aria-label={
+                  pick.adpDelta > 0
+                    ? `Taken ${pick.adpDelta} picks after ADP`
+                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
+                }
                 data-testid="draft-board-cell-adp-delta"
               >
-                {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `−${Math.abs(pick.adpDelta)}`}
+                {/* Words, not a bare "−5": nobody could tell what an unlabelled minus number meant. */}
+                {pick.adpDelta > 0 ? `${pick.adpDelta} late` : `${Math.abs(pick.adpDelta)} early`}
               </span>
             ) : null}
           </span>

@@ -3,7 +3,7 @@
  */
 
 const ADP_LABEL_SYSTEM = 'ADP'
-const ADP_LABEL_AI = 'AI ADP'
+const ADP_LABEL_AI = 'Chimmy ADP'
 export const ADP_LABEL_AF = 'AF ADP'
 
 /**
@@ -22,7 +22,7 @@ const TOOLTIP_SYSTEM_ADP =
 const TOOLTIP_AI_ADP =
   'AllFantasy ADP — aggregated from real completed drafts in this app that match this sport and league context. Separate from imported ADP.'
 
-/** When the AI ADP segment has no snapshot rows yet */
+/** When the Chimmy ADP segment has no snapshot rows yet */
 export const AI_ADP_NOT_ENOUGH_DATA = 'Not enough AllFantasy draft data yet'
 
 export function formatAiAdpUnavailableBanner(serverMessage: string | null | undefined): string {

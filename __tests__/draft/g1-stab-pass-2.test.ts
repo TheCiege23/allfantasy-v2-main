@@ -91,8 +91,8 @@ describe('G.1 #1 — duplicate Sort row removed from PlayerPanel', () => {
     expect(src).toMatch(/showRosterView \? 'Pool' : 'My roster'/)
   })
 
-  it('keeps "AI ADP data not ready" warning', () => {
-    expect(src).toMatch(/AI ADP data not ready/)
+  it('keeps "Chimmy ADP data not ready" warning', () => {
+    expect(src).toMatch(/Chimmy ADP data not ready/)
   })
 
   it('the SleeperPoolTable column-header sort is now the canonical sort UI', () => {

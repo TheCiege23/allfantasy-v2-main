@@ -27,7 +27,7 @@ export interface DraftTeamStripTeamMeta {
   isOrphan?: boolean
   /** Highlights the cell border when this slot is on the clock. */
   isOnClock?: boolean
-  /** AI opponent archetype label from `/api/league/ai-opponents/summary`. */
+  /** Chimmy opponent archetype label from `/api/league/ai-opponents/summary`. */
   aiArchetypeLabel?: string | null
 }
 

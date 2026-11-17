@@ -399,7 +399,7 @@ describe('Commit L / M / N / O / P / Q / R / S / T / U locks all still hold afte
 
   it('Commit S — DraftTeamPanel still computes teamNeeds + byeClusters', () => {
     const dtp = read('components/app/draft-room/DraftTeamPanel.tsx')
-    expect(dtp).toMatch(/computeTeamNeeds\(\{ picks: myPicks, starterSlots \}\)/)
+    expect(dtp).toMatch(/computeStarterNeedsForDisplay\(\{ picks: myPicks, starterSlots \}\)/)
     expect(dtp).toMatch(/detectByeWeekClusters\(myPicks\)/)
   })
 

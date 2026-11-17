@@ -825,7 +825,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
       },
     })
 
-    return { ok: true as const, shouldResetTimer: shouldResetTimerAfterTx }
+    return { ok: true as const, shouldResetTimer: shouldResetTimerAfterTx, auditRow }
   }, { timeout: 30_000, maxWait: 10_000 }).catch((e: unknown) => e)
 
   if (!audit || typeof audit !== 'object' || !('ok' in audit) || (audit as { ok?: unknown }).ok !== true) {
@@ -883,6 +883,42 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
   const snapshot = await buildSessionSnapshot(params.leagueId)
   if (!snapshot) {
     return { ok: false, status: 500, error: 'Failed to build session snapshot' }
+  }
+
+  // Tell the room in its chat. Posted after the commit, fire-and-forget: chat never fails the edit.
+  const committed = (audit as { auditRow?: { overallPickNumber: number; oldRosterId: string | null; newRosterId: string | null; oldPlayerName: string | null; newPlayerName: string | null } }).auditRow
+  if (committed && params.actorUserId) {
+    const nameOf = (rosterId: string | null) =>
+      rosterId ? snapshot.slotOrder?.find((s) => s.rosterId === rosterId)?.displayName?.trim() || null : null
+    const pickNow = snapshot.picks?.find((p) => p.overall === committed.overallPickNumber) ?? null
+    const tc = Math.max(1, snapshot.teamCount)
+    const pickLabel =
+      pickNow?.pickLabel ??
+      `${Math.ceil(committed.overallPickNumber / tc)}.${String(((committed.overallPickNumber - 1) % tc) + 1).padStart(2, '0')}`
+    void import('@/lib/draft-room/postDraftRoomEventChat')
+      .then(({ postDraftRoomEventChat, describeCommissionerPickEdit }) => {
+        const event = describeCommissionerPickEdit({
+          action: params.action as CommissionerPickEditAction,
+          pickLabel,
+          oldPlayerName: committed.oldPlayerName,
+          newPlayerName: committed.newPlayerName,
+          oldOwnerName: nameOf(committed.oldRosterId),
+          newOwnerName: nameOf(committed.newRosterId),
+        })
+        const showsNewPlayer = params.action !== 'REMOVE_PLAYER_FROM_PICK' && pickNow?.playerName?.trim()
+        return postDraftRoomEventChat({
+          leagueId: params.leagueId,
+          actorUserId: params.actorUserId,
+          event: {
+            ...event,
+            overall: committed.overallPickNumber,
+            ...(showsNewPlayer
+              ? { position: pickNow?.position ?? null, team: pickNow?.team ?? null, headshotUrl: pickNow?.playerImageUrl ?? null }
+              : {}),
+          },
+        })
+      })
+      .catch(() => {})
   }
   return { ok: true, snapshot }
 }

@@ -31,7 +31,7 @@ export interface ResultsRosterPanelTeam {
   displayName: string
   /** When true, this is the user's team (drives the default focus). */
   isCurrentUser?: boolean
-  /** AI manager flag — surfaces a tiny robot icon next to the name. */
+  /** Chimmy manager flag — surfaces a tiny robot icon next to the name. */
   isAi?: boolean
 }
 
@@ -124,7 +124,7 @@ export function ResultsRosterPanel({
         >
           <span className="flex min-w-0 items-center gap-1.5">
             {focusedTeam?.isAi ? (
-              <Bot className="h-3.5 w-3.5 shrink-0 text-violet-300/85" aria-label="AI manager" />
+              <Bot className="h-3.5 w-3.5 shrink-0 text-violet-300/85" aria-label="Chimmy manager" />
             ) : (
               <User className="h-3.5 w-3.5 shrink-0 text-cyan-200/85" aria-hidden />
             )}

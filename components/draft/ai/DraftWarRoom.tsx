@@ -201,7 +201,7 @@ export function DraftWarRoom({
           <Brain className="h-4 w-4 text-cyan-300" />
           <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-100/90">AF Legacy</span>
           {data?.fallback ? (
-            <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[11px] text-white/55">Rules + AI</span>
+            <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[11px] text-white/55">Rules + Chimmy</span>
           ) : (
             <span className="rounded border border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-100/90">Live</span>
           )}
@@ -365,7 +365,7 @@ export function DraftWarRoom({
                     })}
                   </ul>
                   <p className="mt-1.5 text-[11px] text-white/40">
-                    Tap alternatives to set Player A, then Player B — then Run AI compare, or use the dropdowns below.
+                    Tap alternatives to set Player A, then Player B — then Run Chimmy compare, or use the dropdowns below.
                   </p>
                 </div>
               )}
@@ -460,7 +460,7 @@ export function DraftWarRoom({
                   onClick={() => void runCompare()}
                   className="mt-2 w-full rounded-lg border border-amber-400/35 bg-amber-500/12 py-2 text-[11px] font-medium text-amber-50 hover:bg-amber-500/20 disabled:opacity-40"
                 >
-                  {compareResult.status === 'loading' ? 'Analyzing…' : 'Run AI compare'}
+                  {compareResult.status === 'loading' ? 'Analyzing…' : 'Run Chimmy compare'}
                 </button>
 
                 {compareResult.status === 'ready' && compareA && compareB && (

@@ -139,7 +139,7 @@ import {
 } from '@/lib/draft-room/assistantFeedLookup'
 import { buildDraftChatPlayerContextFromDisplay } from '@/lib/draft-room/draft-chat-player-context'
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
-import type { DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
+import { PlayerDetailModal, type DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type DraftRoomPageClientProps = {
@@ -372,11 +372,11 @@ export function DraftRoomPageClient({
       acceptConfidenceMin: number
     }
   } | null>(null)
-  /** Teams a commissioner handed to Chimmy (active AI manager assignments), for every member's room. */
+  /** Teams a commissioner handed to Chimmy (active Chimmy manager assignments), for every member's room. */
   const [chimmyManagedRosterIds, setChimmyManagedRosterIds] = useState<string[]>([])
-  /** Prisma AI opponent assignments — draft roster ids (see `/api/league/ai-opponents/summary`). */
+  /** Prisma Chimmy opponent assignments — draft roster ids (see `/api/league/ai-opponents/summary`). */
   const [aiOpponentRosterIds, setAiOpponentRosterIds] = useState<string[]>([])
-  /** Draft roster id → AI archetype label for manager strip badges. */
+  /** Draft roster id → Chimmy archetype label for manager strip badges. */
   const [aiArchetypeByRoster, setAiArchetypeByRoster] = useState<Record<string, string>>({})
   const [orphanAiProviderAvailableState, setOrphanAiProviderAvailableState] = useState<boolean>(true)
   const [draftQueueSizeLimit, setDraftQueueSizeLimit] = useState<number>(normalizeDraftQueueSizeLimit(null))
@@ -588,6 +588,8 @@ export function DraftRoomPageClient({
   const [auctionResolveLoading, setAuctionResolveLoading] = useState(false)
   const [autopickExpiredLoading, setAutopickExpiredLoading] = useState(false)
   const [helperSelectedPlayer] = useState<{ name: string; position: string; team?: string | null } | null>(null)
+  /** Board tile tapped — its overall; the card reads the live pick so a commissioner edit shows through. */
+  const [boardCardOverall, setBoardCardOverall] = useState<number | null>(null)
 
   const localPrefsKey = `${DRAFT_ROOM_LOCAL_PREFS_KEY_PREFIX}${leagueId}`
 
@@ -827,6 +829,20 @@ export function DraftRoomPageClient({
       }))
   }, [players, session?.picks])
 
+  const boardCardPick = useMemo(
+    () => (boardCardOverall == null ? null : (session?.picks ?? []).find((p) => p.overall === boardCardOverall && p.playerName?.trim()) ?? null),
+    [boardCardOverall, session?.picks],
+  )
+  const boardCardPool = useMemo(() => {
+    if (!boardCardPick) return null
+    const name = boardCardPick.playerName.trim().toLowerCase()
+    return (
+      (boardCardPick.playerId ? players.find((p) => p.id === boardCardPick.playerId || p.playerId === boardCardPick.playerId) : undefined) ??
+      players.find((p) => p.name.trim().toLowerCase() === name) ??
+      null
+    )
+  }, [boardCardPick, players])
+
   useEffect(() => {
     roundOneSeenPickIdsRef.current.clear()
     roundOneBootstrapRef.current = false
@@ -910,7 +926,7 @@ export function DraftRoomPageClient({
     [players],
   )
 
-  /** AI layers must never surface players who are already drafted or missing from the live pool. */
+  /** Chimmy layers must never surface players who are already drafted or missing from the live pool. */
   const isAiRecommendationPlayerAvailable = useCallback(
     (name: string, position: string): boolean => {
       const resolved = resolvePlayerFromPool(name, position)
@@ -1330,7 +1346,7 @@ export function DraftRoomPageClient({
               setAiArchetypeByRoster(arch)
             }
           } catch {
-            /* keep empty defaults — no panic on AI failure */
+            /* keep empty defaults — no panic on Chimmy failure */
           }
         })()
         setDraftQueueSizeLimit(normalizeDraftQueueSizeLimit(data?.config?.queue_size_limit))
@@ -1517,10 +1533,10 @@ export function DraftRoomPageClient({
           message: data.message ?? null,
         })
       } else {
-        setLeagueAiAdp({ enabled: true, entries: [], totalDrafts: 0, computedAt: null, stale: true, ageHours: null, message: 'AI ADP unavailable' })
+        setLeagueAiAdp({ enabled: true, entries: [], totalDrafts: 0, computedAt: null, stale: true, ageHours: null, message: 'Chimmy ADP unavailable' })
       }
     } catch {
-      setLeagueAiAdp(draftUISettings?.aiAdpEnabled ? { enabled: true, entries: [], totalDrafts: 0, computedAt: null, stale: true, ageHours: null, message: 'AI ADP unavailable' } : null)
+      setLeagueAiAdp(draftUISettings?.aiAdpEnabled ? { enabled: true, entries: [], totalDrafts: 0, computedAt: null, stale: true, ageHours: null, message: 'Chimmy ADP unavailable' } : null)
     }
   }, [leagueId, draftUISettings?.aiAdpEnabled, useAllFantasyAdp, allFantasyAdpDraftMode])
 
@@ -1943,7 +1959,7 @@ export function DraftRoomPageClient({
         const confirmation = { confirmed: window.confirm(tokenConfirmationMessage(data)) && approvePaidToolQuote(data) }
         if (!confirmation.confirmed) {
           setLiveBrainEnvelope(await brainPromise)
-          setRecommendationError('Token confirmation cancelled. Draft AI explanation was not unlocked.')
+          setRecommendationError('Token confirmation cancelled. Draft Chimmy explanation was not unlocked.')
           return
         }
         ;({ res, data } = await requestRecommendation(true))
@@ -2023,7 +2039,7 @@ export function DraftRoomPageClient({
     isAiRecommendationPlayerAvailable,
   ])
 
-  /** Off-the-clock: clear pick-specific AI so we never show another team's on-clock plan as yours. */
+  /** Off-the-clock: clear pick-specific Chimmy so we never show another team's on-clock plan as yours. */
   useEffect(() => {
     if (!session || !currentUserRosterId || !currentPick) return
     if (currentPick.rosterId === currentUserRosterId) return
@@ -2080,7 +2096,7 @@ export function DraftRoomPageClient({
     currentUserRosterId,
   ])
 
-  /** Drop copilot picks/alts that were taken while AI was in flight or before the next refresh. */
+  /** Drop copilot picks/alts that were taken while Chimmy was in flight or before the next refresh. */
   useEffect(() => {
     setRecommendationResult((prev) => {
       if (!prev) return prev
@@ -2550,7 +2566,7 @@ export function DraftRoomPageClient({
         setSession((prev) => mergeDraftSessionSnapshot(prev, data.session as DraftSessionSnapshot))
         await fetchDraftPool()
         if (data.usedFallback) {
-          setPickError('AI mode used deterministic CPU fallback for this pick.')
+          setPickError('Chimmy mode used deterministic CPU fallback for this pick.')
         }
       } else {
         setPickError(typeof data?.error === 'string' ? data.error : 'Automated orphan pick failed.')
@@ -2950,7 +2966,7 @@ export function DraftRoomPageClient({
         setAiReorderExplanation(data.explanation ?? null)
         setAiReorderExecutionMode(typeof data?.execution?.mode === 'string' ? data.execution.mode : 'rules_engine')
       } else {
-        setAiReorderExplanation(typeof data?.error === 'string' ? data.error : 'AI reorder unavailable.')
+        setAiReorderExplanation(typeof data?.error === 'string' ? data.error : 'Chimmy reorder unavailable.')
         setAiReorderExecutionMode(null)
       }
     } finally {
@@ -3324,8 +3340,8 @@ export function DraftRoomPageClient({
     draftAssistantContext?.injuries?.length
       ? `${draftAssistantContext.injuries.length} injury notes`
       : null,
-    draftUISettings?.aiAdpEnabled ? 'AI ADP ready' : null,
-    draftUISettings?.aiQueueReorderEnabled ? 'queue AI ready' : null,
+    draftUISettings?.aiAdpEnabled ? 'Chimmy ADP ready' : null,
+    draftUISettings?.aiQueueReorderEnabled ? 'Chimmy queue ready' : null,
   ].filter(Boolean).join(' • ')
   const chatMessagesWithAi = useMemo(() => {
     const base = [...chatMessages]
@@ -4074,7 +4090,7 @@ export function DraftRoomPageClient({
           >
             <span>
               <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b91a7]">Draft intelligence</span>
-              <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and AI context</span>
+              <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and Chimmy context</span>
             </span>
             {draftHelperBadgeCount > 0 ? (
               <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#14172a]">
@@ -4722,6 +4738,27 @@ export function DraftRoomPageClient({
       </div>
     ) : null}
     {leagueId && !isMirroredFromSleeper ? <DraftDayShow leagueId={leagueId} sessionStatus={session?.status} viewerRosterId={currentUserRosterId} /> : null}
+    {boardCardPick ? (
+      <PlayerDetailModal
+        open
+        onClose={() => setBoardCardOverall(null)}
+        sport={typeof effectiveDraftSport === 'string' ? effectiveDraftSport : String(sport)}
+        presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+        player={{
+          id: boardCardPick.playerId ?? boardCardPool?.id ?? null,
+          name: boardCardPick.playerName,
+          position: boardCardPick.position ?? null,
+          team: boardCardPick.team ?? null,
+          byeWeek: boardCardPick.byeWeek ?? null,
+          adp: boardCardPool?.adp ?? null,
+          headshotUrl: boardCardPick.playerImageUrl ?? boardCardPool?.display?.assets?.headshotUrl ?? null,
+          teamLogoUrl: boardCardPool?.display?.assets?.teamLogoUrl ?? null,
+        }}
+        leagueContext={{ draftedPickLabel: boardCardPick.pickLabel, rosteredByTeamName: boardCardPick.displayName ?? null }}
+        canDraft={false}
+        draftUnavailableReason="already_drafted"
+      />
+    ) : null}
     {roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session?.draftType }) ? (
       <DraftRoundOneAnnouncementOverlay
         presentationVariant={presentationVariant === 'redraft_snake' && !isDynasty ? 'redraft_snake' : 'default'}
@@ -5428,6 +5465,7 @@ export function DraftRoomPageClient({
                     commissionerCanEditBoard && session?.status === 'paused' && session?.draftType !== 'auction'
                   }
                   onCommissionerEditPick={commissionerCanEditBoard ? openCommissionerPickEditor : undefined}
+                  onOpenPlayer={setBoardCardOverall}
                   adpDeltaByOverall={boardAdpDeltaByOverall}
                   signatureByOverall={boardSignatureByOverall}
                   slotSalaryByOverall={leagueFacts?.slotSalaryByOverall ?? undefined}

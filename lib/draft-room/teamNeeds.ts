@@ -25,6 +25,8 @@
  *     threshold — enough to dent a starting lineup.
  */
 
+import { normalizeSlotKey } from '@/lib/draft-room/rosterSlotOrder'
+
 export type TeamNeedTone = 'thin' | 'ok' | 'heavy'
 
 export type TeamNeed = {
@@ -81,6 +83,66 @@ export function computeTeamNeeds(input: ComputeTeamNeedsInput): TeamNeed[] {
     out.push({ position: slot, have, target, remaining, tone })
   }
   return out
+}
+
+const DISPLAY_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLX', 'SF', 'K', 'DEF', 'DL', 'LB', 'DB', 'IDP']
+const FLEX_ELIGIBLE: Record<string, readonly string[]> = {
+  FLX: ['RB', 'WR', 'TE'],
+  SF: ['QB', 'RB', 'WR', 'TE'],
+  IDP: ['DL', 'LB', 'DB', 'DE', 'DT', 'CB', 'S'],
+}
+
+/**
+ * Starter needs as the War Room shows them: short slot codes (FLX, SF, DEF — never "FLEX" or
+ * "SUPERFLEX"), and flex buckets FILLED from whatever overflows the fixed slots, so a superflex
+ * row reads 1/1 once a second QB is drafted instead of sitting at 0/1 forever.
+ *
+ * Display-only on purpose: `computeTeamNeeds` also feeds waiver and decision engines that key on
+ * the raw slot names, so its output is left exactly as it was.
+ */
+export function computeStarterNeedsForDisplay(input: ComputeTeamNeedsInput): TeamNeed[] {
+  const slots = input.starterSlots
+  if (!slots || typeof slots !== 'object') return []
+  const targets = new Map<string, number>()
+  for (const [rawSlot, rawTarget] of Object.entries(slots)) {
+    const target = Math.floor(Number(rawTarget))
+    if (!Number.isFinite(target) || target <= 0) continue
+    const slot = normalizeSlotKey(rawSlot)
+    if (!slot || slot === 'BN') continue
+    targets.set(slot, (targets.get(slot) ?? 0) + target)
+  }
+  const counts = new Map<string, number>()
+  for (const p of input.picks) {
+    const k = normalizeSlotKey(normalizePosition(p.position))
+    if (k) counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  // What is left after every fixed slot takes its starters — the pool flex rows draw from.
+  const overflow = new Map<string, number>()
+  for (const [pos, n] of counts) overflow.set(pos, Math.max(0, n - (targets.get(pos) ?? 0)))
+  const flexFill = new Map<string, number>()
+  // Narrowest bucket first, so a superflex never takes the RB a plain flex needed.
+  for (const bucket of ['FLX', 'IDP', 'SF']) {
+    const target = targets.get(bucket) ?? 0
+    let filled = 0
+    for (const pos of FLEX_ELIGIBLE[bucket]) {
+      while (filled < target && (overflow.get(pos) ?? 0) > 0) {
+        overflow.set(pos, (overflow.get(pos) ?? 0) - 1)
+        filled += 1
+      }
+    }
+    flexFill.set(bucket, filled)
+  }
+  const rank = (k: string) => {
+    const i = DISPLAY_ORDER.indexOf(k)
+    return i < 0 ? DISPLAY_ORDER.length : i
+  }
+  return [...targets.entries()]
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([position, target]) => {
+      const have = FLEX_ELIGIBLE[position] ? (flexFill.get(position) ?? 0) : (counts.get(position) ?? 0)
+      const tone: TeamNeedTone = have >= target + 2 ? 'heavy' : have >= target ? 'ok' : 'thin'
+      return { position, have, target, remaining: Math.max(0, target - have), tone }
+    })
 }
 
 /**

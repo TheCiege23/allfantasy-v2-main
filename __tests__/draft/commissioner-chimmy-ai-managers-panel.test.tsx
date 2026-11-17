@@ -50,7 +50,7 @@ function checkboxFor(rosterId: string): HTMLInputElement {
 describe('Chimmy AI managers panel', () => {
   it('is labelled as Chimmy and names teams', () => {
     renderPanel()
-    expect(screen.getByText(/Chimmy AI managers/)).toBeTruthy()
+    expect(screen.getByText(/Chimmy managers/)).toBeTruthy()
     expect(screen.getByTestId('draft-commissioner-ai-team-r-open-a').textContent).toBe('Open Team A (slot 3)')
     expect(screen.getByTestId('draft-commissioner-ai-team-r-open-b').textContent).toBe('Team B (slot 9)')
   })

@@ -118,7 +118,7 @@ export function PreDraftSlotSetupCard(props: PreDraftSlotSetupCardProps) {
         <>
           <p className="text-[12px] text-white/80">
             {placeholderCount} draft slot{placeholderCount === 1 ? '' : 's'} still point to
-            placeholder teams. Fill them with AI-managed rosters before the draft starts so
+            placeholder teams. Fill them with Chimmy-managed rosters before the draft starts so
             picks, edits, and post-draft assignment land on real teams.
           </p>
           <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export function PreDraftSlotSetupCard(props: PreDraftSlotSetupCardProps) {
               onClick={handleFill}
               className="rounded border border-amber-300/45 bg-amber-500/20 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-50 hover:bg-amber-500/30 disabled:opacity-50"
             >
-              {submitting ? 'Filling…' : 'Fill empty slots with AI managers'}
+              {submitting ? 'Filling…' : 'Fill empty slots with Chimmy managers'}
             </button>
           </div>
         </>

@@ -33,7 +33,7 @@ export function DraftLiveBrainPremiumBlock({ liveBrain, onPlayerClick }: DraftLi
         <div className="absolute right-2 top-2 opacity-30">
           <Brain className="h-10 w-10 text-cyan-300" aria-hidden />
         </div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/80">AI recommendation</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/80">Chimmy recommendation</p>
         <button
           type="button"
           className="mt-1 w-full text-left"
@@ -113,7 +113,7 @@ export function DraftLiveBrainPremiumBlock({ liveBrain, onPlayerClick }: DraftLi
 
       {rows.length > 0 ? (
         <div className="rounded-lg border border-emerald-400/20 bg-[#0a1228]/80 p-2">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-200/70">Combined AI ADP</p>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-200/70">Combined Chimmy ADP</p>
           <p className="mb-2 text-[11px] text-white/40">{rows[0]?.contextLabel}</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
