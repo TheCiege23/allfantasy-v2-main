@@ -682,6 +682,17 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
+      /*
+       * ⚠ THE LEAGUE ROW CARRIES ITS OWN COPY OF THE WAIVER TYPE, AND IT DEFAULTS TO "rolling".
+       * The engine reads `leagueWaiverSettings` (written below from `waiverDefaults`), but the
+       * commissioner's waiver panel and the league constitution read these columns. Left unset, a
+       * redraft league that runs FAAB told its commissioner "rolling" and hid the FAAB budget field.
+       * Zombie keeps its own override after this.
+       */
+      waiverType: waiverDefaults.waiver_type,
+      ...(waiverDefaults.waiver_type === 'faab' && typeof waiverDefaults.FAAB_budget_default === 'number'
+        ? { waiverBudget: waiverDefaults.FAAB_budget_default }
+        : {}),
       ...(formatId === 'zombie' ? { waiverType: 'fcfs', waiverHours: 0 } : {}),
       /*
        * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE

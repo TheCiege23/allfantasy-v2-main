@@ -25,6 +25,8 @@ export interface BigBrotherSummary {
     sport: string
     finaleFormat: string
     juryStartMode: string
+    /** season_points (default) | hoh_vote | random | commissioner — who settles a tied eviction vote. */
+    evictionTieBreakMode?: string
     /** ai_theme | deterministic_score | hybrid — outcomes stay deterministic. */
     challengeMode?: string
   }

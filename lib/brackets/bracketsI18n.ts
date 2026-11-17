@@ -242,7 +242,7 @@ const EN: BracketsDictionary = {
     "Spin up a private pool for friends or a public pool anyone can discover — or jump into someone else's with an invite code.",
   "brk.hub.howItWorks.step2Title": "Make and finalize your picks",
   "brk.hub.howItWorks.step2Body":
-    "Pick a winner for every series and confirm your bracket. Each series locks when it starts.",
+    "Pick a winner for every matchup and confirm your bracket before it locks. Each tournament shows when its picks lock.",
   "brk.hub.howItWorks.step3Title": "Track, compete, and share",
   "brk.hub.howItWorks.step3Body":
     "Follow live standings, get Chimmy insights on your picks, and share your bracket report card.",
@@ -486,7 +486,7 @@ const ES: BracketsDictionary = {
     "Crea un grupo privado para amigos, uno público que cualquiera pueda descubrir, o únete a otro con un código de invitación.",
   "brk.hub.howItWorks.step2Title": "Haz y finaliza tus picks",
   "brk.hub.howItWorks.step2Body":
-    "Elige un ganador para cada serie y confirma tu bracket. Cada serie se cierra cuando empieza.",
+    "Elige un ganador para cada enfrentamiento y confirma tu bracket antes del cierre. Cada torneo muestra cuándo se cierran sus picks.",
   "brk.hub.howItWorks.step3Title": "Sigue, compite y comparte",
   "brk.hub.howItWorks.step3Body":
     "Sigue tablas en vivo, recibe ideas Chimmy sobre tus picks y comparte tu informe del bracket.",
