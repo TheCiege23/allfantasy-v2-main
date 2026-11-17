@@ -84,7 +84,6 @@ export function LeagueSettingsPanel({
   )
   const [keeperMaxYears, setKeeperMaxYears] = useState(initialData.keeperMaxYears ?? 3)
   const [keeperWaiverAllowed, setKeeperWaiverAllowed] = useState(initialData.keeperWaiverAllowed ?? true)
-  const [keeperMinRoundsHeld, setKeeperMinRoundsHeld] = useState(initialData.keeperMinRoundsHeld ?? 0)
   const [keeperDeadlineLocal, setKeeperDeadlineLocal] = useState('')
   const [keeperConflictRule, setKeeperConflictRule] = useState(initialData.keeperConflictRule ?? 'player_chooses')
   const [keeperMissedDeadlineRule, setKeeperMissedDeadlineRule] = useState(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
@@ -114,7 +113,6 @@ export function LeagueSettingsPanel({
     setKeeperAuctionPct(initialData.keeperAuctionPctIncrease != null ? initialData.keeperAuctionPctIncrease * 100 : 20)
     setKeeperMaxYears(initialData.keeperMaxYears ?? 3)
     setKeeperWaiverAllowed(initialData.keeperWaiverAllowed ?? true)
-    setKeeperMinRoundsHeld(initialData.keeperMinRoundsHeld ?? 0)
     setKeeperConflictRule(initialData.keeperConflictRule ?? 'player_chooses')
     setKeeperMissedDeadlineRule(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
     setKeeperWaiverRound(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
@@ -685,26 +683,6 @@ export function LeagueSettingsPanel({
                 ? 'For a team that submits nothing, AF keeps the eligible players whose market value beats the pick they cost by the most, up to the keeper limit — never someone worth less than his pick. A team that chose to keep nobody is left alone. NFL leagues; other sports keep nobody.'
                 : 'A team that submits nothing by the deadline keeps no one.'}
             </p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] text-white/45">Minimum rounds held</label>
-            <select
-              className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
-              disabled={disabled}
-              value={keeperMinRoundsHeld}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                setKeeperMinRoundsHeld(n)
-                debouncedSave({ keeperMinRoundsHeld: n })
-              }}
-            >
-              {Array.from({ length: 11 }, (_, i) => (
-                <option key={i} value={i}>
-                  {i}
-                </option>
-              ))}
-            </select>
           </div>
 
           <ImportedKeeperGrid leagueId={leagueId} />
