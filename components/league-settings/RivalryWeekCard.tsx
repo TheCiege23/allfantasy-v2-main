@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { editableWeeks } from '@/components/league-settings/ScheduleSwapForm'
+import { formatRivalryWeekForPlatform } from '@/lib/storyline-studio/copyFormat'
 
 type Pair = {
   homeRosterId: string
@@ -26,6 +27,7 @@ export function RivalryWeekCard({ leagueId }: { leagueId: string }) {
   const [week, setWeek] = useState<number | null>(null)
   const [pairs, setPairs] = useState<Pair[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -79,7 +81,7 @@ export function RivalryWeekCard({ leagueId }: { leagueId: string }) {
         aria-label={t('commControl.swapWeek')}
         className="w-full rounded-lg border border-white/10 bg-[#0a1220] px-3 py-2 text-[12px] text-white"
         value={chosen ?? ''}
-        onChange={(e) => { setWeek(Number(e.target.value)); setPairs(null); setMessage(null) }}
+        onChange={(e) => { setWeek(Number(e.target.value)); setPairs(null); setMessage(null); setCopied(false) }}
       >
         {weeks.map((w) => (
           <option key={w.week} value={w.week}>{t('commControl.swapWeekN').replace('{{n}}', String(w.week))}</option>
@@ -99,6 +101,22 @@ export function RivalryWeekCard({ leagueId }: { leagueId: string }) {
             </li>
           ))}
         </ul>
+      ) : null}
+      {pairs && pairs.length > 0 ? (
+        <button
+          type="button"
+          data-testid="rivalry-week-copy"
+          className={`w-full bg-white/[0.04] text-white/85 ${button}`}
+          onClick={() => {
+            const text = formatRivalryWeekForPlatform(
+              { heading: `${t('commControl.rivalryTitle')} - ${t('commControl.swapWeekN').replace('{{n}}', String(chosen))}`, byeLabel: t('commControl.swapBye'), pairs },
+              null,
+            )
+            void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setMessage({ kind: 'ok', text }))
+          }}
+        >
+          {copied ? t('commControl.rivalryCopied') : t('commControl.rivalryCopy')}
+        </button>
       ) : null}
       {pairs && !message ? (
         <button type="button" data-testid="rivalry-week-apply" disabled={busy} onClick={() => void send(true)} className={`w-full bg-amber-600/30 text-amber-100 ${button}`}>

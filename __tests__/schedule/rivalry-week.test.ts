@@ -9,6 +9,10 @@ const h = vi.hoisted(() => ({
   season: vi.fn(),
   records: vi.fn(),
   links: vi.fn(),
+  allRosters: vi.fn(),
+  matchups: vi.fn(),
+  playoffs: vi.fn(),
+  divisions: vi.fn(),
   deleteMany: vi.fn(async () => ({ count: 5 })),
   createMany: vi.fn(async () => ({ count: 5 })),
   log: vi.fn(async () => ({ id: 'a' })),
@@ -18,9 +22,13 @@ vi.mock('@/lib/prisma', () => ({
     redraftSeason: { findUnique: h.season },
     rivalryRecord: { findMany: h.records },
     roster: { findMany: h.links },
+    redraftRoster: { findMany: h.allRosters },
+    redraftMatchup: { findMany: h.matchups },
+    redraftPlayoffMatchup: { findMany: h.playoffs },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({ redraftMatchup: { deleteMany: h.deleteMany, createMany: h.createMany } })),
   },
 }))
+vi.mock('@/lib/league/divisions/loadLeagueDivisions', () => ({ loadSeasonRosterDivisions: h.divisions }))
 vi.mock('@/server/services/auditService', () => ({ logAction: h.log }))
 vi.mock('@/lib/rivalry-engine/rivalryBoard', () => ({
   getRivalryBoard: async () => ({ rows: [{ id: 'rec-AB', chips: [{ label: '6 H2H MEETINGS' }, { label: '3 CLOSE GAMES' }], context: 'Aces holds a 4-2 edge' }] }),
@@ -58,6 +66,10 @@ describe('preview and apply', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     h.season.mockResolvedValue(season())
+    h.allRosters.mockResolvedValue([])
+    h.matchups.mockResolvedValue([])
+    h.playoffs.mockResolvedValue([])
+    h.divisions.mockResolvedValue(null)
     h.links.mockResolvedValue([{ id: 'A', redraftRosterId: 'rrA' }, { id: 'B', redraftRosterId: 'rrB' }, { id: 'C', redraftRosterId: 'rrC' }, { id: 'D', redraftRosterId: 'rrD' }])
     h.records.mockResolvedValue([{ id: 'rec-AB', managerAId: 'A', managerBId: 'B', rivalryScore: 72 }])
   })
@@ -87,3 +99,73 @@ describe('preview and apply', () => {
     expect(h.deleteMany).not.toHaveBeenCalled()
   })
 })
+
+/** A league created here: no rivalry-engine records at all, only its own games. */
+describe('a league that plays here', () => {
+  const ids = ['rrA', 'rrB', 'rrC', 'rrD']
+  const nativeSeason = (over: Record<string, unknown> = {}) => ({
+    id: 's2', leagueId: 'L1', sport: 'NFL', season: 2026, currentWeek: 3, playoffStartWeek: 15, schedule: [],
+    league: { settings: {} },
+    rosters: ids.map((id) => ({ id, ownerId: `u-${id}`, teamName: id, ownerName: id })),
+    ...over,
+  })
+  const game = (home: string, away: string, homeScore: number, awayScore: number, status = 'final') => ({ homeRosterId: home, awayRosterId: away, homeScore, awayScore, status })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    h.season.mockResolvedValue(nativeSeason())
+    h.links.mockResolvedValue([])
+    h.records.mockResolvedValue([])
+    h.playoffs.mockResolvedValue([])
+    h.divisions.mockResolvedValue(null)
+    // Last season's rosters belong to the same owners under other ids.
+    h.allRosters.mockResolvedValue([
+      ...ids.map((id) => ({ id, ownerId: `u-${id}` })),
+      ...ids.map((id) => ({ id: `old-${id}`, ownerId: `u-${id}` })),
+    ])
+    h.matchups.mockResolvedValue([])
+  })
+
+  it('pairs rivals from this season and past seasons, and says why', async () => {
+    h.matchups.mockResolvedValue([
+      game('rrA', 'rrC', 120, 118),            // this season, close
+      game('old-rrA', 'old-rrC', 101, 140),    // last season, same owners
+      game('rrB', 'rrD', 150, 90),
+      game('rrA', 'rrB', 99, 98, 'scheduled'), // not played: does not count
+    ])
+    h.playoffs.mockResolvedValue([{ homeRosterId: 'old-rrA', awayRosterId: 'old-rrC', homeScore: 130, awayScore: 129 }])
+    const out = await previewRivalryWeek({ seasonId: 's2', week: 8 })
+    expect(out.ok).toBe(true)
+    const pairs = (out as { pairs: Array<{ homeRosterId: string; awayRosterId: string | null; rivalry: boolean; reasons: string[] }> }).pairs
+    expect(pairs[0]).toMatchObject({ homeRosterId: 'rrA', awayRosterId: 'rrC', rivalry: true })
+    expect(pairs[0]!.reasons).toEqual(['3 MEETINGS', 'SERIES 2-1', '2 CLOSE GAMES', '1 PLAYOFF MEETING'])
+    expect(pairs[1]).toMatchObject({ homeRosterId: 'rrB', awayRosterId: 'rrD', rivalry: true, reasons: ['1 MEETING', 'SERIES 1-0'] })
+  })
+
+  it('before any game is played, division rivals are the rivals', async () => {
+    h.divisions.mockResolvedValue({ byRoster: new Map([['rrA', { key: 'east' }], ['rrD', { key: 'east' }], ['rrB', { key: 'west' }], ['rrC', { key: 'west' }]]) })
+    const out = await previewRivalryWeek({ seasonId: 's2', week: 8 })
+    const pairs = (out as { pairs: Array<{ homeRosterId: string; awayRosterId: string | null; reasons: string[] }> }).pairs
+    expect(pairs.map((p) => [p.homeRosterId, p.awayRosterId].sort().join('-')).sort()).toEqual(['rrA-rrD', 'rrB-rrC'])
+    expect(pairs.every((p) => p.reasons.includes('DIVISION RIVALS'))).toBe(true)
+  })
+
+  it('with no games and no divisions there are no rivals, and nothing is written', async () => {
+    expect(await applyRivalryWeek({ seasonId: 's2', week: 8, actorUserId: 'c' })).toMatchObject({ ok: false, code: 'NO_RIVALRIES' })
+    expect(h.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('in a league that plays three games a week, the rivalry game is one of each team\'s three', async () => {
+    h.season.mockResolvedValue(nativeSeason({ league: { settings: { games_per_week: 3 } } }))
+    h.matchups.mockResolvedValue([game('rrA', 'rrC', 120, 118), game('rrB', 'rrD', 150, 90)])
+    await applyRivalryWeek({ seasonId: 's2', week: 8, actorUserId: 'c' })
+    const rows = (h.createMany.mock.calls[0] as unknown as [{ data: Array<{ homeRosterId: string; awayRosterId: string }> }])[0].data
+    expect(rows).toHaveLength(6)
+    const perTeam = new Map<string, number>()
+    for (const row of rows) for (const id of [row.homeRosterId, row.awayRosterId]) perTeam.set(id, (perTeam.get(id) ?? 0) + 1)
+    expect([...perTeam.values()]).toEqual([3, 3, 3, 3])
+    const keys = rows.map((row) => [row.homeRosterId, row.awayRosterId].sort().join('-'))
+    expect(new Set(keys).size).toBe(6)
+    expect(keys.slice(0, 2).sort()).toEqual(['rrA-rrC', 'rrB-rrD'])
+  })
+})
+

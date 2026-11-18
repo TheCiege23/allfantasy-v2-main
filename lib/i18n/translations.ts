@@ -6270,6 +6270,8 @@ export const translations: Record<string, Record<string, string>> = {
     "commControl.rivalryApply": "Make week {{n}} rivalry week",
     "commControl.rivalryApplied": "Week {{n}} is rivalry week.",
     "commControl.rivalryNoHistory": "No rivalry history between these two yet.",
+    "commControl.rivalryCopy": "Copy pairings to paste elsewhere",
+    "commControl.rivalryCopied": "Copied",
     "sharedScoring.title": "Use this scoring in my other leagues",
     "sharedScoring.help": "Copies this league's saved scoring to other AllFantasy leagues you run in the same sport. Each league keeps its own lock and season rules, and the change is recorded in its league log.",
     "sharedScoring.open": "Choose leagues",

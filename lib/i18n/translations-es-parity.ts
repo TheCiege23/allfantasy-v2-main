@@ -2362,6 +2362,8 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.rivalryApply": "Convertir la semana {{n}} en semana de rivalidades",
   "commControl.rivalryApplied": "La semana {{n}} es semana de rivalidades.",
   "commControl.rivalryNoHistory": "Todavía no hay historial de rivalidad entre estos dos.",
+  "commControl.rivalryCopy": "Copiar los enfrentamientos para pegarlos en otro lugar",
+  "commControl.rivalryCopied": "Copiado",
   "sharedScoring.title": "Usar esta puntuación en mis otras ligas",
   "sharedScoring.help": "Copia la puntuación guardada de esta liga a otras ligas de AllFantasy que diriges en el mismo deporte. Cada liga mantiene su propio bloqueo y sus reglas de temporada, y el cambio queda en su registro de la liga.",
   "sharedScoring.open": "Elegir ligas",
