@@ -12,7 +12,9 @@
  *
  * By default it writes ONE thing: the `FantraxLeague` snapshot row the normal
  * import writes. Add `--commit` after the league id to also commit the league
- * into the app on staging and read its `future_draft_picks` rows back.
+ * into the app on staging and read its `future_draft_picks` rows back. Add
+ * `--refresh` to apply the scheduled sync's `traded_picks` step to a league that
+ * is already committed (the path that clears a traded-back pick).
  */
 import { prisma } from '@/lib/prisma'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
@@ -20,6 +22,7 @@ import { getFantraxLeagues } from '@/lib/league-import/fantrax/fantraxApi'
 import { listFantraxOwnedTeams } from '@/lib/league-import/fantrax/fantraxTeamSelection'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
+import { applySleeperScopeToLeague } from '@/lib/import-os/collector/applySleeperLeagueSync'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import { persistImportedLeagueFromNormalization } from '@/lib/league-import/ImportedLeagueCommitService'
 import {
@@ -148,8 +151,33 @@ async function main() {
     }
   }
 
+  /*
+   * `--refresh` applies the `traded_picks` scope to the league ALREADY in the app,
+   * through the same function the scheduled sync uses. This is the path that keeps
+   * an imported league current: `--commit` on a league that already exists joins it
+   * and rewrites nothing, so it cannot show a traded-back pick being cleared.
+   */
+  let refreshed: Record<string, unknown> | null = null
+  if (process.argv.includes('--refresh')) {
+    const league = await prisma.league.findFirst({
+      where: { platform: 'fantrax', platformLeagueId: arg },
+      select: { id: true },
+    })
+    if (!league) throw new Error('LEAGUE_NOT_COMMITTED_YET_RUN_WITH_COMMIT_FIRST')
+    const result = await applySleeperScopeToLeague({ leagueId: league.id, scope: 'traded_picks', normalized: n })
+    const rows = await prisma.futureDraftPick.count({ where: { leagueId: league.id } })
+    refreshed = {
+      leagueId: league.id,
+      tradedSent: n.traded_picks?.length ?? null,
+      returnedSent: n.returned_picks?.length ?? null,
+      result,
+      futureDraftPickRowsAfter: rows,
+    }
+  }
+
   console.log(JSON.stringify({
     committed,
+    refreshed,
     target: 'staging',
     league: { name: row.leagueName, season: row.season, sport: row.sport, teams: row.teamCount },
     snapshotUpdatedAt: row.updatedAt,

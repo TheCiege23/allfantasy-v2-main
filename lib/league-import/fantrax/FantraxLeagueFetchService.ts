@@ -897,8 +897,20 @@ export async function fetchFantraxLeagueForImport(
   )
   let unmappedFuturePicks = 0
   const tradedPicks: NonNullable<FantraxImportPayload['tradedPicks']> = []
+  /*
+   * ⚠ AND THE HOME ONES ARE NOT THROWN AWAY — THEY CLEAR STALE ROWS. A pick traded
+   * A -> B and later traded back simply stops appearing in `tradedPicks`, which
+   * left its stored row saying B holds it forever. Naming the picks that are home
+   * is what lets the commit step remove that row.
+   */
+  const returnedPicks: NonNullable<FantraxImportPayload['returnedPicks']> = []
   for (const pick of storedFuture.picks) {
-    if (pick.currentOwnerTeamId === pick.originalOwnerTeamId) continue
+    if (pick.currentOwnerTeamId === pick.originalOwnerTeamId) {
+      const homeTeamId = sourceTeamIds.get(pick.originalOwnerTeamId)
+      if (homeTeamId == null) unmappedFuturePicks += 1
+      else returnedPicks.push({ season: pick.season, round: pick.round, originalTeamId: String(homeTeamId) })
+      continue
+    }
     const originalTeamId = sourceTeamIds.get(pick.originalOwnerTeamId)
     const currentOwnerTeamId = sourceTeamIds.get(pick.currentOwnerTeamId)
     if (originalTeamId == null || currentOwnerTeamId == null) {
@@ -983,6 +995,7 @@ export async function fetchFantraxLeagueForImport(
     ...(storedFuture.stored
       ? {
           tradedPicks,
+          returnedPicks,
           futurePicks: {
             total: storedFuture.picks.length,
             traded: tradedPicks.length,

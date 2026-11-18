@@ -62,6 +62,16 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
             })),
           }
         : {}),
+      /* Picks that are home, so a traded-back pick's stale row can be cleared. */
+      ...(raw.returnedPicks
+        ? {
+            returned_picks: raw.returnedPicks.map((pick) => ({
+              season: pick.season,
+              round: pick.round,
+              original_roster_id: pick.originalTeamId,
+            })),
+          }
+        : {}),
       transactions: history.transactions,
       standings: history.standings,
       player_map: raw.playerMap ?? {},

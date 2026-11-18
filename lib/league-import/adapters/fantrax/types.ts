@@ -115,6 +115,12 @@ export interface FantraxImportPayload {
     originalTeamId: string
     currentOwnerTeamId: string
   }>
+  /**
+   * Future picks Fantrax reports as held by their original team, in this
+   * payload's own team ids. Present whenever `tradedPicks` is. These are what let
+   * a pick that was traded away and later traded back be cleared downstream.
+   */
+  returnedPicks?: Array<{ season: number; round: number; originalTeamId: string }>
   /** How the future-pick inventory broke down, for coverage. */
   futurePicks?: { total: number; traded: number; unmapped: number } | null
   playerMap: Record<string, { name: string; position: string; team: string }>

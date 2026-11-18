@@ -18,6 +18,7 @@ import type {
   CanonicalImportBundle,
   ImportProvider,
   NormalizedImportResult,
+  NormalizedReturnedPick,
   NormalizedTradedPick,
 } from './types'
 
@@ -260,6 +261,72 @@ export async function persistTradedPicks(
     skipped += result.skipped
   }
   return { written, skipped }
+}
+
+/**
+ * Remove stored traded-pick rows for picks the provider now reports as home.
+ *
+ * 🛑 WITHOUT THIS A TRADED-BACK PICK NEVER COMES BACK. `persistTradedPicks` only
+ * ever upserts picks that are currently away from their original team. A pick
+ * traded A -> B and later B -> A drops out of that list, so its row was left
+ * saying B holds it — permanently, with nothing red anywhere.
+ *
+ * ⚠ DELETE, NOT "SET OWNER BACK". For an imported league this table holds a row
+ * only for a pick that has moved; a team's own pick is the absence of a row
+ * (see `futurePickInventory.ts`). Removing the row restores exactly that state.
+ *
+ * ⚠ NARROW ON PURPOSE. A row is removed only when ALL of these hold:
+ *   - the provider named that exact pick (league, season, round, original team)
+ *   - it is marked traded and its holder differs from its original team
+ *   - no AllFantasy trade moved it (`sourceTradeId` is null) — a trade made in
+ *     the app is not the provider's to undo
+ *   - it is still active (not used in a draft, not forfeited)
+ * So an empty or wrong `picks` list can only ever remove nothing.
+ *
+ * Exported for testability; not part of the public import API.
+ */
+export async function clearReturnedTradedPicks(
+  leagueId: string,
+  picks: NormalizedReturnedPick[],
+): Promise<{ cleared: number; skipped: number }> {
+  if (!Array.isArray(picks) || picks.length === 0) return { cleared: 0, skipped: 0 }
+
+  let skipped = 0
+  const unique = new Map<string, NormalizedReturnedPick>()
+  for (const pick of picks) {
+    if (
+      !pick ||
+      typeof pick.season !== 'number' || !Number.isFinite(pick.season) ||
+      typeof pick.round !== 'number' || !Number.isFinite(pick.round) ||
+      typeof pick.original_roster_id !== 'string' || !pick.original_roster_id
+    ) {
+      skipped++
+      continue
+    }
+    unique.set(`${pick.season}\u0000${pick.round}\u0000${pick.original_roster_id}`, pick)
+  }
+
+  const rows = [...unique.values()]
+  const RETURNED_PICK_BATCH_SIZE = 500
+  let cleared = 0
+  for (let offset = 0; offset < rows.length; offset += RETURNED_PICK_BATCH_SIZE) {
+    const values = rows
+      .slice(offset, offset + RETURNED_PICK_BATCH_SIZE)
+      .map((pick) => Prisma.sql`(${pick.season}::int, ${pick.round}::int, ${pick.original_roster_id}::text)`)
+    cleared += await prisma.$executeRaw`
+      DELETE FROM "future_draft_picks" AS f
+      USING (VALUES ${Prisma.join(values)}) AS home("pickSeason", "round", "originalRosterId")
+      WHERE f."leagueId" = ${leagueId}
+        AND f."pickSeason" = home."pickSeason"
+        AND f."round" = home."round"
+        AND f."originalRosterId" = home."originalRosterId"
+        AND f."traded" = TRUE
+        AND f."currentOwnerId" <> f."originalRosterId"
+        AND f."sourceTradeId" IS NULL
+        AND f."status" = 'active'
+    `
+  }
+  return { cleared, skipped }
 }
 
 function resolveImportedLeagueVariant(normalized: NormalizedImportResult): string | null {
@@ -1208,6 +1275,24 @@ export async function persistImportedLeagueFromNormalization(
       incompleteSteps,
       async () => {
         await persistTradedPicks(league.id, normalized.traded_picks!)
+      },
+    )
+  }
+
+  /*
+   * And the other half: picks the provider says are back with their original
+   * team. Independent of the block above on purpose — a league whose last traded
+   * pick just came home has an EMPTY traded list, which is exactly when a stale
+   * row most needs clearing.
+   */
+  if (normalized.returned_picks && normalized.returned_picks.length > 0) {
+    await runBootstrapStep(
+      'RETURNED_PICKS_FAILED',
+      'traded-back draft picks could not be cleared',
+      'warn',
+      incompleteSteps,
+      async () => {
+        await clearReturnedTradedPicks(league.id, normalized.returned_picks!)
       },
     )
   }

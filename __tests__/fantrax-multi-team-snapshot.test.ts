@@ -97,11 +97,14 @@ describe('live Fantrax snapshots with duplicate team names', () => {
       { season: 2027, round: 1, originalTeamId: first?.teamId, currentOwnerTeamId: second?.teamId },
     ])
     expect(raw.futurePicks).toEqual({ total: 3, traded: 1, unmapped: 1 })
+    /* The untraded pick is reported as HOME, which is what clears a traded-back row. */
+    expect(raw.returnedPicks).toEqual([{ season: 2027, round: 2, originalTeamId: first?.teamId }])
 
     const normalized = await FantraxAdapter.normalize(raw)
     expect(normalized.traded_picks).toEqual([
       { season: 2027, round: 1, original_roster_id: first?.teamId, current_owner_roster_id: second?.teamId },
     ])
+    expect(normalized.returned_picks).toEqual([{ season: 2027, round: 2, original_roster_id: first?.teamId }])
     expect(normalized.draft_picks).toHaveLength(1)
     expect(normalized.coverage.draftHistory).toMatchObject({ state: 'partial', count: 1 })
     expect(normalized.source.source_league_id).toBe('real-league-id')
