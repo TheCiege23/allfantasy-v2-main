@@ -5,6 +5,7 @@ import { ChevronDown, Lock, Music2 } from 'lucide-react'
 import { musicBus } from '@/components/app-music/musicBus'
 import { YOUTUBE_STATIONS } from '@/lib/draft-music/youtube'
 import { findStation } from '@/lib/chimmy/musicCards'
+import { appleTouchDevice, type AppleTouchDevice } from '@/lib/platform/appleTouchDevice'
 import {
   draftPlaylistOffered,
   draftPlaylistOptOutKey,
@@ -195,6 +196,15 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
   // on the site: if they have (they tapped their way here), it starts now; otherwise on their first tap in the room.
   // 'click' and not 'pointerdown': on a touch screen only the end of a tap counts as one.
   const [waitingForTap, setWaitingForTap] = useState(false)
+
+  // ⚠ iPhone and iPad: iOS can load the video yet hold back its SOUND until the person taps the player itself — a
+  // tap elsewhere in the room may not count there, and the page cannot tell whether sound came through (the embed
+  // reports nothing back). So on those devices the playing line says how to fix silence. Read after mount: the
+  // server cannot know the device, and guessing would mismatch the first render.
+  const [appleDevice, setAppleDevice] = useState<AppleTouchDevice>(null)
+  useEffect(() => {
+    setAppleDevice(appleTouchDevice(navigator.userAgent, navigator.maxTouchPoints))
+  }, [])
   useEffect(() => {
     setWaitingForTap(false)
     if (!known || optedOutRef.current !== false || !playlist) return
@@ -271,7 +281,9 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
   const sub = !available
     ? 'Music is not available on this page.'
     : playing
-      ? `Playing ${playing.label}. Only you hear it.`
+      ? appleDevice
+        ? `Playing ${playing.label}. No sound? Tap the video once.`
+        : `Playing ${playing.label}. Only you hear it.`
       : playlist && waitingForTap
         ? 'Picked by your commissioner. It starts when you tap anywhere in the room.'
         : playlist && optedOut
