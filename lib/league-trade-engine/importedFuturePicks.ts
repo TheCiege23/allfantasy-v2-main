@@ -3,9 +3,13 @@
  * and the league's own draft history. See `futurePickInventory.ts` for the rules; this module is
  * only the reads and the roster join.
  *
- * ⚠ SLEEPER AND MFL ONLY. Those are the providers whose traded picks are synced into the table.
- * Rebuilding every team's own picks for an ESPN, Yahoo or Fantrax league would list a pick with its
+ * ⚠ SLEEPER, MFL AND FANTRAX ONLY. Those are the providers whose traded picks are synced into the
+ * table. Rebuilding every team's own picks for an ESPN or Yahoo league would list a pick with its
  * original team even where it has been traded, because nothing records the trade.
+ *
+ * Fantrax joined on 2026-11-18, once its import began writing traded picks and clearing the ones
+ * traded back. Its round count is READ from the pick list Fantrax publishes rather than inferred
+ * from draft history — see `publishedRoundsFromFuturePicks`.
  *
  * ⚠ NOT FOR NATIVE LEAGUES. A native dynasty league's picks come from `nativeFuturePicks.ts`,
  * which the trade engine can settle; these are for display and valuation only.
@@ -15,14 +19,16 @@
  */
 import { prisma } from '@/lib/prisma'
 import { matchTeamIdForRoster } from '@/lib/decision-os/world/assemble'
+import { futurePicksFromStoredInventory } from '@/lib/league-import/fantrax/fantraxDraft'
 import {
   futurePickInventory,
+  publishedRoundsFromFuturePicks,
   rookieRoundsFromDraftHistory,
   upcomingDraftSeasons,
   type InventoryPick,
 } from './futurePickInventory'
 
-const PROVIDERS_WITH_SYNCED_PICKS = new Set(['sleeper', 'mfl'])
+const PROVIDERS_WITH_SYNCED_PICKS = new Set(['sleeper', 'mfl', 'fantrax'])
 
 /** True when this league's picks are read from the provider-id-keyed table rather than `Roster.id`. */
 export function hasSyncedProviderPicks(platform: string | null | undefined): boolean {
@@ -77,7 +83,9 @@ export async function loadImportedFuturePicks(args: {
   const seasons = upcomingDraftSeasons({ leagueSeason: args.leagueSeason, status: args.status })
   const teamIds = [...new Set(args.teams.map((t) => t.externalId).filter((x) => x.length > 0))]
 
-  const [stored, history] = await Promise.all([
+  const isFantrax = String(args.platform ?? '').trim().toLowerCase() === 'fantrax'
+
+  const [stored, history, publishedRounds] = await Promise.all([
     prisma.futureDraftPick
       .findMany({
         where: { leagueId: args.leagueId, status: 'active', pickSeason: { in: seasons } },
@@ -85,7 +93,8 @@ export async function loadImportedFuturePicks(args: {
       })
       .catch(() => null),
     // Only a dynasty league has a rookie draft to size; a keeper or redraft league lists stored picks alone.
-    args.isDynasty
+    // Not asked for Fantrax: its recorded draft is the startup, and its round count is read below.
+    args.isDynasty && !isFantrax
       ? prisma.draftFact
           .groupBy({
             by: ['season'],
@@ -95,15 +104,18 @@ export async function loadImportedFuturePicks(args: {
           })
           .catch(() => null)
       : Promise.resolve(null),
+    isFantrax ? loadFantraxPublishedRounds(args.leagueId, seasons) : Promise.resolve(null),
   ])
   if (stored == null) return { ...empty, readFailed: true }
 
-  const rounds = history
-    ? rookieRoundsFromDraftHistory(
-        history.map((h) => ({ season: h.season ?? 0, maxRound: h._max.round ?? 0, picks: h._count._all })),
-        teamIds.length,
-      )
-    : null
+  const rounds = isFantrax
+    ? publishedRounds
+    : history
+      ? rookieRoundsFromDraftHistory(
+          history.map((h) => ({ season: h.season ?? 0, maxRound: h._max.round ?? 0, picks: h._count._all })),
+          teamIds.length,
+        )
+      : null
   if (rounds == null && stored.length === 0) return empty
 
   const inventory = futurePickInventory({ teamIds, seasons, rounds, stored })
@@ -138,6 +150,34 @@ export async function loadImportedFuturePicks(args: {
     coverage: rounds != null ? 'complete' : 'traded_only',
     rosterIdByTeamId: rosterIdByExternal,
     readFailed: false,
+  }
+}
+
+/**
+ * How many rounds Fantrax publishes for these drafts, from the pick list its import stored.
+ *
+ * DB-first: the league row for its Fantrax id, then the newest snapshot of that league. Any failure
+ * (no snapshot, a column this database does not have yet, an unreadable list) is "unknown", which
+ * leaves the caller listing traded picks alone — never a guessed round count.
+ */
+async function loadFantraxPublishedRounds(leagueId: string, seasons: number[]): Promise<number | null> {
+  try {
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { platformLeagueId: true },
+    })
+    const sourceLeagueId = league?.platformLeagueId?.trim()
+    if (!sourceLeagueId) return null
+    const snapshot = await prisma.fantraxLeague.findFirst({
+      where: { sourceLeagueId },
+      orderBy: { updatedAt: 'desc' },
+      select: { draftPicks: true },
+    })
+    const inventory = futurePicksFromStoredInventory(snapshot?.draftPicks ?? null)
+    if (!inventory.stored) return null
+    return publishedRoundsFromFuturePicks(inventory.picks, seasons)
+  } catch {
+    return null
   }
 }
 

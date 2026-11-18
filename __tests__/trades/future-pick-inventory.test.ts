@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   futurePickInventory,
   inventoryPickId,
+  publishedRoundsFromFuturePicks,
   rookieRoundsFromDraftHistory,
   roundOrdinal,
   upcomingDraftSeasons,
@@ -136,5 +137,36 @@ describe('labels and ids', () => {
 
   it('gives a stable, namespaced id that cannot pass for a proposable pick id', () => {
     expect(inventoryPickId({ season: 2027, round: 1, originalTeamId: '4' })).toBe('fdp:2027:1:4')
+  })
+})
+
+/**
+ * Fantrax lists every future pick itself, so its round count is READ, not inferred. Its only
+ * recorded draft is usually the startup (36 rounds on the measured league), which the inference
+ * above rightly refuses — without this a Fantrax team's own picks could never be listed.
+ */
+describe('publishedRoundsFromFuturePicks', () => {
+  const list = (season: number, rounds: number) =>
+    Array.from({ length: rounds }, (_, i) => ({ season, round: i + 1 }))
+
+  it('reads the round count the provider lists for the drafts asked about', () => {
+    const picks = [...list(2027, 4), ...list(2028, 4), ...list(2029, 4), ...list(2030, 4)]
+    expect(publishedRoundsFromFuturePicks(picks, [2027, 2028, 2029])).toBe(4)
+  })
+
+  it('takes the smallest count, so no pick is rebuilt in a round a draft does not list', () => {
+    const picks = [...list(2027, 4), ...list(2028, 3), ...list(2029, 4)]
+    expect(publishedRoundsFromFuturePicks(picks, [2027, 2028, 2029])).toBe(3)
+  })
+
+  it('is unknown when any draft in the horizon has no picks listed', () => {
+    const picks = [...list(2027, 4), ...list(2029, 4)]
+    expect(publishedRoundsFromFuturePicks(picks, [2027, 2028, 2029])).toBeNull()
+    expect(publishedRoundsFromFuturePicks([], [2027])).toBeNull()
+    expect(publishedRoundsFromFuturePicks(picks, [])).toBeNull()
+  })
+
+  it('ignores a row with no usable round', () => {
+    expect(publishedRoundsFromFuturePicks([{ season: 2027, round: 0 }], [2027])).toBeNull()
   })
 })

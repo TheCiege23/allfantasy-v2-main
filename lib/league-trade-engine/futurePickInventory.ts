@@ -69,6 +69,42 @@ export function rookieRoundsFromDraftHistory(seasons: DraftSeasonSize[], teams: 
 }
 
 /**
+ * The round count a provider PUBLISHES for the given drafts, when it lists every future pick
+ * itself (Fantrax); null when it cannot be told.
+ *
+ * This is the other source of a round count. Sleeper never says how many rounds a rookie draft has,
+ * so `rookieRoundsFromDraftHistory` infers it. Fantrax lists every team's pick in every round it
+ * exposes, so the count is read rather than inferred — and a Fantrax league's only recorded draft is
+ * usually its startup (36 rounds on the league this was measured on), which the inference rightly
+ * refuses.
+ *
+ * ⚠ THE SMALLEST COUNT ACROSS THE DRAFTS WINS, AND A DRAFT WITH NO PICKS LISTED MEANS UNKNOWN. A pick
+ * is only rebuilt in a round the provider lists for EVERY draft in the horizon; rebuilding round 4 of
+ * a draft that publishes three rounds would put a pick on the screen that does not exist.
+ *
+ * ⚠ IT IS WHAT THE PROVIDER PUBLISHES, WHICH CAN BE FEWER ROUNDS THAN THE LEAGUE PLAYS. Fantrax's API
+ * returned rounds 1-4 for a league that had traded a 5th. Later rounds are simply not listed.
+ */
+export function publishedRoundsFromFuturePicks(
+  picks: ReadonlyArray<{ season: number; round: number }>,
+  seasons: number[],
+): number | null {
+  if (seasons.length === 0) return null
+  const maxBySeason = new Map<number, number>()
+  for (const pick of picks) {
+    if (!(pick.round > 0)) continue
+    maxBySeason.set(pick.season, Math.max(maxBySeason.get(pick.season) ?? 0, pick.round))
+  }
+  let rounds: number | null = null
+  for (const season of seasons) {
+    const max = maxBySeason.get(season)
+    if (!max) return null
+    rounds = rounds == null ? max : Math.min(rounds, max)
+  }
+  return rounds
+}
+
+/**
  * The drafts whose picks can still change hands.
  *
  * ⚠ THE CURRENT SEASON'S DRAFT IS USUALLY OVER. Two thirds of the stored rows (2,217 of 3,382) are
