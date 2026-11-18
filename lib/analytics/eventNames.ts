@@ -51,6 +51,11 @@ export const ACQUISITION = {
  * admin can see which locked feature actually sells (lib/monetization/upgradeEntrySource.ts).
  */
 export const MONETIZATION = {
+  /** Client signals for contextual plan offers. The beacon cannot emit payment events. */
+  OFFER_VIEWED: 'product.monetization.offer_viewed',
+  OFFER_CLICKED: 'product.monetization.offer_clicked',
+  TOKEN_CHECKOUT_STARTED: 'monetization.token_checkout_started',
+  TOKEN_PURCHASE_CONFIRMED: 'monetization.token_purchase_confirmed',
   /** A Stripe Checkout Session was created for a subscription. */
   CHECKOUT_STARTED: 'monetization.checkout_started',
   /** checkout.session.completed for a subscription, after the paid-state refusal check. Webhook-confirmed only. */

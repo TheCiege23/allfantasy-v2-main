@@ -13,6 +13,8 @@ import { TradeValueChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import styles from './GenericTradeAnalyzer.module.css'
 import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
+import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 type Result = {
   grade?: TradeGradeView
@@ -414,6 +416,23 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
               <h3>{copy(result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value')}</h3>
               <p>{copy("Team A receives ")}{copy((result.grade.getValue ?? result.grade.getMarket).toLocaleString(locale))}{copy(" in market value and sends ")}{copy((result.grade.giveValue ?? result.grade.giveMarket).toLocaleString(locale))}{copy("; Team B is the opposite. The gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the bigger side.")} <TopicTip topic="tradeGrade" /></p>
               <p className="af-tc-generic-hint">{copy("This grade compares market value only. It doesn’t account for league scoring, roster needs, injuries, whether they’ll accept, or how players will perform.")}</p>
+              {sport !== 'NFL' || qbPreset === '1qb' || qbPreset === 'sf' ? (
+                <TradeReviewLink
+                  draft={{
+                    give: assets(teamA, sport, verifiedA),
+                    get: assets(teamB, sport, verifiedB),
+                    sport: normalizeToSupportedSport(sport),
+                    format: dynasty ? 'dynasty' : 'redraft',
+                    qbFormat: qbPreset === '1qb' ? '1qb' : 'sf',
+                    scoring: scoring ? (scoring === 'points' ? 'Points' : 'Categories') : undefined,
+                  }}
+                  source="market_trade_review"
+                  viewerId={viewerId}
+                  storageError={language === 'es' ? 'No se pudo guardar el cambio en esta pestaña.' : 'This browser could not save the trade in this tab.'}
+                >
+                  {language === 'es' ? 'Obtener un análisis completo' : 'Get a full trade review'}
+                </TradeReviewLink>
+              ) : null}
               {result.tradeMarket?.lines.length || result.tradeMarket?.note ? (
                 <div className="af-tc-generic-market" data-testid="generic-trade-market">
                   <strong>{copy("What real trades say")}</strong>

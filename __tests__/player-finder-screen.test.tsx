@@ -1029,7 +1029,7 @@ describe('Player Finder — player depth paywall', () => {
     expect(screen.queryByRole('region', { name: 'Recommended moves' })).toBeNull()
     const moves = screen.getByRole('region', { name: 'Recommended moves — AF Pro' })
     // `back=` is the page the lock sits on (lib/monetization/lockReturn.ts, 2026-11-17) — jsdom's `/` here.
-    expect(within(moves).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&from=lock_player_depth&back=%2F')
+    expect(within(moves).getByRole('link', { name: 'Unlock with AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&offer=monthly&from=lock_player_depth&back=%2F')
 
     const side = screen.getByRole('complementary', { name: 'What to do' })
     expect(within(side).queryByRole('region', { name: 'Chimmy verdict' })).toBeNull()

@@ -899,7 +899,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
       expect(l.textContent).toMatch(/: parte de AF Pro/)
       // Every lock links to AF Pro, names itself (from=lock_<depth>, lib/monetization/upgradeEntrySource.ts) and
       // carries the page it is on (back=, lib/monetization/lockReturn.ts).
-      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toMatch(/^\/upgrade\?plan=pro&from=lock_[a-z_]+&back=%2F[^&]*$/)
+      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toMatch(/^\/upgrade\?plan=pro&offer=monthly&from=lock_[a-z_]+&back=%2F[^&]*$/)
     }
     const out = ownText(container)
     expectWholeSpanish(out, 'locked')
@@ -908,7 +908,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
     }
   })
 
-  it('English: the same locked page still reads the lock’s English, byte for byte', () => {
+  it('English: the same locked page reads the updated English copy', () => {
     const container = wholePage({ depthAccess: FREE_READER, compareRequested: true, whoStartsHim: { leagues: [], locked: true }, valueTrend: valueTrend(true), freeAgentBids: FA_BIDS_LOCKED })
     const heads = [...container.querySelectorAll('.af-core-lock-head [data-ios-purchase]')].map((n) => n.textContent)
     expect(heads).toEqual(
@@ -922,7 +922,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
       ]),
     )
     expect(container.querySelector('.af-core-lock-body [data-ios-purchase]')?.textContent).toBe('Your leagues, scores and the basics stay free. Upgrade to see the rest.')
-    expect(container.querySelector('a.af-core-lock-cta')?.textContent).toBe('See AF Pro')
+    expect(container.querySelector('a.af-core-lock-cta')?.textContent).toBe('Unlock with AF Pro')
   })
 })
 

@@ -16,6 +16,7 @@ import {
   trackUpgradePromptOpened,
 } from '@/lib/monetization-analytics'
 import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
+import { monthlyUpgradeHref } from '@/lib/monetization/upgradeDestination'
 
 interface LockedFeatureCardProps {
   featureName: string
@@ -63,7 +64,8 @@ export function LockedFeatureCard({
    * success panel returns the buyer (lib/monetization/lockReturn.ts). Before 2026-11-17 this link was the
    * bare plan path: the sale counted as "no source" and the buyer landed on /core.
    */
-  const planHref = useLockUpgradeHref(upgradeHref, featureId ? `lock_${featureId}` : null)
+  const planHref = useLockUpgradeHref(monthlyUpgradeHref(upgradeHref), featureId ? `lock_${featureId}` : null)
+  const tokenOfferHref = useLockUpgradeHref(tokenHref, featureId ? `token_${featureId}` : null)
 
   useEffect(() => {
     if (didTrackView.current) return
@@ -129,6 +131,7 @@ export function LockedFeatureCard({
         ) : onUpgradeClick ? (
           <button
             type="button"
+            data-ios-purchase
             onClick={() => {
               trackLockedFeatureConversionClick({
                 surface: 'locked_feature_card',
@@ -152,6 +155,7 @@ export function LockedFeatureCard({
         ) : (
           <Link
             href={planHref}
+            data-ios-purchase
             onClick={() => {
               trackLockedFeatureConversionClick({
                 surface: 'locked_feature_card',
@@ -169,12 +173,13 @@ export function LockedFeatureCard({
             data-testid="locked-feature-upgrade-link"
           >
             <Lock className="h-4 w-4" />
-            View plans
+            Unlock with {requiredPlan}
           </Link>
         )}
         {showTokenFallback && (
           <Link
-            href={tokenHref}
+            href={tokenOfferHref}
+            data-ios-purchase
             onClick={() => {
               const query = tokenHref.includes('?') ? tokenHref.split('?')[1] ?? '' : ''
               const tokenRuleCode = query ? new URLSearchParams(query).get('ruleCode') : null

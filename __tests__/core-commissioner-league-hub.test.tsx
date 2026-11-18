@@ -248,7 +248,7 @@ describe('<CommissionerHub /> — commissioner depth paywall', () => {
     for (const what of LOCKS) {
       const lock = screen.getByRole('region', { name: `${what} — AF Commissioner` })
       // `back=` is the page the lock sits on (lib/monetization/lockReturn.ts, 2026-11-17) — jsdom's `/` here.
-      expect(lock.querySelector('a')?.getAttribute('href')).toBe('/upgrade?plan=commissioner&from=lock_commissioner_depth&back=%2F')
+      expect(lock.querySelector('a')?.getAttribute('href')).toBe('/upgrade?plan=commissioner&offer=monthly&from=lock_commissioner_depth&back=%2F')
     }
     for (const id of ['ch-members', 'ch-waivers', 'ch-reports', 'ch-recipes', 'ch-timeline']) {
       expect(document.getElementById(id)?.className).toBe('af-ch-depth-lock')
