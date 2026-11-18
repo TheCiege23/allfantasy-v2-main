@@ -8,6 +8,9 @@ import type {
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxSourceTeamIds, assignFantraxTeamIds } from './fantraxTeamIds'
 import { ownedFantraxTeamName, parseFantraxTeamSourceId } from './fantraxTeamSelection'
+import { getFantraxLeagueInfo, resolveFantraxSeasonPosition } from './fantraxApi'
+import { fantraxScoringMode, fantraxScoringRules } from './fantraxScoring'
+import { fantraxStarterSlots } from './fantraxRosterSettings'
 
 type LegacyStanding = {
   rank?: unknown
@@ -366,25 +369,6 @@ function buildTeamIdMap(args: {
 }
 
 /**
- * 🛑 THIS COUNTED THE WHOLE LEAGUE'S PLAYER POOL AND CALLED IT A LINEUP.
- *
- * `roster_positions` means STARTING SLOTS — Sleeper's is ["QB","RB","RB","WR",…]
- * — and this returned a census of every rostered player in the league. Measured
- * on production: ["QB:89","RB:129","RWT:36","SFX:12","TE:51","WR:149"], which
- * sums to 466, the entire 12-team pool. `rosterSize` is derived from that sum, so
- * the League row claimed a 466-man roster.
- *
- * ⚠ FANTRAX'S API DOES NOT PUBLISH LINEUP SLOTS, so the honest output is nothing.
- * Emitting a positional breakdown of the pool is worse than emitting none: it is
- * confidently wrong, and every consumer that reads roster_positions as a lineup
- * gets a 466-slot one. The per-team roster SIZE is real and is returned
- * separately below.
- */
-function buildRosterPositionCounts(): Array<{ position: string; count: number }> {
-  return []
-}
-
-/**
  * How many players a team actually rosters, from the rosters themselves.
  *
  * ⚠ THE MEDIAN, NOT THE SUM AND NOT THE MAX. Teams legitimately differ (36–43 on
@@ -487,6 +471,9 @@ export async function fetchFantraxLeagueForImport(
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
   let liveScoringType: 'points' | 'h2h_points' | 'roto' | 'h2h_category' | null = null
+  let liveRosterPositions: Array<{ position: string; count: number }> = []
+  /* Where the league is in its own calendar, when Fantrax was asked this request. */
+  let liveSeasonState: 'preseason' | 'in_progress' | 'complete' | null = null
 
   /*
    * ⚠ A LIVE LEAGUE IS FETCHED HERE, THEN READ BACK AS A SNAPSHOT. Fantrax has a
@@ -537,6 +524,8 @@ export async function fetchFantraxLeagueForImport(
     liveScoringRules = outcome.scoringRules
     liveScoringGaps = outcome.scoringGaps
     liveScoringType = outcome.scoringType
+    liveRosterPositions = outcome.starterSlots ?? []
+    liveSeasonState = outcome.seasonState
   }
 
   const includeConfig = {
@@ -584,6 +573,24 @@ export async function fetchFantraxLeagueForImport(
     throw new FantraxImportLeagueNotFoundError(
       'Fantrax league not found. Use a Fantrax legacy league ID (UUID), or username|season|leagueName.'
     )
+  }
+
+  // Scheduled refreshes may enter through a saved Fantrax snapshot rather than
+  // the live team-selection source. Re-read public scoring and roster limits
+  // before normalizing that snapshot; an unavailable provider response cannot
+  // be treated as an empty ruleset.
+  if (leagueRecord.sourceLeagueId && !lookup.nativeLeague) {
+    const currentInfo = await getFantraxLeagueInfo(leagueRecord.sourceLeagueId).catch(() => null)
+    if (!currentInfo?.ok) throw new FantraxImportUnavailableError('Fantrax league settings could not be refreshed.')
+    const sourceSport = String(leagueRecord.sport ?? '').toLowerCase()
+    const scoringSport = sourceSport === 'nba' || sourceSport === 'ncaab' || sourceSport === 'nfl'
+      ? sourceSport : 'cfb'
+    const mapped = fantraxScoringRules(currentInfo.data, scoringSport)
+    liveScoringRules = mapped.rules
+    liveScoringGaps = mapped.gaps
+    liveScoringType = fantraxScoringMode(currentInfo.data)
+    liveRosterPositions = fantraxStarterSlots(currentInfo.data.rosterInfo)
+    liveSeasonState = resolveFantraxSeasonPosition(currentInfo.data)?.state ?? null
   }
 
   const username = leagueRecord.user?.fantraxUsername ?? lookup.username ?? 'fantrax-user'
@@ -867,14 +874,24 @@ export async function fetchFantraxLeagueForImport(
       season,
       size: leagueRecord.teamCount || teams.length,
       currentWeek,
-      isFinished: season < new Date().getFullYear(),
+      /*
+       * 🛑 THE LEAGUE'S OWN CALENDAR DECIDES, WHEN WE HAVE IT. This was
+       * `season < thisYear` alone, which calls a season that spans New Year
+       * finished in January while it is mid-way, and calls one that ended in
+       * December unfinished until the 1st. Fantrax publishes each period's dates,
+       * so a live read answers directly. The year test remains only for snapshots
+       * with no live source (CSV-era rows), where it is all there is.
+       */
+      isFinished: liveSeasonState
+        ? liveSeasonState === 'complete'
+        : season < new Date().getFullYear(),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
     viewerTeamId: userTeamId,
     settings: {
       scoringType: leagueRecord.isDevy ? 'devy' : liveScoringType,
-      rosterPositions: buildRosterPositionCounts(),
+      rosterPositions: liveRosterPositions,
       /* The real per-team size, so the mapper stops deriving it from the pool. */
       rosterSize: medianRosterSize(rosterPlayers),
       scoringRules: liveScoringRules.map((r) => ({ statKey: r.stat_key, points: r.points_value })),

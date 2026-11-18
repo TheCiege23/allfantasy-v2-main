@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getFantraxLeagues,
   getFantraxLeagueInfo,
+  getFantraxLeagueTeams,
   getFantraxPlayerIds,
   getFantraxStandings,
   flattenFantraxSchedule,
@@ -31,6 +32,21 @@ function resp(status: number, body: string) {
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+it('requests lightweight league info and retains every team', async () => {
+  const teamInfo = Object.fromEntries(Array.from({ length: 256 }, (_, index) => [
+    `team-${index}`, { id: `team-${index}`, name: `Team ${index}` },
+  ]))
+  const data = { leagueName: 'Large league', seasonYear: 2026, teamInfo }
+  const fetchMock = vi.fn().mockResolvedValue(resp(200, JSON.stringify(data)))
+  vi.stubGlobal('fetch', fetchMock)
+
+  expect(await getFantraxLeagueTeams('LargeLeagueID')).toEqual({ ok: true, data })
+  expect(fetchMock).toHaveBeenCalledWith(
+    expect.stringContaining('leagueId=LargeLeagueID&excludePlayerInfo=true'),
+    expect.any(Object),
+  )
+})
 
 async function loadIsolated() {
   return import('@/lib/league-import/fantrax/fantraxApi')
@@ -267,9 +283,31 @@ describe('league discovery from a Secret ID', () => {
     vi.stubGlobal('fetch', fetch)
     await getFantraxLeagues('secret')
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/getLeagues?'),
+      expect.stringContaining('/getLeagues'),
       expect.objectContaining({ headers: expect.objectContaining({ 'User-Agent': expect.stringContaining('AllFantasy') }) }),
     )
+  })
+
+  /**
+   * 🛑 THE SECRET ID IS A CREDENTIAL AND A URL IS A LOG LINE. It used to ride in
+   * the query string; Fantrax accepts the same request as a JSON POST body, so
+   * the URL carries nothing.
+   */
+  it('sends the Secret ID in a POST body, never in the URL', async () => {
+    const SECRET = 'my-secret-id-value'
+    const fetch = vi.fn().mockResolvedValue(resp(200, JSON.stringify({ leagues: [{
+      leagueId: 'abc123', leagueName: 'Cream Bowl', teamIds: ['t1'], teamNames: ['Team 1'],
+    }] })))
+    vi.stubGlobal('fetch', fetch)
+    const res = await getFantraxLeagues(SECRET)
+
+    expect(res.ok).toBe(true)
+    const [url, init] = fetch.mock.calls[0] as [string, RequestInit]
+    expect(String(url)).not.toContain(SECRET)
+    expect(String(url)).not.toContain('?')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ userSecretId: SECRET })
+    expect(init.headers).toMatchObject({ 'Content-Type': 'application/json' })
   })
   /**
    * ⚠ THE THIRD FAILURE SHAPE. getLeagueInfo answers 200-with-error for a bad
@@ -820,6 +858,87 @@ describe('fetching fixtures and results together', () => {
     expect(out.periodsRead).toBe(0)
     expect(out.periodsFailed).toBe(1)
     expect(out.rows.every((r) => r.awayScore === null && r.played === false)).toBe(true)
+  })
+
+  /* A 45-period league, currently in its last period. */
+  const LONG = Array.from({ length: 45 }, (_, i) => i + 1)
+  const DAY = 24 * 60 * 60 * 1000
+  const LONG_START = Date.parse('2026-01-01T00:00:00Z')
+  const LONG_PERIODS = LONG.map((n) => ({
+    number: n,
+    startDate: new Date(LONG_START + (n - 1) * DAY).toISOString(),
+    endDate: new Date(LONG_START + n * DAY - 1000).toISOString(),
+  }))
+  const LONG_MATCHUPS = LONG.map((n) => ({
+    period: n,
+    matchupList: [{ away: { name: 'loganhall', id: 'a' }, home: { name: 'Ydg', id: 'b' } }],
+  }))
+  const LONG_NOW = new Date(LONG_START + 44 * DAY + 60_000)
+  const periodOf = (url: unknown) => Number(new URL(String(url)).searchParams.get('period'))
+  const scoredBody = (period: number) =>
+    JSON.stringify({
+      period,
+      matchups: [
+        {
+          away: { teamId: 'a', teamName: 'loganhall', score: period, gamesPlayed: 3 },
+          home: { teamId: 'b', teamName: 'Ydg', score: 1, gamesPlayed: 3 },
+        },
+      ],
+    })
+
+  /**
+   * 🛑 THE 30-PERIOD CAP. Periods 1..min(current, 30) were read, so a league in
+   * period 45 never received a score for the period it was actually in.
+   */
+  it('reads every period up to the current one, past thirty', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => resp(200, scoredBody(periodOf(url))))
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await fetchFantraxScheduleWithScores(
+      'v2kzedypmm8jp61b',
+      infoWith({ matchups: LONG_MATCHUPS, scoringPeriods: LONG_PERIODS }),
+      { now: LONG_NOW },
+    )
+
+    expect(out.position?.period).toBe(45)
+    expect(out.periodsRead).toBe(45)
+    expect(out.rows.find((r) => r.week === 45)).toMatchObject({ awayScore: 45, played: true })
+  })
+
+  it('an explicit cap keeps the newest periods, not the oldest', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => resp(200, scoredBody(periodOf(url))))
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await fetchFantraxScheduleWithScores(
+      'v2kzedypmm8jp61b',
+      infoWith({ matchups: LONG_MATCHUPS, scoringPeriods: LONG_PERIODS }),
+      { now: LONG_NOW, maxPeriods: 5 },
+    )
+
+    expect(fetchMock.mock.calls.map(([url]) => periodOf(url)).sort((a, b) => a - b)).toEqual([41, 42, 43, 44, 45])
+    expect(out.rows.find((r) => r.week === 45)?.played).toBe(true)
+    expect(out.rows.find((r) => r.week === 1)?.played).toBe(false)
+  })
+
+  /** One request per period, all at once, is a burst against an API that answers 429. */
+  it('never has more than four period requests in flight', async () => {
+    let inFlight = 0
+    let peak = 0
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => {
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 2))
+      inFlight -= 1
+      return resp(200, scoredBody(periodOf(url)))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchFantraxScheduleWithScores(
+      'v2kzedypmm8jp61b',
+      infoWith({ matchups: LONG_MATCHUPS, scoringPeriods: LONG_PERIODS }),
+      { now: LONG_NOW },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(45)
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(4)
   })
 })
 

@@ -18,6 +18,7 @@ import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { fantraxScoringMode, fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
+import { fantraxStarterSlots } from './fantraxRosterSettings'
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
@@ -46,6 +47,7 @@ export type FantraxImportOutcome =
       scoringRules: FantraxScoringRule[]
       scoringGaps: string[]
       scoringType: 'points' | 'h2h_points' | 'roto' | 'h2h_category' | null
+      starterSlots: Array<{ position: string; count: number }>
       /**
        * What the league's draft board actually contained.
        *
@@ -209,6 +211,7 @@ export async function importFantraxLeague(args: {
 
   const season = Number(info.data.seasonYear) || new Date().getFullYear()
   const scoring = fantraxScoringRules(info.data, best.sport)
+  const starterSlots = fantraxStarterSlots(info.data.rosterInfo)
 
   const snapshotOwnerKey = `fantrax-team:${args.leagueId}:${mine.teamId}`
   const fantraxUser = await prisma.fantraxUser.upsert({
@@ -321,6 +324,7 @@ export async function importFantraxLeague(args: {
     total: mine.total,
     scoringRules: scoring.rules,
     scoringType: fantraxScoringMode(info.data),
+    starterSlots,
     draft: {
       picks: draftSummary.picks,
       slots: draftSummary.slotCount,
