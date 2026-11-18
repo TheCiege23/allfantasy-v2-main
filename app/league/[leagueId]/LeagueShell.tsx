@@ -14,6 +14,9 @@ import { dynastySeasonClock as leagueSeasonClock } from '@/lib/league-media/dyna
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
+import '@/components/league/league-type-skin.css'
+import { LeagueTypeHero } from '@/components/league/LeagueTypeHero'
+import { redraftSkinSport, resolveLeagueSkin } from '@/lib/league/leagueTypeSkin'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 
@@ -374,6 +377,11 @@ export function LeagueShell({
 }: LeagueShellProps) {
   const league = useMemo(() => normalizeBigBrotherShellLeague(storedLeague), [storedLeague])
   const zombieLeague = isZombieLeagueLike(league)
+  // Each league type wears its own colours on this page (lib/league/leagueTypeSkin.ts). Zombie is
+  // decided by the page's own wider predicate, so a league it treats as zombie is never skinned as
+  // something else.
+  const leagueSkin = zombieLeague ? 'zombie' : resolveLeagueSkin(league)
+  const leagueSkinSport = leagueSkin === 'redraft' ? redraftSkinSport(league.sport) : undefined
   const router = useRouter()
   const pathname = usePathname()
   // Server props own the league name, format and joined seats. Refresh after saves and when
@@ -1636,7 +1644,13 @@ export function LeagueShell({
         bestBallMode={league.bestBallMode}
         settings={league.settings}
       />
-      <div className="contents" data-league-id={league.id} data-embed-mode={embedMode ? '1' : undefined}>
+      <div
+        className="contents"
+        data-league-id={league.id}
+        data-embed-mode={embedMode ? '1' : undefined}
+        data-league-skin={leagueSkin}
+        data-league-sport={leagueSkinSport}
+      >
         {!embedMode ? (
           <ChimmyBubble
             selectedLeague={selectedLeague}
@@ -1707,21 +1721,13 @@ export function LeagueShell({
       >
         <main
           className={`relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
-            league.leagueVariant === 'survivor'
-              ? specialtyImmersive
-                ? 'border-x border-emerald-500/12 bg-gradient-to-b from-black/50 via-emerald-950/15 to-black/55'
-                : 'border-x border-amber-500/10 bg-gradient-to-b from-[#081018] via-[#07071a] to-[#07071a]'
-              : zombieLeague
-                ? 'border-x border-violet-500/15 bg-gradient-to-b from-[#120818] via-[#07071a] to-[#07071a]'
-                : league.leagueVariant === 'big_brother'
-                  ? specialtyImmersive
-                    ? 'border-x border-fuchsia-500/12 bg-gradient-to-b from-black/50 via-violet-950/20 to-black/58'
-                    : 'border-x border-amber-500/12 bg-gradient-to-b from-[#0a0e1c] via-[#070a14] to-[#040915]'
-                  : league.leagueVariant === 'merged_devy_c2c'
-                    ? 'border-x border-sky-500/15 bg-gradient-to-b from-[#07111f] via-[#050a16] to-[#060b14]'
-                    : league.leagueType === 'devy' || league.leagueVariant === 'devy_dynasty'
-                      ? 'border-x border-indigo-500/15 bg-gradient-to-b from-[#0a1022] via-[#070a18] to-[#060913]'
-                  : 'border-x border-[#ff3d81]/10 bg-gradient-to-b from-[#071322] via-[#050814] to-[#020611]'
+            // The immersive Survivor / Big Brother decks keep their see-through ground over the
+            // atmosphere art; every other league takes its type's skin (league-type-skin.css).
+            specialtyImmersive && league.leagueVariant === 'survivor'
+              ? 'border-x border-emerald-500/12 bg-gradient-to-b from-black/50 via-emerald-950/15 to-black/55'
+              : specialtyImmersive && league.leagueVariant === 'big_brother'
+                ? 'border-x border-fuchsia-500/12 bg-gradient-to-b from-black/50 via-violet-950/20 to-black/58'
+                : 'af-lsk-main'
           }`}
           data-testid="league-command-center-surface"
           data-league-variant={
@@ -1736,12 +1742,27 @@ export function LeagueShell({
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
             {!embedMode && !nativeWorkspace ? (
+              // ONE line in place of three stacked bars: the back links, where the league is hosted,
+              // the imported-league actions and the host button share a row; the read-only note sits
+              // under it.
               <LeagueWorkspaceNavigation
+                variant="strip"
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
                 platform={league.platform}
                 sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId}
                 season={league.season}
+                trailing={
+                  !isAfHostedPlatform(league.platform) ? (
+                    <ImportedLeagueQuickActions
+                      compact
+                      leagueId={league.id}
+                      leagueName={selectedLeague.name ?? 'League'}
+                      platform={league.platform}
+                      canRemove={isOwner}
+                    />
+                  ) : null
+                }
               />
             ) : null}
             <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${nativeWorkspace ? 'hidden' : ''}`}>
@@ -1841,14 +1862,6 @@ export function LeagueShell({
               capSummary={capSummary}
               capRosterId={capRosterId}
             />}
-            {!embedMode && !nativeWorkspace && !isAfHostedPlatform(league.platform) ? (
-              <ImportedLeagueQuickActions
-                leagueId={league.id}
-                leagueName={selectedLeague.name ?? 'League'}
-                platform={league.platform}
-                canRemove={isOwner}
-              />
-            ) : null}
 
             {dispersalDraftInProgress ? (
               <div className="shrink-0 border-b border-[#ff3d81]/20 bg-[#081226] px-4 py-2.5">
@@ -1881,6 +1894,17 @@ export function LeagueShell({
               plain English, and a button that opens the host — AllFantasy is read-only here, so the
               lineup, the draft and renewal all happen there.
             */}
+            {/* The block only this league type has, on the first tab. Survivor, Big Brother,
+                tournament and devy leagues already open with their own hero above the header. */}
+            {!nativeWorkspace && !showSpecialtyHero && !showDevyHero && activeTab === tabDefs[0]?.id ? (
+              <LeagueTypeHero
+                skin={leagueSkin}
+                sportLabel={String(league.sport ?? 'NFL').toUpperCase()}
+                season={Number.isFinite(Number(selectedLeague.season)) ? Number(selectedLeague.season) : null}
+                week={weekFromLeagueSettings(league.settings)}
+                teamCount={league.leagueSize ?? selectedLeague.teamCount ?? null}
+              />
+            ) : null}
             {!nativeWorkspace && activeTab === tabDefs[0]?.id ? (
               <div className="mb-4">
                 <WhatsNextPanel
@@ -2963,7 +2987,8 @@ function LeagueTabNavGlyph({
   )
 }
 
-function LeagueHeader({
+/** Exported for the DB-free skin harness at /e2e/league-type-skins; the page itself is the only real caller. */
+export function LeagueHeader({
   league,
   leagueId,
   tabs,
@@ -3086,21 +3111,11 @@ function LeagueHeader({
         : 'border-cap-red/45 bg-cap-red/15 text-red-100'
   return (
     <div
-      className="sticky top-0 z-[45] isolate flex-shrink-0 border-b border-[#ff3d81]/[0.14] bg-[#050814]/95 shadow-[0_12px_34px_rgba(0,0,0,0.46)] backdrop-blur-xl"
+      className="af-lsk-header sticky top-0 z-[45] isolate flex-shrink-0 backdrop-blur-xl"
       data-testid="league-command-center-header"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-[#ff3d81]/[0.08] via-[#050814]/95 to-violet-500/[0.05]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-24 opacity-60"
-        style={{
-          background:
-            'radial-gradient(ellipse 80% 60% at 50% -20%, rgba(255,61,129,0.18) 0%, transparent 70%)',
-        }}
-      />
+      {/* Tinted by the league type's skin (components/league/league-type-skin.css). */}
+      <div aria-hidden className="af-lsk-header-glow pointer-events-none absolute inset-x-0 top-0 -z-10 h-24 opacity-70" />
       <div
         className={cn(
           'relative flex flex-wrap items-start gap-3 px-4 pb-2 sm:px-5',
@@ -3158,9 +3173,7 @@ function LeagueHeader({
             <span
               className={cn(
                 'inline-flex min-h-6 items-center rounded-full border px-2 text-[11px] font-black uppercase tracking-[0.14em]',
-                headerSportLabel === 'NCAAF'
-                  ? 'border-amber-300/30 bg-amber-500/10 text-amber-100'
-                  : 'border-[#ff9ec0]/30 bg-[#ff3d81]/10 text-[#ffd7e5]',
+                'af-lsk-chip',
               )}
               data-testid="league-header-sport-badge"
             >
@@ -3590,12 +3603,7 @@ function LeagueHeader({
             event.preventDefault()
             onTabChange('trades')
           }}
-          className={cn(
-            'relative z-20 mx-3 mt-2 flex min-h-[44px] w-[calc(100%-1.5rem)] touch-manipulation items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-black uppercase tracking-wide sm:hidden',
-            activeTab === 'trades'
-              ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-white shadow-[0_8px_24px_rgba(255,61,129,0.16)]'
-              : 'border-[#ff3d81]/45 bg-[#ff3d81]/[0.09] text-[#ffb8d1]',
-          )}
+          className="af-lsk-shortcut relative z-20 mx-3 mt-2 flex min-h-[44px] w-[calc(100%-1.5rem)] touch-manipulation items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide sm:hidden"
         >
           <LeagueTabNavGlyph tabId="trades" active={activeTab === 'trades'} className="h-4 w-4" />
           {activeTab === 'trades' ? 'Viewing trades' : 'Open trades'}
@@ -3607,20 +3615,12 @@ function LeagueHeader({
           const activeGroupId = groupForLeagueTab(activeTab)
           const activeGroup = tabGroups.find((g) => g.id === activeGroupId) ?? tabGroups[0]
           return (
-            <div
-              className="rounded-xl border border-[#262c6a] bg-[#0d1132]/85 p-1.5"
-              data-testid="league-command-center-tabs"
-            >
-              {/* ONE combined row: group pills · divider · the active group's tabs.
-                  Previously two stacked rows — merged so the header reads as a
-                  single nav rail (and costs one less row of vertical space on
-                  mobile). Every tab id, testid, deep link, and the roster-issue
-                  badge survive unchanged. */}
-              <div
-                className="scrollbar-none flex snap-x items-center gap-1 overflow-x-auto [-webkit-overflow-scrolling:touch]"
-                role="tablist"
-                aria-label="League navigation"
-              >
+            <div data-testid="league-command-center-tabs">
+              {/* Sleeper's shape: the groups as one row of uppercase, letter-spaced labels with a
+                  short bar in the league type's colour under the active one; the active group's own
+                  tabs as a quieter row of pills beneath. Every tab id, testid, deep link and the
+                  roster-issue badge survive unchanged. */}
+              <div className="af-lsk-tabs" role="tablist" aria-label="League navigation">
                 {tabGroups.map((group) => {
                   const isActiveGroup = group.id === activeGroup?.id
                   return (
@@ -3633,21 +3633,15 @@ function LeagueHeader({
                         const first = group.tabs[0]
                         if (first) onTabChange(first.id)
                       }}
-                      className={cn(
-                        'touch-manipulation flex snap-start min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-2 text-[11px] font-black italic uppercase tracking-wide transition-colors',
-                        isActiveGroup
-                          ? 'bg-[linear-gradient(90deg,#ff3d81,#ff8a3d)] text-white shadow-sm'
-                          : 'border border-transparent text-[#aab1e0] hover:border-[#262c6a] hover:text-white',
-                      )}
+                      className="af-lsk-tab"
                     >
-                      {group.id === 'decide' ? <span aria-hidden>⚡</span> : null}
                       {group.label}
                     </button>
                   )
                 })}
-                {activeGroup && activeGroup.tabs.length > 1 ? (
-                  <>
-                    <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-[#262c6a]" />
+              </div>
+              {activeGroup && activeGroup.tabs.length > 1 ? (
+                <div className="af-lsk-subtabs" role="tablist" aria-label={`${activeGroup.label} sections`}>
                     {activeGroup.tabs.map((tab) => {
                     const isActive = activeTab === tab.id
                     const rosterTab = tab.id === 'team' || tab.id === 'roster' || tab.id === 'squad'
@@ -3660,21 +3654,9 @@ function LeagueHeader({
                         aria-selected={isActive}
                         data-testid={`league-tab-${tab.id}`}
                         onClick={() => onTabChange(tab.id)}
-                        className={cn(
-                          'touch-manipulation flex snap-start min-h-[38px] min-w-0 shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-colors sm:text-[11px]',
-                          isActive
-                            ? 'bg-white/[0.07] text-[#ff9d5c]'
-                            : 'text-[#7b83c4] hover:bg-white/[0.04] hover:text-white',
-                        )}
+                        className="af-lsk-subtab"
                       >
-                        <LeagueTabNavGlyph
-                          tabId={tab.id}
-                          active={isActive}
-                          className={cn(
-                            'h-3.5 w-3.5',
-                            isActive ? 'text-[#ff9d5c]' : 'text-[#7b83c4]',
-                          )}
-                        />
+                        <LeagueTabNavGlyph tabId={tab.id} active={isActive} className="h-3.5 w-3.5" />
                         <span className="truncate">{tab.label}</span>
                         {showRosterBadge ? (
                           <span
@@ -3691,9 +3673,8 @@ function LeagueHeader({
                       </button>
                     )
                     })}
-                  </>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           )
         })()}
