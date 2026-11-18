@@ -1261,6 +1261,13 @@ async function loadMyTeamData(
     : candidates.length > 0
       ? await timing.read('roster',()=>prisma.roster.findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
+          /*
+           * ⚠ THE NEWEST ROW, NOT WHICHEVER POSTGRES RETURNS. A re-import can leave a second roster for
+           * the same team under another owner id — ESPN `565010384` holds one keyed by the manager's
+           * ESPN id and frozen since 2026-09-17 beside the one each sync rewrites. Unordered, which one
+           * this screen showed was luck.
+           */
+          orderBy: { updatedAt: 'desc' },
           select: { id: true, platformUserId: true, playerData: true },
         }))
       : null
