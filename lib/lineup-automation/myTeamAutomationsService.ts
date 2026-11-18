@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { readManagedLineups, managedForOwner } from '@/lib/inactive-manager/inactiveManagerMode'
 import { ownerHasAfCommissionerPlan } from '@/lib/stat-corrections/applyStatCorrections'
 import { autoBenchByeLeagueBlock } from './autoBenchByeService'
+import { autoSwitchInjuredFor } from './autoSwitchInjured'
+import { ownerHasAutoSwitchPlan } from './autoSwitchInjuredService'
 import { myTeamAutomations, type MyTeamAutomation } from './myTeamAutomations'
 
 export type MyTeamAutomationsView = { available: true; items: MyTeamAutomation[]; takeBack: MyTeamAutomation } | { available: false; reason: string }
@@ -12,7 +14,7 @@ export type MyTeamAutomationsView = { available: true; items: MyTeamAutomation[]
 export async function readMyTeamAutomations(leagueId: string, userId: string): Promise<MyTeamAutomationsView> {
   const [league, roster] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, sport: true, settings: true, leagueType: true, bestBallMode: true } }),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true, settings: true, platformUserId: true } }),
   ])
   if (!league || !roster) return { available: false, reason: 'no_team' }
   const block = autoBenchByeLeagueBlock(league)
@@ -25,6 +27,10 @@ export async function readMyTeamAutomations(leagueId: string, userId: string): P
     weeklyLineups: block === null,
     commissionerPlan: await ownerHasAfCommissionerPlan(league.userId),
     managed,
+    autoSwitch: await (async () => {
+      const s = autoSwitchInjuredFor(roster.settings, roster.platformUserId)
+      return s && (await ownerHasAutoSwitchPlan(userId)) ? { level: s.level, timing: s.timing } : null
+    })(),
   })
   return { available: true, ...view }
 }

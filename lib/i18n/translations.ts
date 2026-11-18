@@ -6211,6 +6211,8 @@ export const translations: Record<string, Record<string, string>> = {
     "commControl.updateCommissionersDesc": "Change commissioners or assign additional commissioners.",
     "commControl.lockRoster": "Lock Roster",
     "commControl.lockRosterDesc": "Lock a team out of making roster transactions.",
+    "commControl.memberSettings": "Member Settings",
+    "commControl.memberSettingsDesc": "Chimmy lineup and auto-switch for injured starters, team by team.",
     "commControl.editSchedule": "Edit Schedule Matchups",
     "commControl.editScheduleDesc": "Rebuild matchups for the weeks that have not started. (Regular season only)",
     "commControl.back": "Back",

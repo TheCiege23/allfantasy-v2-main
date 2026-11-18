@@ -2304,6 +2304,8 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.updateCommissionersDesc": "Cambiar comisionados o asignar más comisionados.",
   "commControl.lockRoster": "Bloquear Plantilla",
   "commControl.lockRosterDesc": "Bloquear a un equipo de hacer transacciones de plantilla.",
+  "commControl.memberSettings": "Ajustes de Miembros",
+  "commControl.memberSettingsDesc": "Alineación de Chimmy y cambio automático de titulares lesionados, equipo por equipo.",
   "commControl.editSchedule": "Editar Matchups del Calendario",
   "commControl.editScheduleDesc": "Vuelve a armar los matchups de las semanas que no han empezado. (Solo temporada regular)",
   "commControl.back": "Atrás",

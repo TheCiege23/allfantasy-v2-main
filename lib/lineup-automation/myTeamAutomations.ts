@@ -21,6 +21,18 @@ type MyTeamFacts = {
   commissionerPlan: boolean
   /** This team is being run for its owner right now. */
   managed: null | { autopilot: boolean }
+  /** The commissioner's "auto-switch injured starters" for this team, while the owner has Pro. */
+  autoSwitch?: null | { level: 'out' | 'doubtful' | 'questionable'; timing: 'pregame_90' | 'night_before' }
+}
+
+const AUTO_SWITCH_LEVEL: Record<'out' | 'doubtful' | 'questionable', { en: string; es: string }> = {
+  out: { en: 'is ruled out', es: 'queda descartado' },
+  doubtful: { en: 'is doubtful or worse', es: 'está en duda o peor' },
+  questionable: { en: 'is questionable or worse', es: 'es cuestionable o peor' },
+}
+const AUTO_SWITCH_TIMING: Record<'pregame_90' | 'night_before', { en: string; es: string }> = {
+  pregame_90: { en: 'in the 90 minutes before his game', es: 'en los 90 minutos antes de su partido' },
+  night_before: { en: 'from 8pm Eastern the night before his game', es: 'desde las 8pm (hora del Este) la noche antes de su partido' },
 }
 
 const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -33,6 +45,14 @@ export function myTeamAutomations(f: MyTeamFacts): { items: MyTeamAutomation[]; 
         ? { key: 'managed', en: 'Chimmy is running your team on autopilot right now: your lineup, plus a waiver claim when a starter cannot play. Trade offers to you are paused while it does.', es: 'Chimmy dirige tu equipo en piloto automático ahora mismo: tu alineación y un reclamo cuando un titular no puede jugar. Las ofertas de intercambio quedan en pausa mientras tanto.' }
         : { key: 'managed', en: 'AllFantasy is setting your lineup right now, while you are away.', es: 'AllFantasy está poniendo tu alineación ahora mismo, mientras estás ausente.' },
     )
+  }
+  if (f.autoSwitch && f.weeklyLineups && !f.managed) {
+    const l = AUTO_SWITCH_LEVEL[f.autoSwitch.level], t = AUTO_SWITCH_TIMING[f.autoSwitch.timing]
+    items.push({
+      key: 'auto_switch_injured',
+      en: `Your commissioner turned on auto-switch: a starter who ${l.en} is swapped for your best healthy bench player ${t.en}. You can turn it off on your Team tab.`,
+      es: `Tu comisionado activó el cambio automático: un titular que ${l.es} se cambia por tu mejor suplente sano ${t.es}. Puedes desactivarlo en tu pestaña Equipo.`,
+    })
   }
   if (f.weeklyLineups && fillEmptyStartersOn(f.settings)) {
     items.push({ key: 'fill_empty_starters', en: 'If you leave a starting spot empty, AllFantasy tells you first, then about 3 hours later puts your best bench player who can play there (at once if games have already started). It never moves a player you started.', es: 'Si dejas un puesto titular vacío, AllFantasy te avisa primero y unas 3 horas después pone al mejor suplente que pueda jugar ahí (de inmediato si ya empezaron los partidos). Nunca mueve a un jugador que pusiste de titular.' })

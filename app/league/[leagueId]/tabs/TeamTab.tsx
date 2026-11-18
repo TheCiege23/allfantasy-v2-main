@@ -60,6 +60,7 @@ import { AfInjuryTag } from '@/components/league/AfInjuryTag'
 import { useByeTeams } from './useByeTeams'
 import { useNoGameTeams } from './useNoGameTeams'
 import { TeamFuturePicks } from '@/components/league/TeamFuturePicks'
+import { AutoSwitchOwnerCard } from '@/components/league/AutoSwitchOwnerCard'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -1728,6 +1729,8 @@ const maxWeekMenu = useMemo(() => {
       {league.status === 'in_season' ? (
         <TeamTabMatchupBanner leagueId={league.id} />
       ) : null}
+      {/* The commissioner's auto-switch for this team, with the manager's own off switch (#18). */}
+      <AutoSwitchOwnerCard leagueId={league.id} />
       {legalitySnapshot && !legalitySnapshot.isLegal ? (
         <div
           className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
