@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { defineMessages } from '@/lib/i18n/messages'
 
 /**
  * The manager's side of "Auto-switch injured starters" (owner decision 2026-11-18: the commissioner
@@ -14,12 +15,15 @@ type Level = 'out' | 'doubtful' | 'questionable'
 type Timing = 'pregame_90' | 'night_before'
 type Mine = { rosterId: string | null; setting: { level: Level; timing: Timing } | null; ownerHasPro: boolean }
 
-const COPY = {
+const autoSwitchOwnerMessages = defineMessages({
   en: {
     title: 'Auto-switch injured starters is on',
-    body: (l: string, t: string) => `Your commissioner turned this on for your team: a starter who ${l} is swapped for your best healthy bench player ${t}. Everything else in your lineup stays as you set it.`,
-    levels: { out: 'is ruled out', doubtful: 'is doubtful or worse', questionable: 'is questionable or worse' } as Record<Level, string>,
-    timings: { pregame_90: 'in the 90 minutes before his game', night_before: 'from 8pm Eastern the night before his game' } as Record<Timing, string>,
+    body: (level: string, timing: string): string => `Your commissioner turned this on for your team: a starter who ${level} is swapped for your best healthy bench player ${timing}. Everything else in your lineup stays as you set it.`,
+    levelOut: 'is ruled out',
+    levelDoubtful: 'is doubtful or worse',
+    levelQuestionable: 'is questionable or worse',
+    timingPregame: 'in the 90 minutes before his game',
+    timingNightBefore: 'from 8pm Eastern the night before his game',
     needsPro: 'It runs only while you have AllFantasy Pro.',
     off: 'Turn off',
     saving: 'Turning off…',
@@ -28,20 +32,25 @@ const COPY = {
   },
   es: {
     title: 'El cambio automático de titulares lesionados está activo',
-    body: (l: string, t: string) => `Tu comisionado lo activó para tu equipo: un titular que ${l} se cambia por tu mejor suplente sano ${t}. El resto de tu alineación queda como la pusiste.`,
-    levels: { out: 'queda descartado', doubtful: 'está en duda o peor', questionable: 'es cuestionable o peor' } as Record<Level, string>,
-    timings: { pregame_90: 'en los 90 minutos antes de su partido', night_before: 'desde las 8pm (hora del Este) la noche antes de su partido' } as Record<Timing, string>,
+    body: (level: string, timing: string): string => `Tu comisionado lo activó para tu equipo: un titular que ${level} se cambia por tu mejor suplente sano ${timing}. El resto de tu alineación queda como la pusiste.`,
+    levelOut: 'queda descartado',
+    levelDoubtful: 'está en duda o peor',
+    levelQuestionable: 'es cuestionable o peor',
+    timingPregame: 'en los 90 minutos antes de su partido',
+    timingNightBefore: 'desde las 8pm (hora del Este) la noche antes de su partido',
     needsPro: 'Solo funciona mientras tengas AllFantasy Pro.',
     off: 'Desactivar',
     saving: 'Desactivando…',
     done: 'Desactivado. Tu comisionado puede ver que lo hiciste.',
     failed: 'No se pudo desactivar. Inténtalo de nuevo.',
   },
-}
+})
+
+const LEVEL_KEY = { out: 'levelOut', doubtful: 'levelDoubtful', questionable: 'levelQuestionable' } as const
+const TIMING_KEY = { pregame_90: 'timingPregame', night_before: 'timingNightBefore' } as const
 
 export function AutoSwitchOwnerCard({ leagueId }: { leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const c = language === 'es' ? COPY.es : COPY.en
+  const c = useMessages(autoSwitchOwnerMessages)
   const [mine, setMine] = useState<Mine | null>(null)
   const [state, setState] = useState<'idle' | 'saving' | 'done' | 'failed'>('idle')
   const url = `/api/leagues/${encodeURIComponent(leagueId)}/auto-switch-injured`
@@ -84,7 +93,7 @@ export function AutoSwitchOwnerCard({ leagueId }: { leagueId: string }) {
       <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
         <h3 className="m-0 text-[15px] font-bold" style={{ color: 'var(--lsk-text, var(--text))' }}>{c.title}</h3>
         <p className="m-0 text-[13px] leading-relaxed" style={{ color: 'var(--lsk-muted, var(--muted))' }}>
-          {c.body(c.levels[mine.setting.level], c.timings[mine.setting.timing])}
+          {c.body(c[LEVEL_KEY[mine.setting.level]], c[TIMING_KEY[mine.setting.timing]])}
           {mine.ownerHasPro ? '' : ` ${c.needsPro}`}
         </p>
         {state === 'failed' ? <p role="alert" className="m-0 text-[13px] font-semibold" style={{ color: '#ff6b81' }}>{c.failed}</p> : null}

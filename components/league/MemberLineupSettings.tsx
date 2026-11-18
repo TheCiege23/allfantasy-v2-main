@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { defineMessages } from '@/lib/i18n/messages'
 
 /**
  * Member Settings — Chimmy lineup and auto-switch for injured starters, team by team (owner's page
@@ -33,7 +34,7 @@ const T = {
   blue: 'var(--af-blue, #3b82f6)',
 }
 
-const COPY = {
+const memberLineupMessages = defineMessages({
   en: {
     title: 'Member Settings',
     members: 'Members',
@@ -42,11 +43,14 @@ const COPY = {
     auto: 'Auto-switch injured starters',
     autoSub: 'Swap a starter who might not play for the best healthy bench player who fits the slot.',
     levelLabel: 'Switch a starter who is',
-    levels: { out: 'Out only', doubtful: 'Doubtful or worse', questionable: 'Questionable or worse' } as Record<Level, string>,
+    levelOut: 'Out only',
+    levelDoubtful: 'Doubtful or worse',
+    levelQuestionable: 'Questionable or worse',
     timingLabel: 'Check',
-    timings: { pregame_90: '90 min before each game (inactives)', night_before: 'The night before each game' } as Record<Timing, string>,
+    timingPregame: '90 min before each game (inactives)',
+    timingNightBefore: 'The night before each game',
     riskNote: 'Doubtful and questionable players often play. Out only never benches someone who suits up.',
-    needsPro: (name: string) => `Runs only while ${name} has AllFantasy Pro.`,
+    needsPro: (name: string): string => `Runs only while ${name} has AllFantasy Pro.`,
     managedNote: 'While Chimmy sets this lineup, it already benches a starter who is out.',
     notice: 'The manager is told when you turn either one on, and can turn it off.',
     imported: 'This league is hosted on another site. AllFantasy can’t change a lineup there, so these switches work in leagues played on AllFantasy.',
@@ -65,11 +69,14 @@ const COPY = {
     auto: 'Cambio automático de titulares lesionados',
     autoSub: 'Cambia a un titular que quizá no juegue por el mejor suplente sano que encaje en el puesto.',
     levelLabel: 'Cambiar a un titular que',
-    levels: { out: 'Solo descartado', doubtful: 'En duda o peor', questionable: 'Cuestionable o peor' } as Record<Level, string>,
+    levelOut: 'Solo descartado',
+    levelDoubtful: 'En duda o peor',
+    levelQuestionable: 'Cuestionable o peor',
     timingLabel: 'Revisar',
-    timings: { pregame_90: '90 min antes de cada partido (inactivos)', night_before: 'La noche antes de cada partido' } as Record<Timing, string>,
+    timingPregame: '90 min antes de cada partido (inactivos)',
+    timingNightBefore: 'La noche antes de cada partido',
     riskNote: 'Los jugadores en duda o cuestionables muchas veces juegan. Solo descartado nunca sienta a alguien que se viste.',
-    needsPro: (name: string) => `Solo funciona mientras ${name} tenga AllFantasy Pro.`,
+    needsPro: (name: string): string => `Solo funciona mientras ${name} tenga AllFantasy Pro.`,
     managedNote: 'Mientras Chimmy pone esta alineación, ya sienta a un titular descartado.',
     notice: 'Se le avisa al mánager cuando activas cualquiera de los dos, y puede desactivarlo.',
     imported: 'Esta liga está en otro sitio. AllFantasy no puede cambiar una alineación allí, así que estos ajustes funcionan en ligas jugadas en AllFantasy.',
@@ -80,7 +87,10 @@ const COPY = {
     saved: 'Guardado',
     loading: 'Cargando miembros…',
   },
-}
+})
+
+const LEVEL_KEY = { out: 'levelOut', doubtful: 'levelDoubtful', questionable: 'levelQuestionable' } as const
+const TIMING_KEY = { pregame_90: 'timingPregame', night_before: 'timingNightBefore' } as const
 
 function Switch({ on, disabled, labelledBy, onToggle, testId }: { on: boolean; disabled?: boolean; labelledBy: string; onToggle: () => void; testId: string }) {
   return (
@@ -103,8 +113,7 @@ function Switch({ on, disabled, labelledBy, onToggle, testId }: { on: boolean; d
 const initials = (name: string) => name.replace(/^@/, '').slice(0, 2).toUpperCase()
 
 export function MemberLineupSettings({ leagueId }: { leagueId: string }) {
-  const { language } = useOptionalLanguage()
-  const c = language === 'es' ? COPY.es : COPY.en
+  const c = useMessages(memberLineupMessages)
   const [inactive, setInactive] = useState<InactiveView | null>(null)
   const [auto, setAuto] = useState<AutoView | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -242,7 +251,7 @@ export function MemberLineupSettings({ leagueId }: { leagueId: string }) {
                     style={{ border: `1px solid ${T.line}`, background: T.surface, color: T.text }}
                     data-testid="member-auto-level"
                   >
-                    {(Object.keys(c.levels) as Level[]).map((k) => <option key={k} value={k}>{c.levels[k]}</option>)}
+                    {(Object.keys(LEVEL_KEY) as Level[]).map((k) => <option key={k} value={k}>{c[LEVEL_KEY[k]]}</option>)}
                   </select>
                 </label>
                 <label className="flex min-w-0 flex-[1_1_260px] flex-col gap-1.5 text-[13px] font-bold" style={{ color: T.text }}>
@@ -255,7 +264,7 @@ export function MemberLineupSettings({ leagueId }: { leagueId: string }) {
                     style={{ border: `1px solid ${T.line}`, background: T.surface, color: T.text }}
                     data-testid="member-auto-timing"
                   >
-                    {(Object.keys(c.timings) as Timing[]).map((k) => <option key={k} value={k}>{c.timings[k]}</option>)}
+                    {(Object.keys(TIMING_KEY) as Timing[]).map((k) => <option key={k} value={k}>{c[TIMING_KEY[k]]}</option>)}
                   </select>
                 </label>
                 </div>
