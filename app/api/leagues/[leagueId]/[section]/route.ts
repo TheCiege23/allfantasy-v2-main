@@ -118,6 +118,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'taxi-rules': () => import('../taxi-rules/handler'),
   'taxi-steals': () => import('../taxi-steals/handler'),
   'tournament-context': () => import('../tournament-context/handler'),
+  'trade-interest': () => import('../trade-interest/handler'),
   'trade-review-auto-approve': () => import('../trade-review-auto-approve/handler'),
   'trades': () => import('../trades/handler'),
   'welcome-back': () => import('../welcome-back/handler'),

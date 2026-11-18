@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
-import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import '@/components/dynasty/dynasty-details.css'
@@ -36,7 +35,8 @@ import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
-import { TradeProposeGrid } from '@/components/league/TradeProposeGrid'
+import { Crest, TradeProposeGrid } from '@/components/league/TradeProposeGrid'
+import { useTradeInterest } from '@/components/league/useTradeInterest'
 import {
   groupTradeTimelineBySeason,
   tradeSeasonFromIso,
@@ -1165,6 +1165,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     [watch, persistWatch],
   )
 
+  // The AF crest: league-wide interest (marks + anonymous counts) once the interest table exists;
+  // until then, and if that read fails, the per-browser watch set above.
+  const interest = useTradeInterest(league.id)
+  const interestMarks = interest.available ? interest.mine : watch
+  const toggleInterest = interest.available ? interest.toggle : toggleWatch
+
   const load = useCallback(async (opts?: { background?: boolean }) => {
     const background = opts?.background === true
     if (!background) {
@@ -1951,7 +1957,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {tradeBlock.map((item) => {
                 const accent = positionAccent(item.position)
-                const watched = watch.has(item.playerId)
+                const watched = interestMarks.has(item.playerId)
                 return (
                   // Compact card (owner's reference, 2026-11-17): position · club and the short name on
                   // the left, the photo top-right, the owner on a strip tinted in the position colour.
@@ -1979,15 +1985,17 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                           size={38}
                           variant="round"
                         />
+                        {/* The AF crest in place of the heart: the viewer's interest mark and how many
+                            managers marked this player (owner's page review #9). */}
                         <button
                           type="button"
-                          onClick={() => toggleWatch(item.playerId)}
-                          className={`absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line2)] bg-[var(--surface2)] transition ${
-                            watched ? 'text-rose-400' : 'text-[var(--muted)] hover:text-rose-400/80'
-                          }`}
-                          aria-label={watched ? 'Remove from watch' : 'Watch player'}
+                          onClick={() => toggleInterest(item.playerId)}
+                          className="absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center"
+                          aria-pressed={watched}
+                          aria-label={`${watched ? 'Remove interest in' : 'Mark interest in'} ${item.name}${interest.counts[item.playerId] ? `, ${interest.counts[item.playerId]} interested` : ''}`}
+                          data-testid="trade-block-crest"
                         >
-                          <Heart className={`h-3 w-3 ${watched ? 'fill-current' : ''}`} strokeWidth={2} />
+                          <Crest on={watched} count={interest.counts[item.playerId] ?? 0} />
                         </button>
                       </div>
                     </div>
@@ -2013,8 +2021,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           leagueId={league.id}
           platform={league.platform}
           tradeBlockPlayerIds={tradeBlockPlayerIds}
-          watched={watch}
-          onToggleWatch={toggleWatch}
+          watched={interestMarks}
+          onToggleWatch={toggleInterest}
+          interestCounts={interest.counts}
           onProposeFor={(rosterId, playerId) => {
             setProposeFor({ rosterId, playerId })
             setProposeOpen(true)

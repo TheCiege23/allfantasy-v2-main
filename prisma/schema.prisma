@@ -2527,6 +2527,21 @@ model TradeBlockEntry {
   @@map("trade_block_entries")
 }
 
+/// A manager's "I want this player" mark: the AF crest on the league page's Propose grid and trade
+/// block cards. Shown to other managers only as an anonymous COUNT per player, never as who marked it.
+/// Keyed by the AllFantasy league and user and the player id the league's rosters use.
+model LeagueTradeInterest {
+  id        String   @id @default(cuid())
+  leagueId  String   @db.VarChar(64)
+  userId    String   @db.VarChar(64)
+  playerId  String   @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  @@unique([leagueId, userId, playerId], map: "uq_league_trade_interest")
+  @@index([leagueId, playerId], map: "idx_league_trade_interest_player")
+  @@map("league_trade_interests")
+}
+
 model TradeAnalysisSnapshot {
   id              String    @id @default(uuid())
   leagueId        String    @db.VarChar(64)
