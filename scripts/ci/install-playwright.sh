@@ -24,6 +24,8 @@
 #
 # PW_INSTALL_RETRY_DELAY overrides the first backoff in seconds (tests set it to 0).
 # PW_DEPS_ATTEMPT_TIMEOUT overrides the per-attempt cap on the apt phase (default 300s).
+# PW_APT_WAIT_BUDGET caps the total time spent waiting for a timed-out attempt's apt (default 360s);
+# PW_APT_WAIT_POLL is that wait's poll interval (default 5s; tests set it to 1).
 
 set -u
 
@@ -50,6 +52,36 @@ retry() {
   done
 }
 
+# wait_for_apt — let a timed-out attempt's apt finish instead of failing the next step on its lock.
+#
+# 🛑 `timeout` SIGNALS `npx`, NOT THE `sudo apt-get` PLAYWRIGHT STARTED UNDER IT (2026-11-18). On a slow
+# mirror attempt 1 hit the cap mid-download; its apt-get kept running — and kept the dpkg lock — so attempt 2
+# died at once on "Could not get lock /var/lib/dpkg/lock-frontend … held by process N (apt-get)", and
+# mobile-smoke went red with WebKit's libraries missing (twice in a row on PR #3853, jobs 134461192455 and
+# its re-run). That leftover apt was still making progress, so it is WAITED FOR, never killed: killing dpkg
+# mid-install can leave packages half-configured, which is worse than the slow mirror.
+#
+# Bounded by one budget shared across every wait, so a hung apt cannot run the job into its timeout.
+apt_wait_left="${PW_APT_WAIT_BUDGET:-360}"
+apt_wait_poll="${PW_APT_WAIT_POLL:-5}"
+apt_busy() {
+  command -v pgrep >/dev/null 2>&1 || return 1
+  pgrep -x apt-get >/dev/null 2>&1 || pgrep -x apt >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1
+}
+wait_for_apt() {
+  apt_busy || return 0
+  echo "== waiting for the previous attempt's apt to finish (up to ${apt_wait_left}s left)"
+  while apt_busy; do
+    if [ "$apt_wait_left" -le 0 ]; then
+      echo "::warning::apt from a timed-out attempt is still running; the wait budget is spent."
+      return 1
+    fi
+    sleep "$apt_wait_poll"
+    apt_wait_left=$((apt_wait_left - apt_wait_poll))
+  done
+  echo "== the previous attempt's apt finished"
+}
+
 echo "== 1/3 browsers: ${browsers[*]:-all}"
 if ! retry 3 "$delay0" npx playwright install ${browsers[@]+"${browsers[@]}"}; then
   echo "::error::Playwright could not download the browser(s) (${browsers[*]:-all}) after 3 attempts."
@@ -71,7 +103,22 @@ if command -v timeout >/dev/null 2>&1; then
 else
   deps_cmd=(npx playwright install-deps)
 fi
-if ! retry 2 "$delay0" "${deps_cmd[@]}" ${browsers[@]+"${browsers[@]}"}; then
+deps_ok=0
+deps_delay="$delay0"
+for attempt in 1 2; do
+  if "${deps_cmd[@]}" ${browsers[@]+"${browsers[@]}"}; then
+    deps_ok=1
+    break
+  fi
+  # Whatever the attempt left running finishes first: the retry would otherwise fail on its lock, and the
+  # packages it was installing are exactly the ones this phase wants.
+  wait_for_apt || true
+  if [ "$attempt" -lt 2 ]; then
+    echo "::warning::'${deps_cmd[*]}' failed (attempt $attempt of 2); retrying in ${deps_delay}s"
+    sleep "$deps_delay"
+  fi
+done
+if [ "$deps_ok" -ne 1 ]; then
   echo "::warning::Playwright's OS packages could not be installed after 2 attempts of up to ${deps_cap}s (apt mirror or DNS outage). Continuing on the runner image's own libraries; the launch check below decides whether that is enough. Fonts may differ on this run."
 fi
 
