@@ -15,6 +15,8 @@ export type MatchupPlayerSlot = {
   projectedPoints: number
   /** False when projectedPoints fell back to a flat per-position estimate (no real provider projection for this player/week). */
   hasRealProjection: boolean
+  /** The AF engine's projection in this league's scoring (lib/matchup-center/afProjections.ts). Null/absent when the engine has none — never the provider number. */
+  afProjectedPoints?: number | null
   injuryStatus: string | null
   newsBlurb: string | null
   weatherSummary: string | null
@@ -36,6 +38,10 @@ export type MatchupSidePayload = {
   winPct: number
   totalPoints: number
   projectedTotal: number
+  /** Sum of the starters' AF projections, or null when none has one. */
+  afProjectedTotal?: number | null
+  /** How many starters `afProjectedTotal` covers. */
+  afProjectedFrom?: number
   starters: MatchupPlayerSlot[]
   remainingStarters: number
 }

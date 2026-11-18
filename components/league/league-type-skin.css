@@ -352,3 +352,92 @@ html[data-mode='light'] [data-league-skin] .af-core {
 .af-lsk-sync .af-lsk-sync-remove { color: #fda4af; }
 .af-lsk-sync .af-lsk-sync-remove:hover { color: #ffe4e6; }
 .af-lsk-sync-note { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.5; color: var(--lsk-muted); }
+
+/* ── AF injury tag (components/league/AfInjuryTag.tsx), shared by matchup and roster rows ── */
+.af-inj-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.af-inj-tag[data-tone='ok'] { color: #34d399; background: rgba(52, 211, 153, 0.14); }
+.af-inj-tag[data-tone='warn'] { color: #f5b342; background: rgba(245, 179, 66, 0.14); }
+.af-inj-tag[data-tone='risk'] { color: #fb923c; background: rgba(251, 146, 60, 0.14); }
+.af-inj-tag[data-tone='out'] { color: #fb7185; background: rgba(251, 113, 133, 0.14); }
+
+/* AF's own projection, wherever it sits beside a provider projection. */
+.af-proj-af { color: var(--af-blue, #3b82f6); font-weight: 700; }
+
+/* ── The rafters (components/league/LeagueRafters.tsx), on the league page's history ── */
+.af-lsk-rafters {
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px clamp(18px, 3vw, 30px);
+  border-radius: 18px;
+  border: 1px solid var(--lsk-accent-line, rgba(212, 162, 76, 0.38));
+  background:
+    radial-gradient(60% 120% at 85% 0%, var(--lsk-glow, rgba(212, 162, 76, 0.2)), transparent 65%),
+    linear-gradient(180deg, var(--lsk-surface, #121826), var(--lsk-bg, #0b0f17));
+  color: var(--lsk-text, #e8ecf2);
+}
+.af-lsk-rafters-copy { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.af-lsk-rafters-title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--lsk-heading, #f3d79f);
+}
+.af-lsk-rafters-wall { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: 100%; }
+.af-lsk-rafters-label,
+.af-lsk-rafters-titles {
+  font-size: 12px;
+  color: var(--lsk-muted, #9aa4b2);
+}
+.af-lsk-rafters-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.af-lsk-rafters-pennants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.af-lsk-pennant {
+  flex: none;
+  width: 66px;
+  height: 92px;
+  box-sizing: border-box;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+  background: linear-gradient(180deg, #26344f, #172036);
+  border-top: 3px solid var(--lsk-accent-strong, #d4a24c);
+  color: #e8ecf2;
+}
+.af-lsk-pennant[data-mine='1'] { background: var(--lsk-accent-strong, #d4a24c); color: var(--lsk-accent-ink, #0b0f17); }
+.af-lsk-pennant[data-open='1'] { background: var(--lsk-surface2, #1c2333); border-top-color: var(--lsk-line, #2a3345); color: var(--lsk-muted, #9aa4b2); }
+.af-lsk-pennant-year { font-size: 16px; font-weight: 800; }
+.af-lsk-pennant-name { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+@media (max-width: 639px) {
+  .af-lsk-rafters-wall { align-items: flex-start; }
+  .af-lsk-pennant { width: 56px; height: 80px; }
+}

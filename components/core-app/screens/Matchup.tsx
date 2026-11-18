@@ -37,6 +37,7 @@ import type {
   MatchupTeam,
 } from '@/lib/core-app/matchup'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { injuryTag } from '@/lib/injuries/afInjuryTag'
 import { useMessages } from '@/components/i18n/useMessages'
 import { matchupScreenMessages } from '@/lib/core-app/messages/matchupScreen'
 import { playerGameMark } from '@/lib/core-app/redraftCoreScoreBug'
@@ -341,17 +342,10 @@ function StickyScore({
 }
 
 /**
- * "Q", "D", "DTD" — the injury feed's word for an UNCERTAINTY, shortened the way every fantasy app
- * prints it. Anything unrecognised keeps its first word rather than being dropped.
+ * "Q", "D", "DTD" — the injury feed's word for an UNCERTAINTY. Lives in lib/injuries/afInjuryTag.ts
+ * so the league page's matchup and roster rows label a player exactly as this screen does.
  */
-export function injuryTag(status: string): string {
-  const s = status.trim().toLowerCase()
-  if (s.startsWith('quest')) return 'Q'
-  if (s.startsWith('doubt')) return 'D'
-  if (s.startsWith('prob')) return 'P'
-  if (s.replace(/[^a-z]/g, '') === 'daytoday' || s === 'dtd') return 'DTD'
-  return status.trim().split(/\s+/)[0].slice(0, 4).toUpperCase()
-}
+export { injuryTag }
 
 /**
  * "Sun 1:00 PM" — in the VIEWER's timezone.
