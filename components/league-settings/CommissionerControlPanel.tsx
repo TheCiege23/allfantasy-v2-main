@@ -60,21 +60,30 @@ type SubView =
   | 'edit-schedule'
   | 'member-settings'
 
+const SUB_VIEWS: ReadonlySet<string> = new Set(['edit-lineups', 'update-commissioners', 'lock-roster', 'edit-schedule', 'member-settings'])
+
+/** A view the Commissioner Hub asked for, or null for the menu (an unknown name opens the menu). */
+export function commissionerSubView(view: string | null | undefined): SubView {
+  return view && SUB_VIEWS.has(view) ? (view as SubView) : null
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 interface Props {
   leagueId: string
+  /** Open straight on this view (the Commissioner Hub's cards); Back still returns to the menu. */
+  initialView?: string | null
 }
 
-export function CommissionerControlPanel({ leagueId }: Props) {
+export function CommissionerControlPanel({ leagueId, initialView = null }: Props) {
   const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [teams, setTeams] = useState<TeamInfo[]>([])
-  const [subView, setSubView] = useState<SubView>(null)
+  const [subView, setSubView] = useState<SubView>(() => commissionerSubView(initialView))
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [selectedWeek, setSelectedWeek] = useState(1)
   const [actionLoading, setActionLoading] = useState(false)

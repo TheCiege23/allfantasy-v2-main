@@ -21,6 +21,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
+import type { TaskCardsResult } from '@/lib/core-app/commissioner/tasks'
 import { toast } from 'sonner'
 import {
   buildAllTimeStandings,
@@ -64,6 +66,10 @@ type LeagueSettingsHubLeague = {
 }
 
 type Loadable<T> = T | null | undefined
+
+/* The Commissioner Hub's live panels load only when a commissioner opens that tab. */
+const RivalryWeekCard = dynamic(() => import('@/components/league-settings/RivalryWeekCard').then((m) => m.RivalryWeekCard), { ssr: false })
+const StorylineStudio = dynamic(() => import('@/components/core-app/commissioner/StorylineStudio').then((m) => m.StorylineStudio), { ssr: false })
 
 type HighScoresPayload = {
   seasons: number[]
@@ -126,6 +132,7 @@ export function LeagueSettingsHub({
   const [invite, setInvite] = useState<Loadable<string>>(undefined)
   const [coOwners, setCoOwners] = useState<Loadable<Array<{ id: string; accepted: boolean; name: string }>>>(undefined)
   const [busyField, setBusyField] = useState<string | null>(null)
+  const [tasks, setTasks] = useState<Loadable<TaskCardsResult>>(undefined)
   const prefsRef = useRef<NotificationPreferences | null>(null)
 
   const loadSettings = useCallback(async () => {
@@ -179,6 +186,21 @@ export function LeagueSettingsHub({
     } else setCoOwners(null)
     return () => { live = false }
   }, [payload, canEdit, native, leagueId, myTeam?.externalId])
+
+  // Commissioner Hub "Needs you" (commissioners of an AllFantasy league only — the tab's own rule).
+  useEffect(() => {
+    if (payload === undefined) return
+    if (!(payload && canEdit && native)) {
+      setTasks(null)
+      return
+    }
+    let live = true
+    const lang = language === 'es' ? 'es' : 'en'
+    void getJson<{ tasks?: TaskCardsResult }>(`/api/leagues/${encodeURIComponent(leagueId)}/commissioner-hub?lang=${lang}`).then((d) => {
+      if (live) setTasks(d?.tasks ?? null)
+    })
+    return () => { live = false }
+  }, [payload, canEdit, native, leagueId, language])
 
   const kind = useMemo(
     /*
@@ -345,8 +367,14 @@ export function LeagueSettingsHub({
       highScoresSeasons: records?.length ? null : playerHighs?.teamRows?.length ? playerHighs.teamSeasons : null,
       playerHighScores: playerHighs === undefined ? undefined : playerHighs ? { seasons: playerHighs.seasons, rows: playerHighs.rows.map((r) => ({ rank: r.rank, name: r.playerName, team: r.teamName, season: r.season, week: r.week, points: r.points.toFixed(2) })) } : null,
       correctionWeeks: corrections,
+      commissionerTasks: tasks,
     }
-  }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId])
+  }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId, tasks])
+
+  const slots = useMemo(
+    () => (canEdit && native ? { rivalryWeek: <RivalryWeekCard leagueId={leagueId} />, storyline: <StorylineStudio leagueId={leagueId} /> } : undefined),
+    [canEdit, native, leagueId],
+  )
 
   return (
     <LeagueSettingsHubView
@@ -354,6 +382,7 @@ export function LeagueSettingsHub({
       initialTab={initialTab}
       busyField={busyField}
       advanced={advanced}
+      slots={slots}
       cb={{
         onToggleSetting: (f, n) => void onToggleSetting(f, n),
         onSaveTeamName,

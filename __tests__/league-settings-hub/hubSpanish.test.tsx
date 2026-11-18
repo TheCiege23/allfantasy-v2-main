@@ -108,7 +108,8 @@ function screenText(d: HubViewData): string[] {
       for (const a of ['aria-label', 'placeholder', 'title']) { const v = el.getAttribute(a); if (v) seen.push(v) }
     }
   }
-  for (const tab of ['my', 'setup', 'members', 'record']) {
+  // The Commissioner Hub tab only exists for a commissioner of an AllFantasy league.
+  for (const tab of ['my', 'setup', 'members', ...(d.canEdit && !d.importedFrom ? ['hub'] : []), 'record']) {
     fireEvent.click(getByTestId(`league-settings-hub-tab-${tab}`))
     // Every scoring pill, so every category's rows render once.
     for (const pill of Array.from(container.querySelectorAll('.af-lsh-pill'))) { fireEvent.click(pill); collect() }
