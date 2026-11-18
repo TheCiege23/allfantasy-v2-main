@@ -14,6 +14,7 @@ import { buildMatchupInsightsBlock } from '@/lib/matchup-center/matchupAiInsight
 import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbability'
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
+import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
 
@@ -132,6 +133,7 @@ export async function buildMatchupCenterPayload(params: {
       settings: true,
       leagueVariant: true,
       userId: true,
+      platform: true,
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
@@ -340,8 +342,22 @@ export async function buildMatchupCenterPayload(params: {
     })
   }
 
-  const leftSlots = myStarters.map((r) => toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming'))
-  const rightSlots = oppStarters.map((r) => toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming'))
+  // AF's own projection beside the provider's, in this league's scoring. Empty when the engine has
+  // nothing for the week — the UI then shows no AF line rather than a substitute.
+  const afByPlayer = await loadMatchupAfProjections({
+    playerIds: [...myStarters, ...oppStarters].map((p) => p.id),
+    season,
+    week,
+    sport: String(league.sport),
+    platform: league.platform ?? null,
+    leagueSettings: league.settings,
+  })
+  const withAf = (slot: MatchupPlayerSlot): MatchupPlayerSlot => ({ ...slot, afProjectedPoints: afByPlayer.get(slot.playerId) ?? null })
+
+  const leftSlots = myStarters.map((r) => withAf(toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming')))
+  const rightSlots = oppStarters.map((r) => withAf(toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming')))
+  const leftAf = afSideTotal(leftSlots)
+  const rightAf = afSideTotal(rightSlots)
 
   const stLeft = standings.find((s) => s.rosterId === myRoster.id)
   const stRight = standings.find((s) => s.rosterId === oppRosterId)
@@ -358,6 +374,8 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stLeft?.wins ?? 0, stLeft?.losses ?? 0, stLeft?.ties ?? 0),
     totalPoints: tw?.totalPoints ?? leftSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: leftSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    afProjectedTotal: leftAf.total,
+    afProjectedFrom: leftAf.from,
     projectedTotalIncludesFallback: leftSlots.some((s) => !s.hasRealProjection),
     starters: leftSlots,
     remainingStarters: leftSlots.filter((s) => s.gameStatus !== 'final').length,
@@ -375,6 +393,8 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stRight?.wins ?? 0, stRight?.losses ?? 0, stRight?.ties ?? 0),
     totalPoints: oppResult?.totalPoints ?? rightSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: rightSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    afProjectedTotal: rightAf.total,
+    afProjectedFrom: rightAf.from,
     projectedTotalIncludesFallback: rightSlots.some((s) => !s.hasRealProjection),
     starters: rightSlots,
     remainingStarters: rightSlots.filter((s) => s.gameStatus !== 'final').length,

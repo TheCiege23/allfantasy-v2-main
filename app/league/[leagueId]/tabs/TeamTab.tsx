@@ -56,6 +56,8 @@ import { CollegeRightsSection } from '@/app/league/[leagueId]/components/College
 import type { CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 import { CampusLineupPanel } from '@/app/league/[leagueId]/components/CampusLineupPanel'
 import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
+import { AfInjuryTag } from '@/components/league/AfInjuryTag'
+import { useByeTeams } from './useByeTeams'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -751,7 +753,8 @@ function LineupReplacementPickerSheet({
   )
 }
 
-function RosterRow({
+/** Exported for the DB-free harness at /e2e/league-phase-a; TeamTab is its only real caller. */
+export function RosterRow({
   playerId,
   sport,
   players,
@@ -767,6 +770,7 @@ function RosterRow({
   onChimmyNoteChange,
   onAskChimmy,
   liveScore,
+  byeTeams = null,
 }: {
   playerId: string
   sport: string
@@ -787,6 +791,8 @@ function RosterRow({
   onAskChimmy?: () => void
   /** Live fantasy points for this player (current week, from SSE-refreshed roster). */
   liveScore?: number | null
+  /** Clubs (upper-case abbreviations) with no game this week (`useByeTeams`). A player on one shows BYE in AF blue. */
+  byeTeams?: ReadonlySet<string> | null
 }) {
   // Flash animation when liveScore changes - hooks must run before any early return.
   const [ptFlash, setPtFlash] = useState(false)
@@ -828,6 +834,10 @@ function RosterRow({
   const label = teamDefLabel ?? (playersLoading ? `Player ${playerId.slice(-4)}` : resolved.name)
   const pos = resolved.position || '-'
   const showTeam = resolved.team && resolved.team !== 'FA'
+  // The player's own bye week when the record carries one, else the schedule-derived club list.
+  const onBye =
+    (resolved.byeWeek != null && resolved.byeWeek === week) ||
+    Boolean(showTeam && byeTeams?.has(String(resolved.team).toUpperCase()))
   const leftBadge = slotLabel ?? pos
   const badgeClass = slotLabel ? slotBadgeClass(slotLabel) : positionBadgeClass(pos)
   // Honest projection: no fabricated baseline — missing renders as missing (Honesty Pack 1A).
@@ -881,7 +891,11 @@ function RosterRow({
         />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-white">{label}</p>
+        <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-white">
+          <span className="truncate">{label}</span>
+          {/* AF's injury tag (Q / D / OUT / IR), the same one the matchup rows use. */}
+          <AfInjuryTag status={resolved.injuryStatus} className="shrink-0" />
+        </p>
         <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/40">
           {playersLoading ? (
             '- · -'
@@ -938,7 +952,15 @@ function RosterRow({
           className={ptFlash ? 'w-10 tabular-nums font-semibold text-[#ff9ec0] transition-colors duration-700' : 'w-10 tabular-nums text-white/55 transition-colors duration-700'}
           data-testid="roster-player-pts"
         >
-          {liveScore != null ? liveScore.toFixed(2) : '-'}
+          {onBye ? (
+            <span className="font-extrabold tracking-wide" style={{ color: 'var(--af-blue, #3b82f6)' }} data-testid="roster-player-bye">
+              BYE
+            </span>
+          ) : liveScore != null ? (
+            liveScore.toFixed(2)
+          ) : (
+            '-'
+          )}
         </span>
       </div>
     </>
@@ -1061,6 +1083,8 @@ export function TeamTab({
   const [swapOpen, setSwapOpen] = useState(false)
   const [swapCtx, setSwapCtx] = useState<DbLineupSwapCtx | null>(null)
   const seasonYear = new Date().getFullYear()
+  // Clubs on bye this week -> BYE (AF blue) on their players' rows. NFL only.
+  const byeTeams = useByeTeams(resolvedSport, seasonYear, week)
   const [loading, setLoading] = useState(() => isSleeper || Boolean(userTeam))
   const [error, setError] = useState<string | null>(null)
   const [payload, setPayload] = useState<DbRosterPayload | SleeperApiPayload | null>(null)
@@ -2004,6 +2028,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="space-y-1">
               {sleeperParts.starters.map((id, i) => (
                 <RosterRow
+                  byeTeams={byeTeams}
                   key={`${id}-${i}`}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2029,6 +2054,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="space-y-1">
               {sleeperParts.bench.map((id) => (
                 <RosterRow
+                  byeTeams={byeTeams}
                   key={id}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2054,6 +2080,7 @@ const maxWeekMenu = useMemo(() => {
               <div className="space-y-1">
                 {sleeperParts.taxi.map((id) => (
                   <RosterRow
+                    byeTeams={byeTeams}
                     key={id}
                     playerId={id}
                     issueHighlight={highlightSet.has(id)}
@@ -2080,6 +2107,7 @@ const maxWeekMenu = useMemo(() => {
               <div className="space-y-1">
                 {sleeperParts.ir.map((id) => (
                   <RosterRow
+                    byeTeams={byeTeams}
                     key={id}
                     playerId={id}
                     issueHighlight={highlightSet.has(id)}
@@ -2141,6 +2169,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="space-y-1">
               {dbRosterMeta.starterSlots.map((slot, i) => (
                 <RosterRow
+                  byeTeams={byeTeams}
                   key={`slot-${slot.index}-${i}`}
                   playerId={lineupLists.starters[i] ?? ''}
                   issueHighlight={highlightSet.has(lineupLists.starters[i] ?? '')}
@@ -2179,6 +2208,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="space-y-1">
               {dbBenchRows.map((id, i) => (
                 <RosterRow
+                  byeTeams={byeTeams}
                   key={id ? `bench-${id}` : `bench-empty-${i}`}
                   playerId={id}
                   issueHighlight={id ? highlightSet.has(id) : false}
@@ -2213,6 +2243,7 @@ const maxWeekMenu = useMemo(() => {
               <div className="space-y-1">
                 {dbIrRows.map((id, i) => (
                   <RosterRow
+                    byeTeams={byeTeams}
                     key={id ? `ir-${id}` : `ir-empty-${i}`}
                     playerId={id}
                     issueHighlight={id ? highlightSet.has(id) : false}
@@ -2249,6 +2280,7 @@ const maxWeekMenu = useMemo(() => {
                 {lineupLists.taxi.length > 0 ? (
                   lineupLists.taxi.map((id) => (
                     <RosterRow
+                      byeTeams={byeTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
@@ -2287,6 +2319,7 @@ const maxWeekMenu = useMemo(() => {
                 {lineupLists.devy.length > 0 ? (
                   lineupLists.devy.map((id) => (
                     <RosterRow
+                      byeTeams={byeTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
@@ -2393,6 +2426,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="space-y-1">
               {dbParts.starters.map((id, i) => (
                 <RosterRow
+                  byeTeams={byeTeams}
                   key={id}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2417,6 +2451,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="space-y-1">
               {dbParts.bench.map((id) => (
                 <RosterRow
+                  byeTeams={byeTeams}
                   key={id}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2443,6 +2478,7 @@ const maxWeekMenu = useMemo(() => {
                 {dbParts.ir.length > 0 ? (
                   dbParts.ir.map((id) => (
                     <RosterRow
+                      byeTeams={byeTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
@@ -2473,6 +2509,7 @@ const maxWeekMenu = useMemo(() => {
                 {dbParts.taxi.length > 0 ? (
                   dbParts.taxi.map((id) => (
                     <RosterRow
+                      byeTeams={byeTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
