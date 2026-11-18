@@ -1,3 +1,4 @@
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -88,7 +89,7 @@ export async function proposeDraftQueueChange(args: {
   if (!session) return { ok: false, text: 'This league has no draft, so there is no queue to change.' }
   if (session.status === 'completed') return { ok: false, text: 'This draft is over, so the queue no longer does anything. Nothing was prepared.' }
 
-  const current = await readQueue(session.id, args.userId)
+  const current = await readQueue(session.id, await draftQueueKeyForUser(args.leagueId, args.userId))
   const drafted = normalizeDraftedNameSet(session.picks)
   const notes: string[] = []
 
@@ -208,12 +209,13 @@ export async function executeQueueAction(payload: ChimmyActionTokenPayload, user
   if (!session || session.id !== spec.sessionId) return { ok: false, message: 'A different draft is current now, so nothing was saved. Ask Chimmy again.' }
   if (session.status === 'completed') return { ok: false, message: 'This draft is over, so nothing was saved.' }
 
-  const current = await readQueue(session.id, userId)
+  const queueKey = await draftQueueKeyForUser(payload.leagueId, userId)
+  const current = await readQueue(session.id, queueKey)
   if (queueFingerprint(current) !== spec.baseFingerprint) return { ok: false, message: CHANGED }
 
   const prepared = await prepareDraftQueueSave(payload.leagueId, applyQueueOps(current, spec))
   if (!prepared.ok) return { ok: false, message: `Nothing was saved: ${prepared.error}` }
-  await persistDraftQueue(userId, prepared.prepared)
+  await persistDraftQueue(queueKey, prepared.prepared)
 
   const parts: string[] = []
   if (spec.add.length) parts.push(`${spec.add.map((p) => p.playerName).join(', ')} ${spec.addAt === 'top' ? 'at the top' : 'added'}`)

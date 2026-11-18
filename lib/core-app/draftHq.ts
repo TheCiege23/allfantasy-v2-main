@@ -1,3 +1,4 @@
+import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -333,7 +334,7 @@ async function loadPreparedQueue(sessionId: string, userId: string): Promise<Sec
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const row = await prisma.draftQueue.findUnique({
-    where: { sessionId_userId: { sessionId, userId } },
+    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
     select: { order: true },
   })
   const order = row?.order

@@ -1,3 +1,4 @@
+import { draftQueueKeyForRoster } from '@/lib/league/teamScopedKey'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
 import { loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
@@ -119,9 +120,9 @@ export async function tryQueueAutoPick(
     where: { id: rosterId },
     select: { platformUserId: true, managerUserId: true },
   })
-  // The draft queue belongs to the manager, who may run this team under a key of its own.
+  // Each team has its own queue (lib/league/rosterManager.ts `teamScopedKey`); an unowned team has none.
   const onClockManagerId = onClockRoster ? rosterManagerKey(onClockRoster) : null
-  const queueUserId = onClockManagerId && !onClockManagerId.startsWith('orphan-') ? onClockManagerId : null
+  const queueUserId = onClockManagerId && !onClockManagerId.startsWith('orphan-') ? (await draftQueueKeyForRoster(rosterId)) ?? onClockManagerId : null
   if (!queueUserId) return { success: false }
 
   const queueRow = draftSession.queues.find((q) => q.userId === queueUserId)

@@ -12,6 +12,7 @@
  *   copy only (commissioner-facing); does not replace per-user AF Pro + roster flag for persisting reorder.
  */
 
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -73,7 +74,7 @@ export async function POST(
     })
     if (draftSessionProbe) {
       const row = await prisma.draftQueue.findUnique({
-        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId } },
+        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId: await draftQueueKeyForUser(leagueId, userId) } },
       })
       const order = (row?.order as unknown as QueueEntry[]) ?? []
       queue = order.filter(Boolean)
@@ -150,11 +151,12 @@ export async function POST(
   })
 
   if (plan.mode === 'persist' && plan.persistOrder) {
+    const queueKey = await draftQueueKeyForUser(leagueId, userId)
     await prisma.draftQueue.upsert({
-      where: { sessionId_userId: { sessionId: draftSession.id, userId } },
+      where: { sessionId_userId: { sessionId: draftSession.id, userId: queueKey } },
       create: {
         sessionId: draftSession.id,
-        userId,
+        userId: queueKey,
         order: plan.persistOrder as never,
       },
       update: {

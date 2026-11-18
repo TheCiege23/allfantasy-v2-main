@@ -1,3 +1,4 @@
+import { watchlistKeyForUser } from '@/lib/league/teamScopedKey'
 import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
@@ -62,7 +63,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       const watchlistData = await (prisma as any).waiverWatchlist.findMany({
         where: {
           leagueId: leagueId,
-          userId: userId,
+          // The watchlist of the team being viewed (lib/league/teamScopedKey.ts).
+          userId: await watchlistKeyForUser(leagueId, userId, requestedRosterIdFrom(req)),
         },
         select: {
           playerId: true,

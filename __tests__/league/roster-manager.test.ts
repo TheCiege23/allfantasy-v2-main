@@ -37,3 +37,23 @@ describe('who runs a team', () => {
     expect(isOwnTeamTrade([{ id: 'r1', ...first }, { id: 'r2', platformUserId: 'u2', managerUserId: null }], new Set(['u1']))).toBe(false)
   })
 })
+
+import { teamScopedKey } from '@/lib/league/rosterManager'
+
+describe('a team\'s own draft queue and watchlist', () => {
+  it('a manager\'s first team keeps their user id as the key, so nothing already stored moves', () => {
+    expect(teamScopedKey({ id: 'roster-1', platformUserId: 'u1', managerUserId: null })).toBe('u1')
+    expect(teamScopedKey({ id: 'roster-1', platformUserId: 'u1', managerUserId: 'u1' })).toBe('u1')
+  })
+  it('each further team has a key of its own, so two teams of one manager do not share a list', () => {
+    const second = teamScopedKey({ id: 'roster-2', platformUserId: 'mgr:u1:roster-2', managerUserId: 'u1' })
+    const third = teamScopedKey({ id: 'roster-3', platformUserId: 'mgr:u1:roster-3', managerUserId: 'u1' })
+    expect(second).toBe('team:roster-2')
+    expect(third).toBe('team:roster-3')
+    expect(new Set(['u1', second, third]).size).toBe(3)
+  })
+  it('fits the watchlist column (64 characters) with a full-length roster id', () => {
+    const key = teamScopedKey({ id: '123e4567-e89b-12d3-a456-426614174000', platformUserId: 'mgr:u:123e4567-e89b-12d3-a456-426614174000', managerUserId: 'u' })!
+    expect(key.length).toBeLessThanOrEqual(64)
+  })
+})

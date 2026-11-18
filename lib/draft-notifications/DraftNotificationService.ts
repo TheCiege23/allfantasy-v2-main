@@ -3,7 +3,7 @@
  * Uses unified dispatcher for in-app + email + SMS per user preferences.
  */
 
-import { rosterManagerKey } from '@/lib/league/rosterManager'
+import { rosterManagerKey, teamScopedKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { resolveAppUserIds } from '@/lib/notifications/resolveAppUserIds'
 import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
@@ -595,7 +595,7 @@ async function buildDraftStartingEmailsByUser(
     if (slot == null) continue
     // A failed queue read must not render the "your queue is empty" warning
     // for a queue we simply could not see — that member keeps the plain email.
-    const loaded = await loadDraftQueueForUser(leagueId, userId).catch(() => null)
+    const loaded = await loadDraftQueueForUser(leagueId, userId, { queueKey: teamScopedKey(roster) }).catch(() => null)
     if (!loaded) continue
     out.set(
       userId,

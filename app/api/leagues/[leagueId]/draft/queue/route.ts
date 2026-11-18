@@ -3,6 +3,7 @@
  * PUT: Save draft queue (order array).
  */
 
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -94,7 +95,8 @@ export async function PUT(
     }
   }
 
-  await persistDraftQueue(userId, prepared.prepared)
+  // Saved to the queue of the team the room is about for this manager.
+  await persistDraftQueue(await draftQueueKeyForUser(leagueId, userId), prepared.prepared)
 
   return NextResponse.json({
     ok: true,
