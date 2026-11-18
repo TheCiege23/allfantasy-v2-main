@@ -19,7 +19,7 @@
  *
  * TEAMS are matched by display name (`normalizeFantraxTeamName`, the importer's own key): the name exactly as the
  * export writes it first, then — only when no team has that exact name — both sides with a leading "#N " removed.
- * 🛑 THE "#N" IS PART OF THE NAME IN SOME LEAGUES ("#27 Houston Oilers" is stored that way) and a standings number in
+ * 🛑 THE "#N" IS PART OF THE NAME IN SOME LEAGUES ("#27 Harbor Owls" is stored that way) and a standings number in
  * others; stripping it unconditionally matched none of the first real league's teams. Two teams sharing a name, at
  * either step, is ambiguous and refused.
  *

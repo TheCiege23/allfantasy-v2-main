@@ -17,7 +17,7 @@
  *
  * 🛑 TEAM LABELS ARE KEPT EXACTLY AS WRITTEN — "#4 Team A" stays "#4 Team A". This reader first stripped the "#N "
  * as a standings number, and on the first real league (2026-11-18) the number was PART OF THE TEAM NAME: the league
- * stores "#27 Houston Oilers", so every stripped label missed and an upload of five trades added none. Which reading
+ * stores "#27 Harbor Owls", so every stripped label missed and an upload of five trades added none. Which reading
  * holds differs by league, so the reader does not choose; the planner matches the exact name first and the
  * prefix-stripped name only as a fallback (`fantraxTradeHistoryPlan.ts`).
  *

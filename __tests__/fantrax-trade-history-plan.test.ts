@@ -96,9 +96,9 @@ describe('planFantraxTradeHistoryImport', () => {
   })
 
   /*
-   * 🛑 THE FIRST REAL LEAGUE (2026-11-18): its teams are NAMED "#27 Houston Oilers" — the "#N" is not a standings
+   * 🛑 THE FIRST REAL LEAGUE (2026-11-18): its teams are NAMED "#27 Harbor Owls" — the "#N" is not a standings
    * number there. The reader stripped it, so an upload of five trades added none ("No team in this league is named
-   * \"Houston Oilers\""). Invented names below; the shape is that league's.
+   * \"Harbor Owls\""). Names here are invented; the shape is that league's.
    */
   it('a league whose team names include "#N" matches them exactly', () => {
     const p = planFantraxTradeHistoryImport({
