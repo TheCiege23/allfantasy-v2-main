@@ -1801,6 +1801,11 @@
   color: var(--bad);
 }
 
+/* An ESPN elimination league that knocked you out: the whole line is the verdict, so it is red. */
+.af-core .af-rail-row-rank[data-knocked-out] .af-rail-row-rank-pos {
+  color: var(--bad);
+}
+
 /*
  * ⚠ WHAT THE RANK WAS MEASURED FROM, AND IT IS NOT OPTIONAL. Before kickoff
  * every score in the league is 0, so the order comes entirely from the
