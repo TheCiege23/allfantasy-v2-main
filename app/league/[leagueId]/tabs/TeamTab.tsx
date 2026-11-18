@@ -58,6 +58,7 @@ import { CampusLineupPanel } from '@/app/league/[leagueId]/components/CampusLine
 import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
 import { AfInjuryTag } from '@/components/league/AfInjuryTag'
 import { useByeTeams } from './useByeTeams'
+import { useNoGameTeams } from './useNoGameTeams'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -771,6 +772,7 @@ export function RosterRow({
   onAskChimmy,
   liveScore,
   byeTeams = null,
+  noGameTeams = null,
 }: {
   playerId: string
   sport: string
@@ -793,6 +795,8 @@ export function RosterRow({
   liveScore?: number | null
   /** Clubs (upper-case abbreviations) with no game this week (`useByeTeams`). A player on one shows BYE in AF blue. */
   byeTeams?: ReadonlySet<string> | null
+  /** NBA / NHL / MLB: clubs with no game today (`useNoGameTeams`). A player on one shows NG in AF blue. */
+  noGameTeams?: ReadonlySet<string> | null
 }) {
   // Flash animation when liveScore changes - hooks must run before any early return.
   const [ptFlash, setPtFlash] = useState(false)
@@ -838,6 +842,7 @@ export function RosterRow({
   const onBye =
     (resolved.byeWeek != null && resolved.byeWeek === week) ||
     Boolean(showTeam && byeTeams?.has(String(resolved.team).toUpperCase()))
+  const onNoGame = !onBye && Boolean(showTeam && noGameTeams?.has(String(resolved.team).toUpperCase()))
   const leftBadge = slotLabel ?? pos
   const badgeClass = slotLabel ? slotBadgeClass(slotLabel) : positionBadgeClass(pos)
   // Honest projection: no fabricated baseline — missing renders as missing (Honesty Pack 1A).
@@ -952,9 +957,14 @@ export function RosterRow({
           className={ptFlash ? 'w-10 tabular-nums font-semibold text-[#ff9ec0] transition-colors duration-700' : 'w-10 tabular-nums text-white/55 transition-colors duration-700'}
           data-testid="roster-player-pts"
         >
-          {onBye ? (
-            <span className="font-extrabold tracking-wide" style={{ color: 'var(--af-blue, #3b82f6)' }} data-testid="roster-player-bye">
-              BYE
+          {onBye || onNoGame ? (
+            <span
+              className="font-extrabold tracking-wide"
+              style={{ color: 'var(--af-blue, #3b82f6)' }}
+              data-testid={onBye ? 'roster-player-bye' : 'roster-player-no-game'}
+              title={onBye ? 'Bye week' : 'No game today'}
+            >
+              {onBye ? 'BYE' : 'NG'}
             </span>
           ) : liveScore != null ? (
             liveScore.toFixed(2)
@@ -1424,6 +1434,13 @@ export function TeamTab({
     if (!payload.roster) return null
     return partitionRoster(payload.roster, payload.slotLimits ?? null)
   }, [payload])
+
+  // NG ("no game today") for NBA / NHL / MLB: ask only about this roster's own clubs.
+  const rosterTeamsForNg = useMemo(
+    () => (payload?.roster ? getRosterPlayerIds(payload.roster).map((id) => players[id]?.team ?? null) : []),
+    [payload, players],
+  )
+  const noGameTeams = useNoGameTeams(resolvedSport, typeof league.season === 'number' ? league.season : Number(league.season) || seasonYear, rosterTeamsForNg)
 
   const missingNormalizedRosterData =
     payload &&
@@ -2029,6 +2046,7 @@ const maxWeekMenu = useMemo(() => {
               {sleeperParts.starters.map((id, i) => (
                 <RosterRow
                   byeTeams={byeTeams}
+                  noGameTeams={noGameTeams}
                   key={`${id}-${i}`}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2055,6 +2073,7 @@ const maxWeekMenu = useMemo(() => {
               {sleeperParts.bench.map((id) => (
                 <RosterRow
                   byeTeams={byeTeams}
+                  noGameTeams={noGameTeams}
                   key={id}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2081,6 +2100,7 @@ const maxWeekMenu = useMemo(() => {
                 {sleeperParts.taxi.map((id) => (
                   <RosterRow
                     byeTeams={byeTeams}
+                    noGameTeams={noGameTeams}
                     key={id}
                     playerId={id}
                     issueHighlight={highlightSet.has(id)}
@@ -2108,6 +2128,7 @@ const maxWeekMenu = useMemo(() => {
                 {sleeperParts.ir.map((id) => (
                   <RosterRow
                     byeTeams={byeTeams}
+                    noGameTeams={noGameTeams}
                     key={id}
                     playerId={id}
                     issueHighlight={highlightSet.has(id)}
@@ -2170,6 +2191,7 @@ const maxWeekMenu = useMemo(() => {
               {dbRosterMeta.starterSlots.map((slot, i) => (
                 <RosterRow
                   byeTeams={byeTeams}
+                  noGameTeams={noGameTeams}
                   key={`slot-${slot.index}-${i}`}
                   playerId={lineupLists.starters[i] ?? ''}
                   issueHighlight={highlightSet.has(lineupLists.starters[i] ?? '')}
@@ -2209,6 +2231,7 @@ const maxWeekMenu = useMemo(() => {
               {dbBenchRows.map((id, i) => (
                 <RosterRow
                   byeTeams={byeTeams}
+                  noGameTeams={noGameTeams}
                   key={id ? `bench-${id}` : `bench-empty-${i}`}
                   playerId={id}
                   issueHighlight={id ? highlightSet.has(id) : false}
@@ -2244,6 +2267,7 @@ const maxWeekMenu = useMemo(() => {
                 {dbIrRows.map((id, i) => (
                   <RosterRow
                     byeTeams={byeTeams}
+                    noGameTeams={noGameTeams}
                     key={id ? `ir-${id}` : `ir-empty-${i}`}
                     playerId={id}
                     issueHighlight={id ? highlightSet.has(id) : false}
@@ -2281,6 +2305,7 @@ const maxWeekMenu = useMemo(() => {
                   lineupLists.taxi.map((id) => (
                     <RosterRow
                       byeTeams={byeTeams}
+                      noGameTeams={noGameTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
@@ -2320,6 +2345,7 @@ const maxWeekMenu = useMemo(() => {
                   lineupLists.devy.map((id) => (
                     <RosterRow
                       byeTeams={byeTeams}
+                      noGameTeams={noGameTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
@@ -2427,6 +2453,7 @@ const maxWeekMenu = useMemo(() => {
               {dbParts.starters.map((id, i) => (
                 <RosterRow
                   byeTeams={byeTeams}
+                  noGameTeams={noGameTeams}
                   key={id}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2452,6 +2479,7 @@ const maxWeekMenu = useMemo(() => {
               {dbParts.bench.map((id) => (
                 <RosterRow
                   byeTeams={byeTeams}
+                  noGameTeams={noGameTeams}
                   key={id}
                   playerId={id}
                   issueHighlight={highlightSet.has(id)}
@@ -2479,6 +2507,7 @@ const maxWeekMenu = useMemo(() => {
                   dbParts.ir.map((id) => (
                     <RosterRow
                       byeTeams={byeTeams}
+                      noGameTeams={noGameTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}
@@ -2510,6 +2539,7 @@ const maxWeekMenu = useMemo(() => {
                   dbParts.taxi.map((id) => (
                     <RosterRow
                       byeTeams={byeTeams}
+                      noGameTeams={noGameTeams}
                       key={id}
                       playerId={id}
                       issueHighlight={highlightSet.has(id)}

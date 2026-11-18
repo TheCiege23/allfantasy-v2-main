@@ -71,3 +71,35 @@ export const SAMPLE_HISTORY = {
     ],
   },
 }
+
+const mp = (id: string, name: string, position: string, team: string, to: string | null = null) => ({ id, name, position, team, imageUrl: null, to })
+const daysAgo = (d: number, h = 0) => new Date(Date.now() - d * 86_400_000 - h * 3_600_000).toISOString()
+
+export const SAMPLE_MOVES = {
+  moves: [
+    { id: 'm1', kind: 'waiver', occurredAt: daysAgo(1, 3), teamName: 'TDIsland', managerName: 'TDIsland', avatarUrl: null, involvedTeams: ['TDIsland'],
+      adds: [mp('9001', 'Nick Herbig', 'LB', 'PIT')], drops: [mp('9002', 'Stetson Bennett IV', 'QB', 'LAR')], bid: 12, picks: [] },
+    { id: 'm2', kind: 'trade', occurredAt: daysAgo(2, 1), teamName: 'jcoffey1257', managerName: 'jcoffey1257', avatarUrl: null, involvedTeams: ['jcoffey1257', 'erosado0826'],
+      adds: [mp('7564', 'Christian Watson', 'WR', 'GB', 'jcoffey1257'), mp('4984', 'Baker Mayfield', 'QB', 'TB', 'erosado0826')], drops: [], bid: null, picks: ['2027 2nd (erosado0826)'] },
+    { id: 'm3', kind: 'roster_move', occurredAt: daysAgo(2, 6), teamName: 'Hoovi', managerName: 'Hoovi', avatarUrl: null, involvedTeams: ['Hoovi'],
+      adds: [], drops: [mp('9003', 'Theo Johnson', 'TE', 'NYG')], bid: null, picks: [] },
+    { id: 'm4', kind: 'waiver', occurredAt: daysAgo(9), teamName: 'RobbyS5', managerName: 'RobbyS5', avatarUrl: null, involvedTeams: ['RobbyS5'],
+      adds: [mp('9004', 'Brevyn Spann-Ford', 'TE', 'DAL')], drops: [mp('9005', 'Boye Mafe', 'DL', 'CIN')], bid: 3, picks: [] },
+  ],
+}
+
+export const SAMPLE_PLAYER_MAP = {
+  '9101': { id: '9101', name: 'Kimani Vidal', position: 'RB', team: 'LAC' },
+  '9102': { id: '9102', name: 'Sauce Gardner', position: 'DB', team: 'IND' },
+}
+
+export const SAMPLE_ROSTER = { roster: { players: ['9101', '9102'] } }
+
+export const SAMPLE_NEWS = {
+  items: [
+    { id: 'n1', title: 'Kimani Vidal tallies two catches against Baltimore', source: 'RotoWire', url: null, playerName: 'Kimani Vidal', imageUrl: null, publishedAt: daysAgo(0, 2),
+      body: "Vidal turned two carries into zero yards and caught both of his targets for 14 yards in the Chargers' 23-20 win over the Ravens on Monday." },
+    { id: 'n2', title: 'Sauce Gardner (calf) misses practice Tuesday', source: 'FantasyPros', url: null, playerName: 'Sauce Gardner', imageUrl: null, publishedAt: daysAgo(0, 5),
+      body: 'Gardner did not practice on Tuesday. His status is uncertain for Thursday’s game against the Texans.' },
+  ],
+}
