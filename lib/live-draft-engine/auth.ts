@@ -2,6 +2,7 @@
  * Draft access: league owner or commissioner can access; members can view/submit when on clock.
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { listHeldTeams } from '@/lib/league/viewerTeams'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
@@ -79,10 +80,10 @@ export async function canSubmitPickForRoster(
   if (await isCommissioner(leagueId, userId)) return true
   const roster = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, managerUserId: true },
   })
   if (!roster) return false
-  if (roster.platformUserId === userId) return true
+  if (isRosterManagedBy(roster, userId)) return true
   if (await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)) return true
 
   const devFallbackRosterId = await getDevBypassFallbackRosterId(leagueId, userId)
@@ -140,8 +141,8 @@ export async function canSubmitDispersalPickForUser(
   if (!userId) return false
   const roster = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, managerUserId: true },
   })
   if (!roster) return false
-  return roster.platformUserId === userId || await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)
+  return isRosterManagedBy(roster, userId) || await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)
 }

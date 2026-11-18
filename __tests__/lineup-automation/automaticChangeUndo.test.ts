@@ -30,6 +30,8 @@ const h = vi.hoisted(() => {
     automationAuditLog: { create: async (args: AnyArgs) => { state.audit.push({ ...args.data, createdAt: new Date() }); return args.data } },
     afRosterLineupAssignment: { deleteMany: async () => ({ count: 0 }), createMany: async () => ({ count: 0 }) },
   }
+  // The owner a roster query asks for: the plain field, or the first-team half of "first team or managed by".
+  const ownerOf = (args: AnyArgs) => args?.where?.platformUserId ?? args?.where?.OR?.[0]?.platformUserId
   const prisma = {
     league: { findUnique: async () => state.league },
     roster: {
@@ -38,8 +40,8 @@ const h = vi.hoisted(() => {
       findUnique: async () => state.roster,
       // "The teams this manager holds" (lib/league/viewerTeams.ts) filters by owner; the by-id read does not.
       findMany: async (args: AnyArgs) =>
-        args?.where?.platformUserId === 'member2' ? [{ id: 'af-roster-2' }]
-          : args?.where?.platformUserId && args.where.platformUserId !== state.roster.platformUserId ? []
+        ownerOf(args) === 'member2' ? [{ id: 'af-roster-2' }]
+          : ownerOf(args) && ownerOf(args) !== state.roster.platformUserId ? []
           : [state.roster],
     },
     leagueTeam: { findMany: async () => [{ platformUserId: 'owner', teamName: 'Owner FC' }] },

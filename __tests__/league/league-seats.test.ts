@@ -26,6 +26,7 @@ function matches(row: Row, where: Row | undefined): boolean {
   if (!where) return true
   return Object.entries(where).every(([key, cond]) => {
     if (key === 'NOT') return !matches(row, cond as Row)
+    if (key === 'OR') return (cond as Row[]).some((alt) => matches(row, alt))
     if (key === 'leagueId_userId') return row.leagueId === cond.leagueId && row.userId === cond.userId
     if (key === 'leagueId_externalId') return row.leagueId === cond.leagueId && row.externalId === cond.externalId
     if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
@@ -216,6 +217,29 @@ describe('assignLeagueSeat', () => {
   it('refuses a seat a person holds, and a second seat for the same person', async () => {
     const db = nativeLeague()
     expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r1', userId: 'amy' })).toMatchObject({ ok: false, code: 'ROSTER_TAKEN' })
+    await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: false, code: 'ALREADY_HOLDS_ROSTER' })
+  })
+
+  it('a league that allows it gives a manager a second team under a key of its own', async () => {
+    const db = nativeLeague()
+    db.league.rows[0]!.settings = { allow_multi_team_managers: true }
+    await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })
+    const second = await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })
+    expect(second).toMatchObject({ ok: true, rosterId: 'r3', alreadyHeld: false })
+    // The first team keeps her user id as its key; the second has its own and names her as manager.
+    expect(db.roster.rows.find((r: Row) => r.id === 'r2')).toMatchObject({ platformUserId: 'amy', managerUserId: 'amy' })
+    expect(db.roster.rows.find((r: Row) => r.id === 'r3')).toMatchObject({ platformUserId: 'mgr:amy:r3', managerUserId: 'amy' })
+    expect(db.leagueTeam.rows.find((t: Row) => t.externalId === 'r3')).toMatchObject({ claimedByUserId: 'amy', platformUserId: 'mgr:amy:r3', isOrphan: false })
+    // Assigning the same team again is a no-op, not a third team.
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true, alreadyHeld: true })
+    expect(db.roster.rows.find((r: Row) => r.id === 'r3')).toMatchObject({ platformUserId: 'mgr:amy:r3', managerUserId: 'amy' })
+  })
+
+  it('a one-seat-per-person format refuses a second team even with the setting stored', async () => {
+    const db = nativeLeague()
+    db.league.rows[0]!.settings = { allow_multi_team_managers: true }
+    db.league.rows[0]!.leagueVariant = 'survivor'
     await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })
     expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: false, code: 'ALREADY_HOLDS_ROSTER' })
   })

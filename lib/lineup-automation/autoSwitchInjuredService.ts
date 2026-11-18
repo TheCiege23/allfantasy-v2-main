@@ -1,3 +1,4 @@
+import { isRosterManagedBy, rosterManagerKey } from '@/lib/league/rosterManager'
 import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import 'server-only'
 
@@ -109,11 +110,11 @@ export async function setAutoSwitchInjured(leagueId: string, actorUserId: string
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: leagueSelect })
   if (!league) return { ok: false, status: 404, error: 'League not found.' }
   if (autoBenchByeLeagueBlock(league)) return { ok: false, status: 409, error: 'AllFantasy can only switch lineups in leagues it runs with weekly lineups.' }
-  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
+  const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, managerUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
   const commissioner = await isElevatedCommissioner(leagueId, actorUserId)
-  const isOwner = !!roster.platformUserId && roster.platformUserId === actorUserId
+  const isOwner = isRosterManagedBy(roster, actorUserId)
   if (!commissioner && !(isOwner && !parsed.on)) {
     return { ok: false, status: 403, error: isOwner ? 'Only the commissioner can turn this on. You can turn it off.' : 'Commissioner only.' }
   }
@@ -142,9 +143,10 @@ export async function setAutoSwitchInjured(leagueId: string, actorUserId: string
     }).catch(() => {})
   }
   // The manager is told when the commissioner switches it on or changes it (owner decision 2026-11-18).
-  if (changed && before.value && roster.platformUserId && roster.platformUserId !== actorUserId) {
+  const managerId = rosterManagerKey(roster)
+  if (changed && before.value && managerId && managerId !== actorUserId) {
     await dispatchNotification({
-      userIds: [roster.platformUserId],
+      userIds: [managerId],
       category: 'autocoach',
       type: 'auto_switch_injured_on',
       title: `Auto-switch injured starters is on · ${league.name ?? 'your league'}`,

@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
@@ -305,7 +306,7 @@ export async function GET(
     await Promise.all([
       prisma.roster.findMany({
         where: { leagueId },
-        select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+        select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true },
       }),
       /*
        * The league's own season decides rookie-vs-future on every pick below.
@@ -713,7 +714,7 @@ export async function GET(
    * counterparty list on imports or breaks the propose gate on natives.
    */
   const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  const viewerRosterId = rosters.find((r) => r.platformUserId === userId || r.id === coOwnerRosterId) ?? null
+  const viewerRosterId = rosters.find((r) => isRosterManagedBy(r, userId) || r.id === coOwnerRosterId) ?? null
 
   // `identityIds` (claimed team + linked Sleeper id) was read in wave one.
   const viewerTeamRosterId =

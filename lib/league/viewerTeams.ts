@@ -16,6 +16,7 @@
  *
  * `chooseActingTeam` is the pure rule; `resolveActingRoster` reads the manager's teams and applies it.
  */
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
@@ -88,10 +89,13 @@ export function chooseActingTeam(held: readonly HeldTeam[], requestedRosterId: s
 /** Every team this manager holds in the league, in a stable order. */
 export async function listHeldTeams(leagueId: string, userId: string): Promise<HeldTeam[]> {
   if (!leagueId || !userId) return []
-  const where = { leagueId, platformUserId: userId }
+  // Their first team (keyed by their user id) and any further team that names them as its manager.
   const select = { id: true, redraftRosterId: true } as const
   const delegate = prisma.roster as typeof prisma.roster & { findMany?: typeof prisma.roster.findMany }
-  const many = typeof delegate.findMany === 'function' ? await delegate.findMany({ where, select, orderBy: { id: 'asc' } }) : null
+  const many = typeof delegate.findMany === 'function'
+    ? await delegate.findMany({ where: managedRosterWhere(leagueId, userId), select, orderBy: { id: 'asc' } })
+    : null
+  const where = { leagueId, platformUserId: userId }
   /*
    * A database client that answers only the single-team read (the many unit-test doubles written when a
    * manager could hold one team) is asked that way, so those suites keep exercising these routes. The

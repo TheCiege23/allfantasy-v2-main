@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
@@ -54,7 +55,7 @@ export async function GET(
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (roster.platformUserId !== session.user.id && !(await canCommissionerAct(leagueId, session.user.id, 'rosters'))) {
+  if (!isRosterManagedBy(roster, session.user.id) && !(await canCommissionerAct(leagueId, session.user.id, 'rosters'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
