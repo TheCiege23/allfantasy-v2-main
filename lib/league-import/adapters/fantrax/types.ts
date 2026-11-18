@@ -122,7 +122,13 @@ export interface FantraxImportPayload {
    */
   returnedPicks?: Array<{ season: number; round: number; originalTeamId: string }>
   /** How the future-pick inventory broke down, for coverage. */
-  futurePicks?: { total: number; traded: number; unmapped: number } | null
+  futurePicks?: {
+    total: number
+    traded: number
+    unmapped: number
+    /** Picks placed from an uploaded trade-history export (rounds the API does not publish). */
+    fromTradeExport?: number
+  } | null
   playerMap: Record<string, { name: string; position: string; team: string }>
   previousSeasons: Array<{
     season: string

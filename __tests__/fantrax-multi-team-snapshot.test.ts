@@ -96,7 +96,7 @@ describe('live Fantrax snapshots with duplicate team names', () => {
     expect(raw.tradedPicks).toEqual([
       { season: 2027, round: 1, originalTeamId: first?.teamId, currentOwnerTeamId: second?.teamId },
     ])
-    expect(raw.futurePicks).toEqual({ total: 3, traded: 1, unmapped: 1 })
+    expect(raw.futurePicks).toEqual({ total: 3, traded: 1, unmapped: 1, fromTradeExport: 0 })
     /* The untraded pick is reported as HOME, which is what clears a traded-back row. */
     expect(raw.returnedPicks).toEqual([{ season: 2027, round: 2, originalTeamId: first?.teamId }])
 

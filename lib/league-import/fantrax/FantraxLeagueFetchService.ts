@@ -11,6 +11,7 @@ import { ownedFantraxTeamName, parseFantraxTeamSourceId } from './fantraxTeamSel
 import { getFantraxLeagueInfo, resolveFantraxSeasonPosition } from './fantraxApi'
 import { fantraxScoringMode, fantraxScoringRules } from './fantraxScoring'
 import { fantraxStarterSlots } from './fantraxRosterSettings'
+import { readStoredFantraxPickTrades, resolveFantraxCsvPickOwnership } from './fantraxPickTrades'
 import {
   futurePicksFromStoredInventory,
   madePicksFromStoredBoard,
@@ -925,6 +926,43 @@ export async function fetchFantraxLeagueForImport(
     })
   }
 
+  /*
+   * And the rounds Fantrax's API does not publish, from an uploaded trade-history
+   * export. `getDraftPicks` stops at round 4; a 5th-round pick trade is visible
+   * only in that export. See `fantraxPickTrades.ts`.
+   *
+   * ⚠ THE API WINS WHEREVER IT SPEAKS. An export is a point in time and the API is
+   * current, so a pick in a season-and-round the API lists is never taken from the
+   * export — otherwise an old upload would overwrite a trade made since.
+   *
+   * ⚠ FUTURE DRAFTS ONLY. An export reaches back through drafts already held; a
+   * pick for this season or earlier is history, not an asset anybody owns.
+   *
+   * ⚠ TEAMS ARE MATCHED BY NAME, THE ONLY KEY AN EXPORT HAS. A name that is not a
+   * unique team in this league places nothing and is counted.
+   */
+  const apiPublished = new Set(storedFuture.picks.map((pick) => `${pick.season}:${pick.round}`))
+  const csvOwnership = resolveFantraxCsvPickOwnership(
+    readStoredFantraxPickTrades(leagueRecord.transactions),
+  )
+  let csvFuturePicks = 0
+  for (const pick of csvOwnership) {
+    if (!(pick.season > season)) continue
+    if (apiPublished.has(`${pick.season}:${pick.round}`)) continue
+    const originalTeamId = resolveTeamId(pick.originalTeam, teamMap)
+    const currentOwnerTeamId = resolveTeamId(pick.currentTeam, teamMap)
+    if (!originalTeamId || !currentOwnerTeamId) {
+      unmappedFuturePicks += 1
+      continue
+    }
+    csvFuturePicks += 1
+    if (originalTeamId === currentOwnerTeamId) {
+      returnedPicks.push({ season: pick.season, round: pick.round, originalTeamId })
+    } else {
+      tradedPicks.push({ season: pick.season, round: pick.round, originalTeamId, currentOwnerTeamId })
+    }
+  }
+
   const previousSeasonRecords = await prisma.fantraxLeague.findMany({
     where: {
       appUserId: userId,
@@ -992,7 +1030,7 @@ export async function fetchFantraxLeagueForImport(
           state: storedBoard.draftState,
         }
       : null,
-    ...(storedFuture.stored
+    ...(storedFuture.stored || csvFuturePicks > 0
       ? {
           tradedPicks,
           returnedPicks,
@@ -1000,6 +1038,7 @@ export async function fetchFantraxLeagueForImport(
             total: storedFuture.picks.length,
             traded: tradedPicks.length,
             unmapped: unmappedFuturePicks,
+            fromTradeExport: csvFuturePicks,
           },
         }
       : {}),
