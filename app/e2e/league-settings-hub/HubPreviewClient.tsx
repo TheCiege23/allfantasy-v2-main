@@ -162,6 +162,25 @@ export function HubPreviewClient({
       // Week 10 is open with three changed players; week 9 was checked and nothing moved; earlier
       // weeks were never checked (no `changes`), so all three states of the card are one click apart.
       afOptions: buildAfOptions(p, kind, 'kn-2026'),
+      // Connected leagues (Phase C4), sample: a Zombie universe, a tournament round, Survivor's two islands.
+      connected: kind === 'zombie'
+        ? { kind: 'zombie', name: 'The Outbreak', hubHref: '#', isGroupOwner: true, draftSchedule: { kind: 'zombie', universeId: 'u1' }, leagues: [
+            { leagueId: 'kn-2026', name: 'Kingdom North', role: 'Gamma', status: 'in_season', draftAt: null, current: true },
+            { leagueId: 'z2', name: 'Outbreak South', role: 'Gamma', status: 'in_season', draftAt: null, current: false },
+            { leagueId: 'z3', name: 'Quarantine Zone', role: 'Beta', status: 'setup', draftAt: '2026-11-29T00:00:00Z', current: false },
+          ] }
+        : kind === 'tournament'
+          ? { kind: 'tournament', name: 'Fall Classic', hubHref: '#', isGroupOwner: false, draftSchedule: null, leagues: [
+              { leagueId: 'kn-2026', name: 'Group A', role: 'Round 1', status: 'forming', draftAt: null, current: true },
+              { leagueId: 't2', name: 'Group B', role: 'Round 1', status: 'forming', draftAt: null, current: false },
+              { leagueId: null, name: 'Group C', role: 'Round 1', status: 'forming', draftAt: null, current: false },
+            ] }
+          : kind === 'survivor'
+            ? { kind: 'survivor', name: 'Kingdom North', hubHref: '#', isGroupOwner: true, draftSchedule: null, leagues: [
+                { leagueId: 'kn-2026', name: 'Kingdom North', role: 'Main Island', status: 'in_season', draftAt: null, current: true },
+                { leagueId: 'x2', name: 'Kingdom North Exile', role: 'Exile Island', status: 'in_season', draftAt: null, current: false },
+              ] }
+            : null,
       // Commissioner Hub "Needs you" (sample; the live list comes from /api/leagues/[id]/commissioner-hub).
       commissionerTasks: {
         cards: [
@@ -208,6 +227,7 @@ export function HubPreviewClient({
         onOpenEditor: () => {},
         onLeaveLeague: importedFrom ? undefined : () => {},
         onCopy: () => {},
+        onScheduleConnectedDrafts: async () => null,
       }}
     />
   )
@@ -238,6 +258,7 @@ export function HubPreviewClient({
             onOpenEditor: () => {},
             onLeaveLeague: () => {},
             onCopy: () => {},
+            onScheduleConnectedDrafts: async () => null,
           }}
         />
       </div>
