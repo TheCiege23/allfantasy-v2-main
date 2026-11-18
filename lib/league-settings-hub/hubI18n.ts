@@ -940,7 +940,7 @@ const ES: Record<string, string> = {
   'Schedule': 'Calendario',
   'Who plays whom each week.': 'Quién juega contra quién cada semana.',
   'Edit the schedule': 'Editar el calendario',
-  'Rebuild it, or swap two teams’ opponents in a week.': 'Rehazlo, o intercambia los rivales de dos equipos en una semana.',
+  'Randomize it up to 25 times in the league chat, set a week by hand, rebuild it, or swap two teams.': 'Sortéalo hasta 25 veces en el chat de la liga, pon una semana a mano, rehazlo o intercambia dos equipos.',
   'Divisions': 'Divisiones',
   'How many, their names, who is in each, and division rivals twice.': 'Cuántas, sus nombres, quién está en cada una y los rivales de división dos veces.',
   'Rivalry Week': 'Semana de rivalidad',

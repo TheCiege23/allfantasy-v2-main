@@ -449,7 +449,7 @@ const SEASON_LINKS: HubLink[] = [
 ]
 
 const SCHEDULE_LINKS: HubLink[] = [
-  { label: 'Edit the schedule', description: 'Rebuild it, or swap two teams’ opponents in a week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-edit-schedule' },
+  { label: 'Edit the schedule', description: 'Randomize it up to 25 times in the league chat, set a week by hand, rebuild it, or swap two teams.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-edit-schedule' },
   { label: 'Divisions', description: 'How many, their names, who is in each, and division rivals twice.', panel: 'divisions', testid: 'hub-divisions' },
 ]
 
