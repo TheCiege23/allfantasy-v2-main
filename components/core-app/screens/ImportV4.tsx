@@ -28,6 +28,7 @@ import {
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
+import { FantraxTradeHistoryUpload } from '@/components/core-app/import/FantraxTradeHistoryUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
@@ -2319,6 +2320,19 @@ export function ImportV4({
         <details className="af-im-fx-disclosure">
           <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
           <FantraxUpload />
+        </details>
+      ) : null}
+
+      {/*
+        Later-round pick trades. Fantrax's API shares future picks for rounds 1-4
+        only, so a traded 5th reaches us from the league's trade-history export or
+        not at all. Collapsed for the same reason as the panel above: most
+        importers never need it, and it must not be the first thing they meet.
+      */}
+      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">Traded picks past round 4? Add your Fantrax trade history</summary>
+          <FantraxTradeHistoryUpload />
         </details>
       ) : null}
 
