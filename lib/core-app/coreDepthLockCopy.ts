@@ -38,6 +38,10 @@ export type CoreDepthLockCopy = {
   body: string
   bodyAlt: string
   cta: (planName: string) => string
+  tradeBreakdownBenefit: string
+  tradeReviewWithTokens: string
+  fullTradeReview: string
+  tradeDraftStorageError: string
   /** "Free until Oct 15 — then AF Pro". */
   freeUntil: (startsAtIso: string, planName: string) => string
 }
@@ -85,7 +89,6 @@ const SUBJECT_ES: Record<string, string> = {
   'The full trade breakdown': 'Desglose completo de cambios',
   'The trade finder': 'Buscador de intercambios',
   'Your rebuild plan': 'Tu plan de reconstrucción',
-  'Season reports and automation': 'Informes y automatizaciones de temporada',
   // Competitive Edge (Draft HQ, Trade Center) — the product name stays
   'Competitive Edge': 'Competitive Edge',
 }

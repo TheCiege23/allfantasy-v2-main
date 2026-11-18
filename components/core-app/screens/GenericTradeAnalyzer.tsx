@@ -14,6 +14,7 @@ import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import styles from './GenericTradeAnalyzer.module.css'
 import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
 import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
+import { coreDepthLockCopy } from '@/lib/core-app/coreDepthLockCopy'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 type Result = {
@@ -139,6 +140,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
   const [teamB, setTeamB] = useState('')
   const [result, setResult] = useState<Result | null>(null)
   const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy({result,assets:[...teamA.split(/\r?\n/),...teamB.split(/\r?\n/)].map(name=>({name}))})
+  const depthCopy = coreDepthLockCopy(language)
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -428,9 +430,9 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                   }}
                   source="market_trade_review"
                   viewerId={viewerId}
-                  storageError={language === 'es' ? 'No se pudo guardar el cambio en esta pestaña.' : 'This browser could not save the trade in this tab.'}
+                  storageError={depthCopy.tradeDraftStorageError}
                 >
-                  {language === 'es' ? 'Obtener un análisis completo' : 'Get a full trade review'}
+                  {depthCopy.fullTradeReview}
                 </TradeReviewLink>
               ) : null}
               {result.tradeMarket?.lines.length || result.tradeMarket?.note ? (
