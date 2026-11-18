@@ -72,8 +72,8 @@ describe('planFantraxTradeHistoryImport', () => {
     expect(unknownPlayer.refused[0]!.reasons[0]).toMatch(/Nobody Known KC WR could not be matched/)
     const wrongTeam = plan('"Receiver Three","DAL","WR","#9 Mesa Comets","#3 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"')
     expect(wrongTeam.ready).toEqual([])
-    expect(plan('"Receiver Three","WAS","WR","#9 Lake Herons","#3 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"').refused[0]!.reasons).toEqual(['No team in this league is named "Lake Herons".'])
-    expect(plan('"Receiver Three","WAS","WR","#9 Dune Foxes","#3 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"').refused[0]!.reasons).toEqual(['"Dune Foxes" has no manager on file in this league.'])
+    expect(plan('"Receiver Three","WAS","WR","#9 Lake Herons","#3 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"').refused[0]!.reasons).toEqual(['No team in this league is named "#9 Lake Herons".'])
+    expect(plan('"Receiver Three","WAS","WR","#9 Dune Foxes","#3 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"').refused[0]!.reasons).toEqual(['"#9 Dune Foxes" has no manager on file in this league.'])
   })
 
   it('a three-team trade is reported, not flattened', () => {
@@ -92,7 +92,44 @@ describe('planFantraxTradeHistoryImport', () => {
       teams: [...TEAMS, { externalId: '505', teamName: 'harbor  owls', platformUserId: 'fantrax-manager:x' }],
       identities: IDS,
     })
-    expect(p.refused[0]!.reasons).toEqual(['Two teams in this league are named "Harbor Owls".'])
+    expect(p.refused[0]!.reasons).toEqual(['Two teams in this league are named "#3 Harbor Owls".'])
+  })
+
+  /*
+   * 🛑 THE FIRST REAL LEAGUE (2026-11-18): its teams are NAMED "#27 Houston Oilers" — the "#N" is not a standings
+   * number there. The reader stripped it, so an upload of five trades added none ("No team in this league is named
+   * \"Houston Oilers\""). Invented names below; the shape is that league's.
+   */
+  it('a league whose team names include "#N" matches them exactly', () => {
+    const p = planFantraxTradeHistoryImport({
+      trades: csv(
+        '"Receiver Three","WAS","WR","#9 Mesa Comets","#27 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"',
+        '"2027 Draft Pick, Round 1 (#27 Harbor Owls)","","","#27 Harbor Owls","#9 Mesa Comets","0","Sun Oct 4, 2026, 1:00PM","5"',
+      ),
+      teams: [
+        { externalId: '101', teamName: '#27 Harbor Owls', platformUserId: 'fantrax-user:owl' },
+        { externalId: '202', teamName: '#9 Mesa Comets', platformUserId: 'fantrax-manager:mesa-comets' },
+      ],
+      identities: IDS,
+    })
+    expect(p.refused).toEqual([])
+    expect(p.ready[0]!.fact.rosterIds.sort()).toEqual(['101', '202'])
+    expect(p.ready[0]!.fact.draftPicks[0]).toMatchObject({ rosterId: '101', previousOwnerId: '101', ownerId: '202' })
+  })
+
+  it('the exact name wins over a prefix-stripped one, so "#9 Owls" never lands on a team named "Owls"', () => {
+    const p = planFantraxTradeHistoryImport({
+      trades: csv('"Receiver Three","WAS","WR","#9 Mesa Comets","#3 Harbor Owls","0","Sun Oct 4, 2026, 1:00PM","5"'),
+      teams: [
+        { externalId: '101', teamName: '#3 Harbor Owls', platformUserId: 'fantrax-user:owl' },
+        { externalId: '999', teamName: 'Harbor Owls', platformUserId: 'fantrax-user:other' },
+        { externalId: '202', teamName: 'Mesa Comets', platformUserId: 'fantrax-manager:mesa-comets' },
+      ],
+      identities: IDS,
+    })
+    expect(p.refused).toEqual([])
+    expect(p.ready[0]!.fact.rosterIds).toContain('101')
+    expect(p.ready[0]!.fact.rosterIds).not.toContain('999')
   })
 
   it('no budget line is a read zero ([]), not "unknown"', () => {

@@ -17,8 +17,11 @@
  * ⚠ The export's Position column is the roster SLOT for some players ("SFX" for a superflex QB), which is no
  * position at all — it is then simply not used, rather than read as a mismatch.
  *
- * TEAMS are matched by display name (`normalizeFantraxTeamName`, the importer's own key), after the export's
- * "#N " standings prefix is stripped. Two league teams sharing a name is ambiguous and refused.
+ * TEAMS are matched by display name (`normalizeFantraxTeamName`, the importer's own key): the name exactly as the
+ * export writes it first, then — only when no team has that exact name — both sides with a leading "#N " removed.
+ * 🛑 THE "#N" IS PART OF THE NAME IN SOME LEAGUES ("#27 Houston Oilers" is stored that way) and a standings number in
+ * others; stripping it unconditionally matched none of the first real league's teams. Two teams sharing a name, at
+ * either step, is ambiguous and refused.
  *
  * Only TWO-TEAM trades are written: `LeagueTrade` is one row per side with one partner, and the completed-trade
  * grade grades two teams. A three-team trade is reported, not flattened.
@@ -29,7 +32,7 @@ import { nflPositionGroups, nflTeamCode, fantraxNflNameKey } from '@/lib/player-
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import { normalizeFantraxTeamName } from './fantraxTeamIds'
-import type { FantraxCsvTrade } from './fantraxTradeHistoryCsv'
+import { stripFantraxStandingPrefix, type FantraxCsvTrade } from './fantraxTradeHistoryCsv'
 
 /** One of the AF league's teams, as the Fantrax importer wrote it (`LeagueTeam`). */
 export type FantraxLeagueTeamRef = { externalId: string; teamName: string | null; platformUserId: string | null }
@@ -60,13 +63,19 @@ export function nflSeasonForTradeDate(at: Date): number {
 }
 
 function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
-  const byName = new Map<string, FantraxLeagueTeamRef[]>()
+  const exact = new Map<string, FantraxLeagueTeamRef[]>()
+  const stripped = new Map<string, FantraxLeagueTeamRef[]>()
+  const add = (m: Map<string, FantraxLeagueTeamRef[]>, key: string, t: FantraxLeagueTeamRef) => {
+    if (key) m.set(key, [...(m.get(key) ?? []), t])
+  }
   for (const t of teams) {
-    const key = normalizeFantraxTeamName(t.teamName ?? '')
-    if (key) byName.set(key, [...(byName.get(key) ?? []), t])
+    add(exact, normalizeFantraxTeamName(t.teamName ?? ''), t)
+    add(stripped, normalizeFantraxTeamName(stripFantraxStandingPrefix(t.teamName ?? '')), t)
   }
   return (label: string): FantraxLeagueTeamRef | string => {
-    const hits = byName.get(normalizeFantraxTeamName(label)) ?? []
+    // The exact name decides whenever any team carries it; the stripped form is consulted only when none does.
+    const exactHits = exact.get(normalizeFantraxTeamName(label)) ?? []
+    const hits = exactHits.length ? exactHits : stripped.get(normalizeFantraxTeamName(stripFantraxStandingPrefix(label))) ?? []
     if (hits.length === 1) return hits[0]!
     return hits.length === 0 ? `No team in this league is named "${label}".` : `Two teams in this league are named "${label}".`
   }
