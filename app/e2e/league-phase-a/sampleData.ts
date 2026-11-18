@@ -146,3 +146,21 @@ export const SAMPLE_STANDINGS = {
     { rosterId: 't-baby', teamName: 'babytezz', wins: 3, losses: 7, ties: 0, pointsFor: 1175.82, pointsAgainst: 1447.88, rank: 13 },
   ],
 }
+
+/** Phase B2: the Propose grid and trade window's roster read (SAMPLE DATA). */
+const tp = (id: string, name: string, position: string, team: string) => ({ id, name, position, team, imageUrl: null, byeWeek: null, injuryStatus: null })
+const tr = (rosterId: string, ownerName: string, players: ReturnType<typeof tp>[]) => ({
+  rosterId, platformUserId: `u-${rosterId}`, ownerName, players, picks: [], faabRemaining: null, canReceiveProposal: true, teamExternalId: rosterId,
+})
+export const SAMPLE_TRADE_ROSTERS = {
+  viewerRosterId: 'tr-me',
+  viewerTeamRosterId: 'tr-me',
+  suggestions: [],
+  multiTeamSuggestions: [],
+  rosters: [
+    tr('tr-me', 'TheCiege24', [tp('4017', 'C.J. Stroud', 'QB', 'HOU'), tp('4881', 'Brock Purdy', 'QB', 'SF'), tp('7564', 'Breece Hall', 'RB', 'NYJ'), tp('8131', 'Tee Higgins', 'WR', 'CIN'), tp('9001', 'Devin Lloyd', 'LB', 'CAR')]),
+    tr('tr-bb', 'BricktopBill', [tp('5001', 'Trevor Lawrence', 'QB', 'JAX'), tp('5002', "De'Von Achane", 'RB', 'MIA'), tp('5003', 'Amon-Ra St. Brown', 'WR', 'DET'), tp('5004', 'Colby Parkinson', 'TE', 'LAR')]),
+    tr('tr-gumbo', '504Gumbo', [tp('6001', 'Jayden Daniels', 'QB', 'WAS'), tp('6794', 'Chris Olave', 'WR', 'NO'), tp('6003', 'Alontae Taylor', 'DB', 'NO')]),
+    tr('tr-cap', 'Captainameri', [tp('7001', 'Ashton Jeanty', 'RB', 'LV'), tp('7002', 'CeeDee Lamb', 'WR', 'DAL'), tp('7003', 'Brandon Aubrey', 'K', 'DAL')]),
+  ],
+}

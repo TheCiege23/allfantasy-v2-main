@@ -846,6 +846,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
    * ("countered — the new offer is below"), then posts the new one, in that order.
    */
   const counteredParentId = parent?.id ?? null
+  // The proposer can opt out of the offer card ("Send direct message" off in the trade window).
+  // A countered parent's card is still closed, so that thread never shows a stale live offer.
+  const sendOfferDm = (input.metadata as Record<string, unknown> | undefined)?.sendDirectMessage !== false
   syncTradeDm('offer', async ([dm, sources]) => {
     if (counteredParentId) {
       await dm
@@ -857,6 +860,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         })
         .catch(() => null)
     }
+    if (!sendOfferDm) return
     await dm.postTradeOfferToDm({
       source: 'native',
       tradeId: trade.id,
