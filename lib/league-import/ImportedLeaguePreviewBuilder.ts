@@ -469,7 +469,8 @@ function buildImportReviewFacts(normalized: NormalizedImportResult): ImportRevie
       .filter((r) => r.is_orphan === true || !String(r.owner_name ?? '').trim())
       .map((r) => r.source_team_id),
     failedRosterTeamIds: normalized.rosters.filter((r) => r.fetch_status === 'failed').map((r) => r.source_team_id),
-    tradedPickCount: normalized.traded_picks?.length ?? 0,
+    // Fantrax lists untraded picks too (`traded: false`); only the moved ones are "traded picks".
+    tradedPickCount: (normalized.traded_picks ?? []).filter((p) => p.traded !== false).length,
     standingsCount: normalized.standings?.length ?? 0,
   }
 }

@@ -2,12 +2,18 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
   FantraxImportDraftPick,
+  FantraxImportFuturePick,
   FantraxImportPayload,
   FantraxImportTeam,
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
-import { readStoredFantraxDerived, readStoredFantraxDraft } from './fantraxSnapshotHistory'
+import {
+  readStoredFantraxDerived,
+  readStoredFantraxDraft,
+  readStoredFantraxFuturePicks,
+  rekeyFantraxFuturePicks,
+} from './fantraxSnapshotHistory'
 import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
 
 type LegacyStanding = {
@@ -901,6 +907,12 @@ export async function fetchFantraxLeagueForImport(
   })
   const draftPicks = boardPicks.length > 0 ? boardPicks : exportDraftPicks
 
+  /* Future-season picks, re-keyed from Fantrax's team ids to ours. Absent when none are on file. */
+  const storedFuturePicks = readStoredFantraxFuturePicks(leagueRecord.transactions)
+  const futurePicks: FantraxImportFuturePick[] | undefined = storedFuturePicks
+    ? rekeyFantraxFuturePicks(storedFuturePicks, teamIdFor)
+    : undefined
+
   const storedDerived = readStoredFantraxDerived(leagueRecord.transactions)
   const derivedTransactions: FantraxImportTransaction[] = []
   for (const move of storedDerived.moves) {
@@ -1021,6 +1033,7 @@ export async function fetchFantraxLeagueForImport(
     schedule,
     transactions: [...transactions, ...derivedTransactions],
     draftPicks,
+    ...(futurePicks ? { futurePicks } : {}),
     historySources: {
       draftBoard: boardPicks.length > 0,
       exportTransactions: transactions.length,

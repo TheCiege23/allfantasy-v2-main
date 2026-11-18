@@ -13,10 +13,11 @@ import 'server-only'
 import { preserveSnapshotNames } from './preserveSnapshotNames'
 import { withFantraxDisplayNames } from './fantraxPlayerName'
 
-import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
+import { getFantraxDraftPicks, getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
 import {
   buildStoredFantraxDraft,
+  buildStoredFantraxFuturePicks,
   deriveFantraxMovesBetweenSnapshots,
   mergeFantraxSnapshotHistory,
   readStoredFantraxDraft,
@@ -209,7 +210,7 @@ export async function importFantraxLeague(args: {
    * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
    * map that fails to load fails soft below, exactly like the others.
    */
-  const [rosters, standings, cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw, schedule, draft, pickInventory] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     directoryFor('CFB'),
@@ -220,6 +221,9 @@ export async function importFantraxLeague(args: {
     directoryFor('NCAAB'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
+    /* Future-season picks and who holds them. Fails soft like the board: a league still imports
+       without them, and a failed read keeps the inventory already on file. */
+    Promise.resolve().then(() => getFantraxDraftPicks(args.leagueId)).catch(() => null),
   ])
   /*
    * Fantrax's directories name players "Last, First"; the season rosters and the draft board store
@@ -418,6 +422,13 @@ export async function importFantraxLeague(args: {
     : null
   const boardOnFile = storedDraft ?? readStoredFantraxDraft((refreshTarget ?? existing)?.transactions)
   const observedAt = new Date().toISOString()
+  const storedFuturePicks = pickInventory && pickInventory.ok
+    ? buildStoredFantraxFuturePicks(
+        pickInventory.data.future,
+        Object.fromEntries(resolved.map((r) => [r.teamId, r.teamName])),
+        observedAt,
+      )
+    : null
   const observedPeriod = schedule.position?.period ?? null
   const retainPeriodCalendar = usesFantraxPeriodCalendar(best.sport)
   const derived = prior
@@ -432,6 +443,7 @@ export async function importFantraxLeague(args: {
     : { moves: [], suspectedTrades: [] }
   const history = mergeFantraxSnapshotHistory((refreshTarget ?? existing)?.transactions, {
     draft: storedDraft,
+    futurePicks: storedFuturePicks,
     moves: derived.moves,
     suspectedTrades: derived.suspectedTrades,
     period: observedPeriod,

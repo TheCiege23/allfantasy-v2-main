@@ -1118,17 +1118,30 @@ export type FantraxOutstandingPick = {
   teamId: string
 }
 
+/**
+ * One future-season pick, as `getDraftPicks.futureDraftPicks` reports it.
+ *
+ * Measured 2026-11-18 on three public dynasty leagues (34 and 36 teams): every row is exactly
+ * `{ year, round, originalOwnerTeamId, currentOwnerTeamId }`, one row per team per round per year
+ * for ten years, traded or not. A traded pick is a row whose two team ids differ (9 of 1,360 in
+ * one league, 2 of 1,080 in another). There is no pick-in-round: the order is not set yet.
+ * Capture: `tests/fixtures/fantrax/nfl-dynasty-future-picks-public.json`.
+ */
+export type FantraxFuturePick = {
+  /** The draft year the pick belongs to. */
+  year: number
+  round: number
+  /** Fantrax team id the pick was issued to. */
+  originalOwnerTeamId: string
+  /** Fantrax team id holding it now; equal to the original when it has not been traded. */
+  currentOwnerTeamId: string
+}
+
 export type FantraxDraftPickInventory = {
   /** Current-season picks not yet used. */
   current: FantraxOutstandingPick[]
-  /**
-   * Future-season picks — the dynasty asset.
-   *
-   * ⚠ EMPTY IN THE ONLY LEAGUE MEASURED, so the element shape is UNVERIFIED and
-   * is typed as the same row only because that is the sibling field's shape.
-   * Do not build a traded-pick feature on this without seeing one first.
-   */
-  future: FantraxOutstandingPick[]
+  /** Future-season picks: the whole inventory, not only the traded ones. Empty in a redraft league. */
+  future: FantraxFuturePick[]
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -1229,11 +1242,23 @@ export async function getFantraxDraftPicks(
     return out
   }
 
+  const future: FantraxFuturePick[] = []
+  for (const raw of Array.isArray(body.futureDraftPicks) ? body.futureDraftPicks : []) {
+    const row = (raw ?? {}) as Record<string, unknown>
+    const year = toFiniteNumber(row.year)
+    const round = toFiniteNumber(row.round)
+    const originalOwnerTeamId = String(row.originalOwnerTeamId ?? '').trim()
+    const currentOwnerTeamId = String(row.currentOwnerTeamId ?? '').trim()
+    // A row missing either owner cannot say who holds the pick; it is skipped, never guessed.
+    if (year == null || round == null || round < 1 || !originalOwnerTeamId || !currentOwnerTeamId) continue
+    future.push({ year, round, originalOwnerTeamId, currentOwnerTeamId })
+  }
+
   return {
     ok: true,
     data: {
       current: read(body.currentDraftPicks),
-      future: read(body.futureDraftPicks),
+      future,
     },
   }
 }

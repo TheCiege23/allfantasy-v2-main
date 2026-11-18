@@ -309,6 +309,12 @@ export interface NormalizedTradedPick {
   original_roster_id: string
   current_owner_roster_id: string
   previous_owner_roster_id?: string
+  /**
+   * Whether the pick has changed hands. Absent means true: Sleeper and MFL list only moved picks.
+   * Fantrax lists every pick with its holder, so its untraded picks carry `false` and are stored
+   * as the team's own.
+   */
+  traded?: boolean
 }
 
 /** Title-game result for one season, in the adapter's own team id space. */

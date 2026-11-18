@@ -201,7 +201,7 @@ export type LeagueSyncScope = (typeof LEAGUE_SYNC_SCOPES)[number]
  * Sleeper-specific — every scope maps to a canonical table any provider can fill — so this is
  * purely a rename, kept aliased for the existing call sites.
  *
- * ⚠ `traded_picks` IS EMITTED BY SLEEPER ALONE TODAY, and that is a provider coverage gap
+ * ⚠ `traded_picks` IS EMITTED BY SLEEPER, MFL AND FANTRAX ONLY, and that is a provider coverage gap
  * rather than a scope-set problem: the scope applies an empty list for the others, which is
  * correct and idempotent. It starts doing real work the moment another adapter emits them.
  */
