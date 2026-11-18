@@ -191,7 +191,7 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
     <div className="af-core af-tk" data-guide="tokens">
       {/*
         ⚠ THIS PAGE HAD NO NAVIGATION AT ALL — no header and not one link. /tokens is behind sign-in
-        (app/tokens/layout.tsx), so the way out is always the app.
+        (app/tokens/page.tsx), so the way out is always the app.
       */}
       <nav className="af-tkg-nav" aria-label="Main">
         <Link href="/core" className="af-tkg-brand">
