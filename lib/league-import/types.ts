@@ -317,6 +317,21 @@ export interface NormalizedTradedPick {
   traded?: boolean
 }
 
+/**
+ * A future pick the provider POSITIVELY reports as held by its original team.
+ *
+ * Exists for the traded-back case. `future_draft_picks` holds a row only for a
+ * pick that has left its original roster, and nothing ever removed one — so a
+ * pick traded away and later traded home kept showing its old holder forever.
+ * A provider that lists every pick (Fantrax, MFL) can say "this one is home",
+ * and that is what clears the stale row.
+ */
+export interface NormalizedReturnedPick {
+  season: number
+  round: number
+  original_roster_id: string
+}
+
 /** Title-game result for one season, in the adapter's own team id space. */
 interface NormalizedSeasonPlacement {
   champion_source_team_id: string | null
@@ -381,6 +396,13 @@ export interface NormalizedImportResult {
    * exposes them but no picks are currently in a traded state.
    */
   traded_picks?: NormalizedTradedPick[]
+  /**
+   * Future picks the provider reports as back with (or never having left) their
+   * original team. Absent = the provider cannot say — Sleeper's `/traded_picks`
+   * lists moved picks only, so silence about a pick there proves nothing and no
+   * stored row is ever cleared on its account.
+   */
+  returned_picks?: NormalizedReturnedPick[]
   /**
    * Who won the season's title and who lost it, from the provider's own playoff
    * result — NOT from `standings`. Absent = the adapter has no such result (season

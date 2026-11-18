@@ -13,6 +13,8 @@ import { prisma } from '@/lib/prisma'
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
 import { parseFantraxTradeHistoryCsv, type FantraxCsvSkip } from './fantraxTradeHistoryCsv'
 import { planFantraxTradeHistoryImport, type FantraxRefusedTrade } from './fantraxTradeHistoryPlan'
+import { laterRoundPickOwnership } from './fantraxTradeHistoryPicks'
+import { readStoredFantraxFuturePicks } from './fantraxSnapshotHistory'
 
 /** Generous for a CSV of trades (the sample is ~2 KB for four trades); stops a stray upload. */
 export const FANTRAX_TRADE_CSV_MAX_BYTES = 1_000_000
@@ -26,6 +28,11 @@ export type FantraxTradeHistoryImportResult =
       refused: FantraxRefusedTrade[]
       /** Lines of the file that were not a readable trade row. */
       skippedLines: FantraxCsvSkip[]
+      /**
+       * Future picks placed from this export, in rounds Fantrax's API does not publish. `null` when
+       * that step could not run; the trades above are saved either way.
+       */
+      laterRoundPicks: { traded: number; cleared: number } | null
     }
   | { ok: false; status: 400 | 404 | 409; error: string }
 
@@ -33,7 +40,7 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
   if (args.csvText.length > FANTRAX_TRADE_CSV_MAX_BYTES) return { ok: false, status: 400, error: 'The file is too large for a trade history export.' }
   const league = await prisma.league.findUnique({
     where: { id: args.leagueId },
-    select: { platform: true, platformLeagueId: true, sport: true },
+    select: { platform: true, platformLeagueId: true, sport: true, season: true },
   })
   if (!league) return { ok: false, status: 404, error: 'League not found.' }
   if (String(league.platform ?? '').toLowerCase() !== 'fantrax' || !league.platformLeagueId) {
@@ -72,5 +79,44 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
       'nfl',
     )
   }
-  return { ok: true, imported: plan.ready.length, rowsWritten, refused: plan.refused, skippedLines: parsed.skipped }
+
+  /*
+   * Later-round pick ownership. Fantrax's API publishes future picks for rounds 1-4 only, so a
+   * traded 5th is visible nowhere but this export (see `fantraxTradeHistoryPicks.ts`). The picks
+   * the API does not cover are written to `future_draft_picks` here, where the trade screens read
+   * them.
+   *
+   * ⚠ FAILS SOFT. The trades are already saved; a problem placing picks must not turn a good
+   * upload into an error. `laterRoundPicks: null` says the step did not run.
+   */
+  let laterRoundPicks: { traded: number; cleared: number } | null = null
+  try {
+    const snapshot = await prisma.fantraxLeague.findFirst({
+      where: { OR: [{ sourceLeagueId: league.platformLeagueId }, { id: league.platformLeagueId }] },
+      orderBy: { updatedAt: 'desc' },
+      select: { transactions: true },
+    })
+    const published = new Set(
+      (readStoredFantraxFuturePicks(snapshot?.transactions ?? null)?.picks ?? []).map((p) => `${p.season}:${p.round}`),
+    )
+    const ownership = laterRoundPickOwnership({
+      facts: plan.ready.map((t) => t.fact),
+      publishedRounds: published,
+      afterSeason: typeof league.season === 'number' ? league.season : null,
+    })
+    laterRoundPicks = { traded: 0, cleared: 0 }
+    if (ownership.traded.length > 0 || ownership.returned.length > 0) {
+      const { persistTradedPicks, clearReturnedTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
+      if (ownership.traded.length > 0) {
+        laterRoundPicks.traded = (await persistTradedPicks(args.leagueId, ownership.traded)).written
+      }
+      if (ownership.returned.length > 0) {
+        laterRoundPicks.cleared = (await clearReturnedTradedPicks(args.leagueId, ownership.returned)).cleared
+      }
+    }
+  } catch {
+    laterRoundPicks = null
+  }
+
+  return { ok: true, imported: plan.ready.length, rowsWritten, refused: plan.refused, skippedLines: parsed.skipped, laterRoundPicks }
 }
