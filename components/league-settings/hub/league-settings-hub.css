@@ -229,3 +229,12 @@
   .af-lsh-row[data-af-option] > .af-lsh-row-copy { flex: 1 1 100% !important; }
   .af-lsh-row[data-af-option] > .af-lsh-af-value { flex: 1 1 auto; max-width: none; text-align: left; }
 }
+
+/* Connected leagues pop-up (Phase C4). */
+.af-lsh-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 6vh 12px 24px; background: rgba(2, 4, 12, .72); overflow-y: auto; }
+.af-lsh-modal { width: 100%; max-width: 720px; border-radius: 18px; border: 1px solid rgba(255,255,255,.12); background: var(--lsh-card); color: var(--lsh-text); box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+.af-lsh-modal-section { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border-top: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+.af-lsh-modal-section > span { color: var(--lsh-muted); line-height: 1.5; }
+.af-lsh-modal-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-lsh-modal-row .af-lsh-input { flex: 1 1 220px; width: auto; }
+.af-lsh-modal-foot { display: flex; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid rgba(255,255,255,.06); }

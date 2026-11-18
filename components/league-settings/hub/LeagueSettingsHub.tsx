@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { TaskCardsResult } from '@/lib/core-app/commissioner/tasks'
+import type { ConnectedGroup } from '@/lib/league/connectedLeagues'
 import { toast } from 'sonner'
 import { buildAfOptions,
   buildAllTimeStandings,
@@ -133,6 +134,7 @@ export function LeagueSettingsHub({
   const [coOwners, setCoOwners] = useState<Loadable<Array<{ id: string; accepted: boolean; name: string }>>>(undefined)
   const [busyField, setBusyField] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Loadable<TaskCardsResult>>(undefined)
+  const [connected, setConnected] = useState<Loadable<ConnectedGroup>>(undefined)
   const prefsRef = useRef<NotificationPreferences | null>(null)
 
   const loadSettings = useCallback(async () => {
@@ -201,6 +203,29 @@ export function LeagueSettingsHub({
     })
     return () => { live = false }
   }, [payload, canEdit, native, leagueId, language])
+
+  // Connected leagues (Phase C4): the Survivor islands, tournament round or Zombie universe, if any.
+  const loadConnected = useCallback(async () => {
+    const d = await getJson<{ group?: ConnectedGroup | null }>(`/api/leagues/${encodeURIComponent(leagueId)}/connected-leagues`)
+    setConnected(d ? d.group ?? null : null)
+  }, [leagueId])
+  useEffect(() => {
+    if (payload === undefined) return
+    if (payload && canEdit && native) void loadConnected()
+    else setConnected(null)
+  }, [payload, canEdit, native, loadConnected])
+
+  /** Every connected draft at once, through the group's own route (which checks its owner again). */
+  const onScheduleConnectedDrafts = useCallback(async (isoDateTime: string): Promise<string | null> => {
+    const plan = connected?.draftSchedule
+    if (!plan) return tx('Only the group’s commissioner can schedule every draft at once.')
+    const res = plan.kind === 'tournament'
+      ? await sendJson('/api/tournament/draft', 'POST', { tournamentId: plan.tournamentId, roundNumber: plan.roundNumber, draftDateTime: isoDateTime })
+      : await sendJson(`/api/zombie/universe/${encodeURIComponent(plan.universeId)}/draft-schedule`, 'POST', { mode: 'single', scheduledFor: isoDateTime })
+    if (!res.ok) return res.error ?? tx('Could not set the drafts. Try again.')
+    await loadConnected()
+    return null
+  }, [connected, loadConnected])
 
   const kind = useMemo(
     /*
@@ -369,8 +394,9 @@ export function LeagueSettingsHub({
       correctionWeeks: corrections,
       commissionerTasks: tasks,
       afOptions: p ? buildAfOptions(p, kind, leagueId) : p === null ? [] : undefined,
+      connected,
     }
-  }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId, tasks])
+  }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId, tasks, connected])
 
   const slots = useMemo(
     () => (canEdit && native ? { rivalryWeek: <RivalryWeekCard leagueId={leagueId} />, storyline: <StorylineStudio leagueId={leagueId} /> } : undefined),
@@ -396,6 +422,7 @@ export function LeagueSettingsHub({
         onLeaveLeague,
         onCopy,
         onShare,
+        onScheduleConnectedDrafts,
       }}
     />
   )
