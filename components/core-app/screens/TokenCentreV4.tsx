@@ -231,12 +231,8 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
         <h2 className="af-tk-h2" id="af-tkg-packs-h">
           {g.packsTitle}
         </h2>
-        {starterOffer && featuredCost ? (
-          <p className="af-tk-sub">
-            {locale.startsWith('es')
-              ? `Esta acción cuesta ${featuredCost.toLocaleString(locale)} tokens.`
-              : `${featuredRule?.label} costs ${featuredCost.toLocaleString(locale)} tokens each time.`}
-          </p>
+        {starterOffer && featuredRule && featuredCost ? (
+          <p className="af-tk-sub">{g.featuredCost(featuredRule.label, featuredCost.toLocaleString(locale))}</p>
         ) : null}
         <div className="af-tk-packs">
           {availablePacks.map((p) => (

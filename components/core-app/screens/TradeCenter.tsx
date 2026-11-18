@@ -59,7 +59,7 @@ import { RebuildPlanCard } from '@/components/core-app/screens/RebuildPlanCard'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
+import { coreDepthLockCopy, lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
@@ -818,6 +818,7 @@ export function TradeCenter(props: {
 }) {
   const language = useOptionalLanguage().language
   const tcm = useMessages(tradeCenterMessages)
+  const depthCopy = coreDepthLockCopy(language)
   const lg = useMessages(tradesLeagueGuideMessages)
   /* The live "Trade deadline in 3d 4h" text, for a deadline with a close time; the headline uses it as is. */
   const liveDeadline = useTradeDeadlineCountdownText(props.deadlineCountdown)
@@ -2914,9 +2915,7 @@ export function TradeCenter(props: {
           <CoreDepthLock
             access={depthAccess}
             what={lockSubjectText('The full trade breakdown', language)}
-            benefit={language === 'es'
-              ? 'Consulta el impacto en tu plantilla y las posibles contraofertas.'
-              : 'See how this trade changes your roster and what you could counter with.'}
+            benefit={depthCopy.tradeBreakdownBenefit}
             source="lock_trade_breakdown"
             lang={language}
           >
@@ -2930,9 +2929,9 @@ export function TradeCenter(props: {
               }}
               source="lock_trade_breakdown"
               viewerId={props.viewerId}
-              storageError={language === 'es' ? 'No se pudo guardar el cambio en esta pestaña.' : 'This browser could not save the trade in this tab.'}
+              storageError={depthCopy.tradeDraftStorageError}
             >
-              {language === 'es' ? 'Revisar este cambio con tokens' : 'Review this trade with tokens'}
+              {depthCopy.tradeReviewWithTokens}
             </TradeReviewLink>
           </CoreDepthLock>
         </div>

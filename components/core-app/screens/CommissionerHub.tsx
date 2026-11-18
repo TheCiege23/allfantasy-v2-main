@@ -66,7 +66,6 @@ import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizar
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { DynastyFormatCard } from '@/components/core-app/commissioner/DynastyFormatCard'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
-import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { DisputeDesk } from '@/components/disputes/DisputeDesk'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
@@ -236,10 +235,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {depth && !depth.unlocked ? (
         <CoreDepthLock
           access={depth}
-          what={lockSubjectText('Season reports and automation', language)}
-          benefit={language === 'es'
-            ? 'Supervisa la actividad y la salud de tu liga y automatiza el trabajo de cada semana.'
-            : 'Monitor league activity and health and automate weekly commissioner work.'}
+          what={t('Season reports and automation')}
+          benefit={t('Monitor league activity and health and automate weekly commissioner work.')}
           source="lock_commissioner_season"
           lang={language}
         />
