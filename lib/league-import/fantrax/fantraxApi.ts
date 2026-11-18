@@ -1098,11 +1098,55 @@ export type FantraxDraftPickInventory = {
   /**
    * Future-season picks — the dynasty asset.
    *
-   * ⚠ EMPTY IN THE ONLY LEAGUE MEASURED, so the element shape is UNVERIFIED and
-   * is typed as the same row only because that is the sibling field's shape.
-   * Do not build a traded-pick feature on this without seeing one first.
+   * ⚠ A DIFFERENT ROW SHAPE FROM `current`, AND IT WAS TYPED AS THE SAME ONE
+   * UNTIL A REAL ROW WAS SEEN. Measured on a 34-team dynasty league 2026-11-18,
+   * 1,360 rows, every one carrying exactly these four keys:
+   *
+   *     { "year": 2027, "round": 1,
+   *       "currentOwnerTeamId": "…", "originalOwnerTeamId": "…" }
+   *
+   * There is no `pick` and no `teamId`, so the old reader (which looked for the
+   * current-pick keys) returned zero rows for a league that had 1,360.
+   *
+   * ⚠ EVERY PICK IS LISTED, TRADED OR NOT. An untraded pick has the same id in
+   * both owner fields. "Traded" is `currentOwnerTeamId !== originalOwnerTeamId`,
+   * and it is the caller's job to ask.
    */
-  future: FantraxOutstandingPick[]
+  future: FantraxFuturePick[]
+  /** The future-pick rows exactly as Fantrax sent them, kept so nothing is lost to a vendor change. */
+  futureRaw: unknown[]
+}
+
+export type FantraxFuturePick = {
+  /** The draft season the pick belongs to. Fantrax calls it `year`. */
+  season: number
+  round: number
+  /** Fantrax team id of whoever the pick was originally issued to. */
+  originalOwnerTeamId: string
+  /** Fantrax team id of whoever holds it now. */
+  currentOwnerTeamId: string
+}
+
+/**
+ * Read future-pick rows, from the API or from storage.
+ *
+ * A row missing any of the four fields is dropped, not half-read: a pick with no
+ * original owner cannot be keyed, and one with no current owner says nothing.
+ */
+export function parseFantraxFuturePicks(value: unknown): FantraxFuturePick[] {
+  if (!Array.isArray(value)) return []
+  const out: FantraxFuturePick[] = []
+  for (const raw of value) {
+    if (raw === null || typeof raw !== 'object') continue
+    const row = raw as Record<string, unknown>
+    const season = toFiniteNumber(row.year ?? row.season)
+    const round = toFiniteNumber(row.round)
+    const originalOwnerTeamId = String(row.originalOwnerTeamId ?? '').trim()
+    const currentOwnerTeamId = String(row.currentOwnerTeamId ?? '').trim()
+    if (season == null || round == null || !originalOwnerTeamId || !currentOwnerTeamId) continue
+    out.push({ season, round, originalOwnerTeamId, currentOwnerTeamId })
+  }
+  return out
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -1207,7 +1251,8 @@ export async function getFantraxDraftPicks(
     ok: true,
     data: {
       current: read(body.currentDraftPicks),
-      future: read(body.futureDraftPicks),
+      future: parseFantraxFuturePicks(body.futureDraftPicks),
+      futureRaw: Array.isArray(body.futureDraftPicks) ? body.futureDraftPicks : [],
     },
   }
 }

@@ -28,7 +28,12 @@
  * So a draft board is not a list of picks made: it is a list of SLOTS, and only
  * the filled ones are draft history.
  */
-import type { FantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
+import {
+  parseFantraxFuturePicks,
+  type FantraxDraftPickInventory,
+  type FantraxDraftResults,
+  type FantraxFuturePick,
+} from '@/lib/league-import/fantrax/fantraxApi'
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 
 export interface FantraxDraftSummary {
@@ -113,4 +118,217 @@ export function describeFantraxDraftCoverage(summary: FantraxDraftSummary): stri
     return `${summary.madeCount} of ${summary.slotCount} Fantrax draft slots have been picked; ${summary.outstandingCount} are still outstanding.`
   }
   return `All ${summary.madeCount} Fantrax draft picks were imported.`
+}
+
+/* ------------------------------------------------------------------ *
+ * Storage
+ *
+ * `FantraxLeague.draftBoard` and `FantraxLeague.draftPicks` are JSON columns.
+ * These are the shapes written to them and the readers that take them back out.
+ *
+ * ⚠ THE READERS TRUST NOTHING. A JSON column holds whatever was written by
+ * whichever version of this file wrote it, so every field is re-checked on the
+ * way out and a row that does not look like a pick is dropped, not coerced.
+ * ------------------------------------------------------------------ */
+
+type PlayerDirectory = Record<string, { name?: string | null; position?: string | null; team?: string | null }>
+
+/** One slot of the stored draft board. `playerId` is null for a slot not yet used. */
+export type StoredFantraxDraftSlot = {
+  round: number
+  /** OVERALL pick number. */
+  pick: number
+  pickInRound: number
+  /** Fantrax's own team id. */
+  teamId: string
+  time: number | null
+  playerId: string | null
+  /**
+   * Who the player was, resolved WHEN THE DRAFT WAS STORED.
+   *
+   * ⚠ NOT LOOKED UP LATER, ON PURPOSE. The reader only has the players currently
+   * on a roster, and a drafted player who was since dropped is not among them —
+   * so resolving at read time would leave every cut player nameless. The import
+   * holds the sport's whole player directory, so the name is taken there.
+   */
+  playerName: string | null
+  playerPosition: string | null
+  playerTeam: string | null
+}
+
+export type StoredFantraxDraftBoard = {
+  version: 1
+  fetchedAt: string
+  draftState: string | null
+  draftType: string | null
+  draftOrder: string[]
+  draftDate: string | null
+  startDate: string | null
+  endDate: string | null
+  picks: StoredFantraxDraftSlot[]
+}
+
+export type StoredFantraxPickInventory = {
+  version: 1
+  fetchedAt: string
+  /** This season's unused picks. ⚠ `pick` is the pick WITHIN the round here. */
+  current: Array<{ round: number; pick: number; teamId: string }>
+  /** Future-season picks exactly as Fantrax sent them — see `futureRaw` in fantraxApi. */
+  futureRaw: unknown[]
+}
+
+export function toStoredFantraxDraftBoard(
+  results: FantraxDraftResults,
+  players: PlayerDirectory = {},
+  now: Date = new Date(),
+): StoredFantraxDraftBoard {
+  return {
+    version: 1,
+    fetchedAt: now.toISOString(),
+    draftState: results.draftState,
+    draftType: results.draftType,
+    draftOrder: results.draftOrder,
+    draftDate: results.draftDate,
+    startDate: results.startDate,
+    endDate: results.endDate,
+    picks: results.picks.map((slot) => {
+      const player = slot.playerId ? players[slot.playerId] : undefined
+      return {
+        round: slot.round,
+        pick: slot.pick,
+        pickInRound: slot.pickInRound,
+        teamId: slot.teamId,
+        time: slot.time,
+        playerId: slot.playerId,
+        playerName: player?.name?.trim() || null,
+        playerPosition: player?.position?.trim() || null,
+        playerTeam: player?.team?.trim() || null,
+      }
+    }),
+  }
+}
+
+export function toStoredFantraxPickInventory(
+  inventory: FantraxDraftPickInventory,
+  now: Date = new Date(),
+): StoredFantraxPickInventory {
+  return {
+    version: 1,
+    fetchedAt: now.toISOString(),
+    current: inventory.current.map((p) => ({ round: p.round, pick: p.pick, teamId: p.teamId })),
+    futureRaw: inventory.futureRaw,
+  }
+}
+
+function finite(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+function text(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** Read a stored board back. Null when the column is empty or not a board. */
+export function parseStoredFantraxDraftBoard(raw: unknown): StoredFantraxDraftBoard | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const body = raw as Record<string, unknown>
+  if (!Array.isArray(body.picks)) return null
+
+  const picks: StoredFantraxDraftSlot[] = []
+  for (const entry of body.picks) {
+    if (entry === null || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    const round = finite(row.round)
+    const pick = finite(row.pick)
+    const pickInRound = finite(row.pickInRound)
+    const teamId = text(row.teamId)
+    if (round == null || pick == null || pickInRound == null || !teamId) continue
+    picks.push({
+      round,
+      pick,
+      pickInRound,
+      teamId,
+      time: finite(row.time),
+      playerId: text(row.playerId),
+      playerName: text(row.playerName),
+      playerPosition: text(row.playerPosition),
+      playerTeam: text(row.playerTeam),
+    })
+  }
+
+  return {
+    version: 1,
+    fetchedAt: text(body.fetchedAt) ?? '',
+    draftState: text(body.draftState),
+    draftType: text(body.draftType),
+    draftOrder: Array.isArray(body.draftOrder) ? body.draftOrder.map(text).filter((t): t is string => t != null) : [],
+    draftDate: text(body.draftDate),
+    startDate: text(body.startDate),
+    endDate: text(body.endDate),
+    picks,
+  }
+}
+
+/**
+ * The future picks on a stored inventory, still in Fantrax's team-id space.
+ *
+ * `stored` is false when the column is empty or is not an inventory — which is a
+ * different fact from a stored inventory with no future picks, and the caller
+ * reports them differently.
+ */
+export function futurePicksFromStoredInventory(raw: unknown): {
+  stored: boolean
+  picks: FantraxFuturePick[]
+} {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { stored: false, picks: [] }
+  const body = raw as Record<string, unknown>
+  if (!Array.isArray(body.futureRaw)) return { stored: false, picks: [] }
+  return { stored: true, picks: parseFantraxFuturePicks(body.futureRaw) }
+}
+
+/** A made pick, in the import payload's shape but still in Fantrax's team-id space. */
+export type FantraxBoardPick = {
+  round: number
+  pickNumber: number
+  /** Fantrax's own team id — the caller maps it onto its own team ids. */
+  sourceTeamId: string
+  playerId: string
+  playerName: string | null
+  position: string | null
+  team: string | null
+}
+
+/**
+ * The picks actually made on a stored board, in draft order.
+ *
+ * ⚠ ONLY MADE PICKS, for the reason `mapFantraxDraftResults` gives: a slot with
+ * no player is not draft history. `outstanding` says how many were left out.
+ */
+export function madePicksFromStoredBoard(board: StoredFantraxDraftBoard | null): {
+  picks: FantraxBoardPick[]
+  slots: number
+  outstanding: number
+  draftState: string | null
+} {
+  if (!board) return { picks: [], slots: 0, outstanding: 0, draftState: null }
+  const picks: FantraxBoardPick[] = []
+  for (const slot of board.picks) {
+    if (!slot.playerId) continue
+    picks.push({
+      round: slot.round,
+      /* OVERALL, not in-round — see the header of this file. */
+      pickNumber: slot.pick,
+      sourceTeamId: slot.teamId,
+      playerId: slot.playerId,
+      playerName: slot.playerName,
+      position: slot.playerPosition,
+      team: slot.playerTeam,
+    })
+  }
+  picks.sort((a, b) => a.pickNumber - b.pickNumber)
+  return {
+    picks,
+    slots: board.picks.length,
+    outstanding: board.picks.length - picks.length,
+    draftState: board.draftState,
+  }
 }

@@ -13,8 +13,12 @@ import 'server-only'
 import { selectFantraxRoster } from './fantraxTeamSelection'
 import { selectFantraxSportMap } from './fantraxSportSelection'
 
-import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
-import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
+import { getFantraxDraftPicks, getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
+import {
+  mapFantraxDraftResults,
+  toStoredFantraxDraftBoard,
+  toStoredFantraxPickInventory,
+} from '@/lib/league-import/fantrax/fantraxDraft'
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { fantraxScoringMode, fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
@@ -51,11 +55,9 @@ export type FantraxImportOutcome =
       /**
        * What the league's draft board actually contained.
        *
-       * ⚠ RETURNED RATHER THAN STORED, for the same reason `scoringRules` above
-       * is: `FantraxLeague` has no draft column. Adding one is a migration, and a
-       * migration is not this import's call — so the capability lands first and
-       * the persistence decision stays with the repo owner. A caller that wants
-       * the picks has them here; nothing silently half-writes them.
+       * Also stored now, on `FantraxLeague.draftBoard` (every slot) and
+       * `FantraxLeague.draftPicks` (who owns the unused ones). This summary is
+       * what this one request read; the columns are what survives it.
        *
        * `picks` holds only the slots actually used —
        * `NormalizedDraftPick.source_player_id` is required and an unmade slot has
@@ -145,7 +147,7 @@ export async function importFantraxLeague(args: {
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
    */
-  const [rosters, standings, cfb, nfl, nba, ncaab, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfb, nfl, nba, ncaab, schedule, draft, pickInventory] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
@@ -154,6 +156,8 @@ export async function importFantraxLeague(args: {
     getFantraxPlayerIds('NCAAB'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
+    /* Who owns which unused picks. Fails soft for the same reason the draft does. */
+    getFantraxDraftPicks(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
@@ -257,7 +261,27 @@ export async function importFantraxLeague(args: {
    */
   const draftSummary = mapFantraxDraftResults(draft && draft.ok ? draft.data : null, { season })
 
+  /* The directory of the sport that was selected, so drafted players are named
+     even after they have left every roster. */
+  const directory =
+    best.sport === 'cfb' ? cfb : best.sport === 'nfl' ? nfl : best.sport === 'nba' ? nba : ncaab
+  /*
+   * ⚠ A FAILED READ LEAVES THE STORED DRAFT ALONE. These keys are only present
+   * when Fantrax actually answered, and an absent key is "do not touch" to the
+   * upsert. Writing null on a throttle would erase a completed draft that was
+   * read fine last time — a transient outage turned into lost history.
+   */
+  const draftColumns = {
+    ...(draft && draft.ok
+      ? { draftBoard: toStoredFantraxDraftBoard(draft.data, directory.ok ? directory.data : {}) as unknown as object }
+      : {}),
+    ...(pickInventory && pickInventory.ok
+      ? { draftPicks: toStoredFantraxPickInventory(pickInventory.data) as unknown as object }
+      : {}),
+  }
+
   const payload = {
+    ...draftColumns,
     appUserId: args.appUserId,
     /*
      * The id this import was handed, kept so the snapshot can be refreshed.

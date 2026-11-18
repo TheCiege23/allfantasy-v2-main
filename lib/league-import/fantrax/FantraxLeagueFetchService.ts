@@ -11,6 +11,11 @@ import { ownedFantraxTeamName, parseFantraxTeamSourceId } from './fantraxTeamSel
 import { getFantraxLeagueInfo, resolveFantraxSeasonPosition } from './fantraxApi'
 import { fantraxScoringMode, fantraxScoringRules } from './fantraxScoring'
 import { fantraxStarterSlots } from './fantraxRosterSettings'
+import {
+  futurePicksFromStoredInventory,
+  madePicksFromStoredBoard,
+  parseStoredFantraxDraftBoard,
+} from './fantraxDraft'
 
 type LegacyStanding = {
   rank?: unknown
@@ -823,7 +828,31 @@ export async function fetchFantraxLeagueForImport(
     }
   })
 
-  const draftPicks: FantraxImportDraftPick[] = transactions
+  /*
+   * ⚠ THE REAL DRAFT, WHEN ONE IS ON FILE. `draftBoard` is the league's own draft
+   * from `getDraftResults`, stored by the live import. It carries real player ids
+   * and real team ids, so it replaces the CSV-era fallback below — which only ever
+   * knew about traded-pick rows and invented a player id for each.
+   *
+   * Read through a cast because the column is newer than some generated clients.
+   */
+  const storedBoard = madePicksFromStoredBoard(
+    parseStoredFantraxDraftBoard((leagueRecord as { draftBoard?: unknown }).draftBoard),
+  )
+  const boardDraftPicks: FantraxImportDraftPick[] = storedBoard.picks.map((pick) => ({
+    round: pick.round,
+    pickNumber: pick.pickNumber,
+    /* Same sentinel as below: an unmapped team is "unknown", never a guess. */
+    teamId: sourceTeamIds.has(pick.sourceTeamId)
+      ? String(sourceTeamIds.get(pick.sourceTeamId))
+      : 'fantrax-team:unknown',
+    playerId: pick.playerId,
+    playerName: pick.playerName ?? rosterPlayerMap[pick.playerId]?.name ?? null,
+    position: pick.position ?? rosterPlayerMap[pick.playerId]?.position ?? null,
+    team: pick.team ?? rosterPlayerMap[pick.playerId]?.team ?? null,
+  }))
+
+  const csvDraftPicks: FantraxImportDraftPick[] = transactions
     .filter((transaction) => transaction.isDraftPick)
     .map((transaction) => {
       const round = transaction.pickRound ?? null
@@ -848,6 +877,41 @@ export async function fetchFantraxLeagueForImport(
       } satisfies FantraxImportDraftPick
     })
     .filter(Boolean) as FantraxImportDraftPick[]
+
+  const hasBoardPicks = boardDraftPicks.length > 0
+  const draftPicks = hasBoardPicks ? boardDraftPicks : csvDraftPicks
+
+  /*
+   * Future picks that have changed hands — the dynasty asset.
+   *
+   * ⚠ FANTRAX LISTS EVERY FUTURE PICK, AND ONLY THE TRADED ONES GO DOWNSTREAM.
+   * `future_draft_picks` records ownership changes and stamps each row traded, so
+   * passing all 1,360 picks of a 34-team league would mark every one of them as
+   * traded. A pick whose current and original owner match is left out.
+   *
+   * ⚠ A PICK WITH A TEAM WE CANNOT PLACE IS COUNTED, NOT GUESSED. Both owners
+   * must map onto a team in this league; `unmapped` says how many did not.
+   */
+  const storedFuture = futurePicksFromStoredInventory(
+    (leagueRecord as { draftPicks?: unknown }).draftPicks,
+  )
+  let unmappedFuturePicks = 0
+  const tradedPicks: NonNullable<FantraxImportPayload['tradedPicks']> = []
+  for (const pick of storedFuture.picks) {
+    if (pick.currentOwnerTeamId === pick.originalOwnerTeamId) continue
+    const originalTeamId = sourceTeamIds.get(pick.originalOwnerTeamId)
+    const currentOwnerTeamId = sourceTeamIds.get(pick.currentOwnerTeamId)
+    if (originalTeamId == null || currentOwnerTeamId == null) {
+      unmappedFuturePicks += 1
+      continue
+    }
+    tradedPicks.push({
+      season: pick.season,
+      round: pick.round,
+      originalTeamId: String(originalTeamId),
+      currentOwnerTeamId: String(currentOwnerTeamId),
+    })
+  }
 
   const previousSeasonRecords = await prisma.fantraxLeague.findMany({
     where: {
@@ -908,6 +972,24 @@ export async function fetchFantraxLeagueForImport(
     schedule,
     transactions,
     draftPicks,
+    draftBoard: storedBoard.slots > 0
+      ? {
+          slots: storedBoard.slots,
+          made: storedBoard.picks.length,
+          outstanding: storedBoard.outstanding,
+          state: storedBoard.draftState,
+        }
+      : null,
+    ...(storedFuture.stored
+      ? {
+          tradedPicks,
+          futurePicks: {
+            total: storedFuture.picks.length,
+            traded: tradedPicks.length,
+            unmapped: unmappedFuturePicks,
+          },
+        }
+      : {}),
     playerMap: rosterPlayerMap,
     previousSeasons: previousSeasonRecords.map((record) => ({
       season: String(record.season),

@@ -1,0 +1,35 @@
+-- Somewhere to keep a Fantrax league's draft.
+--
+-- WHY THESE COLUMNS EXIST
+-- The import already calls Fantrax `getDraftResults`, and `getDraftPicks` is one
+-- wrapper away, but `FantraxLeague` had no column for either. The draft board was
+-- returned to the caller and dropped, so an imported league's "draft history" was
+-- whatever traded-pick rows an old CSV upload happened to contain, and pick
+-- ownership (the dynasty asset) was never kept at all.
+--
+--   draftBoard   every slot from getDraftResults, with the player where a pick was
+--                made, plus draft state, type, order and dates
+--   draftPicks   outstanding pick ownership from getDraftPicks: this season's
+--                unused picks, and future-season picks as Fantrax sent them
+--
+-- JSONB, LIKE THE REST OF THE SNAPSHOT
+-- standings, matchups, roster and transactions on this table are all JSON
+-- snapshots that the import rewrites whole. The draft is the same kind of thing,
+-- read back by the same reader, so it is stored the same way rather than as a
+-- child table with its own lifecycle.
+--
+-- NULLABLE, AND PERMANENTLY SO FOR SOME ROWS
+-- A CSV-era row was never fetched from the API and has no draft to store. A live
+-- league whose draft could not be read keeps whatever it had before. NULL means
+-- "no draft on file", which is a real state.
+--
+-- ADDITIVE ONLY. No backfill, no default, no index. Existing rows are untouched
+-- and fill in on their next import.
+--
+-- ORDER OF OPERATIONS
+-- Apply this BEFORE the code that reads or writes these columns is deployed. A
+-- generated client that knows about a column the database lacks raises P2022 on
+-- every read of this table, not only on draft reads.
+
+ALTER TABLE "FantraxLeague" ADD COLUMN IF NOT EXISTS "draftBoard" JSONB;
+ALTER TABLE "FantraxLeague" ADD COLUMN IF NOT EXISTS "draftPicks" JSONB;

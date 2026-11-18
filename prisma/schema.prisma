@@ -2369,6 +2369,15 @@ model FantraxLeague {
   /// userId+leagueName+season), and a unique constraint would turn the second
   /// person's import into a write error.
   sourceLeagueId String?
+  /// The league's draft board, from Fantrax `getDraftResults`: every slot, with the
+  /// player where a pick was made, plus the draft's state, type, order and dates.
+  /// Shape is `StoredFantraxDraftBoard` in `lib/league-import/fantrax/fantraxDraft.ts`.
+  /// Null on CSV-era rows and on leagues whose draft could not be read.
+  draftBoard     Json?
+  /// Who owns which unused draft picks, from Fantrax `getDraftPicks`: the current
+  /// season's outstanding picks and the future-season picks exactly as Fantrax sent
+  /// them. Shape is `StoredFantraxPickInventory` in the same file.
+  draftPicks     Json?
   user           FantraxUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Import Security Closure phase: the real, authenticated AllFantasy user who
   /// uploaded this snapshot. Nullable for safe backfill of any pre-existing rows —

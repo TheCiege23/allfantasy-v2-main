@@ -47,6 +47,21 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
       scoring,
       schedule,
       draft_picks: history.draft_picks,
+      /*
+       * Absent when no pick inventory is on file (a CSV-era snapshot), so the
+       * contract on `traded_picks` holds: absent = not exposed, [] = exposed and
+       * nothing is currently traded.
+       */
+      ...(raw.tradedPicks
+        ? {
+            traded_picks: raw.tradedPicks.map((pick) => ({
+              season: pick.season,
+              round: pick.round,
+              original_roster_id: pick.originalTeamId,
+              current_owner_roster_id: pick.currentOwnerTeamId,
+            })),
+          }
+        : {}),
       transactions: history.transactions,
       standings: history.standings,
       player_map: raw.playerMap ?? {},
@@ -162,14 +177,37 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
                   : 'Fixtures come from the league schedule. No week has been played yet, so no scores are on file.',
           }
         })(),
-        draftHistory: {
-          state: history.draft_picks.length > 0 ? 'partial' : 'missing',
-          count: history.draft_picks.length,
-          note:
-            history.draft_picks.length > 0
-              ? 'Fantrax draft history currently reflects traded draft-pick events when available.'
-              : 'No Fantrax draft pick history was available from uploaded data.',
-        },
+        /*
+         * ⚠ TWO SOURCES, AND THE NOTE SAYS WHICH. A live import stores the
+         * league's real draft board, so the count is picks actually made and the
+         * state is `full` only when no slot is still outstanding. A CSV-era
+         * snapshot has no board and falls back to traded-pick rows, which were
+         * never a draft and are reported as such.
+         */
+        draftHistory: raw.draftBoard
+          ? {
+              state:
+                raw.draftBoard.made === 0
+                  ? ('missing' as const)
+                  : raw.draftBoard.outstanding > 0
+                    ? ('partial' as const)
+                    : ('full' as const),
+              count: raw.draftBoard.made,
+              note:
+                raw.draftBoard.made === 0
+                  ? `Fantrax reports a ${raw.draftBoard.slots}-slot draft board with no picks made yet.`
+                  : raw.draftBoard.outstanding > 0
+                    ? `${raw.draftBoard.made} of ${raw.draftBoard.slots} Fantrax draft slots have been picked; ${raw.draftBoard.outstanding} are still outstanding.`
+                    : `All ${raw.draftBoard.made} Fantrax draft picks were imported.`,
+            }
+          : {
+              state: history.draft_picks.length > 0 ? ('partial' as const) : ('missing' as const),
+              count: history.draft_picks.length,
+              note:
+                history.draft_picks.length > 0
+                  ? 'No Fantrax draft board is on file for this league; draft history reflects traded draft-pick events from uploaded data.'
+                  : 'No Fantrax draft pick history was available for this league.',
+            },
         tradeHistory: {
           /* Same ambiguity as Yahoo and MFL: a required array, so `[]` proves nothing. */
           state:

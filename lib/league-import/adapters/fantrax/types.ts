@@ -90,6 +90,33 @@ export interface FantraxImportPayload {
   schedule: FantraxImportScheduleWeek[]
   transactions: FantraxImportTransaction[]
   draftPicks: FantraxImportDraftPick[]
+  /**
+   * Set when `draftPicks` came from the league's stored draft board rather than
+   * from traded-pick rows in an uploaded CSV. Lets coverage say how much of the
+   * draft is on file instead of guessing from the pick count.
+   */
+  draftBoard?: {
+    slots: number
+    made: number
+    outstanding: number
+    state: string | null
+  } | null
+  /**
+   * Future draft picks that have changed hands, in this payload's own team ids.
+   *
+   * Absent (undefined) = no pick inventory is on file for this league, so nothing
+   * is known. Empty array = the inventory is on file and no pick is traded.
+   * Untraded picks are not listed — the downstream table records ownership
+   * CHANGES, and a row there is marked traded.
+   */
+  tradedPicks?: Array<{
+    season: number
+    round: number
+    originalTeamId: string
+    currentOwnerTeamId: string
+  }>
+  /** How the future-pick inventory broke down, for coverage. */
+  futurePicks?: { total: number; traded: number; unmapped: number } | null
   playerMap: Record<string, { name: string; position: string; team: string }>
   previousSeasons: Array<{
     season: string
