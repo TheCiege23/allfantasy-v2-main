@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { getAdminAccessState } from "@/lib/adminAuth"
 import { getLeagueSafeInboundConfig } from "@/lib/leaguesafe/inbound-security"
 import { processLeagueSafeNotification } from "@/lib/leaguesafe/process-notification"
+import { applyParsedLeagueSafeEmail } from "@/lib/leaguesafe/league-connection"
 
 /** Next server actions enforce same-origin POSTs. No bearer bypass or raw-content input. */
 export async function parseStoredNotification(form: FormData): Promise<void> {
@@ -17,6 +18,12 @@ export async function parseStoredNotification(form: FormData): Promise<void> {
   if (config) {
     try { result = await processLeagueSafeNotification(id, config.domains) }
     catch { console.error("[leaguesafe] manual_parse_failed") }
+    // A parsed notice is filed under its league's connection and written to the dues ledger. Run on
+    // "unchanged" too, so a notice parsed before its league connected is picked up by parsing it again.
+    if (result === "parsed" || result === "unchanged") {
+      try { await applyParsedLeagueSafeEmail(id) }
+      catch { console.error("[leaguesafe] apply_failed") }
+    }
   }
   revalidatePath("/admin/leaguesafe/raw")
   redirect("/admin/leaguesafe/raw?" + new URLSearchParams({ id, parse: result }).toString())
