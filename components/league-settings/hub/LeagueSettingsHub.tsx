@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { TaskCardsResult } from '@/lib/core-app/commissioner/tasks'
 import { toast } from 'sonner'
-import {
+import { buildAfOptions,
   buildAllTimeStandings,
   buildDraftGroups,
   buildGeneralGroups,
@@ -368,6 +368,7 @@ export function LeagueSettingsHub({
       playerHighScores: playerHighs === undefined ? undefined : playerHighs ? { seasons: playerHighs.seasons, rows: playerHighs.rows.map((r) => ({ rank: r.rank, name: r.playerName, team: r.teamName, season: r.season, week: r.week, points: r.points.toFixed(2) })) } : null,
       correctionWeeks: corrections,
       commissionerTasks: tasks,
+      afOptions: p ? buildAfOptions(p, kind, leagueId) : p === null ? [] : undefined,
     }
   }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId, tasks])
 

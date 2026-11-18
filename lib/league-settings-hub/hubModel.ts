@@ -12,6 +12,9 @@
 
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTeamLeagues'
+import { readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { describeByePlan, isNaturalByePlan, naturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
 import { resolveHubSport, scoringCategories, scoringCategoryFor, sportCopy, sportDisplayName, sportFamily, SPORT_SLOT_NAMES, statLabel } from './sportProfile'
 
 export type HubKind =
@@ -373,7 +376,7 @@ export function buildTypeRuleGroups(p: HubSettingsPayload, kind: HubKind): HubGr
         { key: 'count', label: 'Max Keepers', value: num(l.keeperCount) != null ? `${l.keeperCount} per team` : DASH },
         { key: 'years', label: 'Max Years Kept', value: num(l.keeperMaxYears) != null ? String(l.keeperMaxYears) : DASH },
         { key: 'cost', label: 'Cost System', value: str(l.keeperCostSystem) ? humanize(String(l.keeperCostSystem)) : DASH },
-        { key: 'penalty', label: 'Round Penalty', value: num(l.keeperRoundPenalty) != null ? plural(Number(l.keeperRoundPenalty), 'round') : DASH },
+        // The round shift is said once, in words, by the AllFantasy options' "Keeper cost" row (buildAfOptions).
         { key: 'waiver', label: 'Waiver Pickups Keepable', value: yesNo(l.keeperWaiverAllowed) },
         { key: 'conflict', label: 'Conflicts', value: str(l.keeperConflictRule) ? humanize(String(l.keeperConflictRule)) : DASH },
         { key: 'missed', label: 'Missed Deadline', value: str(l.keeperMissedDeadlineRule) ? humanize(String(l.keeperMissedDeadlineRule)) : DASH },
@@ -412,6 +415,127 @@ function formatDate(raw: unknown, timeZone?: string | null): string | null {
   } catch {
     return d.toISOString().slice(0, 16).replace('T', ' ')
   }
+}
+
+/* ------------------------------------------------------ AllFantasy options */
+
+/**
+ * An AllFantasy-only rule as League Setup and the Commissioner Hub both show it (owner's page review
+ * #12–16, Phase C2): one model, so the two can never disagree. `panel` is the League Settings sub-page
+ * that edits it; `href` a page outside League Settings (Survivor's own settings).
+ */
+export type HubAfOption = {
+  key: string
+  label: string
+  description: string
+  value: string
+  panel?: string
+  href?: string
+}
+
+const ROOKIE_ORDER_KINDS: ReadonlySet<HubKind> = new Set<HubKind>(['dynasty', 'devy', 'c2c'])
+
+function nextPowerOfTwo(n: number): number {
+  let p = 1
+  while (p < n) p *= 2
+  return p
+}
+
+function keeperShiftText(n: number): string {
+  if (n === 0) return 'Same round as last season'
+  const rounds = plural(Math.abs(n), 'round')
+  return n > 0 ? `${rounds} earlier than last season` : `${rounds} later than last season`
+}
+
+/**
+ * Read from GET /api/league/settings — the same read both screens already make. Every value is what the
+ * league actually runs on: the median default and the natural bye plan are the code's own defaults
+ * (lib/league/oddTeamLeagues.ts, lib/playoff-brackets/byePlan.ts), not copy.
+ */
+export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: string): HubAfOption[] {
+  const l = p.league ?? {}
+  const snap = p.settingsSnapshot ?? {}
+  const out: HubAfOption[] = []
+  const teamCount = num(l.teamCount) ?? num(l.leagueSize)
+
+  if (teamCount != null && isOddTeamCount(teamCount) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(kind)) {
+    const extra = readExtraMatchupSettings(snap)
+    out.push({
+      key: 'oddTeams',
+      label: 'Odd number of teams',
+      description: `${teamCount} teams, so one team has no opponent each week.`,
+      value: extra.enabled
+        ? `Extra matchup vs last week’s ${extra.opponent === 'median' ? 'median team' : 'top scorer'}`
+        : l.medianGame === true
+          ? 'Plays the league median'
+          : 'One team rests each week',
+      panel: 'af-options',
+    })
+  }
+
+  const playoffTeams = num(l.playoffTeams)
+  if (HUB_KIND_META[kind].endgameLabel !== 'Endgame' && playoffTeams != null && playoffTeams >= 2) {
+    const stored = parseStoredByePlan(snap.playoff_bye_plan, playoffTeams)
+    const plan = stored ?? naturalByePlan(playoffTeams)
+    const custom = stored != null && !isNaturalByePlan(playoffTeams, stored)
+    const bracket = nextPowerOfTwo(playoffTeams)
+    out.push({
+      key: 'byes',
+      label: 'Playoff byes',
+      description: custom
+        ? 'A custom bye plan. The bracket reseeds after each round.'
+        : bracket === playoffTeams
+          ? `${playoffTeams} playoff teams fill the bracket, so nobody gets a bye.`
+          : `${playoffTeams} playoff teams: the top seeds skip round 1 to fill a bracket of ${bracket}.`,
+      value: describeByePlan(plan),
+      panel: 'playoffs',
+    })
+  }
+
+  if (ROOKIE_ORDER_KINDS.has(kind)) {
+    const ro = (snap.rookie_draft_order ?? null) as { mode?: unknown; enabled?: unknown } | null
+    const reverseMaxPf = ro?.mode === 'reverse_max_pf'
+    out.push({
+      key: 'rookieOrder',
+      label: 'Rookie draft order',
+      description: ro?.enabled === true
+        ? 'Set automatically when the regular season ends. Playoff teams go by seed; the champion picks last.'
+        : 'Not set automatically. The commissioner sets next season’s order.',
+      value: reverseMaxPf ? 'Reverse max points for' : 'Worst to first',
+      panel: 'draft',
+    })
+  }
+
+  if (kind === 'keeper') {
+    const system = str(l.keeperCostSystem) ?? 'round_based'
+    const penalty = num(l.keeperRoundPenalty) ?? 1
+    const pickupRound = num(snap.keeper_waiver_cost_round)
+    const value =
+      system === 'free' ? 'Free: keepers cost no pick'
+        : system === 'auction_value' ? 'Auction value carries over'
+          : system === 'inflation' ? `${keeperShiftText(penalty)}, growing each year`
+            : keeperShiftText(penalty)
+    out.push({
+      key: 'keeperCost',
+      label: 'Keeper cost',
+      description: pickupRound != null && system !== 'free' && system !== 'auction_value'
+        ? `Set before the draft. A player picked up off waivers costs a round ${pickupRound} pick.`
+        : 'Set before the draft, so every manager knows what a keeper costs.',
+      value,
+      panel: 'af-options',
+    })
+  }
+
+  if (kind === 'survivor') {
+    out.push({
+      key: 'idols',
+      label: 'Survivor idols',
+      description: 'An idol moves only with its player. Drop that player and the idol goes back to the waiver pool with them.',
+      value: 'Hidden in the player pool',
+      href: `/survivor/${encodeURIComponent(leagueId)}/settings`,
+    })
+  }
+  return out
 }
 
 /* ---------------------------------------------------------------- draft */

@@ -13,6 +13,7 @@ import { DraftTab } from '@/components/league-settings/tabs/DraftTab'
 import { WaiversTab } from '@/components/league-settings/tabs/WaiversTab'
 import { TradesTab } from '@/components/league-settings/tabs/TradesTab'
 import { PlayoffsTab } from '@/components/league-settings/tabs/PlayoffsTab'
+import { AfOptionsSettingsPanel } from '@/components/league-settings/AfOptionsSettingsPanel'
 import { AISettingsTab } from '@/components/league-settings/tabs/AISettingsTab'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
 import { CoOwnerSettingsPanel } from '@/components/league-settings/CoOwnerSettingsPanel'
@@ -64,6 +65,9 @@ export function LeagueSettingsSubPageBody({
       break
     case 'trades':
       body = <TradesTab {...props} />
+      break
+    case 'af-options':
+      body = <AfOptionsSettingsPanel leagueId={leagueId} />
       break
     case 'playoffs':
       body = <PlayoffsTab {...props} />

@@ -23,6 +23,7 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'guillotine-chop-rules',
   'guillotine-rules',
   'pirate-rules',
+  'af-options',
   'playoffs',
   'members',
   'team-settings',
