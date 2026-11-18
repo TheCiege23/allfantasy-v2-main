@@ -44,7 +44,7 @@ export function Crest({ on, count = 0 }: { on: boolean; count?: number }) {
       {count > 0 ? (
         // The filled crest uses the skin's accent, so the number takes the skin's matching ink —
         // in light mode that accent is dark and a fixed dark number disappears into it.
-        <span className="absolute inset-0 flex items-center justify-center pt-px text-[10px] font-black" style={{ color: on ? 'var(--lsk-accent-ink, #0b0f17)' : '#0b0f17' }}>
+        <span className="absolute inset-0 flex items-center justify-center pt-px text-[11px] font-black leading-none tracking-tight" style={{ color: on ? 'var(--lsk-accent-ink, #0b0f17)' : '#0b0f17' }}>
           {count > 9 ? '9+' : count}
         </span>
       ) : null}
