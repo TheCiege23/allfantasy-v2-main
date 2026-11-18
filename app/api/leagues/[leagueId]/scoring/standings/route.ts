@@ -1,3 +1,4 @@
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -118,11 +119,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
    * (NOT NULL, unique per league). `Roster` has no `userId`, and `LeagueTeam.platformUserId` is
    * the nullable lookalike that must never be used for identity.
    */
+  // With several teams, the named one (header / `?rosterId=`), else the manager's first.
   const viewerRosterId =
-    (await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: session.user.id },
-      select: { id: true },
-    }))?.id ?? null
+    (await resolveViewingRoster(leagueId, session.user.id, requestedRosterIdFrom(req), { allowCoOwner: false }))?.rosterId ?? null
 
   /*
    * Playoff-cut position, for the divider row. Read from league settings when present; the table

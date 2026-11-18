@@ -36,7 +36,11 @@ const h = vi.hoisted(() => {
       findFirst: async (args: AnyArgs) =>
         args?.where?.platformUserId === 'member2' ? { id: 'af-roster-2' } : args?.where?.platformUserId && args.where.platformUserId !== state.roster.platformUserId ? null : state.roster,
       findUnique: async () => state.roster,
-      findMany: async () => [state.roster],
+      // "The teams this manager holds" (lib/league/viewerTeams.ts) filters by owner; the by-id read does not.
+      findMany: async (args: AnyArgs) =>
+        args?.where?.platformUserId === 'member2' ? [{ id: 'af-roster-2' }]
+          : args?.where?.platformUserId && args.where.platformUserId !== state.roster.platformUserId ? []
+          : [state.roster],
     },
     leagueTeam: { findMany: async () => [{ platformUserId: 'owner', teamName: 'Owner FC' }] },
     automationAuditLog: {

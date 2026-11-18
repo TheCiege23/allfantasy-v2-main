@@ -2,6 +2,7 @@
  * Draft access: league owner or commissioner can access; members can view/submit when on clock.
  */
 
+import { listHeldTeams } from '@/lib/league/viewerTeams'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
@@ -91,22 +92,40 @@ export async function canSubmitPickForRoster(
 }
 
 /**
+ * Every roster this user may act for in the league's draft: each team they hold, or, holding none, the
+ * team they co-own (then the dev-bypass fallback). A manager who runs several teams is on the clock
+ * whenever ANY of these is, so "is it my turn" must be asked of the whole list.
+ */
+export async function getCurrentUserRosterIdsForLeague(
+  leagueId: string,
+  userId: string | undefined
+): Promise<string[]> {
+  if (!userId) return []
+  const held = await listHeldTeams(leagueId, userId)
+  if (held.length > 0) return held.map((team) => team.rosterId)
+  const coOwnedRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+  if (coOwnedRosterId) return [coOwnedRosterId]
+  const devFallbackRosterId = await getDevBypassFallbackRosterId(leagueId, userId)
+  return devFallbackRosterId ? [devFallbackRosterId] : []
+}
+
+/**
  * Current user's roster id for this league (for draft room: "am I on the clock?" and auto-pick).
- * Uses platformUserId = userId; returns null if user has no roster in the league.
+ * Returns null if the user has no roster in the league.
+ *
+ * With several teams this is the one named by `requestedRosterId` when the user holds it, otherwise
+ * their first (a stable order). A caller deciding whose turn it is should use
+ * `getCurrentUserRosterIdsForLeague` instead, so the user's other teams are not missed.
  */
 export async function getCurrentUserRosterIdForLeague(
   leagueId: string,
-  userId: string | undefined
+  userId: string | undefined,
+  requestedRosterId?: string | null
 ): Promise<string | null> {
-  if (!userId) return null
-  const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
-  if (roster) return roster.id
-  const coOwnedRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  if (coOwnedRosterId) return coOwnedRosterId
-  return getDevBypassFallbackRosterId(leagueId, userId)
+  const rosterIds = await getCurrentUserRosterIdsForLeague(leagueId, userId)
+  const requested = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
+  if (requested && rosterIds.includes(requested)) return requested
+  return rosterIds[0] ?? null
 }
 
 /**

@@ -12,6 +12,7 @@
  *   copy only (commissioner-facing); does not replace per-user AF Pro + roster flag for persisting reorder.
  */
 
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -132,10 +133,11 @@ export async function POST(
     'pro_draft_ai'
   )
 
-  const rosterPrefs = await prisma.roster.findUnique({
-    where: { leagueId_platformUserId: { leagueId, platformUserId: userId } },
-    select: { settings: true },
-  })
+  // The preference lives on a team: the named one when the manager holds it, else their first.
+  const prefsTeam = await resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(req, body), { allowCoOwner: false })
+  const rosterPrefs = prefsTeam
+    ? await prisma.roster.findFirst({ where: { id: prefsTeam.rosterId, leagueId }, select: { settings: true } })
+    : null
   const aiManageDraftQueueEnabled = getAiManageDraftQueueEnabled(rosterPrefs?.settings)
 
   const plan = planDraftQueueAiReorder({

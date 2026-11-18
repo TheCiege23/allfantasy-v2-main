@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 /**
@@ -83,8 +84,12 @@ export async function readAutoSwitchForLeague(leagueId: string): Promise<{ avail
 }
 
 /** The owner's view of their own team: is it on, and who switched it on. */
-export async function readMyAutoSwitch(leagueId: string, userId: string): Promise<{ rosterId: string | null; setting: AutoSwitchInjuredSetting | null; ownerHasPro: boolean }> {
-  const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true, settings: true, platformUserId: true } })
+export async function readMyAutoSwitch(leagueId: string, userId: string, rosterId?: string | null): Promise<{ rosterId: string | null; setting: AutoSwitchInjuredSetting | null; ownerHasPro: boolean }> {
+  // With several teams: the named one when it is theirs, else their first (lib/league/viewerTeams.ts).
+  const viewing = await resolveViewingRoster(leagueId, userId, rosterId, { allowCoOwner: false })
+  const roster = viewing
+    ? await prisma.roster.findFirst({ where: { id: viewing.rosterId, leagueId }, select: { id: true, settings: true, platformUserId: true } })
+    : null
   if (!roster) return { rosterId: null, setting: null, ownerHasPro: false }
   const setting = autoSwitchInjuredFor(roster.settings, roster.platformUserId)
   return { rosterId: roster.id, setting, ownerHasPro: setting ? await ownerHasAutoSwitchPlan(userId) : false }
