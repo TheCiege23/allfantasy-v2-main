@@ -20,6 +20,8 @@ import { TeamFuturePicks } from '@/components/league/TeamFuturePicks'
 import { LeagueStandings } from '@/components/standings/LeagueStandings'
 import { MemberLineupSettings } from '@/components/league/MemberLineupSettings'
 import { AutoSwitchOwnerCard } from '@/components/league/AutoSwitchOwnerCard'
+import { ScheduleToolsCard } from '@/components/league-settings/ScheduleToolsCard'
+import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { SAMPLE_FUTURE_PICKS, SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_STANDINGS, SAMPLE_TRADE_ROSTERS, SAMPLE_TRADES_PANEL } from './sampleData'
 
 /*
@@ -49,6 +51,28 @@ const harnessAuto = {
   ],
 }
 const harnessInterest: Record<string, number> = { '5003': 4, '5002': 2, '6794': 1, '7002': 11, '7564': 3, '6001': 1 }
+// Phase C3 schedule tools: 12 teams, weeks 1–4 played, a circle-method schedule for the rest.
+const harnessTeams = ['Blitz Brigade', 'Gridiron Ghosts', 'Taco Tuesday', 'Kingdom North', 'Fourth & Long', 'Red Zone Ray', 'Hail Mary', 'Taxi Squad', 'Bench Mob', 'Waiver Wire', 'Sunday Scaries', 'Dynasty Duke']
+const harnessSchedule = {
+  playoffStartWeek: 15,
+  weeks: Array.from({ length: 14 }, (_, w) => {
+    const ids = harnessTeams.map((_, i) => i)
+    const rot = [ids[0]!, ...ids.slice(1).map((_, i) => ids[1 + ((i + w) % 11)]!)]
+    return {
+      week: w + 1,
+      locked: w < 4,
+      matchups: Array.from({ length: 6 }, (_, i) => ({
+        id: `m${w}-${i}`, homeRosterId: `r${rot[i]}`, awayRosterId: `r${rot[11 - i]}`,
+        homeName: harnessTeams[rot[i]!]!, awayName: harnessTeams[rot[11 - i]!]!, bye: false,
+      })),
+    }
+  }),
+}
+const harnessDivisions = {
+  config: { count: 4, names: ['East', 'North', 'South', 'West'], teamAssignments: Object.fromEntries(harnessTeams.map((_, i) => [`t${i}`, i % 4])), aiNamingEnabled: false, rivalsTwice: false, lastUpdatedAt: null, lastUpdatedBy: null },
+  isCommissioner: true, isSurvivor: false, sport: 'NFL', leagueVariant: null,
+  teams: harnessTeams.map((name, i) => ({ id: `t${i}`, teamName: name, ownerName: name, avatarUrl: null, wins: 2, losses: 2, platformUserId: `p${i}`, isCommissioner: i === 0, isCoCommissioner: false, isOrphan: false, role: 'member' })),
+}
 if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: boolean }).__afPhaseAFetch) {
   ;(window as unknown as { __afPhaseAFetch?: boolean }).__afPhaseAFetch = true
   const real = window.fetch.bind(window)
@@ -97,6 +121,13 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
     }
     // The trade window's grade preview needs a database; answer "not graded" so the window renders.
     if (url.includes('/api/leagues/harness-league/trades/grade-preview')) return json({ grade: null })
+    if (url.includes('/api/redraft/schedule')) {
+      if ((init?.method ?? 'GET') === 'GET') return json({ schedule: harnessSchedule, customWeeks: [8] })
+      const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string; times?: number }
+      if (body.action === 'randomize') return json({ ok: true, posted: body.times ?? 1, regeneratedFromWeek: 5 })
+      return json({ ok: true })
+    }
+    if (url.includes('/api/commissioner/leagues/harness-league/division-settings')) return json(harnessDivisions)
     return real(input, init)
   }
 }
@@ -190,6 +221,8 @@ export function LeaguePhaseAHarnessClient() {
             {view === 'standings' ? <LeagueStandings leagueId="harness-league" /> : null}
             {view === 'members' ? <MemberLineupSettings leagueId="harness-league" /> : null}
             {view === 'autoswitch' ? <AutoSwitchOwnerCard leagueId="harness-league" /> : null}
+            {view === 'schedule' ? <ScheduleToolsCard leagueId="harness-league" /> : null}
+            {view === 'divisions' ? <DivisionSettingsCommissionerPanel leagueId="harness-league" /> : null}
             {view === 'news' ? <LeaguePlayerNewsTab leagueId="harness-league" sport="NFL" /> : null}
             {view === 'ng' ? (
               // NBA roster on a day two clubs have no game: NG in AF blue in the points column.

@@ -13,6 +13,7 @@
 import { requestScheduleRebuild } from '@/lib/schedule-runtime/rebuildScheduleRequest'
 import { ScheduleSwapForm } from '@/components/league-settings/ScheduleSwapForm'
 import { RivalryWeekCard } from '@/components/league-settings/RivalryWeekCard'
+import { ScheduleToolsCard } from '@/components/league-settings/ScheduleToolsCard'
 import { MemberLineupSettings } from '@/components/league/MemberLineupSettings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Lock, Unlock, Check } from 'lucide-react'
@@ -84,6 +85,8 @@ export function CommissionerControlPanel({ leagueId, initialView = null }: Props
   const [success, setSuccess] = useState<string | null>(null)
   const [teams, setTeams] = useState<TeamInfo[]>([])
   const [subView, setSubView] = useState<SubView>(() => commissionerSubView(initialView))
+  /** Bumped when the schedule tools change the schedule, so the swap form and Rivalry Week re-read it. */
+  const [scheduleNonce, setScheduleNonce] = useState(0)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [selectedWeek, setSelectedWeek] = useState(1)
   const [actionLoading, setActionLoading] = useState(false)
@@ -561,8 +564,9 @@ export function CommissionerControlPanel({ leagueId, initialView = null }: Props
         </button>
         {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{success}</div>}
         {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
-        <ScheduleSwapForm leagueId={leagueId} />
-        <RivalryWeekCard leagueId={leagueId} />
+        <ScheduleToolsCard leagueId={leagueId} onChanged={() => setScheduleNonce((n) => n + 1)} />
+        <ScheduleSwapForm key={`swap-${scheduleNonce}`} leagueId={leagueId} />
+        <RivalryWeekCard key={`rivalry-${scheduleNonce}`} leagueId={leagueId} />
       </div>
     )
   }
