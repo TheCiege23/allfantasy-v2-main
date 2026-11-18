@@ -103,3 +103,46 @@ export const SAMPLE_NEWS = {
       body: 'Gardner did not practice on Tuesday. His status is uncertain for Thursday’s game against the Texans.' },
   ],
 }
+
+/** Phase B: the future-picks view and the standings it joins to (SAMPLE DATA). */
+const pk = (season: number, round: number, fromTeam: string | null = null) => ({ season, round, label: ['1st', '2nd', '3rd', '4th'][round - 1], fromTeam })
+export const SAMPLE_FUTURE_PICKS = {
+  board: {
+    seasons: [2027, 2028, 2029],
+    rounds: 4,
+    coverage: 'complete',
+    teams: [
+      { rosterId: 'r-me', name: '(F) SF IDP', isViewer: true, total: 13, firsts: 4,
+        bySeason: { 2027: [pk(2027, 1), pk(2027, 1, 'Hoovi'), pk(2027, 2), pk(2027, 4)], 2028: [pk(2028, 1), pk(2028, 2), pk(2028, 2, 'jaydezz'), pk(2028, 3), pk(2028, 4)], 2029: [pk(2029, 1), pk(2029, 2), pk(2029, 3), pk(2029, 4)] },
+        tradedAwayBySeason: { 2027: [{ round: 3, label: '3rd', toTeam: 'RobbyS5' }] } },
+      { rosterId: 'r-hoovi', name: 'Hoovi', isViewer: false, total: 11, firsts: 2, bySeason: {}, tradedAwayBySeason: {} },
+      { rosterId: 'r-anth', name: 'Anthonyfkern1223', isViewer: false, total: 12, firsts: 3, bySeason: {}, tradedAwayBySeason: {} },
+      { rosterId: 'r-baby', name: 'babytezz', isViewer: false, total: 12, firsts: 3, bySeason: {}, tradedAwayBySeason: {} },
+    ],
+  },
+  ids: [
+    { rosterId: 'r-me', teamId: 't-me', name: '(F) SF IDP', isViewer: true },
+    { rosterId: 'r-hoovi', teamId: 't-hoovi', name: 'Hoovi', isViewer: false },
+    { rosterId: 'r-anth', teamId: 't-anth', name: 'Anthonyfkern1223', isViewer: false },
+    { rosterId: 'r-baby', teamId: 't-baby', name: 'babytezz', isViewer: false },
+  ],
+  projection: {
+    draftSeason: 2027, phase: 'regular_season', teamCount: 4, warnings: ['Max PF is computed live and is not frozen yet; stat corrections can still move it.'],
+    slots: {
+      't-baby': { slot: 1, status: 'provisional', group: 'non_playoff', reason: 'Worst record among non-playoff teams (3-7).' },
+      't-hoovi': { slot: 2, status: 'provisional', group: 'non_playoff', reason: '2nd-worst record among non-playoff teams (4-6).' },
+      't-me': { slot: 3, status: 'provisional', group: 'non_playoff', reason: 'Outside the playoff line at 5-5; ordered by Max PF among non-playoff teams.' },
+      't-anth': { slot: 4, status: 'provisional', group: 'playoff', reason: 'Playoff seed 1: picks after every non-playoff team.' },
+    },
+  },
+}
+
+export const SAMPLE_STANDINGS = {
+  season: 2026, scoringMode: 'points', viewerRosterId: 't-me', source: 'imported', sourcePlatform: 'Sleeper', scoredWeeks: null,
+  standings: [
+    { rosterId: 't-anth', teamName: 'Anthonyfkern1223', wins: 8, losses: 2, ties: 0, pointsFor: 1792.28, pointsAgainst: 1547.92, rank: 1 },
+    { rosterId: 't-me', teamName: '(F) SF IDP', wins: 5, losses: 5, ties: 0, pointsFor: 1676.24, pointsAgainst: 1435.94, rank: 7 },
+    { rosterId: 't-hoovi', teamName: 'Hoovi', wins: 4, losses: 6, ties: 0, pointsFor: 1583.62, pointsAgainst: 1535.96, rank: 11 },
+    { rosterId: 't-baby', teamName: 'babytezz', wins: 3, losses: 7, ties: 0, pointsFor: 1175.82, pointsAgainst: 1447.88, rank: 13 },
+  ],
+}

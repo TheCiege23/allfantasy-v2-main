@@ -45,6 +45,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'divisions': () => import('../divisions/handler'),
   'downsize': () => import('../downsize/handler'),
   'draft-grades': () => import('../draft-grades/handler'),
+  'future-picks': () => import('../future-picks/handler'),
   'draft-results': () => import('../draft-results/handler'),
   'drama': () => import('../drama/handler'),
   'dynasty-backfill': () => import('../dynasty-backfill/handler'),
