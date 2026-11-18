@@ -83,6 +83,11 @@ schedule.
   - Where it shows: the manager's picker is in My Settings; the commissioner's on/off switch and assign/swap are on the AllFantasy options page; a "Copy league" row appears in League Setup and the Commissioner Hub.
   - **NFL only for now, including the name and logo.** The NBA, NHL and MLB team lists in `lib/sport-teams/SportTeamMetadataRegistry.ts` hold abbreviations only and are partly out of date (NHL still lists ARI, MLB still lists OAK). Those three sports get name and logo once a verified team table exists; `copyLeagueTeams` is the one place to add it.
 
+- **PR 2, real schedule (2026-11-18):**
+  - Code: `lib/league/copyLeagueSchedule.ts` (games to weeks, coverage, pairing) and `lib/league/copyLeagueScheduleService.ts` (preview, and apply as custom weeks).
+  - Where it shows: Commissioner Hub › Edit the schedule, in a "Real NFL schedule" section with a "Real game" tag in the week editor.
+  - Real pairs are stored in `copy_league.realGames[season][week]`, and the part 1 writer keeps them.
+
 ## Build plan (two PRs)
 
 1. **Teams.** Add the `copy_league` settings key, the team picker in Team settings, the commissioner assign/swap

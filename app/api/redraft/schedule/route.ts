@@ -3,6 +3,8 @@ import { swapTeamsInWeek } from '@/lib/schedule-runtime/matchupSwapService'
 import { applyRivalryWeek, previewRivalryWeek } from '@/lib/schedule-runtime/rivalryWeekService'
 import { keepWeekAsCustom, randomizeSchedule, setCustomWeek } from '@/lib/schedule-runtime/scheduleToolsService'
 import { readCustomWeeks, type CustomPair } from '@/lib/schedule-runtime/customWeeks'
+import { applyRealSchedule, previewRealSchedule } from '@/lib/league/copyLeagueScheduleService'
+import { readCopyLeague } from '@/lib/league/copyLeague'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -35,6 +37,9 @@ type ScheduleAction =
   | 'randomize'
   | 'set_custom_week'
   | 'clear_custom_week'
+  // Copy leagues, part 2: the real NFL schedule (lib/league/copyLeagueScheduleService.ts).
+  | 'real_schedule_preview'
+  | 'real_schedule_apply'
 
 async function resolveSeasonGate(input: {
   seasonId?: string | null
@@ -79,14 +84,20 @@ export async function GET(req: NextRequest) {
   if (!resolved.ok) return NextResponse.json({ error: resolved.reason }, { status: 409 })
 
   // The weeks a commissioner set by hand, which every regeneration keeps (lib/schedule-runtime/customWeeks.ts).
-  const league = await prisma.league.findUnique({ where: { id: gate.season.leagueId }, select: { settings: true } }).catch(() => null)
+  const league = await prisma.league.findUnique({ where: { id: gate.season.leagueId }, select: { settings: true, sport: true } }).catch(() => null)
   const customWeeks = Object.keys(readCustomWeeks(league?.settings, gate.season.season)).map(Number).sort((a, b) => a - b)
+  // Copy league: on or off, and which pairs each week are real NFL games (for the "Real game" tag).
+  const copy = readCopyLeague(league?.settings, league?.sport)
+  const realGamesRaw = ((league?.settings as Record<string, unknown> | null)?.copy_league as Record<string, unknown> | undefined)?.realGames as Record<string, unknown> | undefined
+  const realGames = (realGamesRaw?.[String(gate.season.season)] ?? {}) as Record<string, Array<[string, string | null]>>
 
   return NextResponse.json({
     seasonId: gate.season.id,
     schedule: resolved.state,
     coverage: resolved.coverage,
     customWeeks,
+    copyLeague: copy.enabled,
+    realGames,
   })
 }
 
@@ -175,6 +186,15 @@ export async function POST(req: NextRequest) {
     if (!out.ok) return NextResponse.json({ error: out.message, code: out.code }, { status: out.status })
     const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: gate.season.id })
     return NextResponse.json({ ok: true, seasonId: gate.season.id, week: out.week, cleared: out.cleared, schedule: resolved.ok ? resolved.state : null })
+  }
+
+  // Copy league: the real NFL schedule, previewed or written as custom weeks.
+  if (action === 'real_schedule_preview' || action === 'real_schedule_apply') {
+    const out = action === 'real_schedule_preview'
+      ? await previewRealSchedule({ seasonId: gate.season.id })
+      : await applyRealSchedule({ seasonId: gate.season.id, actorUserId: userId })
+    if (!out.ok) return NextResponse.json({ error: out.message, code: out.code }, { status: out.status })
+    return NextResponse.json({ ok: true, seasonId: gate.season.id, weeks: out.weeks, applied: action === 'real_schedule_apply' })
   }
 
   // Rivalry week: pair each team with its biggest rival for one week (lib/schedule-runtime/rivalryWeekService.ts).
