@@ -13,6 +13,7 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   'guillotine-chop-rules': 'Chop rules',
   'guillotine-rules': 'League rules',
   'pirate-rules': 'Pirate rules',
+  'af-options': 'AllFantasy options',
   playoffs: 'Playoff settings',
   members: 'Managers',
   'team-settings': 'Team settings',

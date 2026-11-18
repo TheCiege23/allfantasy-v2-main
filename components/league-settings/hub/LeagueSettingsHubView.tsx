@@ -23,6 +23,7 @@ import {
   type HubRosterItem,
   type HubRow,
   type HubScoringCategory,
+  type HubAfOption,
   type HubStandingRow,
 } from '@/lib/league-settings-hub/hubModel'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
@@ -93,6 +94,11 @@ export type HubViewData = {
    * could not be read.
    */
   commissionerTasks?: { cards: TaskCard[]; overflow: TaskCard[] } | null
+  /**
+   * AllFantasy-only rules (lib/league-settings-hub/hubModel `buildAfOptions`), shown in League Setup and
+   * again in the Commissioner Hub. Absent or `undefined` while loading.
+   */
+  afOptions?: HubAfOption[]
 }
 
 /** Live panels the Commissioner Hub embeds; the fetching owner supplies them, a fixture preview may not. */
@@ -291,6 +297,7 @@ function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; labe
   if (tab === 'setup') {
     const out = [{ id: 'general', label: 'General' }, { id: 'waivers', label: 'Waivers' }]
     if (data.typeRules === undefined || data.typeRules.length) out.push({ id: 'rules', label: meta.rulesTitle })
+    if (data.afOptions === undefined || data.afOptions.length) out.push({ id: 'afoptions', label: 'AllFantasy options' })
     out.push({ id: 'notes', label: 'Commish Notes' }, { id: 'roster', label: 'Roster' }, { id: 'scoring', label: 'Scoring' }, { id: 'draft', label: 'Draft' })
     return out
   }
@@ -466,7 +473,43 @@ export function leagueOptionLinks(kind: HubKind, leagueId: string): HubLink[] {
   return out
 }
 
+/** A link the AllFantasy option rows already open (same editor) is not listed twice. */
+export function withoutAfDuplicates(links: HubLink[], options: HubAfOption[] | undefined): HubLink[] {
+  if (!options?.length) return links
+  const taken = new Set(options.flatMap((o) => [o.panel, o.href].filter(Boolean) as string[]))
+  return links.filter((l) => !taken.has((l.panel ?? l.href) as string))
+}
+
 const TASK_DOT: Record<TaskCard['severity'], string> = { bad: '#ef4444', warn: '#f59e0b', info: '#3b82f6' }
+
+/**
+ * AllFantasy options as rows: the value, what it means, and the editor that changes it. `tagged` adds
+ * "Also in Hub" (League Setup); `canOpen` hides the editor for a viewer who cannot change it.
+ */
+function AfOptionRows({ options, cb, canOpen, tagged = false }: { options: HubAfOption[]; cb: HubCallbacks; canOpen: boolean; tagged?: boolean }) {
+  const { t } = useT()
+  return (
+    <div className="af-lsh-list" data-testid="af-options">
+      {options.map((o) => (
+        <div key={o.key} className="af-lsh-row" data-af-option="" data-testid={`af-option-${o.key}`}>
+          <div className="af-lsh-row-copy" style={{ flex: '1 1 auto' }}>
+            <span>
+              {t(o.label)}
+              {tagged ? <span className="af-lsh-af-tag">{t('Also in Hub')}</span> : null}
+            </span>
+            <span>{t(o.description)}</span>
+          </div>
+          <strong className="af-lsh-af-value">{t(o.value)}</strong>
+          {!canOpen ? null : o.href ? (
+            <a className="af-lsh-btn" data-size="sm" href={o.href} data-testid={`af-option-open-${o.key}`}>{t('Open')}</a>
+          ) : o.panel ? (
+            <button type="button" className="af-lsh-btn" data-size="sm" onClick={() => cb.onOpenEditor(o.panel as string)} data-testid={`af-option-open-${o.key}`}>{t('Open')}</button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function HubLinks({ links, cb }: { links: HubLink[]; cb: HubCallbacks }) {
   const { t } = useT()
@@ -551,7 +594,8 @@ function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCal
         {slots?.rivalryWeek ?? <HubLinks links={[{ label: 'Set up Rivalry Week', description: 'Preview the pairs, then apply them to that week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-rivalry-open' }]} cb={cb} />}
       </Card>
       <Card id="options" title="League options" sub="The same settings as League Setup, with the editors that change them.">
-        <HubLinks links={leagueOptionLinks(data.kind, data.leagueId)} cb={cb} />
+        {data.afOptions === undefined ? <Loading lines={2} /> : data.afOptions.length ? <AfOptionRows options={data.afOptions} cb={cb} canOpen /> : null}
+        <HubLinks links={withoutAfDuplicates(leagueOptionLinks(data.kind, data.leagueId), data.afOptions)} cb={cb} />
       </Card>
       <Card id="storyline" title="Storyline" sub="How Chimmy tells your season in the league chat.">
         {slots?.storyline ?? <p className="af-lsh-empty">{t('Storyline loads here on the league page.')}</p>}
@@ -702,6 +746,12 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
       {data.typeRules === undefined || data.typeRules.length ? (
         <Card id="rules" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
           {data.typeRules === undefined ? <Loading /> : <GroupGrid groups={data.typeRules} canEdit={edit} />}
+        </Card>
+      ) : null}
+
+      {data.afOptions === undefined || data.afOptions.length ? (
+        <Card id="afoptions" title="AllFantasy options" sub="Rules only AllFantasy has. Each one is also in the Commissioner Hub.">
+          {data.afOptions === undefined ? <Loading lines={2} /> : <AfOptionRows options={data.afOptions} cb={cb} canOpen={edit} tagged />}
         </Card>
       ) : null}
 

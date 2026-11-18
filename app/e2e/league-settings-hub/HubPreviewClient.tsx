@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import {
+import { buildAfOptions,
   buildAllTimeStandings,
   buildDraftGroups,
   buildGeneralGroups,
@@ -161,6 +161,7 @@ export function HubPreviewClient({
       },
       // Week 10 is open with three changed players; week 9 was checked and nothing moved; earlier
       // weeks were never checked (no `changes`), so all three states of the card are one click apart.
+      afOptions: buildAfOptions(p, kind, 'kn-2026'),
       // Commissioner Hub "Needs you" (sample; the live list comes from /api/leagues/[id]/commissioner-hub).
       commissionerTasks: {
         cards: [
