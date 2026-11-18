@@ -16,7 +16,9 @@ import '@/components/league/league-workspace.css'
 import '@/components/league/league-type-skin.css'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
 import { LeaguePlayerNewsTab } from '@/components/league/LeaguePlayerNewsTab'
-import { SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_TRADES_PANEL } from './sampleData'
+import { TeamFuturePicks } from '@/components/league/TeamFuturePicks'
+import { LeagueStandings } from '@/components/standings/LeagueStandings'
+import { SAMPLE_FUTURE_PICKS, SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_STANDINGS, SAMPLE_TRADES_PANEL } from './sampleData'
 
 /*
  * Dev-only harness: answer the three reads these surfaces make with SAMPLE DATA, so the page renders
@@ -35,6 +37,8 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
     if (url.includes('/api/league/roster')) return json(SAMPLE_ROSTER)
     if (url.includes('/api/sleeper/players')) return json(SAMPLE_PLAYER_MAP)
     if (url.includes('/api/leagues/harness-league/player-news')) return json(SAMPLE_NEWS)
+    if (url.includes('/api/leagues/harness-league/future-picks')) return json(SAMPLE_FUTURE_PICKS)
+    if (url.includes('/api/leagues/harness-league/scoring/standings')) return json(SAMPLE_STANDINGS)
     return real(input, init)
   }
 }
@@ -124,6 +128,8 @@ export function LeaguePhaseAHarnessClient() {
             {view === 'trades' ? <TradesTab league={league} teams={[]} /> : null}
             {view === 'history' ? <LegacyHome league={league} leagueId="harness-league" /> : null}
             {view === 'activity' ? <LeagueActivityTab leagueId="harness-league" /> : null}
+            {view === 'picks' ? <TeamFuturePicks leagueId="harness-league" /> : null}
+            {view === 'standings' ? <LeagueStandings leagueId="harness-league" /> : null}
             {view === 'news' ? <LeaguePlayerNewsTab leagueId="harness-league" sport="NFL" /> : null}
             {view === 'ng' ? (
               // NBA roster on a day two clubs have no game: NG in AF blue in the points column.

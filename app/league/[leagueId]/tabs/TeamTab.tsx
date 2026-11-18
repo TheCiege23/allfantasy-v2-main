@@ -59,6 +59,7 @@ import type { CampusLineupView } from '@/lib/c2c/campusLineupView'
 import { AfInjuryTag } from '@/components/league/AfInjuryTag'
 import { useByeTeams } from './useByeTeams'
 import { useNoGameTeams } from './useNoGameTeams'
+import { TeamFuturePicks } from '@/components/league/TeamFuturePicks'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -2749,6 +2750,9 @@ const maxWeekMenu = useMemo(() => {
           }}
         />
       ) : null}
+
+      {/* Future draft picks, at the foot of the page (renders nothing in a league without picks). */}
+      <TeamFuturePicks leagueId={league.id} />
     </div>
   )
 }
