@@ -22,6 +22,8 @@ import { MemberLineupSettings } from '@/components/league/MemberLineupSettings'
 import { AutoSwitchOwnerCard } from '@/components/league/AutoSwitchOwnerCard'
 import { ScheduleToolsCard } from '@/components/league-settings/ScheduleToolsCard'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
+import { CopyLeaguePanel } from '@/components/league-settings/CopyLeaguePanel'
+import { copyLeagueTeams } from '@/lib/league/copyLeague'
 import { SAMPLE_FUTURE_PICKS, SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_STANDINGS, SAMPLE_TRADE_ROSTERS, SAMPLE_TRADES_PANEL } from './sampleData'
 
 /*
@@ -67,6 +69,12 @@ const harnessSchedule = {
       })),
     }
   }),
+}
+// Copy leagues (docs/league-page/COPY_LEAGUES_DESIGN.md): 12 teams, 4 already holding a real NFL team.
+let harnessCopy = {
+  available: true, enabled: true, locked: false, canManage: true, myLeagueTeamId: 'c3',
+  teams: harnessTeams.map((name, i) => ({ leagueTeamId: `c${i}`, teamName: name, ownerName: name, code: ['BUF', 'KC', null, 'PHI', null, 'DET', null, null, null, null, null, null][i] ?? null })),
+  catalog: copyLeagueTeams('NFL'),
 }
 const harnessDivisions = {
   config: { count: 4, names: ['East', 'North', 'South', 'West'], teamAssignments: Object.fromEntries(harnessTeams.map((_, i) => [`t${i}`, i % 4])), aiNamingEnabled: false, rivalsTwice: false, lastUpdatedAt: null, lastUpdatedBy: null },
@@ -128,6 +136,16 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
       return json({ ok: true })
     }
     if (url.includes('/api/commissioner/leagues/harness-league/division-settings')) return json(harnessDivisions)
+    if (url.includes('/api/leagues/harness-league/copy-league')) {
+      if ((init?.method ?? 'GET') === 'GET') return json(harnessCopy)
+      const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string; code?: string | null; leagueTeamId?: string }
+      const id = body.action === 'pick' ? harnessCopy.myLeagueTeamId : body.leagueTeamId
+      if (body.action === 'pick' || body.action === 'assign') {
+        harnessCopy = { ...harnessCopy, teams: harnessCopy.teams.map((t) => (t.leagueTeamId === id ? { ...t, code: body.code ?? null } : t)) }
+      }
+      if (body.action === 'enable' || body.action === 'disable') harnessCopy = { ...harnessCopy, enabled: body.action === 'enable' }
+      return json({ ok: true, view: harnessCopy })
+    }
     return real(input, init)
   }
 }
@@ -223,6 +241,12 @@ export function LeaguePhaseAHarnessClient() {
             {view === 'autoswitch' ? <AutoSwitchOwnerCard leagueId="harness-league" /> : null}
             {view === 'schedule' ? <ScheduleToolsCard leagueId="harness-league" /> : null}
             {view === 'divisions' ? <DivisionSettingsCommissionerPanel leagueId="harness-league" /> : null}
+            {view === 'copyleague' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <CopyLeaguePanel leagueId="harness-league" mode="mine" />
+                <CopyLeaguePanel leagueId="harness-league" mode="commissioner" />
+              </div>
+            ) : null}
             {view === 'news' ? <LeaguePlayerNewsTab leagueId="harness-league" sport="NFL" /> : null}
             {view === 'ng' ? (
               // NBA roster on a day two clubs have no game: NG in AF blue in the points column.

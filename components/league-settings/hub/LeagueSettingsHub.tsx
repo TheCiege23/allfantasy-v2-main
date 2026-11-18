@@ -71,6 +71,7 @@ type Loadable<T> = T | null | undefined
 /* The Commissioner Hub's live panels load only when a commissioner opens that tab. */
 const RivalryWeekCard = dynamic(() => import('@/components/league-settings/RivalryWeekCard').then((m) => m.RivalryWeekCard), { ssr: false })
 const StorylineStudio = dynamic(() => import('@/components/core-app/commissioner/StorylineStudio').then((m) => m.StorylineStudio), { ssr: false })
+const CopyLeaguePanel = dynamic(() => import('@/components/league-settings/CopyLeaguePanel').then((m) => m.CopyLeaguePanel), { ssr: false })
 
 type HighScoresPayload = {
   seasons: number[]
@@ -399,7 +400,11 @@ export function LeagueSettingsHub({
   }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId, tasks, connected])
 
   const slots = useMemo(
-    () => (canEdit && native ? { rivalryWeek: <RivalryWeekCard leagueId={leagueId} />, storyline: <StorylineStudio leagueId={leagueId} /> } : undefined),
+    () => ({
+      ...(canEdit && native ? { rivalryWeek: <RivalryWeekCard leagueId={leagueId} />, storyline: <StorylineStudio leagueId={leagueId} /> } : {}),
+      // Copy league: the panel decides for itself (on, AllFantasy-hosted, NFL, you have a team).
+      ...(native ? { copyLeague: <CopyLeaguePanel leagueId={leagueId} mode="mine" /> } : {}),
+    }),
     [canEdit, native, leagueId],
   )
 

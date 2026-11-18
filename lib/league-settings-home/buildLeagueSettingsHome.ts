@@ -12,6 +12,7 @@ import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { isPirateLeague, readPirateRules, type PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTeamLeagues'
+import { copyLeagueAvailable } from '@/lib/league/copyLeague'
 
 export type SettingsSubPageId =
   | 'general'
@@ -272,11 +273,13 @@ export function formatScoringMode(settings: unknown): string {
 
 /**
  * What the "AllFantasy options" sub-page holds for this league, or null when it holds nothing: the odd-team
- * extra matchup (an odd redraft or keeper league) and keeper rules (a keeper league). Phase C2.
+ * extra matchup (an odd redraft or keeper league), keeper rules (a keeper league) and, given the sport, copy
+ * league (an NFL league; docs/league-page/COPY_LEAGUES_DESIGN.md). Phase C2.
  */
-export function afOptionsSummary(leagueType: string | null | undefined, teamCount: number): string | null {
+export function afOptionsSummary(leagueType: string | null | undefined, teamCount: number, sport?: string | null): string | null {
   const type = String(leagueType ?? '').toLowerCase()
   const parts: string[] = []
+  if (copyLeagueAvailable(sport)) parts.push('Copy league')
   if (isOddTeamCount(teamCount) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(type)) parts.push('Odd-team extra matchup')
   if (type === 'keeper') parts.push('Keeper rules')
   return parts.length ? parts.join(' · ') : null
@@ -296,7 +299,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const pirate = isPirateLeague(league)
   const teamCount = league.leagueSize ?? teams.length
   const joined = teams.filter((t) => Boolean(t.claimedByUserId)).length
-  const afSummary = afOptionsSummary(league.leagueType, teamCount)
+  const afSummary = afOptionsSummary(league.leagueType, teamCount, league.sport)
 
   const sections: SettingsHomeSection[] = [
     {

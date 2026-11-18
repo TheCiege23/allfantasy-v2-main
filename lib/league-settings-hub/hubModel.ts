@@ -14,6 +14,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTeamLeagues'
 import { readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { copyLeagueAvailable, readCopyLeague } from '@/lib/league/copyLeague'
 import { describeByePlan, isNaturalByePlan, naturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
 import { resolveHubSport, scoringCategories, scoringCategoryFor, sportCopy, sportDisplayName, sportFamily, SPORT_SLOT_NAMES, statLabel } from './sportProfile'
 
@@ -457,6 +458,20 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
   const snap = p.settingsSnapshot ?? {}
   const out: HubAfOption[] = []
   const teamCount = num(l.teamCount) ?? num(l.leagueSize)
+
+  // Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): NFL leagues hosted on AllFantasy.
+  const sport = str(l.sport)
+  if (copyLeagueAvailable(sport)) {
+    const copy = readCopyLeague(snap, sport)
+    const picked = Object.keys(copy.teams).length
+    out.push({
+      key: 'copyLeague',
+      label: 'Copy league',
+      description: 'Every manager takes a real NFL team, and its name and logo become the team’s own.',
+      value: copy.enabled ? (teamCount != null ? `${picked} of ${teamCount} teams have a real team` : 'Copy league is on') : 'Copy league is off',
+      panel: 'af-options',
+    })
+  }
 
   if (teamCount != null && isOddTeamCount(teamCount) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(kind)) {
     const extra = readExtraMatchupSettings(snap)
