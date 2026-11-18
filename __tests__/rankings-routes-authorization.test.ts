@@ -83,7 +83,7 @@ const {
     roster: {
       count: vi.fn(async ({ where }: any) =>
         store.rosters.filter(
-          (r) => r.leagueId === where.leagueId && r.platformUserId === where.platformUserId
+          (r) => r.leagueId === where.leagueId && (where.OR ?? [where]).some((w: any) => w.platformUserId != null && r.platformUserId === w.platformUserId)
         ).length
       ),
     },
