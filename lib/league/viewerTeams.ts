@@ -12,6 +12,7 @@
  *   - several held and the request names one of them: that team;
  *   - several held and the request names none: REFUSED (`TEAM_REQUIRED`). Never a guess.
  *   - a team named that the manager does not hold: REFUSED (`NOT_YOUR_TEAM`).
+ * With nothing named, the team the manager last switched to (a cookie, see below) is used when they hold it.
  *
  * `chooseActingTeam` is the pure rule; `resolveActingRoster` reads the manager's teams and applies it.
  */
@@ -29,9 +30,38 @@ export type ActingTeam =
 export const ACTING_TEAM_HEADER = 'x-af-roster-id'
 export const ACTING_TEAM_FIELD = 'rosterId'
 
+/**
+ * The manager's ACTIVE team: the one they switched to in the league header, remembered in a cookie so
+ * every request carries it without each screen having to. It is a preference, not a claim: a remembered
+ * team the manager no longer holds is ignored, where a team NAMED on the request and not held is refused.
+ * The cookie lists one roster id per league, dot-separated; ids are unique across leagues.
+ */
+export const ACTIVE_TEAMS_COOKIE = 'af_active_teams'
+const ACTIVE_TEAMS_MAX = 40
+const PREFERRED_PREFIX = 'preferred:'
+
+function readActiveTeamIds(cookieValue: string | null | undefined): string[] {
+  return String(cookieValue ?? '')
+    .split('.')
+    .map((id) => id.trim())
+    .filter((id) => /^[A-Za-z0-9_-]{6,64}$/.test(id))
+    .slice(0, ACTIVE_TEAMS_MAX)
+}
+
+/** The cookie value after switching to `rosterId`, dropping the league's other teams from the list. */
+export function activeTeamsCookieAfterSwitch(current: string | null | undefined, rosterId: string, leagueRosterIds: readonly string[]): string {
+  const others = new Set(leagueRosterIds)
+  return [rosterId, ...readActiveTeamIds(current).filter((id) => id !== rosterId && !others.has(id))].slice(0, ACTIVE_TEAMS_MAX).join('.')
+}
+
 export function chooseActingTeam(held: readonly HeldTeam[], requestedRosterId: string | null | undefined): ActingTeam {
   const rosterIds = held.map((team) => team.rosterId)
-  const requested = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
+  const raw = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
+  // Remembered teams only ever pick among the teams held; with no match they count as nothing named.
+  const preferred = raw.startsWith(PREFERRED_PREFIX)
+    ? raw.slice(PREFERRED_PREFIX.length).split('.').find((id) => held.some((team) => team.rosterId === id)) ?? ''
+    : null
+  const requested = preferred ?? raw
   if (held.length === 0) {
     return { ok: false, code: 'NO_TEAM', status: 404, message: 'You do not have a team in this league.', rosterIds }
   }
@@ -84,7 +114,10 @@ export function requestedRosterIdFrom(
     const value = (body as Record<string, unknown>)[ACTING_TEAM_FIELD]
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
-  return null
+  // Nothing named: fall back to the team the manager last switched to, as a preference.
+  const cookies = (req as { cookies?: { get?(name: string): { value?: string } | undefined } } | null | undefined)?.cookies
+  const remembered = readActiveTeamIds(cookies?.get?.(ACTIVE_TEAMS_COOKIE)?.value)
+  return remembered.length > 0 ? `${PREFERRED_PREFIX}${remembered.join('.')}` : null
 }
 
 /**
@@ -102,7 +135,7 @@ export async function resolveActingRoster(
     const coOwned = await acceptedCoOwnerRosterId(leagueId, userId)
     if (coOwned) {
       const requested = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
-      if (requested && requested !== coOwned) {
+      if (requested && !requested.startsWith(PREFERRED_PREFIX) && requested !== coOwned) {
         return { ok: false, code: 'NOT_YOUR_TEAM', status: 403, message: 'That team is not yours.', rosterIds: [coOwned] }
       }
       const roster = await prisma.roster.findFirst({ where: { id: coOwned, leagueId }, select: { redraftRosterId: true } })
@@ -110,6 +143,26 @@ export async function resolveActingRoster(
     }
   }
   return chooseActingTeam(held, requestedRosterId)
+}
+
+/**
+ * The team a READ shows: the named team when the manager holds it, otherwise their first team (a stable
+ * order), or null with no team. Screens and summaries may fall back like this; anything that CHANGES a
+ * team must use `resolveActingRoster`, which refuses instead.
+ */
+export async function resolveViewingRoster(
+  leagueId: string,
+  userId: string,
+  requestedRosterId?: string | null,
+  opts: { allowCoOwner?: boolean } = {},
+): Promise<{ rosterId: string; redraftRosterId: string | null; heldCount: number } | null> {
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterId, opts)
+  if (acting.ok) return { rosterId: acting.rosterId, redraftRosterId: acting.redraftRosterId, heldCount: acting.heldCount }
+  if (acting.code === 'NO_TEAM') return null
+  // Several teams and none (or a wrong one) named: show the first rather than nothing.
+  const held = await listHeldTeams(leagueId, userId)
+  const first = held[0]
+  return first ? { rosterId: first.rosterId, redraftRosterId: first.redraftRosterId, heldCount: held.length } : null
 }
 
 /** Thrown by a lookup helper that cannot return a response itself; the route turns it into one. */

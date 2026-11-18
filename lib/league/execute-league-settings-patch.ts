@@ -4,7 +4,7 @@
  * - PATCH /api/leagues/[leagueId]/settings (section + updates)
  */
 
-import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY } from '@/lib/league/multiTeamManagers'
+import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY, multiTeamManagersSupported } from '@/lib/league/multiTeamManagers'
 import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { NextResponse } from 'next/server'
 import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
@@ -638,6 +638,9 @@ export async function executeLeagueSettingsPatch(
    */
   if (body.allowMultiTeamManagers !== undefined && typeof body.allowMultiTeamManagers !== 'boolean') {
     return jsonError('allowMultiTeamManagers must be true or false', 400)
+  }
+  if (body.allowMultiTeamManagers === true && !multiTeamManagersSupported(league)) {
+    return jsonError('Several teams for one manager is available in standard leagues only (redraft, dynasty, keeper, best ball).', 400)
   }
   if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
     return jsonError('medianGameInPlayoffs must be true or false', 400)
