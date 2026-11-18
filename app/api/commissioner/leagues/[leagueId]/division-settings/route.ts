@@ -21,6 +21,7 @@ import {
   DIVISION_NAME_MAX,
   DIVISION_PLAYOFF_RULES,
   STANDARD_DIVISION_COUNTS,
+  MAX_STANDARD_DIVISIONS,
   SURVIVOR_TRIBE_COUNTS,
   readDivisionConfig,
   validateDivisionSetup,
@@ -142,7 +143,7 @@ export async function PUT(
   const allowedCounts = isSurvivor ? SURVIVOR_TRIBE_COUNTS : STANDARD_DIVISION_COUNTS
   if (body.count !== undefined && !(typeof body.count === 'number' && allowedCounts.includes(body.count))) {
     return NextResponse.json(
-      { error: isSurvivor ? 'Pick no tribes, or 2, 4 or 8 tribes.' : 'Pick no divisions, or 2, 3 or 4 divisions.', code: 'COUNT_NOT_ALLOWED' },
+      { error: isSurvivor ? 'Pick no tribes, or 2, 4 or 8 tribes.' : `Pick no divisions, or 2 to ${MAX_STANDARD_DIVISIONS} divisions.`, code: 'COUNT_NOT_ALLOWED' },
       { status: 400 },
     )
   }

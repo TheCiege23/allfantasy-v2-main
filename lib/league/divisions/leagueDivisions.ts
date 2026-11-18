@@ -32,7 +32,9 @@ export const DIVISION_PLAYOFF_RULES: readonly DivisionPlayoffRule[] = ['top_seed
 export const DEFAULT_DIVISION_PLAYOFF_RULE: DivisionPlayoffRule = 'top_seeds'
 
 /** Division counts a standard league may pick. Survivor tribes keep their own 2/4/8 on the same route. */
-export const STANDARD_DIVISION_COUNTS: readonly number[] = [0, 2, 3, 4]
+/** Most divisions a standard league may have. Every division still needs at least two teams. */
+export const MAX_STANDARD_DIVISIONS = 32
+export const STANDARD_DIVISION_COUNTS: readonly number[] = [0, ...Array.from({ length: MAX_STANDARD_DIVISIONS - 1 }, (_, i) => i + 2)]
 export const SURVIVOR_TRIBE_COUNTS: readonly number[] = [0, 2, 4, 8]
 export const DIVISION_NAME_MAX = 80
 
@@ -219,7 +221,7 @@ export function divisionCountAllowed(teamCount: number, count: number): boolean 
 
 /**
  * The rules for a standard (non-Survivor) division setup:
- * - 0 (off) or 2–4 divisions, and at least two teams in every division;
+ * - 0 (off) or 2–32 divisions, and at least two teams in every division;
  * - every division named, names unique and at most 80 characters;
  * - assignments only to known teams and real divisions;
  * - even or near-even: no division may hold more than `ceil(teams / divisions)`, and once every team
@@ -230,7 +232,7 @@ export function validateDivisionSetup(input: DivisionSetupInput, teamIds: Readon
   const { count } = input
   const teamCount = teamIds.length
   if (!STANDARD_DIVISION_COUNTS.includes(count)) {
-    return { ok: false, code: 'COUNT_NOT_ALLOWED', error: 'Pick no divisions, or 2, 3 or 4 divisions.' }
+    return { ok: false, code: 'COUNT_NOT_ALLOWED', error: `Pick no divisions, or 2 to ${MAX_STANDARD_DIVISIONS} divisions.` }
   }
   if (input.playoffRule !== undefined && !(DIVISION_PLAYOFF_RULES as readonly unknown[]).includes(input.playoffRule)) {
     return { ok: false, code: 'BAD_PLAYOFF_RULE', error: 'Unknown division playoff rule.' }

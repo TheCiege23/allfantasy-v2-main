@@ -4,6 +4,8 @@
  * - PATCH /api/leagues/[leagueId]/settings (section + updates)
  */
 
+import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY } from '@/lib/league/multiTeamManagers'
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { NextResponse } from 'next/server'
 import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { Prisma } from '@prisma/client'
@@ -383,7 +385,7 @@ export async function executeLeagueSettingsPatch(
   let bestBallPoolWarnings: string[] = []
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
-    if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
+    if (!Number.isInteger(size) || size < 2 || size > MAX_NATIVE_TEAMS) return jsonError(`leagueSize must be 2–${MAX_NATIVE_TEAMS}`, 400)
     // Best ball: every team's starter seats are filled from what it drafted, so the new size must fit
     // the sport's player pool with the league's current seats (lib/bestball/poolCapacity.ts).
     if (size !== league.leagueSize) {
@@ -554,8 +556,8 @@ export async function executeLeagueSettingsPatch(
     if (Number.isFinite(pt) && pt > Math.max(1, teamCount)) {
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
-    // The bracket engine runs at most four rounds (canonicalNflRedraftPlayoffRuntime warns past 16 and
-    // nothing reads the warning), and no sport's season has room for a fifth.
+    // The bracket engine runs at most five rounds (32 teams). Whether five rounds fit this league's
+    // season is checked separately, by the playoff fit rules below.
     if (Number.isFinite(pt) && pt > MAX_PLAYOFF_TEAMS) {
       return jsonError(`playoffTeams can be at most ${MAX_PLAYOFF_TEAMS}`, 400)
     }
@@ -634,6 +636,9 @@ export async function executeLeagueSettingsPatch(
    * League median in the playoffs (lib/redraft/medianGame.ts) — off unless stored true. A boolean only:
    * anything else is refused rather than read as off, so a bad client cannot silently flip it.
    */
+  if (body.allowMultiTeamManagers !== undefined && typeof body.allowMultiTeamManagers !== 'boolean') {
+    return jsonError('allowMultiTeamManagers must be true or false', 400)
+  }
   if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
     return jsonError('medianGameInPlayoffs must be true or false', 400)
   }
@@ -1278,6 +1283,15 @@ export async function executeLeagueSettingsPatch(
       where: { leagueId, status: { not: REDRAFT_SEASON_STATUS.COMPLETE } },
       data: { medianGame: body.medianGame as boolean },
     })
+  }
+
+  if (typeof body.allowMultiTeamManagers === 'boolean') {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY]: body.allowMultiTeamManagers } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY)
   }
 
   if (typeof body.medianGameInPlayoffs === 'boolean') {

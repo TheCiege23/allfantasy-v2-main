@@ -1,3 +1,4 @@
+import { inferGamesPerWeek, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
@@ -268,6 +269,8 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
     medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
     divisionRivalsTwice,
+    // An imported schedule states its own shape; a native one follows the league's setting.
+    gamesPerWeek: imported ? inferGamesPerWeek(imported.matchups) : Math.max(readGamesPerWeek(season.league?.settings), inferGamesPerWeek(season.schedule.map(toScheduleMatchupInput))),
   })
 
   return {
@@ -375,10 +378,12 @@ export async function generateNflRedraftScheduleForSeason(input: {
   }
 
   const { teams, divisionRivalsTwice } = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
+  const scheduleLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
   const generated = generateCanonicalRegularSeasonSchedule({
     rules,
     teams,
     divisionRivalsTwice,
+    gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings),
     totalWeeks: season.totalWeeks,
     playoffStartWeek: season.playoffStartWeek,
   })

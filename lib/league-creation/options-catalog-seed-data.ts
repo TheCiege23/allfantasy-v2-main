@@ -1,6 +1,7 @@
+import { DYNASTY_TEAM_COUNTS, REDRAFT_TEAM_COUNTS } from '@/lib/league/teamCountLimits'
 import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
-import { NFL_DYNASTY_TEAM_COUNTS, SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
+import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 import { KEEPER_EVEN_TEAM_COUNTS, KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
@@ -32,7 +33,8 @@ const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAA
 
 const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
-const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
+const UNIVERSAL_CREATE_TEAM_COUNTS = [...REDRAFT_TEAM_COUNTS]
+const DYNASTY_CREATE_TEAM_COUNTS = [...DYNASTY_TEAM_COUNTS]
 
 const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
@@ -316,13 +318,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: [4, 6, 8, 10, 12, 14, 16],
     },
     dynasty: {
-      NFL: [...NFL_DYNASTY_TEAM_COUNTS],
-      NBA: [4, 6, 8, 10, 12, 14, 16],
-      MLB: [4, 6, 8, 10, 12, 14, 16],
-      NHL: [4, 6, 8, 10, 12, 14, 16],
-      NCAAF: [4, 6, 8, 10, 12, 14, 16],
-      NCAAB: [4, 6, 8, 10, 12, 14, 16],
-      SOCCER: [4, 6, 8, 10, 12, 14, 16],
+      NFL: DYNASTY_CREATE_TEAM_COUNTS,
+      NBA: DYNASTY_CREATE_TEAM_COUNTS,
+      MLB: DYNASTY_CREATE_TEAM_COUNTS,
+      NHL: DYNASTY_CREATE_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
+      NCAAB: DYNASTY_CREATE_TEAM_COUNTS,
+      SOCCER: DYNASTY_CREATE_TEAM_COUNTS,
     },
     // Keeper runs 4–20 for these four sports. Even sizes are free; odd sizes (5–19) are an AF
     // Commissioner option: listed so the server accepts them,

@@ -152,7 +152,8 @@ export function getTeamCountOptions(
     return leagueType === 'survivor' ? survivorCastSizesThatFitNow(sport, seeded) : [...seeded]
   }
 
-  if (leagueType === 'dynasty' && sport === 'NFL') return [...NFL_DYNASTY_TEAM_COUNTS]
+  if (leagueType === 'dynasty') return [...NFL_DYNASTY_TEAM_COUNTS]
+  if (leagueType === 'redraft') return [...UNIVERSAL_CREATE_TEAM_COUNTS]
 
   if (leagueType === 'tournament') {
     return [...TOURNAMENT_POOL_SIZES]

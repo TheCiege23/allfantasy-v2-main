@@ -946,7 +946,7 @@ export async function fetchFantraxLeagueForImport(
    * league reached My Team and the add/drop gate with no lineup, and nothing could tell it was IDP.
    * Same `positionConstraints` read; unlike NBA/NHL it is all-or-nothing (see mapFantraxLineupSlots).
    */
-  const proSlots = splitSeason && (sport === 'NBA' || sport === 'NHL')
+  const proSlots = sport === 'NCAAB' || (splitSeason && (sport === 'NBA' || sport === 'NHL'))
     ? mapFantraxRosterSlots(sport, sourceSettings?.rosterInfo)
     : sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB' || sport === 'SOCCER'
       ? mapFantraxLineupSlots(sport, sourceSettings?.rosterInfo)
@@ -1007,6 +1007,14 @@ export async function fetchFantraxLeagueForImport(
            than dropped: a scoring rule we silently skipped is a wrong score. */
         ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),
         ...(proSlots && proSlots.gaps.length > 0 ? { rosterSlotGaps: proSlots.gaps } : {}),
+        // Divisions, re-keyed from Fantrax's team id to ours (the id every team row is stored under).
+        divisionByTeamId: Object.fromEntries(
+          standings.flatMap((standing) => {
+            const division = sourceSettings?.teamDivisions?.[asString(standing.fantraxTeamId)]
+            const teamId = resolveTeamId(asString(standing.team), teamMap)
+            return division && teamId ? [[teamId, division]] : []
+          }),
+        ),
       },
     },
     teams,

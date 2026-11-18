@@ -67,6 +67,7 @@ export function LeagueSettingsPanel({
   const [timezone, setTimezone] = useState(initialData.timezone ?? 'America/New_York')
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
   const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
+  const [multiTeamManagers, setMultiTeamManagers] = useState(initialData.allowMultiTeamManagers === true)
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
@@ -98,6 +99,7 @@ export function LeagueSettingsPanel({
     setTimezone(initialData.timezone ?? 'America/New_York')
     setMedianGame(Boolean(initialData.medianGame))
     setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
+    setMultiTeamManagers(initialData.allowMultiTeamManagers === true)
     setLeagueType(initialData.leagueType ?? 'redraft')
     setLeagueSize(initialData.leagueSize ?? 12)
     setAllowPreDraft(Boolean(initialData.allowPreDraftMoves))
@@ -309,6 +311,16 @@ export function LeagueSettingsPanel({
             }}
           />
         ) : null}
+        <SettingsToggleRow
+          label="A manager may run more than one team"
+          description="For leagues where one person runs several franchises. Each team is joined from its own AllFantasy account; with this on, a manager's second account is allowed to take another team."
+          checked={multiTeamManagers}
+          disabled={disabled}
+          onChange={(v) => {
+            setMultiTeamManagers(v)
+            void save({ allowMultiTeamManagers: v })
+          }}
+        />
         {isOddTeamCount(leagueSize) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(leagueType) ? (
           <ExtraMatchupSettingsBlock
             initial={readExtraMatchupSettings(settingsSnapshot)}

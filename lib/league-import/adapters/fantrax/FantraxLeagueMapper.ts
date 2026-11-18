@@ -1,3 +1,4 @@
+import { readFantraxDivisions, STANDINGS_DIVISIONS_KEY } from '@/lib/league-import/standingsDivisions'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { usesFantraxPeriodCalendar } from '@/lib/league-import/fantrax/fantraxProSports'
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
@@ -51,6 +52,8 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
       faab_budget: null,
       roster_positions: source.settings?.rosterPositions.map((slot) => `${slot.position}:${slot.count}`) ?? [],
       fantrax_settings: source.settings?.raw ?? null,
+      // Divisions were dropped until 2026-11-18. `null` clears a stale key, as for Sleeper and ESPN.
+      [STANDINGS_DIVISIONS_KEY]: readFantraxDivisions((source.settings?.raw as { divisionByTeamId?: Record<string, string> } | null | undefined)?.divisionByTeamId),
     } satisfies NormalizedLeagueSettings
   },
 }

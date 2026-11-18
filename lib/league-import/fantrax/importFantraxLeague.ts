@@ -64,6 +64,8 @@ export type FantraxImportOutcome =
         firstPlayoffPeriod?: number
         scoringPeriods?: FantraxLeagueInfo['scoringPeriods']
         playoffs?: FantraxLeagueInfo['playoffs']
+        /** Fantrax team id → division name, when the league has two or more divisions. */
+        teamDivisions?: Record<string, string>
       }
       scoringGaps: string[]
       /**
@@ -549,6 +551,7 @@ export async function importFantraxLeague(args: {
     sourceSettings: {
       scoringSystem: info.data.scoringSystem ?? null,
       rosterInfo: info.data.rosterInfo,
+      ...fantraxTeamDivisions(info.data),
       ...(retainPeriodCalendar ? fantraxPeriodCalendar(info.data) : {}),
     },
     seasonState: schedule.position?.state ?? (retainPeriodCalendar ? fantraxSeasonDateState(info.data) : null),
@@ -556,6 +559,18 @@ export async function importFantraxLeague(args: {
     scoredPeriodsRead: schedule.periodsRead,
     scoredPeriodsFailed: schedule.periodsFailed,
   }
+}
+
+/** Each team's division, by Fantrax team id. Nothing unless the league really is split in two or more. */
+function fantraxTeamDivisions(info: FantraxLeagueInfo): { teamDivisions?: Record<string, string> } {
+  const teamDivisions: Record<string, string> = {}
+  for (const [key, team] of Object.entries(recordOf(info.teamInfo))) {
+    const row = recordOf(team)
+    const id = String(row.id ?? key ?? '').trim()
+    const division = typeof row.division === 'string' ? row.division.trim() : ''
+    if (id && division) teamDivisions[id] = division
+  }
+  return new Set(Object.values(teamDivisions)).size >= 2 ? { teamDivisions } : {}
 }
 
 function fantraxSeasonDateState(info: FantraxLeagueInfo, now = new Date()) {
