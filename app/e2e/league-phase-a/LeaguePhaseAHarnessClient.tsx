@@ -48,6 +48,7 @@ const harnessAuto = {
     { rosterId: 'r6', setting: null as { level: string; timing: string } | null, ownerHasPro: true },
   ],
 }
+const harnessInterest: Record<string, number> = { '5003': 4, '5002': 2, '6794': 1, '7002': 11, '7564': 3, '6001': 1 }
 if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: boolean }).__afPhaseAFetch) {
   ;(window as unknown as { __afPhaseAFetch?: boolean }).__afPhaseAFetch = true
   const real = window.fetch.bind(window)
@@ -84,6 +85,16 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
       return json({ rosterId: 'r1', setting: harnessAuto.teams[0]!.setting, ownerHasPro: true })
     }
     if (url.includes('/api/leagues/harness-league/trades/rosters')) return json(SAMPLE_TRADE_ROSTERS)
+    // Trade interest (the AF crest): anonymous counts per player, plus the viewer's own marks.
+    if (url.includes('/api/leagues/harness-league/trade-interest')) {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { playerId?: string; interested?: boolean }
+        const id = String(body.playerId ?? '')
+        harnessInterest[id] = Math.max(0, (harnessInterest[id] ?? 0) + (body.interested ? 1 : -1))
+        return json({ ok: true, count: harnessInterest[id] })
+      }
+      return json({ available: true, counts: harnessInterest, mine: ['5003'] })
+    }
     // The trade window's grade preview needs a database; answer "not graded" so the window renders.
     if (url.includes('/api/leagues/harness-league/trades/grade-preview')) return json({ grade: null })
     return real(input, init)

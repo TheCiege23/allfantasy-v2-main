@@ -12,8 +12,8 @@ import type { TradeableRoster } from '@/app/api/leagues/[leagueId]/trades/roster
  * - Your own tiles carry "Add to block" / "On block". On a Sleeper league that writes AllFantasy's
  *   trade block (POST/DELETE /api/core/player-card/watch, list 'trade-block'; the server proves the
  *   player is yours). Elsewhere the control is not offered.
- * - Everyone else's tiles carry the AF crest: the viewer's own interest mark (the Trades tab's
- *   existing watch set). A cross-manager COUNT needs its own storage and is not drawn until it exists.
+ * - Everyone else's tiles carry the AF crest: the viewer's interest mark and, once the
+ *   `league_trade_interests` table exists, how many managers marked the player (anonymous).
  *
  * Reads `/api/leagues/[leagueId]/trades/rosters`, the same read the trade window uses.
  */
@@ -34,11 +34,21 @@ const T = {
   strong: 'var(--lsk-accent-strong, var(--accent))',
 }
 
-function Crest({ on }: { on: boolean }) {
+/** The AF crest: filled when the viewer wants the player; the number is how many managers do. */
+export function Crest({ on, count = 0 }: { on: boolean; count?: number }) {
   return (
-    <svg width="20" height="22" viewBox="0 0 56 64" aria-hidden="true">
-      <path d="M28 2 L53 11 V32 C53 47 42 57 28 62 C14 57 3 47 3 32 V11 Z" fill={on ? 'var(--lsk-accent-strong, #d4a24c)' : 'rgba(255,255,255,.75)'} stroke="#0b0f17" strokeWidth="4" />
-    </svg>
+    <span className="relative inline-flex h-[24px] w-[22px] items-center justify-center">
+      <svg width="22" height="24" viewBox="0 0 56 64" aria-hidden="true">
+        <path d="M28 2 L53 11 V32 C53 47 42 57 28 62 C14 57 3 47 3 32 V11 Z" fill={on ? 'var(--lsk-accent-strong, #d4a24c)' : 'rgba(255,255,255,.75)'} stroke="#0b0f17" strokeWidth="4" />
+      </svg>
+      {count > 0 ? (
+        // The filled crest uses the skin's accent, so the number takes the skin's matching ink —
+        // in light mode that accent is dark and a fixed dark number disappears into it.
+        <span className="absolute inset-0 flex items-center justify-center pt-px text-[10px] font-black" style={{ color: on ? 'var(--lsk-accent-ink, #0b0f17)' : '#0b0f17' }}>
+          {count > 9 ? '9+' : count}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -48,6 +58,7 @@ export function TradeProposeGrid({
   tradeBlockPlayerIds,
   watched,
   onToggleWatch,
+  interestCounts = {},
   onProposeFor,
   onBlockChanged,
 }: {
@@ -58,6 +69,8 @@ export function TradeProposeGrid({
   /** The viewer's own interest marks. */
   watched: ReadonlySet<string>
   onToggleWatch: (playerId: string) => void
+  /** Anonymous count of managers who marked each player (empty until the interest table exists). */
+  interestCounts?: Record<string, number>
   /** Open the trade window with this manager and player chosen. */
   onProposeFor: (rosterId: string, playerId: string) => void
   /** A block change was saved; the Trades tab re-reads its panel. */
@@ -196,11 +209,11 @@ export function TradeProposeGrid({
                             type="button"
                             onClick={() => onToggleWatch(p.id)}
                             aria-pressed={watched.has(p.id)}
-                            aria-label={watched.has(p.id) ? `Remove interest in ${p.name}` : `Mark interest in ${p.name}`}
+                            aria-label={`${watched.has(p.id) ? 'Remove interest in' : 'Mark interest in'} ${p.name}${interestCounts[p.id] ? `, ${interestCounts[p.id]} interested` : ''}`}
                             className="flex h-7 w-7 shrink-0 items-center justify-center"
                             data-testid="propose-grid-crest"
                           >
-                            <Crest on={watched.has(p.id)} />
+                            <Crest on={watched.has(p.id)} count={interestCounts[p.id] ?? 0} />
                           </button>
                         ) : null}
                       </div>
