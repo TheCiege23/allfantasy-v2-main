@@ -30,6 +30,10 @@ export type GrowthEventNames = {
   trialStarted: string
   checkoutStarted: string
   paid: string
+  offerViewed?: string
+  offerClicked?: string
+  tokenCheckout?: string
+  tokenPaid?: string
 }
 
 export type StageKey = 'visitors' | 'signups' | 'imported' | 'trials' | 'paid'
@@ -45,13 +49,15 @@ export type Stage = {
 
 export type SideFigure = { key: string; label: string; count: number; previous: number }
 
-export type EntrySourceRow = { entrySource: string; checkouts: number; trials: number; paid: number }
+export type EntrySourceRow = { entrySource: string; viewed: number; clicked: number; checkouts: number; trials: number; paid: number }
+export type TokenSalesRow = { entrySource: string; checkouts: number; paid: number }
 
 export type GrowthSummary = {
   days: number
   funnel: Stage[]
   side: SideFigure[]
   whatSells: EntrySourceRow[]
+  tokenSales: TokenSalesRow[]
 }
 
 const STAGE_LABELS: Record<StageKey, string> = {
@@ -118,10 +124,11 @@ export function summarizeGrowth(
 ): GrowthSummary {
   const now = bucket()
   const before = bucket()
-  const sells = new Map<string, { checkouts: Set<string>; trials: Set<string>; paid: Set<string> }>()
+  const sells = new Map<string, { viewed: Set<string>; clicked: Set<string>; checkouts: Set<string>; trials: Set<string>; paid: Set<string> }>()
+  const tokenSalesBySource = new Map<string, { checkouts: Set<string>; paid: Set<string> }>()
   const sellRow = (k: string) => {
     let r = sells.get(k)
-    if (!r) sells.set(k, (r = { checkouts: new Set(), trials: new Set(), paid: new Set() }))
+    if (!r) sells.set(k, (r = { viewed: new Set(), clicked: new Set(), checkouts: new Set(), trials: new Set(), paid: new Set() }))
     return r
   }
 
@@ -155,6 +162,25 @@ export function summarizeGrowth(
           if (b === now) sellRow(entrySourceOf(e.meta)).trials.add(who)
         }
         break
+      case names.offerViewed:
+      case names.offerClicked:
+        if (who && b === now) {
+          const row = sellRow(entrySourceOf(e.meta))
+          const people = e.event === names.offerViewed ? row.viewed : row.clicked
+          people.add(who)
+        }
+        break
+      case names.tokenCheckout:
+      case names.tokenPaid: {
+        const sessionId = e.meta?.stripe_session_id
+        if (b !== now || typeof sessionId !== 'string' || !sessionId) break
+        const source = entrySourceOf(e.meta)
+        let row = tokenSalesBySource.get(source)
+        if (!row) tokenSalesBySource.set(source, (row = { checkouts: new Set(), paid: new Set() }))
+        const sessions = e.event === names.tokenCheckout ? row.checkouts : row.paid
+        sessions.add(sessionId)
+        break
+      }
       case names.checkoutStarted:
         if (who && b === now) sellRow(entrySourceOf(e.meta)).checkouts.add(who)
         break
@@ -183,10 +209,17 @@ export function summarizeGrowth(
   ]
 
   const whatSells: EntrySourceRow[] = [...sells.entries()]
-    .map(([entrySource, r]) => ({ entrySource, checkouts: r.checkouts.size, trials: r.trials.size, paid: r.paid.size }))
+    .map(([entrySource, r]) => ({
+      entrySource, viewed: r.viewed.size, clicked: r.clicked.size,
+      checkouts: r.checkouts.size, trials: r.trials.size, paid: r.paid.size,
+    }))
     .sort((a, b) => b.paid - a.paid || b.checkouts - a.checkouts || a.entrySource.localeCompare(b.entrySource))
 
-  return { days: window.days, funnel, side, whatSells }
+  const tokenSales = [...tokenSalesBySource.entries()]
+    .map(([entrySource, row]) => ({ entrySource, checkouts: row.checkouts.size, paid: row.paid.size }))
+    .sort((a, b) => b.paid - a.paid || b.checkouts - a.checkouts || a.entrySource.localeCompare(b.entrySource))
+
+  return { days: window.days, funnel, side, whatSells, tokenSales }
 }
 
 /** "lock_player_depth" → "Player depth lock", for the few sources we know; the raw tag otherwise. */

@@ -15,7 +15,7 @@ export const coreDepthLockMessages = defineMessages<CoreDepthLockCopy>({
     headAlt: (subject) => `${subject} ${subject.endsWith('s') ? 'are' : 'is'} not included with your account`,
     body: 'Your leagues, scores and the basics stay free. Upgrade to see the rest.',
     bodyAlt: 'Your leagues, scores and the basics are all here.',
-    cta: (plan) => `See ${plan}`,
+    cta: (plan) => `Unlock with ${plan}`,
     freeUntil: (startsAt, plan) => `${freeUntilLabel(startsAt, 'en')} — then ${plan}`,
   },
   es: {
@@ -23,7 +23,7 @@ export const coreDepthLockMessages = defineMessages<CoreDepthLockCopy>({
     headAlt: (subject) => `${subject}: no disponible con tu cuenta`,
     body: 'Tus ligas, los marcadores y lo básico siguen siendo gratis. Mejora tu plan para ver el resto.',
     bodyAlt: 'Tus ligas, los marcadores y lo básico están todos aquí.',
-    cta: (plan) => `Ver ${plan}`,
+    cta: (plan) => `Desbloquear con ${plan}`,
     freeUntil: (startsAt, plan) => `${freeUntilLabel(startsAt, 'es')} — luego, ${plan}`,
   },
 })

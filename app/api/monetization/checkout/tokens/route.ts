@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
+import { MONETIZATION } from "@/lib/analytics/eventNames"
+import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
+import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
 import { isAppleIosShellRequest } from "@/lib/monetization/isAppleIosShellRequest"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -20,6 +24,7 @@ import { validateCouponForUser, createPendingRedemption, calculateDiscountedAmou
 type CheckoutTokensBody = {
   sku?: string
   returnPath?: string
+  entrySource?: string | null
   /** Optional sponsor/promo code entered by user at checkout (e.g. "WassupFred") */
   couponCode?: string
 }
@@ -101,6 +106,7 @@ export async function POST(req: Request) {
     }
 
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
+    const entrySource = normalizeEntrySource(body?.entrySource)
     // Canonical checkout: charge is derived from the catalog price id
     // (STRIPE_PRICE_AF_*), guaranteeing charged == displayed catalog price.
     const checkout = await buildStripeCheckoutSessionForSku({
@@ -109,6 +115,7 @@ export async function POST(req: Request) {
       userEmail: session.user.email ?? null,
       stripeCustomerId: await findStripeCustomerIdForUser(session.user.id),
       returnPath,
+      entrySource,
       couponCode: resolvedCouponCode,
       couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
     })
@@ -119,6 +126,18 @@ export async function POST(req: Request) {
         },
         { status: 503 }
       )
+    }
+
+    try {
+      const jar = await cookies()
+      await recordFunnelEvent({
+        event: MONETIZATION.TOKEN_CHECKOUT_STARTED,
+        userId: session.user.id,
+        getCookie: (name) => jar.get(name)?.value,
+        meta: { sku: item.sku, entry_source: entrySource ?? "unknown", stripe_session_id: checkout.sessionId },
+      })
+    } catch {
+      // Analytics must not interrupt a created checkout.
     }
 
     return NextResponse.json({

@@ -57,6 +57,8 @@ import {
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { RebuildPlanCard } from '@/components/core-app/screens/RebuildPlanCard'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -2907,11 +2909,34 @@ export function TradeCenter(props: {
         </details>
       ) : null}
 
-      {result && depthAccess && depthLocked ? (
+      {result && depthAccess && depthLocked && !blocked && !noSignal ? (
         <div className="af-tc-mstep-wrap">
-          <CoreDepthLock access={depthAccess} what={lockSubjectText('The full trade breakdown', language)} lang={language} />
+          <CoreDepthLock
+            access={depthAccess}
+            what={lockSubjectText('The full trade breakdown', language)}
+            benefit={language === 'es'
+              ? 'Consulta el impacto en tu plantilla y las posibles contraofertas.'
+              : 'See how this trade changes your roster and what you could counter with.'}
+            source="lock_trade_breakdown"
+            lang={language}
+          >
+            <TradeReviewLink
+              draft={{
+                give: giveAssets.filter(valuedByVerdict),
+                get: getAssets.filter(valuedByVerdict),
+                leagueId: props.league?.id,
+                format: props.dynasty ? 'dynasty' : props.leagueType === 'keeper' ? 'keeper' : 'redraft',
+                sport: normalizeToSupportedSport(props.sport),
+              }}
+              source="lock_trade_breakdown"
+              viewerId={props.viewerId}
+              storageError={language === 'es' ? 'No se pudo guardar el cambio en esta pestaña.' : 'This browser could not save the trade in this tab.'}
+            >
+              {language === 'es' ? 'Revisar este cambio con tokens' : 'Review this trade with tokens'}
+            </TradeReviewLink>
+          </CoreDepthLock>
         </div>
-      ) : intel ? (
+      ) : !depthLocked && intel ? (
         <details className="af-tc-analysis-fold">
         <summary>{copy("Deeper trade strategy and partner context")}</summary>
         <section className="af-tc-dos" data-section="breakdown">

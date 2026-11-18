@@ -68,6 +68,6 @@ describe('the lock card names itself on the way to checkout', () => {
         access: { depth: 'player_depth', unlocked: false, hasPlan: false, planName: 'AF Pro', label: 'Player deep dives', upgradePath: '/upgrade?plan=pro', preLaunchFree: false, startsAt: null } as never,
       }),
     )
-    expect(html).toContain('href="/upgrade?plan=pro&amp;from=lock_player_depth"')
+    expect(html).toContain('href="/upgrade?plan=pro&amp;offer=monthly&amp;from=lock_player_depth"')
   })
 })

@@ -8,9 +8,16 @@ export const runtime = "nodejs"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
 import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
-import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
+import { TradeReviewPurchase } from "@/components/monetization/TradeReviewPurchase"
+import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync"
+import { dispatchStateRefreshEvent } from "@/lib/state-consistency/state-events"
+import type { TradeGradeView } from "@/lib/decision-os/trade/tradeGrade"
+import {
+  readTradeReviewDraft, saveTradeReviewDraft, tradeReviewPath, type TradeReviewAsset, type TradeReviewDraft,
+} from "@/lib/monetization/tradeReviewDraft"
 import { GenericTradeAnalyzer } from "@/components/core-app/screens/GenericTradeAnalyzer"
 import { TradeMarketMovers } from "@/components/trade-market/TradeMarketMovers"
 import { TradeShareButton, type ShareAsset } from "@/components/trade-evaluator/TradeShareButton"
@@ -383,6 +390,33 @@ function emptySide(name: string, firstPlayerName = ""): TradeSide {
     players: [emptyPlayer(firstPlayerName)],
     picks: [],
     faab: 0,
+  }
+}
+
+function draftAssets(side: TradeSide): TradeReviewAsset[] {
+  const players = side.players.filter((player) => player.name.trim()).map(({ name, position, team, age }) => ({
+    kind: "player" as const, name: name.trim(), position, team, age,
+  }))
+  const picks = side.picks.map((pick) => ({
+    kind: "pick" as const, year: Number(pick.year), round: Number(pick.round),
+    tier: pick.projectedRange === "unknown" ? undefined : pick.projectedRange, draftSide: pick.draftSide,
+  }))
+  return [...players, ...picks, ...(side.faab > 0 ? [{ kind: "faab" as const, amount: side.faab }] : [])]
+}
+
+function restoreSide(name: string, assets: TradeReviewAsset[], info?: TradeReviewDraft["senderInfo"]): TradeSide {
+  const side = { ...emptySide(name), ...info }
+  const players = assets.flatMap((asset) => asset.kind === "player" ? [{
+    ...emptyPlayer(asset.name), position: asset.position ?? "", team: asset.team ?? "", age: asset.age ?? "",
+  }] : [])
+  return {
+    ...side,
+    players: players.length ? players : side.players,
+    picks: assets.flatMap((asset) => asset.kind === "pick" ? [{
+      id: uid(), year: String(asset.year), round: String(asset.round), draftSide: asset.draftSide,
+      projectedRange: asset.tier ?? "unknown",
+    }] : []),
+    faab: assets.reduce((sum, asset) => asset.kind === "faab" ? sum + asset.amount : sum, 0),
   }
 }
 
@@ -854,10 +888,14 @@ function AssetPanel({
 
 function TradeHubInner() {
   const playerCompareUi = usePlayerComparisonUIOptional()
+  const { data: session, status: sessionStatus } = useSession()
+  const viewerId = session?.user?.id
   const searchParams = useSearchParams()
   const previewSender = searchParams?.get("previewSender") ?? ""
   const previewReceiver = searchParams?.get("previewReceiver") ?? ""
+  const reviewDraftId = searchParams?.get("review") ?? ""
   const linkedLeagueIdParam = searchParams?.get("leagueId") ?? ""
+  const postPurchaseSync = usePostPurchaseSync({ successMessage: "Purchase complete. Your trade is ready to review." })
   /*
    * The open-market grade is the default: it needs no login and no imported league, which is who this
    * page was failing ("Not graded" without a league). A `?leagueId=` link, or `?mode=league`, opens the
@@ -878,7 +916,11 @@ function TradeHubInner() {
   const [linkedLeagueId, setLinkedLeagueId] = useState("")
   const [leagueRows, setLeagueRows] = useState<LinkedLeague[]>([])
   const [phase, setPhase] = useState<PhaseKey>("plan")
+  const [grading, setGrading] = useState(false)
+  const [freeGrade, setFreeGrade] = useState<{ fingerprint: string; grade: TradeGradeView } | null>(null)
+  const [carriedDraft, setCarriedDraft] = useState(false)
   const [loading, setLoading] = useState(false)
+  const draftIdRef = useRef<string | null>(null)
   const [result, setResult] = useState<TradeResult | null>(null)
   /* The two sides as they were GRADED — what a share link stores, even if the inputs change after. */
   const [gradedSides, setGradedSides] = useState<{ sender: TradeSide; receiver: TradeSide } | null>(null)
@@ -893,7 +935,40 @@ function TradeHubInner() {
     () => receiver.players.some((player) => player.name.trim()) || receiver.picks.length > 0 || receiver.faab > 0,
     [receiver]
   )
-  const canEvaluate = senderHasAssets && receiverHasAssets && !loading
+  const canEvaluate = senderHasAssets && receiverHasAssets && !loading && !grading
+
+  const draft = useMemo<TradeReviewDraft>(() => ({
+    give: draftAssets(sender), get: draftAssets(receiver),
+    leagueId: linkedLeagueId || undefined,
+    sport, format, qbFormat, scoring, asOfDate,
+    senderInfo: { teamName: sender.teamName, record: sender.record, isProMember: sender.isProMember },
+    receiverInfo: { teamName: receiver.teamName, record: receiver.record, isProMember: receiver.isProMember },
+  }), [asOfDate, format, linkedLeagueId, qbFormat, receiver, scoring, sender, sport])
+  const gradeFingerprint = JSON.stringify(draft)
+  const visibleGrade = freeGrade?.fingerprint === gradeFingerprint ? freeGrade.grade : null
+
+  useEffect(() => {
+    if (!reviewDraftId || sessionStatus === "loading" || draftIdRef.current === reviewDraftId) return
+    const saved = readTradeReviewDraft(reviewDraftId, viewerId)
+    if (!saved) return
+    draftIdRef.current = reviewDraftId
+    setSender(restoreSide("Sender Team", saved.give, saved.senderInfo))
+    setReceiver(restoreSide("Receiver Team", saved.get, saved.receiverInfo))
+    setSport(saved.sport)
+    setFormat(saved.format)
+    if (saved.qbFormat) setQbFormat(saved.qbFormat)
+    if (saved.scoring) setScoring(saved.scoring)
+    if (saved.asOfDate) setAsOfDate(saved.asOfDate)
+    setLinkedLeagueId(saved.leagueId ?? "")
+    setCarriedDraft(true)
+  }, [reviewDraftId, sessionStatus, viewerId])
+
+  const saveReviewReturnPath = useCallback(() => {
+    const id = saveTradeReviewDraft(draft, draftIdRef.current, viewerId)
+    if (!id) return null
+    draftIdRef.current = id
+    return tradeReviewPath(id)
+  }, [draft, viewerId])
 
   const miniCompare = useMemo(() => {
     const a = sender.players.find((player) => player.name.trim())?.name.trim() ?? ""
@@ -977,6 +1052,8 @@ function TradeHubInner() {
     setAsOfDate("")
     setPhase("plan")
     setResult(null)
+    setFreeGrade(null)
+    setCarriedDraft(false)
     setError(null)
   }, [])
 
@@ -986,6 +1063,35 @@ function TradeHubInner() {
     setResult(null)
     setError(null)
   }, [receiver, sender])
+
+  async function gradeTrade() {
+    if (!canEvaluate) return
+    setGrading(true)
+    setError(null)
+    setFreeGrade(null)
+    setResult(null)
+    try {
+      const response = await fetch("/api/trade-value/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sportFilter: sport, leagueId: draft.leagueId ?? null,
+          strategy: "neutral", teamContext: "neutral", skipAi: true,
+          sideGive: draft.give, sideGet: draft.get,
+          isDynasty: format !== "redraft",
+          ...(sport === "NFL" ? { lineup: { qb: 1, sf: qbFormat === "sf" ? 1 : 0 } } : {}),
+          ...(scoring === "Points" ? { scoringFormat: "points" } : {}),
+        }),
+      })
+      const data = await response.json() as { grade?: TradeGradeView; error?: string }
+      if (!response.ok || !data.grade) throw new Error(data.error ?? "Could not grade this trade.")
+      setFreeGrade({ fingerprint: gradeFingerprint, grade: data.grade })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not grade this trade.")
+    } finally {
+      setGrading(false)
+    }
+  }
 
   const evaluate = useCallback(async () => {
     if (!canEvaluate) return
@@ -1071,6 +1177,7 @@ function TradeHubInner() {
          * it saying which player, and what to do about it. Prefer the sentence; keep the code
          * as the fallback for responses that carry no message.
          */
+        if (response.status === 402) dispatchStateRefreshEvent({ domain: "tokens", source: "trade-review" })
         throw new Error(data.message ?? data.error ?? `Trade evaluator returned ${response.status}`)
       }
 
@@ -1176,14 +1283,6 @@ function TradeHubInner() {
         ) : null}
 
         {mode === "league" ? (<>
-        <InContextMonetizationCard
-          className="mt-6"
-          title="Trade Analyzer access"
-          featureId="trade_analyzer"
-          tokenRuleCodes={["ai_trade_analyzer_full_review"]}
-          testIdPrefix="trade-monetization"
-        />
-
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <AssetPanel label="Sender · Giving" accent="#06b6d4" side={sender} campusToCanton={campusToCanton} onChange={setSender} onClear={() => setSender(emptySide("Sender Team"))} />
           <AssetPanel label="Receiver · Giving" accent="#a78bfa" side={receiver} campusToCanton={campusToCanton} onChange={setReceiver} onClear={() => setReceiver(emptySide("Receiver Team"))} />
@@ -1323,7 +1422,7 @@ function TradeHubInner() {
         <div className="mt-6 flex flex-col items-center gap-3">
           <button
             type="button"
-            onClick={() => void evaluate()}
+            onClick={() => void gradeTrade()}
             disabled={!canEvaluate}
             data-testid="trade-evaluate-button"
             className="w-full max-w-xl touch-manipulation rounded-2xl px-6 py-4 text-base font-black tracking-wide text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
@@ -1332,12 +1431,42 @@ function TradeHubInner() {
               boxShadow: canEvaluate ? "0 10px 32px rgba(8,145,178,0.28)" : "none",
             }}
           >
-            {loading ? "Analyzing Trade..." : "Evaluate Trade"}
+            {grading ? "Grading trade…" : "Get free trade verdict"}
           </button>
           {!senderHasAssets || !receiverHasAssets ? (
             <p className="text-xs text-white/35">Add at least one player, pick, or FAAB on both sides to enable analysis.</p>
           ) : null}
         </div>
+
+        {visibleGrade ? (
+          <section className="mt-4 rounded-2xl border border-white/10 p-4" aria-live="polite" data-testid="trade-free-verdict">
+            <h2 className="font-bold">Free trade verdict</h2>
+            {visibleGrade.graded ? (
+              <>
+                <p className="mt-2 text-sm text-white/85">
+                  Sender {visibleGrade.letter} · Receiver {visibleGrade.partnerLetter} · {Math.abs(visibleGrade.percentDiff ?? 0)}% value gap
+                </p>
+                {visibleGrade.label ? <p className="mt-1 text-sm text-white/70">{visibleGrade.label}</p> : null}
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-white/85">{visibleGrade.reason}</p>
+            )}
+            {asOfDate ? <p className="mt-2 text-sm text-white/65">The free verdict uses current values.</p> : null}
+          </section>
+        ) : null}
+        {postPurchaseSync.state.phase !== "idle" ? (
+          <div className="mt-4 rounded-xl border border-white/10 p-3 text-sm" role="status">
+            {postPurchaseSync.state.message}
+            {postPurchaseSync.state.phase === "pending" || postPurchaseSync.state.phase === "failed" ? (
+              <button type="button" className="ml-2 underline" disabled={postPurchaseSync.isSyncing} onClick={() => void postPurchaseSync.retrySync()}>
+                Refresh access
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {(visibleGrade?.graded || carriedDraft) && !result && senderHasAssets && receiverHasAssets ? (
+          <TradeReviewPurchase busy={loading || grading} onReview={() => void evaluate()} saveReturnPath={saveReviewReturnPath} />
+        ) : null}
 
         {canEvaluate ? (
           <TradeSimulationStrip

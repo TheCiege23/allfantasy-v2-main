@@ -489,6 +489,18 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
       await recordPaidConversion(session, checkoutContext)
     } else if (purchaseType === "tokens") {
       await persistTokenPurchaseFromCheckout(session, checkoutContext)
+      if (checkoutContext?.userId && session.payment_status === "paid" && (session.amount_total ?? 0) > 0) {
+        await recordFunnelEvent({
+          event: MONETIZATION.TOKEN_PURCHASE_CONFIRMED,
+          userId: checkoutContext.userId,
+          getCookie: () => undefined,
+          meta: {
+            sku: checkoutContext.sku,
+            entry_source: normalizeEntrySource(session.metadata?.entrySource) ?? "unknown",
+            stripe_session_id: session.id,
+          },
+        })
+      }
     }
 
     // ── Sponsor coupon redemption ─────────────────────────────────────
