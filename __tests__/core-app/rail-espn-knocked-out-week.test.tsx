@@ -68,6 +68,7 @@ describe('the league list row', () => {
     expect(record).toMatchObject({ wins: 52, losses: 56, rank: null, knockedOutWeek: 8 })
     render(<RailRowBody name="Washington Pro Knockout PPR League" platform="espn" m={null} showScoreStatus={false} record={record} />)
     expect(screen.getByTestId('rail-knocked-out').textContent).toBe('Knocked out · Week 8')
+    expect(screen.getByTestId('rail-knocked-out').querySelector('.af-rail-row-rank[data-knocked-out]')).not.toBeNull()
     expect(screen.queryByText('Matchup unavailable from ESPN')).toBeNull()
     expect(screen.getByText('52-56')).toBeTruthy()
     expect(screen.queryByText(/11th/)).toBeNull()

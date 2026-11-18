@@ -420,10 +420,10 @@ export function RailRowBody({
         /*
           The knocked-out line of a native Guilly row (`RailGuillotine`, state 'eliminated'): the same
           classes and tone, so both read alike. It replaces "Matchup unavailable from ESPN", which
-          was true and beside the point.
+          was true and beside the point. `data-knocked-out` turns the words themselves red.
         */
         <span className="af-rail-row-line" data-testid="rail-knocked-out">
-          <span className="af-rail-row-rank" data-tone="bad" data-guillotine="eliminated">
+          <span className="af-rail-row-rank" data-tone="bad" data-guillotine="eliminated" data-knocked-out="">
             <span className="af-rail-row-rank-pos">{msg.knockedOutWeek(knockedOutWeek)}</span>
           </span>
         </span>
