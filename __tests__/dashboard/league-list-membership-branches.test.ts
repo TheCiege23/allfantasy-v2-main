@@ -54,7 +54,7 @@ describe('dashboard league list — membership branches', () => {
       expect(block).toContain('redraftMembers: { some: { userId } }')
       expect(block).toContain('teams: { some: { claimedByUserId: userId } }')
       // The one that was missing, and the reason this file exists.
-      expect(block).toContain('rosters: { some: { platformUserId: userId } }')
+      expect(block).toContain('rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } }')
     }
   })
 
