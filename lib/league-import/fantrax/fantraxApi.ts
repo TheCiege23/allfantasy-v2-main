@@ -276,6 +276,8 @@ export function humanizeVendorMessage(raw: string | null | undefined): string {
 /** Bounded: enough to ride out a blip without prolonging an outage. */
 const FXEA_RETRIES = 3
 const FXEA_TIMEOUT_MS = 15_000
+/** How many `getMatchupScores` periods are in flight at once. */
+const FXEA_SCORE_CONCURRENCY = 4
 
 /**
  * 408/429/5xx are "ask again shortly". A 400 is NOT one of them, deliberately: a
@@ -308,7 +310,16 @@ function fxeaRetryDelay(attempt: number): Promise<void> {
  * — check the id exactly as it appears in the league URL.` An outage was presented to the
  * user as a typo in their league id, and to the collector as a league that is not there.
  */
-async function fxeaGet<T>(path: string, timeoutMs = FXEA_TIMEOUT_MS): Promise<FantraxResult<T>> {
+async function fxeaGet<T>(
+  path: string,
+  timeoutMs = FXEA_TIMEOUT_MS,
+  /*
+   * When given, the request is a POST with this as its JSON body. The Fantrax docs
+   * accept either form on every endpoint; the body form exists here so a credential
+   * (the Secret ID) never has to ride in a URL, where request logging would keep it.
+   */
+  jsonBody?: Record<string, unknown>,
+): Promise<FantraxResult<T>> {
   let res: Response
   let text = ''
 
@@ -319,7 +330,11 @@ async function fxeaGet<T>(path: string, timeoutMs = FXEA_TIMEOUT_MS): Promise<Fa
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
         res = await fetch(`${FANTRAX_FXEA_BASE}${path}`, {
-          headers: { Accept: 'application/json' },
+          headers: {
+            Accept: 'application/json',
+            ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
+          },
+          ...(jsonBody ? { method: 'POST', body: JSON.stringify(jsonBody) } : {}),
           signal: controller.signal,
         })
         if (!isTransientFantraxStatus(res.status)) {
@@ -574,7 +589,15 @@ export async function getFantraxLeagues(
     return { ok: false, failure: { kind: 'api_error', message: 'a Fantrax Secret ID is required' } }
   }
 
-  const res = await fxeaGet<unknown>(`/getLeagues?userSecretId=${encodeURIComponent(trimmed)}`)
+  /*
+   * 🛑 POST BODY, NEVER THE QUERY STRING. This sent `?userSecretId=…`, which put a
+   * long-lived credential into a URL — the same shape as a token in a query
+   * parameter, leaked by any layer that logs request URLs. Fantrax documents a JSON
+   * POST body as an equal alternative; verified live 2026-11-18 that an unknown
+   * Secret ID answers `HTTP 200 {}` by POST exactly as it does by GET, and that a
+   * real one returns the account's leagues.
+   */
+  const res = await fxeaGet<unknown>('/getLeagues', FXEA_TIMEOUT_MS, { userSecretId: trimmed })
   if (!res.ok) return res
 
   const body = res.data as Record<string, unknown>
@@ -1008,13 +1031,42 @@ export async function fetchFantraxScheduleWithScores(
   const rows = flattenFantraxSchedule(info)
   const position = resolveFantraxSeasonPosition(info, options?.now ?? new Date())
 
-  const maxPeriods = options?.maxPeriods ??
-    (isFantraxSoccerScoring(info.scoringSystem) ? SOCCER_CONFIG.defaultSeasonWeeks : 30)
-  const through = Math.min(position?.scoredThrough ?? 0, maxPeriods)
+  const through = position?.scoredThrough ?? 0
   if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0, periodScores: [] }
 
-  const wanted = Array.from({ length: through }, (_, i) => i + 1)
-  const results = await Promise.all(wanted.map((p) => getFantraxMatchupScores(leagueId, p)))
+  /*
+   * 🛑 NO BLANKET 30-PERIOD CAP, AND A CAP KEEPS THE NEWEST PERIODS. This read
+   * periods 1..min(through, 30), so a league in period 45 got scores for its first
+   * 30 periods and never for the current one — the one everything downstream
+   * needs. The bound is the league's own calendar. Soccer keeps its season-length
+   * cap, and a caller that passes `maxPeriods` gets the most recent periods, not
+   * the oldest.
+   */
+  const maxPeriods = options?.maxPeriods ??
+    (isFantraxSoccerScoring(info.scoringSystem) ? SOCCER_CONFIG.defaultSeasonWeeks : null)
+  const first =
+    typeof maxPeriods === 'number' && Number.isFinite(maxPeriods) && maxPeriods >= 1
+      ? Math.max(1, through - Math.trunc(maxPeriods) + 1)
+      : 1
+  const wanted = Array.from({ length: through - first + 1 }, (_, i) => first + i)
+
+  /*
+   * ⚠ A FEW AT A TIME, NOT ALL AT ONCE. One request per period fired together is
+   * a burst of 20+ against an API that answers 429, and each of those then
+   * retries on the same schedule. A small pool keeps the import polite at a cost
+   * of a few hundred milliseconds.
+   */
+  const results: Array<FantraxResult<FantraxPeriodScore>> = new Array(wanted.length)
+  let next = 0
+  const worker = async () => {
+    while (next < wanted.length) {
+      const index = next++
+      results[index] = await getFantraxMatchupScores(leagueId, wanted[index]!)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(FXEA_SCORE_CONCURRENCY, wanted.length) }, () => worker()),
+  )
 
   const scored: FantraxPeriodScore[] = []
   let periodsFailed = 0

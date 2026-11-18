@@ -30,6 +30,7 @@ import {
   buildTier0LeagueColumnPatch,
   buildImportedLeagueSettings,
   persistTradedPicks,
+  clearReturnedTradedPicks,
   refreshKeepsStoredScoring,
   republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
@@ -617,13 +618,24 @@ async function applyTradedPicks(
 ): Promise<ApplyScopeResult> {
   const out = emptyApplyResult()
   const picks = normalized.traded_picks
-  if (!Array.isArray(picks) || picks.length === 0) {
-    // Absent = provider doesn't expose them; empty = none traded. Either way a no-op (no erasure).
-    return out
+  // Absent = provider doesn't expose them; empty = none traded. Neither erases anything by itself.
+  if (Array.isArray(picks) && picks.length > 0) {
+    const res = await persistTradedPicks(leagueId, picks)
+    out.imported += res.written
+    out.rejected += res.skipped
   }
-  const res = await persistTradedPicks(leagueId, picks)
-  out.imported += res.written
-  out.rejected += res.skipped
+  /*
+   * The one erasure this scope performs, and only on a positive statement: a provider that
+   * lists every pick (Fantrax, MFL) names the ones that are home, and a stored "traded" row
+   * for one of those is stale. Runs even when nothing is currently traded — a league whose
+   * last traded pick just came back has an empty `traded_picks` and one row to clear.
+   */
+  const returned = normalized.returned_picks
+  if (Array.isArray(returned) && returned.length > 0) {
+    const res = await clearReturnedTradedPicks(leagueId, returned)
+    out.removed += res.cleared
+    out.rejected += res.skipped
+  }
   return out
 }
 

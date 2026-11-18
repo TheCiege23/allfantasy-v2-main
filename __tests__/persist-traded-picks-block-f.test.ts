@@ -103,3 +103,68 @@ describe('persistTradedPicks — bulk persistence', () => {
     expect(mocks.executeRaw).not.toHaveBeenCalled()
   })
 })
+
+async function invokeClear(
+  ...args: Parameters<typeof import('@/lib/league-import/ImportedLeagueCommitService').clearReturnedTradedPicks>
+) {
+  const { clearReturnedTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
+  return clearReturnedTradedPicks(...args)
+}
+
+/**
+ * 🛑 THE TRADED-BACK CASE. A pick traded A -> B and later B -> A drops out of the
+ * provider's traded list, and nothing removed its stored row — so it kept showing
+ * B as the holder forever.
+ */
+describe('clearReturnedTradedPicks — a pick that came home', () => {
+  it('deletes only rows the provider named, and only provider-written traded ones', async () => {
+    mocks.executeRaw.mockResolvedValue(2)
+    const result = await invokeClear('lea-abc', [
+      { season: 2027, round: 1, original_roster_id: '18' },
+      { season: 2028, round: 4, original_roster_id: '27' },
+    ])
+
+    expect(result).toEqual({ cleared: 2, skipped: 0 })
+    expect(mocks.executeRaw).toHaveBeenCalledOnce()
+    const sql = (mocks.executeRaw.mock.calls[0][0] as TemplateStringsArray).join(' ')
+    expect(sql).toContain('DELETE FROM "future_draft_picks"')
+    /* Every guard is load-bearing: drop one and the delete widens. */
+    expect(sql).toContain('f."leagueId" =')
+    expect(sql).toContain('f."traded" = TRUE')
+    expect(sql).toContain('f."currentOwnerId" <> f."originalRosterId"')
+    expect(sql).toContain('f."sourceTradeId" IS NULL')
+    expect(sql).toContain(`f."status" = 'active'`)
+    expect(mocks.executeRaw.mock.calls[0]).toContain('lea-abc')
+    expect(boundValues()).toEqual([2027, 1, '18', 2028, 4, '27'])
+  })
+
+  it('does nothing at all for an empty or missing list', async () => {
+    await expect(invokeClear('lea-abc', [])).resolves.toEqual({ cleared: 0, skipped: 0 })
+    await expect(invokeClear('lea-abc', undefined as never)).resolves.toEqual({ cleared: 0, skipped: 0 })
+    expect(mocks.executeRaw).not.toHaveBeenCalled()
+  })
+
+  it('skips a malformed pick rather than widening the delete', async () => {
+    mocks.executeRaw.mockResolvedValue(1)
+    const result = await invokeClear('lea-abc', [
+      { season: 2027, round: 1, original_roster_id: '18' },
+      { season: 2027, round: 1, original_roster_id: '' },
+      { season: Number.NaN, round: 1, original_roster_id: '5' },
+      null as never,
+    ])
+    expect(result).toEqual({ cleared: 1, skipped: 3 })
+    expect(boundValues()).toEqual([2027, 1, '18'])
+  })
+
+  it('names each pick once and batches a large league', async () => {
+    mocks.executeRaw.mockResolvedValue(0)
+    const picks = Array.from({ length: 1351 }, (_, i) => ({
+      season: 2027 + (i % 10), round: 1 + (i % 4), original_roster_id: String(Math.floor(i / 40)),
+    }))
+    const unique = new Set(picks.map((p) => `${p.season}|${p.round}|${p.original_roster_id}`)).size
+    await invokeClear('lea-abc', [...picks, picks[0]!])
+    const bound = mocks.executeRaw.mock.calls.reduce((sum, _call, i) => sum + boundValues(i).length, 0)
+    expect(bound).toBe(unique * 3)
+    expect(mocks.executeRaw.mock.calls.length).toBe(Math.ceil(unique / 500))
+  })
+})
