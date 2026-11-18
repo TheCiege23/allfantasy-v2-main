@@ -66,6 +66,8 @@ vi.mock('@/lib/prisma', () => {
       }),
     },
     roster: {
+      // "My teams" is read as a list by owner (lib/league/viewerTeams.ts); the league-wide list stays empty.
+      findMany: async (a: { where?: { platformUserId?: string } }) => (a?.where?.platformUserId ? [{ id: 'r-me', redraftRosterId: null }] : []),
       findFirst: async () => ({
         id: 'r-me',
         platformUserId: 'u1',
