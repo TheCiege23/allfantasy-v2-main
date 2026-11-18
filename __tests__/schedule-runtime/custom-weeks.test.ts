@@ -100,3 +100,40 @@ describe('division count vs the real sport', () => {
     expect(divisionSportMatch(null, 4)).toBeNull()
   })
 })
+
+describe('custom weeks in a league that plays several games a week', () => {
+  const ids = ['a', 'b', 'c', 'd']
+  const threeGames = [
+    { home: 'a', away: 'b' }, { home: 'c', away: 'd' },
+    { home: 'a', away: 'c' }, { home: 'b', away: 'd' },
+    { home: 'a', away: 'd' }, { home: 'b', away: 'c' },
+  ]
+
+  it('a full week of three games each is valid there, and refused as a one-game week', () => {
+    expect(checkCustomPairs(threeGames, ids, 3)).toEqual({ ok: true })
+    expect(checkCustomPairs(threeGames, ids)).toMatchObject({ ok: false, code: 'TEAM_TWICE' })
+  })
+
+  it('refuses the same two teams meeting twice, a team short of games, and a bye row', () => {
+    expect(checkCustomPairs([...threeGames.slice(0, 4), { home: 'a', away: 'b' }, { home: 'c', away: 'd' }], ids, 3)).toMatchObject({ ok: false, code: 'TEAM_TWICE' })
+    expect(checkCustomPairs(threeGames.slice(0, 2), ids, 3)).toMatchObject({ ok: false, code: 'TEAM_MISSING' })
+    expect(checkCustomPairs([...threeGames, { home: 'a', away: null }], ids, 3)).toMatchObject({ ok: false, code: 'TOO_MANY_BYES' })
+  })
+
+  it('with an odd number of teams a team may play one fewer', () => {
+    // Five teams, two games a week: one team sits out each round.
+    const week = [{ home: 'a', away: 'b' }, { home: 'c', away: 'd' }, { home: 'e', away: 'a' }, { home: 'b', away: 'c' }]
+    expect(checkCustomPairs(week, [...ids, 'e'], 2)).toEqual({ ok: true })
+  })
+
+  it('a kept multi-game week survives a rebuild instead of being reported stale', () => {
+    const generated = [{ week: 3, homeRosterId: 'a', awayRosterId: 'd' }, { week: 4, homeRosterId: 'a', awayRosterId: 'b' }]
+    const out = applyCustomWeeks(generated, { 3: threeGames }, { fromWeek: 1, regularSeasonWeeks: 10, rosterIds: ids, gamesPerWeek: 3 })
+    expect(out.applied).toEqual([3])
+    expect(out.stale).toEqual([])
+    expect(out.matchups.filter((m) => m.week === 3)).toHaveLength(6)
+    // Positive control: read as a one-game league, the same week is stale and the generator's week stands.
+    expect(applyCustomWeeks(generated, { 3: threeGames }, { fromWeek: 1, regularSeasonWeeks: 10, rosterIds: ids }).stale).toEqual([3])
+  })
+})
+

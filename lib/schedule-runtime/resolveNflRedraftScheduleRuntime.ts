@@ -440,7 +440,7 @@ export async function generateNflRedraftScheduleForSeason(input: {
   const customWeeks = readCustomWeeks(league?.settings, season.season)
   const rosterIds = teams.map((t) => t.rosterId)
   const withCustom = (matchups: typeof generated.matchups) =>
-    applyCustomWeeks(matchups, customWeeks, { fromWeek, regularSeasonWeeks: generated.regularSeasonWeeks, rosterIds })
+    applyCustomWeeks(matchups, customWeeks, { fromWeek, regularSeasonWeeks: generated.regularSeasonWeeks, rosterIds, gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings) })
   const kept = withCustom(generated.matchups)
   const nameOf = new Map(teams.map((t) => [t.rosterId, t.displayName]))
   // A draw is shown by the first week it can change: a custom week reads the same in every draw.

@@ -74,7 +74,8 @@ export type PairsCheck = { ok: true } | { ok: false; code: string; message: stri
  * A week's pairings are valid when every roster plays exactly once, nobody plays itself, and a bye is
  * used only when the team count is odd — and then exactly once.
  */
-export function checkCustomPairs(pairs: readonly CustomPair[], rosterIds: readonly string[]): PairsCheck {
+export function checkCustomPairs(pairs: readonly CustomPair[], rosterIds: readonly string[], gamesPerWeek = 1): PairsCheck {
+  if (gamesPerWeek > 1) return checkMultiGamePairs(pairs, rosterIds, gamesPerWeek)
   const known = new Set(rosterIds)
   const seen = new Set<string>()
   let byes = 0
@@ -96,6 +97,34 @@ export function checkCustomPairs(pairs: readonly CustomPair[], rosterIds: readon
   return { ok: true }
 }
 
+/**
+ * A league that plays several games a week (./gamesPerWeek.ts): every team plays that many games, or one
+ * fewer when the team count is odd, never the same opponent twice in the week, and there is no bye row.
+ */
+function checkMultiGamePairs(pairs: readonly CustomPair[], rosterIds: readonly string[], gamesPerWeek: number): PairsCheck {
+  const known = new Set(rosterIds)
+  const games = new Map<string, number>()
+  const met = new Set<string>()
+  for (const p of pairs) {
+    if (p.away == null) return { ok: false, code: 'TOO_MANY_BYES', message: `With ${gamesPerWeek} games a week there is no bye: a team with no opponent just plays one fewer.` }
+    if (p.home === p.away) return { ok: false, code: 'SELF_MATCHUP', message: 'A team cannot play itself.' }
+    for (const id of [p.home, p.away]) {
+      if (!known.has(id)) return { ok: false, code: 'UNKNOWN_TEAM', message: 'A team in these matchups is not in this league.' }
+      games.set(id, (games.get(id) ?? 0) + 1)
+    }
+    const key = [p.home, p.away].sort().join('|')
+    if (met.has(key)) return { ok: false, code: 'TEAM_TWICE', message: 'Two teams meet twice in this week.' }
+    met.add(key)
+  }
+  const fewest = known.size % 2 === 1 ? gamesPerWeek - 1 : gamesPerWeek
+  for (const id of known) {
+    const n = games.get(id) ?? 0
+    if (n > gamesPerWeek) return { ok: false, code: 'TEAM_TWICE', message: `A team has more than ${gamesPerWeek} games this week.` }
+    if (n < Math.max(1, fewest)) return { ok: false, code: 'TEAM_MISSING', message: `Every team needs ${gamesPerWeek} games this week.` }
+  }
+  return { ok: true }
+}
+
 type GeneratedMatchup = { week: number; homeRosterId: string; awayRosterId: string | null }
 
 /**
@@ -105,7 +134,7 @@ type GeneratedMatchup = { week: number; homeRosterId: string; awayRosterId: stri
 export function applyCustomWeeks<M extends GeneratedMatchup>(
   matchups: readonly M[],
   custom: CustomWeeks,
-  input: { fromWeek: number; regularSeasonWeeks: number; rosterIds: readonly string[] },
+  input: { fromWeek: number; regularSeasonWeeks: number; rosterIds: readonly string[]; gamesPerWeek?: number },
 ): { matchups: Array<M | GeneratedMatchup>; applied: number[]; stale: number[] } {
   const applied: number[] = []
   const stale: number[] = []
@@ -113,7 +142,7 @@ export function applyCustomWeeks<M extends GeneratedMatchup>(
   for (const [k, pairs] of Object.entries(custom)) {
     const week = Number(k)
     if (week < input.fromWeek || week > input.regularSeasonWeeks) continue
-    if (checkCustomPairs(pairs, input.rosterIds).ok) {
+    if (checkCustomPairs(pairs, input.rosterIds, input.gamesPerWeek ?? 1).ok) {
       replace.set(week, pairs)
       applied.push(week)
     } else stale.push(week)
