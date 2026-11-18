@@ -1,5 +1,5 @@
+import { ActingTeamRefused, actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -53,11 +53,11 @@ function waiverClaimError(message: string, status: number) {
   return NextResponse.json({ error: message, code: waiverClaimErrorCode(message) }, { status })
 }
 
-async function resolveClaimRoster(leagueId: string, userId: string) {
-  const direct = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
-  if (direct) return direct
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  if (coOwnerRosterId) return prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId } })
+async function resolveClaimRoster(leagueId: string, userId: string, requestedRosterId: string | null) {
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterId)
+  if (acting.ok) return prisma.roster.findFirst({ where: { id: acting.rosterId, leagueId } })
+  if (acting.code !== 'NO_TEAM') throw new ActingTeamRefused(acting)
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
   if (league?.leagueVariant !== 'survivor_guillotine') return null
   const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
@@ -71,10 +71,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const [leagueAsOwner, rosterAsMember] = await Promise.all([
-    (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    resolveClaimRoster(leagueId, userId),
-  ])
+  let leagueAsOwner: { id: string } | null
+  let rosterAsMember: Awaited<ReturnType<typeof resolveClaimRoster>>
+  try {
+    ;[leagueAsOwner, rosterAsMember] = await Promise.all([
+      (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
+      resolveClaimRoster(leagueId, userId, requestedRosterIdFrom(req)),
+    ])
+  } catch (error) {
+    if (error instanceof ActingTeamRefused) return actingTeamRefusal(error.result)
+    throw error
+  }
   if (!leagueAsOwner && !rosterAsMember) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
   const type = req.nextUrl.searchParams?.get("type") || "pending"
@@ -107,7 +114,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const roster = await resolveClaimRoster(leagueId, userId)
+  let roster: Awaited<ReturnType<typeof resolveClaimRoster>>
+  try {
+    roster = await resolveClaimRoster(leagueId, userId, requestedRosterIdFrom(req))
+  } catch (error) {
+    if (error instanceof ActingTeamRefused) return actingTeamRefusal(error.result)
+    throw error
+  }
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))

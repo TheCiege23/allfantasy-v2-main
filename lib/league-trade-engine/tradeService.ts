@@ -1,3 +1,4 @@
+import { assertNotOwnTeamTrade } from '@/lib/league-trade-engine/ownTeamTrade'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
 /**
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
@@ -555,6 +556,8 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (!proposerOwnsRoster) {
     throw new Error('Proposer must own the proposing roster')
   }
+  // One manager, several teams: no moving players between them (lib/league-trade-engine/ownTeamTrade.ts).
+  await assertNotOwnTeamTrade(input.proposedByUserId, participants)
 
   const rosterTxGate = await assertRosterTransactionsAllowed({
     leagueId: input.leagueId,

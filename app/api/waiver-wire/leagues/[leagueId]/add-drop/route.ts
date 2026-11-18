@@ -1,4 +1,4 @@
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -38,11 +38,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return errorResponse("UNAUTHORIZED")
 
   const leagueId = params.leagueId
-  let roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
-  if (!roster) {
-    const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-    if (coOwnerRosterId) roster = await prisma.roster.findFirst({ where: { leagueId, id: coOwnerRosterId }, select: { id: true } })
-  }
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  let roster: { id: string } | null = acting.ok ? { id: acting.rosterId } : null
   if (!roster) {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
     if (league?.leagueVariant === 'survivor_guillotine') {
