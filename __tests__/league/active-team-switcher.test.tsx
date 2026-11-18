@@ -52,4 +52,35 @@ describe('the team switcher', () => {
     expect(onSwitched).not.toHaveBeenCalled()
     expect(select.value).toBe('r1')
   })
+
+  it('in the auction room, confirms the team shown to the server so a bid is always for the team on screen', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? respond({ ok: true })
+        : respond({ teams: [{ rosterId: 'r1', teamName: 'Aces' }, { rosterId: 'r2', teamName: 'Bears' }], activeRosterId: 'r1' }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const onSwitched = vi.fn()
+    render(<ActiveTeamSwitcher leagueId="L1" variant="auction" onSwitched={onSwitched} />)
+    const select = (await screen.findByLabelText('teamSwitcher.auctionLabel')) as HTMLSelectElement
+    expect(screen.getByTestId('auction-team-picker')).toHaveTextContent('teamSwitcher.auctionHelp')
+    // Opening the room remembers the team shown, without counting as a switch.
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1))
+    expect(JSON.parse(String(fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body))).toEqual({ rosterId: 'r1' })
+    expect(onSwitched).not.toHaveBeenCalled()
+
+    fireEvent.change(select, { target: { value: 'r2' } })
+    await waitFor(() => expect(onSwitched).toHaveBeenCalledWith('r2'))
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(String(posts[posts.length - 1]![1]!.body))).toEqual({ rosterId: 'r2' })
+  })
+
+  it('in the auction room, a manager with one team sees no picker and nothing is sent', async () => {
+    const fetchMock = vi.fn(async () => respond({ teams: [{ rosterId: 'r1', teamName: 'Aces' }], activeRosterId: 'r1' }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { container } = render(<ActiveTeamSwitcher leagueId="L1" variant="auction" />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(container).toBeEmptyDOMElement()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

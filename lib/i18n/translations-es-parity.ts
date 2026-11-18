@@ -2395,6 +2395,8 @@ export const translationsEsParity: Record<string, string> = {
   "teamSwitcher.label": "Equipo activo",
   "teamSwitcher.help": "Diriges {{n}} equipos en esta liga. Las alineaciones, reclamos, intercambios y selecciones se aplican al equipo elegido aquí.",
   "teamSwitcher.failed": "No se pudo cambiar de equipo. Inténtalo de nuevo.",
+  "teamSwitcher.auctionLabel": "Pujando como",
+  "teamSwitcher.auctionHelp": "Diriges {{n}} equipos aquí. Las pujas y nominaciones gastan el presupuesto de este equipo, y no puedes superar la puja de tu propio equipo.",
   "sharedScoring.title": "Usar esta puntuación en mis otras ligas",
   "sharedScoring.help": "Copia la puntuación guardada de esta liga a otras ligas de AllFantasy que diriges en el mismo deporte. Cada liga mantiene su propio bloqueo y sus reglas de temporada, y el cambio queda en su registro de la liga.",
   "sharedScoring.open": "Elegir ligas",

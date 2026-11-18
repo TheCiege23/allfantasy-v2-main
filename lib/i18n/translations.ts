@@ -6334,6 +6334,8 @@ export const translations: Record<string, Record<string, string>> = {
     "teamSwitcher.label": "Running team",
     "teamSwitcher.help": "You run {{n}} teams in this league. Lineups, waivers, trades and picks apply to the team chosen here.",
     "teamSwitcher.failed": "Could not switch teams. Try again.",
+    "teamSwitcher.auctionLabel": "Bidding as",
+    "teamSwitcher.auctionHelp": "You run {{n}} teams here. Bids and nominations spend this team's budget, and you cannot outbid your own team.",
     "sharedScoring.title": "Use this scoring in my other leagues",
     "sharedScoring.help": "Copies this league's saved scoring to other AllFantasy leagues you run in the same sport. Each league keeps its own lock and season rules, and the change is recorded in its league log.",
     "sharedScoring.open": "Choose leagues",
