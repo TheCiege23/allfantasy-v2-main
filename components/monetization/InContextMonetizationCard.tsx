@@ -5,10 +5,14 @@ import Link from 'next/link'
 import { Coins, Crown, Lock, Sparkles } from 'lucide-react'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { useMonetizationContext } from '@/hooks/useMonetizationContext'
+import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
+import { monthlyUpgradeHref } from '@/lib/monetization/upgradeDestination'
+import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
 import {
   resolvePlanTierFromSku,
   trackInsufficientTokenFlowViewed,
   trackLockedFeatureConversionClick,
+  trackLockedFeatureViewed,
   trackTokenPurchaseClicked,
   trackUpgradeEntryClicked,
 } from '@/lib/monetization-analytics'
@@ -42,12 +46,18 @@ export function InContextMonetizationCard({
   className?: string
   testIdPrefix?: string
 }) {
+  const purchasableRuleCodes = tokenRuleCodes.filter(isTokenPurchasableRule)
   const { loading, error, entitlement, feature, tokenBalance, previewsByRuleCode, refetch } = useMonetizationContext({
     featureId,
-    ruleCodes: tokenRuleCodes,
+    ruleCodes: purchasableRuleCodes,
   })
+  const upgradeHref = useLockUpgradeHref(monthlyUpgradeHref(feature?.upgradePath ?? '/pricing'), featureId ? `lock_${featureId}` : null)
 
-  const primaryRuleCode = tokenRuleCodes[0] ?? null
+  const primaryRuleCode = purchasableRuleCodes[0] ?? null
+  const tokenHref = useLockUpgradeHref(
+    primaryRuleCode ? `/tokens?ruleCode=${encodeURIComponent(primaryRuleCode)}&offer=starter` : '/tokens',
+    primaryRuleCode ? `token_${primaryRuleCode}` : null,
+  )
   const primaryPreview = primaryRuleCode ? previewsByRuleCode.get(primaryRuleCode)?.preview ?? null : null
   const includedWithPlan = Boolean(feature?.hasAccess)
   const isSupremeUser = Boolean(entitlement?.plans?.includes('supreme'))
@@ -63,6 +73,12 @@ export function InContextMonetizationCard({
   useEffect(() => {
     if (loading || !feature || feature.hasAccess || didTrackPrompt.current) return
     didTrackPrompt.current = true
+    trackLockedFeatureViewed({
+      surface: 'in_context_monetization_card',
+      featureId: feature.featureId,
+      requiredPlan: feature.requiredPlan,
+      entitlementStatus: entitlement?.status,
+    })
   }, [entitlement?.status, feature, loading])
 
   useEffect(() => {
@@ -158,9 +174,9 @@ export function InContextMonetizationCard({
         </p>
       ) : null}
 
-      {tokenRuleCodes.length > 1 && !includedWithPlan ? (
+      {purchasableRuleCodes.length > 1 && !includedWithPlan ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {tokenRuleCodes.map((ruleCode) => {
+          {purchasableRuleCodes.map((ruleCode) => {
             const preview = previewsByRuleCode.get(ruleCode)?.preview
             if (!preview) return null
             return (
@@ -184,7 +200,8 @@ export function InContextMonetizationCard({
         <div className="mt-2 flex flex-wrap gap-2">
           {showUpgradeCta ? (
             <Link
-              href={feature?.upgradePath ?? '/pricing'}
+              href={upgradeHref}
+              data-ios-purchase
               onClick={() => {
                 trackLockedFeatureConversionClick({
                   surface: 'in_context_monetization_card',
@@ -201,12 +218,13 @@ export function InContextMonetizationCard({
               className="rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-100 hover:bg-cyan-500/20"
               data-testid={`${testIdPrefix}-upgrade-cta`}
             >
-              Upgrade plan
+              {feature?.requiredPlan ? `Unlock with ${feature.requiredPlan}` : 'See upgrade options'}
             </Link>
           ) : null}
           {showBuyTokensCta ? (
             <Link
-              href={`/tokens${primaryRuleCode ? `?ruleCode=${encodeURIComponent(primaryRuleCode)}` : ''}`}
+              href={tokenHref}
+              data-ios-purchase
               onClick={() => {
                 trackLockedFeatureConversionClick({
                   surface: 'in_context_monetization_card',
@@ -230,6 +248,7 @@ export function InContextMonetizationCard({
           {showSupremeUpsellCta ? (
             <Link
               href="/pricing?highlight=supreme"
+              data-ios-purchase
               onClick={() => {
                 trackLockedFeatureConversionClick({
                   surface: 'in_context_monetization_card',

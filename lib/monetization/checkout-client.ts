@@ -3,6 +3,7 @@ import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 import { purchaseWithGooglePlay } from "@/lib/monetization/google-play-client"
 import { isAppleApp, purchaseWithApple } from "@/lib/monetization/apple-iap-client"
 import { entrySourceFromSearch, normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
+import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 
 export type MonetizationCheckoutProductType = "subscription" | "token_pack"
 
@@ -38,12 +39,6 @@ function resolveCheckoutEndpoint(productType: MonetizationCheckoutProductType): 
     : "/api/monetization/checkout/tokens"
 }
 
-function normalizeReturnPath(path: string): string {
-  const value = String(path ?? "").trim()
-  if (!value.startsWith("/")) return "/pricing"
-  return value.length > 200 ? value.slice(0, 200) : value
-}
-
 export async function resolveCheckoutUrl(
   request: MonetizationCheckoutRequest
 ): Promise<MonetizationCheckoutResult> {
@@ -73,14 +68,14 @@ export async function resolveCheckoutUrl(
   const normalizedRequest: MonetizationCheckoutRequest = {
     sku,
     productType: request.productType,
-    returnPath: normalizeReturnPath(request.returnPath),
+    returnPath: resolveSafeReturnPath(request.returnPath),
     couponCode: normalizedCoupon,
   }
   const entrySource =
     normalizeEntrySource(request.entrySource) ??
     (typeof window === "undefined" ? null : entrySourceFromSearch(window.location?.search))
   const endpoint = resolveCheckoutEndpoint(request.productType)
-  const requestKey = `${normalizedRequest.productType}:${normalizedRequest.sku}:${normalizedRequest.returnPath}:${normalizedCoupon ?? ""}`
+  const requestKey = `${normalizedRequest.productType}:${normalizedRequest.sku}:${normalizedRequest.returnPath}:${normalizedCoupon ?? ""}:${entrySource ?? ""}`
   const existing = inFlightCheckoutRequests.get(requestKey)
   if (existing) return existing
 

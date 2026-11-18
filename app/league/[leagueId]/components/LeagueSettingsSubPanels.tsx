@@ -82,6 +82,8 @@ export type SubPanelContext = {
   onGoToDraftTab: () => void
   /** From `/api/league/settings` when available - powers IDP Intelligence panel gating. */
   hasAfCommissionerSub?: boolean
+  /** The Commissioner Hub asked for one of CommissionerControlPanel's views ('edit-schedule', …). */
+  commissionerToolsView?: string | null
 }
 
 function Row({ label, value }: { label: string; value: string }) {

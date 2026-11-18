@@ -21,7 +21,7 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 }))
 
 import { LeagueSettingsHubView, type HubCallbacks, type HubViewData } from '@/components/league-settings/hub/LeagueSettingsHubView'
-import {
+import { buildAfOptions,
   buildDraftGroups,
   buildGeneralGroups,
   buildNotificationGroups,
@@ -76,6 +76,8 @@ function data(kind: HubKind, sport: string, canEdit = true): HubViewData {
     myTeam: { name: 'Ghost Protocol', avatarUrl: null },
     notifications: { groups: buildNotificationGroups(kind, canEdit, sport), on: {}, leagueEnabled: true },
     general: buildGeneralGroups(p, kind), waivers: buildWaiverGroups(p, kind), typeRules: buildTypeRuleGroups(p, kind),
+    // AllFantasy options, with 11 teams so the odd-team row renders too (Phase C2).
+    afOptions: buildAfOptions({ ...p, league: { ...p.league, teamCount: 11, leagueSize: 11 }, settingsSnapshot: { ...p.settingsSnapshot, keeper_waiver_cost_round: 10 } }, kind, 'L1'),
     commissionerNote: null,
     roster: buildRosterItems(unified, [], sport),
     scoring: { preset: null, categories: groupScoringRules(RULES[sport]!.map(([statKey, pointsValue]) => ({ statKey, pointsValue, enabled: true })), sport) },
@@ -108,7 +110,8 @@ function screenText(d: HubViewData): string[] {
       for (const a of ['aria-label', 'placeholder', 'title']) { const v = el.getAttribute(a); if (v) seen.push(v) }
     }
   }
-  for (const tab of ['my', 'setup', 'members', 'record']) {
+  // The Commissioner Hub tab only exists for a commissioner of an AllFantasy league.
+  for (const tab of ['my', 'setup', 'members', ...(d.canEdit && !d.importedFrom ? ['hub'] : []), 'record']) {
     fireEvent.click(getByTestId(`league-settings-hub-tab-${tab}`))
     // Every scoring pill, so every category's rows render once.
     for (const pill of Array.from(container.querySelectorAll('.af-lsh-pill'))) { fireEvent.click(pill); collect() }

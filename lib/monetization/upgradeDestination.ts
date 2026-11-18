@@ -60,6 +60,21 @@ export function normalizePlanFamilyInput(input: unknown): SubscriptionPlanFamily
   }
 }
 
+/** Focus an in-context upgrade on one monthly plan while preserving feature and return parameters. */
+export function monthlyUpgradeHref(href: string | null | undefined): string {
+  if (!href) return '/pricing'
+  const path = href.split(/[?#]/, 1)[0]
+  if (path !== '/upgrade' && path !== '/pricing' && path !== '/pro' && path !== '/commissioner-upgrade') return href
+  const url = new URL(href, 'https://allfantasy.local')
+  const highlight = url.searchParams.get('highlight') ?? ''
+  const family = normalizePlanFamilyInput(url.searchParams.get('plan'))
+    ?? (path === '/pro' ? 'af_pro' : path === '/commissioner-upgrade' ? 'af_commissioner' : null)
+    ?? normalizePlanFamilyInput(HIGHLIGHT_TO_PLAN_FAMILY[highlight])
+  if (!family) return href
+  url.searchParams.set('offer', 'monthly')
+  return upgradePathForPlan(family, Object.fromEntries(url.searchParams)) + url.hash
+}
+
 /** `/upgrade?plan=<plan>` plus any context (`feature`, `highlight`, `from`…). Empty values are dropped. */
 export function upgradePathForPlan(
   family: SubscriptionPlanFamily,

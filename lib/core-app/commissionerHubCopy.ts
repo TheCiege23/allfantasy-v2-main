@@ -19,6 +19,9 @@
 import { coreLocale } from './messages/coreLocale'
 
 const ES: Record<string, string> = {
+  'Season reports and automation': 'Informes y automatizaciones de temporada',
+  'Monitor league activity and health and automate weekly commissioner work.':
+    'Supervisa la actividad y la salud de tu liga y automatiza el trabajo de cada semana.',
   // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
   'Storyline Studio': 'Estudio de historias',
   // ── Fantrax trade history upload (components/core-app/commissioner/FantraxTradeHistoryUpload.tsx) ──

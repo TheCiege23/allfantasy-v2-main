@@ -1,5 +1,8 @@
 'use client'
 
+import { CoreDepthLockCta } from '@/components/core-app/CoreDepthLockCta'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
+
 import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
@@ -1141,9 +1144,15 @@ export function LeagueBasicsStep({
               {lockedTeamCounts.includes(state.teamCount)
                 ? tx(t, 'createLeague.g30.teamCount.oddLockedChosen', `A ${state.teamCount}-team keeper league is part of AF Commissioner. Choose an even size, or upgrade.`)
                 : tx(t, 'createLeague.g30.teamCount.oddLocked', `Odd sizes (${lockedTeamCounts.join(', ')}) are part of AF Commissioner.`)}{' '}
-              <a href="/pricing?plan=commissioner" className="font-bold text-violet-600 underline dark:text-violet-300" data-testid="g30-team-count-upgrade">
+              <CoreDepthLockCta
+                href={upgradePathForPlan('af_commissioner')}
+                source="lock_league_creation_team_count"
+                requiredPlan="AF Commissioner"
+                testId="g30-team-count-upgrade"
+                className="font-bold text-violet-600 underline dark:text-violet-300"
+              >
                 {tx(t, 'createLeague.g30.teamCount.oddUpgrade', 'Upgrade')}
-              </a>
+              </CoreDepthLockCta>
             </span>
           ) : null}
           {getEffectiveLeagueType(state) === 'guillotine' && guillotineNeedsDoubleElimination(state.teamCount) ? (
@@ -2054,18 +2063,20 @@ function ImportProviderCard({ provider }: { provider: ImportProviderOption }) {
 export function AFCommissionerUpsellCard() {
   const { t } = useLanguage()
   return (
-    <div className="rounded-2xl border border-violet-500/30 bg-violet-600/10 p-4" data-testid="g30-commissioner-upsell">
+    <div className="rounded-2xl border border-violet-500/30 bg-violet-600/10 p-4" data-testid="g30-commissioner-upsell" data-ios-purchase>
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
         {t('createLeague.g30.upsell.eyebrow')}
       </p>
       <h3 className="mt-2 text-lg font-black">{t('createLeague.g30.upsell.title')}</h3>
       <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{t('createLeague.g30.upsell.body')}</p>
-      <a
-        href="/pricing?plan=commissioner"
+      <CoreDepthLockCta
+        href={upgradePathForPlan('af_commissioner')}
+        source="lock_league_creation_advanced"
+        requiredPlan="AF Commissioner"
         className="mt-4 inline-flex min-h-11 touch-manipulation items-center rounded-xl bg-violet-600 px-4 text-sm font-black text-[#ffffff]"
       >
         {t('createLeague.g30.upsell.cta')}
-      </a>
+      </CoreDepthLockCta>
     </div>
   )
 }

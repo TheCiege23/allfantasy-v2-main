@@ -63,7 +63,7 @@ describe('Commissioner OS intelligence pages — AF Commissioner', () => {
     render(await Page())
     const lock = screen.getByRole('region', { name: `${what} — AF Commissioner` })
     // `back=` is the page the lock sits on (lib/monetization/lockReturn.ts, 2026-11-17) — jsdom's `/` here.
-    expect(lock.querySelector('a')?.getAttribute('href')).toBe('/upgrade?plan=commissioner&from=lock_commissioner_depth&back=%2F')
+    expect(lock.querySelector('a')?.getAttribute('href')).toBe('/upgrade?plan=commissioner&offer=monthly&from=lock_commissioner_depth&back=%2F')
     expect(getDecisionOSAdapter).not.toHaveBeenCalled()
   })
 

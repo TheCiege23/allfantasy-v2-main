@@ -162,7 +162,7 @@ describe('Trade Center — trade depth paywall', () => {
     expect(document.querySelector('.af-tc-fits')).toBeNull()
     const who = screen.getByRole('region', { name: 'Who to trade with — AF Pro' })
     // `back=` is the page the lock sits on (lib/monetization/lockReturn.ts, 2026-11-17) — jsdom's `/` here.
-    expect(within(who).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&from=lock_trade_depth&back=%2F')
+    expect(within(who).getByRole('link', { name: 'Unlock with AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&offer=monthly&from=lock_trade_depth&back=%2F')
     expect(screen.getByRole('region', { name: 'The trade finder — AF Pro' })).toBeInTheDocument()
     expect(screen.queryByText('Find trade partners')).toBeNull()
     expect(chips()).toEqual(['Charlie', 'Bravo', 'Delta'])
@@ -277,7 +277,7 @@ describe('Trade Center — Competitive Edge', () => {
     await analyzeWith(EDGE)
     const lock = screen.getByRole('region', { name: 'Competitive Edge — AF Pro' })
     // `back=` lands after mount (useLockUpgradeHref), and this lock mounts after the async analysis.
-    await waitFor(() => expect(within(lock).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&from=lock_competitive_edge&back=%2F'))
+    await waitFor(() => expect(within(lock).getByRole('link', { name: 'Unlock with AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&offer=monthly&from=lock_competitive_edge&back=%2F'))
     expect(screen.queryByTestId('trade-competitive-edge')).toBeNull()
     expect(document.body.textContent).not.toContain('took on a WR')
   })

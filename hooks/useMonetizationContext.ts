@@ -16,6 +16,7 @@ type EntitlementSnapshot = {
 
 type FeatureContext = {
   featureId: SubscriptionFeatureId
+  available?: boolean
   hasAccess: boolean
   requiredPlan: string | null
   upgradePath: string

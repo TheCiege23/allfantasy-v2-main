@@ -47,6 +47,7 @@ export function LeagueSettingsPanel({
   canEdit,
   save,
   debouncedSave,
+  only,
 }: {
   leagueId: string
   initialData: CommissionerSettingsFormData
@@ -56,6 +57,8 @@ export function LeagueSettingsPanel({
   canEdit: boolean
   save: (partial: Record<string, unknown>) => Promise<void>
   debouncedSave: (partial: Record<string, unknown>) => void
+  /** 'af-options': only the odd-team extra matchup and keeper rules (the AllFantasy options sub-page). */
+  only?: 'af-options'
 }) {
   const { t } = useOptionalLanguage()
   const [name, setName] = useState(initialData.name ?? '')
@@ -133,296 +136,19 @@ export function LeagueSettingsPanel({
   const showKeeper = leagueType === 'keeper'
   const subscriptionGate = useSubscriptionGateOptional()
 
-  return (
-    <div className="space-y-8 px-6 py-6 text-[13px] text-white/85" data-league-id={leagueId}>
-      <SettingsPanelHeading
-        title="General league settings"
-        subtitle="Set league identity, format, and core rules. Playoff and waiver detail live in their own tabs."
+  const extraMatchupSection =
+    isOddTeamCount(leagueSize) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(leagueType) ? (
+      <ExtraMatchupSettingsBlock
+        initial={readExtraMatchupSettings(settingsSnapshot)}
+        disabled={disabled}
+        hasAccess={hasCommissionerAccess}
+        onUpgrade={() => subscriptionGate?.gate('commissioner_ai_tools')}
+        save={(value) => void save({ settingsMerge: { [EXTRA_MATCHUP_SETTINGS_KEY]: value } })}
       />
-
-      <div>
-        <SettingsSectionLabel>League description</SettingsSectionLabel>
-        <textarea
-          className={`${controlClass} min-h-[96px] max-w-lg rounded-2xl py-3`}
-          disabled={disabled}
-          value={leagueDescription}
-          placeholder="Shown on league cards and discovery where your league opts in."
-          onChange={(e) => {
-            const v = e.target.value
-            setLeagueDescription(v)
-            debouncedSave({ settingsMerge: { leagueDescription: v } })
-          }}
-        />
-      </div>
-
-      <div className="grid max-w-lg gap-4 sm:grid-cols-3">
-        <div className="sm:col-span-1">
-          <SettingsSectionLabel>Sport</SettingsSectionLabel>
-          {/* Sport is fixed at creation — the server refuses to patch it (commissioner-league-patch). */}
-          <p className={controlClass} aria-readonly="true">
-            {initialData.sport ?? '—'}
-          </p>
-        </div>
-        <div className="sm:col-span-1">
-          <SettingsSectionLabel>Season year</SettingsSectionLabel>
-          <input
-            type="number"
-            min={2000}
-            max={2100}
-            className={controlClass}
-            disabled={disabled}
-            value={season}
-            onChange={(e) => {
-              const n = Number(e.target.value)
-              setSeason(n)
-              debouncedSave({ season: n })
-            }}
-          />
-        </div>
-        <div className="sm:col-span-1">
-          <SettingsSectionLabel>Default language</SettingsSectionLabel>
-          <select
-            className={controlClass}
-            disabled={disabled}
-            value={language}
-            onChange={(e) => {
-              const v = e.target.value
-              setLanguage(v)
-              debouncedSave({ language: v })
-            }}
-          >
-            <option value="en">English</option>
-            <option value="es">Español</option>
-          </select>
-        </div>
-      </div>
-
-      {/*
-        🛑 "LISTING & DISCOVERABILITY" SAVED A KEY NOTHING READ (2026-11-15). It wrote `leagueListingVisibility`; Find
-        League, invites and joins read the league's privacy setting. A commissioner who chose "Private" stayed listed.
-        This is now the league's real privacy and invite editor, the same one those paths read.
-      */}
-      {canEdit ? (
-        <div data-testid="league-settings-privacy">
-          <LeaguePrivacyAndInvitesPanel leagueId={leagueId} />
-        </div>
-      ) : null}
-
-      <div>
-        <SettingsSectionLabel>League name</SettingsSectionLabel>
-        <input
-          id="ls-name"
-          className={controlClass}
-          value={name}
-          disabled={disabled}
-          onChange={(e) => {
-            const v = e.target.value
-            setName(v)
-            debouncedSave({ name: v })
-          }}
-        />
-      </div>
-
-      <div>
-        <SettingsSectionLabel>League type</SettingsSectionLabel>
-        <SettingsRadioGroup
-          name="league-type"
-          value={leagueType}
-          disabled={disabled}
-          onChange={(v) => {
-            setLeagueType(v)
-            debouncedSave({ leagueType: v })
-          }}
-          options={[
-            {
-              id: 'redraft',
-              title: 'Redraft',
-              description: 'Full redraft each season; all players available.',
-            },
-            {
-              id: 'keeper',
-              title: 'Keeper',
-              description: 'Teams retain a configured number of players year to year.',
-            },
-            {
-              id: 'dynasty',
-              title: 'Dynasty',
-              description: 'Rosters carry over; rookie and free-agent drafts replenish talent.',
-            },
-          ]}
-        />
-      </div>
-
-      <div>
-        <SettingsSectionLabel>Number of teams</SettingsSectionLabel>
-        <select
-          data-testid="settings-league-size"
-          className={controlClass}
-          disabled={disabled}
-          value={leagueSize}
-          onChange={(e) => {
-            const n = Number(e.target.value)
-            setLeagueSize(n)
-            debouncedSave({ leagueSize: n })
-          }}
-        >
-          {/* Keeper runs to 20 teams (lib/league/oddTeamLeagues.ts); every other format keeps 4–18 here. */}
-          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
-            // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
-            const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
-            return (
-              <option key={n} value={n} disabled={locked}>
-                {n}{locked ? ' · AF Commissioner' : ''}
-              </option>
-            )
-          })}
-        </select>
-        {!hasCommissionerAccess && leagueType === 'keeper' ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="settings-odd-keeper-size-locked">
-            <SettingsHelper>Odd team counts for a keeper league are part of AF Commissioner.</SettingsHelper>
-            <SubscriptionGateBadge
-              featureId="commissioner_ai_tools"
-              onClick={() => subscriptionGate?.gate('commissioner_ai_tools')}
-            />
-          </div>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <SettingsSectionLabel>Core rules</SettingsSectionLabel>
-        <SettingsToggleRow
-          label="Extra game vs league median"
-          checked={medianGame}
-          disabled={disabled}
-          onChange={(v) => {
-            setMedianGame(v)
-            void save({ medianGame: v })
-          }}
-        />
-        {medianGame ? (
-          <SettingsToggleRow
-            label="League median in playoffs"
-            description="Off: playoff weeks are win-or-go-home only. On: median results still count in playoff weeks, in season records only — the bracket is decided by playoff scores alone."
-            checked={medianInPlayoffs}
-            disabled={disabled}
-            onChange={(v) => {
-              setMedianInPlayoffs(v)
-              void save({ medianGameInPlayoffs: v })
-            }}
-          />
-        ) : null}
-        <SettingsToggleRow
-          label="A manager may run more than one team"
-          description="For leagues where one person runs several franchises. Each team is joined from its own AllFantasy account; with this on, a manager's second account is allowed to take another team."
-          checked={multiTeamManagers}
-          disabled={disabled}
-          onChange={(v) => {
-            setMultiTeamManagers(v)
-            void save({ allowMultiTeamManagers: v })
-          }}
-        />
-        {isOddTeamCount(leagueSize) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(leagueType) ? (
-          <ExtraMatchupSettingsBlock
-            initial={readExtraMatchupSettings(settingsSnapshot)}
-            disabled={disabled}
-            hasAccess={hasCommissionerAccess}
-            onUpgrade={() => subscriptionGate?.gate('commissioner_ai_tools')}
-            save={(value) => void save({ settingsMerge: { [EXTRA_MATCHUP_SETTINGS_KEY]: value } })}
-          />
-        ) : null}
-        <SettingsToggleRow
-          label="Allow moves pre-draft"
-          checked={allowPreDraft}
-          disabled={disabled}
-          onChange={(v) => {
-            setAllowPreDraft(v)
-            debouncedSave({ allowPreDraftMoves: v })
-          }}
-        />
-        <SettingsToggleRow
-          label="Prevent bench players from being dropped after game starts"
-          checked={preventBenchDrops}
-          disabled={disabled}
-          onChange={(v) => {
-            setPreventBenchDrops(v)
-            debouncedSave({ preventBenchDrops: v })
-          }}
-        />
-        <SettingsToggleRow
-          label={t('leagueSettings.lockAllRosterMoves')}
-          description={t('leagueSettings.lockAllRosterMovesHint')}
-          checked={lockMoves}
-          disabled={disabled}
-          dimmed={false}
-          onChange={(v) => {
-            setLockMoves(v)
-            void save({ lockAllMoves: v })
-          }}
-        />
-        <SettingsToggleRow
-          label="Allow draft pick trading"
-          checked={draftPickTrading}
-          disabled={disabled}
-          onChange={(v) => {
-            setDraftPickTrading(v)
-            void save({ draftPickTrading: v })
-          }}
-        />
-        <SettingsToggleRow
-          label="Override league invite capacity"
-          checked={overrideInvite}
-          disabled={disabled}
-          onChange={(v) => {
-            setOverrideInvite(v)
-            debouncedSave({ overrideInviteCapacity: v })
-          }}
-        />
-        {/* The invite link's on/off switch lives in the privacy editor above, which writes both stores joins read. */}
-      </div>
-
-      <div>
-        <SettingsSectionLabel>Supplemental / dispersal rounds</SettingsSectionLabel>
-        <select
-          className={controlClass}
-          disabled={disabled}
-          value={dispersalRounds}
-          onChange={(e) => {
-            const n = Number(e.target.value)
-            setDispersalRounds(n)
-            debouncedSave({ dispersalDraftRounds: n })
-          }}
-        >
-          {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <SettingsHelper>Used for supplemental or dispersal draft configuration where your league format supports it.</SettingsHelper>
-      </div>
-
-      <div>
-        <SettingsSectionLabel>Timezone</SettingsSectionLabel>
-        <select
-          id="ls-tz"
-          className={controlClass}
-          disabled={disabled}
-          value={timezone}
-          onChange={(e) => {
-            const v = e.target.value
-            setTimezone(v)
-            debouncedSave({ timezone: v })
-          }}
-        >
-          {COMMON_TIMEZONES.map((tz) => (
-            <option key={tz.value} value={tz.value}>
-              {tz.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {showKeeper ? (
+    ) : null
+  // Keeper rules — also the "AllFantasy options" settings sub-page (`only`), which a native keeper league
+  // reaches from League Setup and the Commissioner Hub; this panel otherwise lives in a modal it never mounts.
+  const keeperSection = showKeeper ? (
         <div className="space-y-4 border-t border-white/[0.08] pt-6">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-sky-300/90">Keeper rules</p>
 
@@ -717,7 +443,302 @@ export function LeagueSettingsPanel({
             </PremiumGate>
           ) : null}
         </div>
+  ) : null
+
+  if (only === 'af-options') {
+    return (
+      <div className="space-y-8 px-6 py-6 text-[13px] text-white/85" data-league-id={leagueId} data-testid="settings-af-options">
+        {extraMatchupSection}
+        {keeperSection}
+        {!extraMatchupSection && !keeperSection ? (
+          <p className="text-[13px] text-white/60">This league has no AllFantasy-only options to set here.</p>
+        ) : null}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-8 px-6 py-6 text-[13px] text-white/85" data-league-id={leagueId}>
+      <SettingsPanelHeading
+        title="General league settings"
+        subtitle="Set league identity, format, and core rules. Playoff and waiver detail live in their own tabs."
+      />
+
+      <div>
+        <SettingsSectionLabel>League description</SettingsSectionLabel>
+        <textarea
+          className={`${controlClass} min-h-[96px] max-w-lg rounded-2xl py-3`}
+          disabled={disabled}
+          value={leagueDescription}
+          placeholder="Shown on league cards and discovery where your league opts in."
+          onChange={(e) => {
+            const v = e.target.value
+            setLeagueDescription(v)
+            debouncedSave({ settingsMerge: { leagueDescription: v } })
+          }}
+        />
+      </div>
+
+      <div className="grid max-w-lg gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-1">
+          <SettingsSectionLabel>Sport</SettingsSectionLabel>
+          {/* Sport is fixed at creation — the server refuses to patch it (commissioner-league-patch). */}
+          <p className={controlClass} aria-readonly="true">
+            {initialData.sport ?? '—'}
+          </p>
+        </div>
+        <div className="sm:col-span-1">
+          <SettingsSectionLabel>Season year</SettingsSectionLabel>
+          <input
+            type="number"
+            min={2000}
+            max={2100}
+            className={controlClass}
+            disabled={disabled}
+            value={season}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              setSeason(n)
+              debouncedSave({ season: n })
+            }}
+          />
+        </div>
+        <div className="sm:col-span-1">
+          <SettingsSectionLabel>Default language</SettingsSectionLabel>
+          <select
+            className={controlClass}
+            disabled={disabled}
+            value={language}
+            onChange={(e) => {
+              const v = e.target.value
+              setLanguage(v)
+              debouncedSave({ language: v })
+            }}
+          >
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+      </div>
+
+      {/*
+        🛑 "LISTING & DISCOVERABILITY" SAVED A KEY NOTHING READ (2026-11-15). It wrote `leagueListingVisibility`; Find
+        League, invites and joins read the league's privacy setting. A commissioner who chose "Private" stayed listed.
+        This is now the league's real privacy and invite editor, the same one those paths read.
+      */}
+      {canEdit ? (
+        <div data-testid="league-settings-privacy">
+          <LeaguePrivacyAndInvitesPanel leagueId={leagueId} />
+        </div>
       ) : null}
+
+      <div>
+        <SettingsSectionLabel>League name</SettingsSectionLabel>
+        <input
+          id="ls-name"
+          className={controlClass}
+          value={name}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value
+            setName(v)
+            debouncedSave({ name: v })
+          }}
+        />
+      </div>
+
+      <div>
+        <SettingsSectionLabel>League type</SettingsSectionLabel>
+        <SettingsRadioGroup
+          name="league-type"
+          value={leagueType}
+          disabled={disabled}
+          onChange={(v) => {
+            setLeagueType(v)
+            debouncedSave({ leagueType: v })
+          }}
+          options={[
+            {
+              id: 'redraft',
+              title: 'Redraft',
+              description: 'Full redraft each season; all players available.',
+            },
+            {
+              id: 'keeper',
+              title: 'Keeper',
+              description: 'Teams retain a configured number of players year to year.',
+            },
+            {
+              id: 'dynasty',
+              title: 'Dynasty',
+              description: 'Rosters carry over; rookie and free-agent drafts replenish talent.',
+            },
+          ]}
+        />
+      </div>
+
+      <div>
+        <SettingsSectionLabel>Number of teams</SettingsSectionLabel>
+        <select
+          data-testid="settings-league-size"
+          className={controlClass}
+          disabled={disabled}
+          value={leagueSize}
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            setLeagueSize(n)
+            debouncedSave({ leagueSize: n })
+          }}
+        >
+          {/* Keeper runs to 20 teams (lib/league/oddTeamLeagues.ts); every other format keeps 4–18 here. */}
+          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
+            // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
+            const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
+            return (
+              <option key={n} value={n} disabled={locked}>
+                {n}{locked ? ' · AF Commissioner' : ''}
+              </option>
+            )
+          })}
+        </select>
+        {!hasCommissionerAccess && leagueType === 'keeper' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="settings-odd-keeper-size-locked">
+            <SettingsHelper>Odd team counts for a keeper league are part of AF Commissioner.</SettingsHelper>
+            <SubscriptionGateBadge
+              featureId="commissioner_ai_tools"
+              onClick={() => subscriptionGate?.gate('commissioner_ai_tools')}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <SettingsSectionLabel>Core rules</SettingsSectionLabel>
+        <SettingsToggleRow
+          label="Extra game vs league median"
+          checked={medianGame}
+          disabled={disabled}
+          onChange={(v) => {
+            setMedianGame(v)
+            void save({ medianGame: v })
+          }}
+        />
+        {medianGame ? (
+          <SettingsToggleRow
+            label="League median in playoffs"
+            description="Off: playoff weeks are win-or-go-home only. On: median results still count in playoff weeks, in season records only — the bracket is decided by playoff scores alone."
+            checked={medianInPlayoffs}
+            disabled={disabled}
+            onChange={(v) => {
+              setMedianInPlayoffs(v)
+              void save({ medianGameInPlayoffs: v })
+            }}
+          />
+        ) : null}
+        <SettingsToggleRow
+          label="A manager may run more than one team"
+          description="For leagues where one person runs several franchises. With this on, a manager can be given another team, and each team owes its own dues. Managers cannot trade between their own teams."
+          checked={multiTeamManagers}
+          disabled={disabled}
+          onChange={(v) => {
+            setMultiTeamManagers(v)
+            void save({ allowMultiTeamManagers: v })
+          }}
+        />
+        {extraMatchupSection}
+        <SettingsToggleRow
+          label="Allow moves pre-draft"
+          checked={allowPreDraft}
+          disabled={disabled}
+          onChange={(v) => {
+            setAllowPreDraft(v)
+            debouncedSave({ allowPreDraftMoves: v })
+          }}
+        />
+        <SettingsToggleRow
+          label="Prevent bench players from being dropped after game starts"
+          checked={preventBenchDrops}
+          disabled={disabled}
+          onChange={(v) => {
+            setPreventBenchDrops(v)
+            debouncedSave({ preventBenchDrops: v })
+          }}
+        />
+        <SettingsToggleRow
+          label={t('leagueSettings.lockAllRosterMoves')}
+          description={t('leagueSettings.lockAllRosterMovesHint')}
+          checked={lockMoves}
+          disabled={disabled}
+          dimmed={false}
+          onChange={(v) => {
+            setLockMoves(v)
+            void save({ lockAllMoves: v })
+          }}
+        />
+        <SettingsToggleRow
+          label="Allow draft pick trading"
+          checked={draftPickTrading}
+          disabled={disabled}
+          onChange={(v) => {
+            setDraftPickTrading(v)
+            void save({ draftPickTrading: v })
+          }}
+        />
+        <SettingsToggleRow
+          label="Override league invite capacity"
+          checked={overrideInvite}
+          disabled={disabled}
+          onChange={(v) => {
+            setOverrideInvite(v)
+            debouncedSave({ overrideInviteCapacity: v })
+          }}
+        />
+        {/* The invite link's on/off switch lives in the privacy editor above, which writes both stores joins read. */}
+      </div>
+
+      <div>
+        <SettingsSectionLabel>Supplemental / dispersal rounds</SettingsSectionLabel>
+        <select
+          className={controlClass}
+          disabled={disabled}
+          value={dispersalRounds}
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            setDispersalRounds(n)
+            debouncedSave({ dispersalDraftRounds: n })
+          }}
+        >
+          {Array.from({ length: 11 }, (_, i) => i).map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <SettingsHelper>Used for supplemental or dispersal draft configuration where your league format supports it.</SettingsHelper>
+      </div>
+
+      <div>
+        <SettingsSectionLabel>Timezone</SettingsSectionLabel>
+        <select
+          id="ls-tz"
+          className={controlClass}
+          disabled={disabled}
+          value={timezone}
+          onChange={(e) => {
+            const v = e.target.value
+            setTimezone(v)
+            debouncedSave({ timezone: v })
+          }}
+        >
+          {COMMON_TIMEZONES.map((tz) => (
+            <option key={tz.value} value={tz.value}>
+              {tz.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {keeperSection}
     </div>
   )
 }

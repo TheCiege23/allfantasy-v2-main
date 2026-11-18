@@ -62,6 +62,7 @@ const NAV_GROUPS: ReadonlyArray<{ key: 'league' | 'rules' | 'ops'; items: Readon
       { id: 'draft', key: 'draft' },
       { id: 'trades', key: 'trades' },
       { id: 'playoffs', key: 'playoffs' },
+      { id: 'af-options', key: 'afOptions' },
       { id: 'guillotine-first-chop', key: 'firstChop' },
       { id: 'guillotine-chop-rules', key: 'chopRules' },
       { id: 'guillotine-rules', key: 'guillotineRules' },

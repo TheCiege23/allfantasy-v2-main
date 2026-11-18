@@ -219,3 +219,13 @@
   border-radius: var(--af-radius-card, 16px);
   padding: 16px;
 }
+
+/* AllFantasy options (Phase C2): the AF-only tag and the value beside each rule. */
+.af-lsh-af-tag { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; vertical-align: 1px; background: rgba(59, 130, 246, .16); color: #93c5fd; }
+.af-lsh-af-value { flex: 0 1 auto; max-width: 45%; text-align: right; font-size: 13px; font-weight: 700; color: var(--lsh-text); }
+/* Phone: the value drops under the description, left-aligned, with Open beside it (no 3-line value column). */
+@media (max-width: 560px) {
+  .af-lsh-row[data-af-option] { flex-wrap: wrap; }
+  .af-lsh-row[data-af-option] > .af-lsh-row-copy { flex: 1 1 100% !important; }
+  .af-lsh-row[data-af-option] > .af-lsh-af-value { flex: 1 1 auto; max-width: none; text-align: left; }
+}

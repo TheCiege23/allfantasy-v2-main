@@ -11,6 +11,7 @@ import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffSt
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { isPirateLeague, readPirateRules, type PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTeamLeagues'
 
 export type SettingsSubPageId =
   | 'general'
@@ -26,6 +27,8 @@ export type SettingsSubPageId =
   /** Guillotine: endgame, release timing, tiebreakers, correction wait… (lib/guillotine/guillotineRules.ts). */
   | 'guillotine-rules'
   | 'pirate-rules'
+  /** AllFantasy-only rules with no other native editor: the odd-team extra matchup and keeper rules (Phase C2). */
+  | 'af-options'
   | 'playoffs'
   | 'members'
   | 'team-settings'
@@ -267,6 +270,18 @@ export function formatScoringMode(settings: unknown): string {
   return 'Points'
 }
 
+/**
+ * What the "AllFantasy options" sub-page holds for this league, or null when it holds nothing: the odd-team
+ * extra matchup (an odd redraft or keeper league) and keeper rules (a keeper league). Phase C2.
+ */
+export function afOptionsSummary(leagueType: string | null | undefined, teamCount: number): string | null {
+  const type = String(leagueType ?? '').toLowerCase()
+  const parts: string[] = []
+  if (isOddTeamCount(teamCount) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(type)) parts.push('Odd-team extra matchup')
+  if (type === 'keeper') parts.push('Keeper rules')
+  return parts.length ? parts.join(' · ') : null
+}
+
 function divisionCount(settings: unknown): number {
   const s = settingsRecord(settings)
   const cfg = settingsRecord(s.division_config)
@@ -281,6 +296,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const pirate = isPirateLeague(league)
   const teamCount = league.leagueSize ?? teams.length
   const joined = teams.filter((t) => Boolean(t.claimedByUserId)).length
+  const afSummary = afOptionsSummary(league.leagueType, teamCount)
 
   const sections: SettingsHomeSection[] = [
     {
@@ -293,6 +309,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         // Waivers sit with the league's format, not the draft (owner's call, 2026-11-01): how claims run is
         // part of what kind of league this is.
         { id: 'waivers', label: 'Waivers', value: formatWaivers(league), ...edit('waivers') },
+        ...(afSummary ? [{ id: 'af-options', label: 'AllFantasy options', value: afSummary, ...edit('af-options') }] : []),
       ],
     },
     {
@@ -428,10 +445,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   if (canEdit) {
     sections.push({
       id: 'commissioner',
-      title: 'Commissioner tools',
+      // The Commissioner Hub (owner's page review #16) replaces "Commissioner tools"; the sub-page it
+      // used to name is the lineups / locks / schedule / members panel and league history.
+      title: 'Commissioner Hub',
       rows: [
         { id: 'league-ai', label: 'League Chimmy', value: 'Helpers & commissioner intelligence', target: 'ai' },
-        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls and league history', target: 'commissioner-tools' },
+        { id: 'commissioner-tools', label: 'Lineups, locks & schedule', value: 'Lineups, locks, schedule, members and league history', target: 'commissioner-tools' },
         { id: 'dues', label: 'Dues & payouts', value: 'Track who has paid', target: 'dues' },
         { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
         { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },

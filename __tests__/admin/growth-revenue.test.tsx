@@ -60,10 +60,22 @@ describe('counting the path', () => {
 
   it('what sells: by surface, people who paid first', () => {
     expect(s.whatSells).toEqual([
-      { entrySource: 'lock_player_depth', checkouts: 2, trials: 1, paid: 1 },
-      { entrySource: 'ai_daily_cap', checkouts: 0, trials: 0, paid: 1 },
-      { entrySource: 'unknown', checkouts: 1, trials: 0, paid: 0 },
+      { entrySource: 'lock_player_depth', viewed: 0, clicked: 0, checkouts: 2, trials: 1, paid: 1 },
+      { entrySource: 'ai_daily_cap', viewed: 0, clicked: 0, checkouts: 0, trials: 0, paid: 1 },
+      { entrySource: 'unknown', viewed: 0, clicked: 0, checkouts: 1, trials: 0, paid: 0 },
     ])
+  })
+
+  it('counts offer views by user and confirmed token packs by Stripe session', () => {
+    const source = { entry_source: 'lock_trade_breakdown' }
+    const token = { entry_source: 'trade_review_starter_pack', stripe_session_id: 'cs_starter' }
+    const report = summarizeGrowth([
+      e('view', 'a', 1, source), e('view', 'a', 1, source), e('click', 'a', 1, source),
+      e('token_checkout', 'a', 1, token), e('token_paid', 'a', 1, token), e('token_paid', 'a', 1, token),
+    ], { ...NAMES, offerViewed: 'view', offerClicked: 'click', tokenCheckout: 'token_checkout', tokenPaid: 'token_paid' }, WINDOW)
+    expect(report.whatSells).toMatchObject([{ entrySource: 'lock_trade_breakdown', viewed: 1, clicked: 1, paid: 0 }])
+    expect(report.tokenSales).toEqual([{ entrySource: 'trade_review_starter_pack', checkouts: 1, paid: 1 }])
+    expect(report.funnel.at(-1)?.count).toBe(0)
   })
 
   it('reads in plain words', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
+import { buildAfOptions,
   buildAllTimeStandings,
   buildDraftGroups,
   buildGeneralGroups,
@@ -108,7 +108,9 @@ describe('buildTypeRuleGroups', () => {
   it('reads keeper fields and concept setup answers', () => {
     const g = buildTypeRuleGroups({ league: { keeperCount: 3, keeperRoundPenalty: 1 }, settingsSnapshot: { conceptSetup: { tribeCount: 4, idolsEnabled: true, nested: { a: 1 } } } }, 'keeper')
     expect(row(g, 'count')?.value).toBe('3 per team')
-    expect(row(g, 'penalty')?.value).toBe('1 round')
+    // The round shift is said once, in words, in the AllFantasy options' Keeper cost row (Phase C2).
+    expect(row(g, 'penalty')).toBeUndefined()
+    expect(buildAfOptions({ league: { keeperCount: 3, keeperRoundPenalty: 1 } }, 'keeper', 'L1').find((o) => o.key === 'keeperCost')?.value).toBe('1 round earlier than last season')
     expect(row(g, 'concept-tribeCount')?.value).toBe('4')
     expect(row(g, 'concept-idolsEnabled')?.value).toBe('Yes')
     expect(row(g, 'concept-nested')).toBeUndefined()

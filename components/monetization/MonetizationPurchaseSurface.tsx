@@ -157,6 +157,7 @@ export default function MonetizationPurchaseSurface({
   subtitle,
   focusPlanFamily = null,
   conversionHero = false,
+  monthlyOffer = false,
 }: {
   pagePath: string;
   title: string;
@@ -164,7 +165,9 @@ export default function MonetizationPurchaseSurface({
   focusPlanFamily?: PlanFamily | null;
   /** Richer marketing header + value props (e.g. `/pricing`). */
   conversionHero?: boolean;
+  monthlyOffer?: boolean;
 }) {
+  const focusedMonthly = Boolean(monthlyOffer && focusPlanFamily);
   const [payload, setPayload] = useState<CatalogPayload | null>(null);
   const { nativeApp, prices: nativePrices, needsUpdate, error: playError } = useNativeIapPrices();
   // The AF Pro free trial — web only: a store build never asks, and never shows it (App Store 3.1.1 / 3.1.3).
@@ -268,8 +271,9 @@ export default function MonetizationPurchaseSurface({
 
   const orderedFamilies = useMemo(() => {
     if (!focusPlanFamily) return PLAN_FAMILY_ORDER;
+    if (focusedMonthly) return [focusPlanFamily];
     return [focusPlanFamily, ...PLAN_FAMILY_ORDER.filter((family) => family !== focusPlanFamily)];
-  }, [focusPlanFamily]);
+  }, [focusPlanFamily, focusedMonthly]);
 
   const itemBySku = useMemo(() => {
     const map = new Map<string, CatalogItem>();
@@ -540,13 +544,13 @@ export default function MonetizationPurchaseSurface({
           </section>
         ) : null}
 
-        {focusPlanFamily === "af_pro" ? (
+        {!focusedMonthly && focusPlanFamily === "af_pro" ? (
           <AFProPlanSpotlight className="mb-4" />
         ) : null}
-        {focusPlanFamily === "af_war_room" ? (
+        {!focusedMonthly && focusPlanFamily === "af_war_room" ? (
           <AFWarRoomPlanSpotlight className="mb-4" />
         ) : null}
-        {focusPlanFamily === "af_supreme" ? (
+        {!focusedMonthly && focusPlanFamily === "af_supreme" ? (
           <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
@@ -643,12 +647,12 @@ export default function MonetizationPurchaseSurface({
                 <span className="text-white/60">applied — {appliedCouponPct}% discount will be deducted at Stripe checkout</span>
               </div>
             ) : null}
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className={focusedMonthly ? "max-w-xl" : "grid gap-5 md:grid-cols-2"}>
               {orderedFamilies.map((family) => {
                 const plan = plansByFamily.get(family);
                 if (!plan) return null;
                 const monthly = plan.monthly;
-                const yearly = plan.yearly;
+                const yearly = focusedMonthly ? null : plan.yearly;
                 if (!monthly && !yearly) return null;
                 const primary = monthly ?? yearly;
                 if (!primary) return null;
@@ -687,7 +691,7 @@ export default function MonetizationPurchaseSurface({
                         </li>
                       ))}
                     </ul>
-                    {focused && focusPlanFamily !== "af_supreme" ? (
+                    {focused && !focusedMonthly && focusPlanFamily !== "af_supreme" ? (
                       <Link
                         href={upgradePathForPlan("af_supreme")}
                         onClick={() =>
@@ -786,6 +790,18 @@ export default function MonetizationPurchaseSurface({
               })}
             </div>
 
+            {focusedMonthly && focusPlanFamily ? (
+              <Link
+                href={upgradePathForPlan(focusPlanFamily, {
+                  from: searchParams?.get("from"),
+                  back: searchParams?.get("back"),
+                })}
+                className="mt-4 inline-block text-sm font-medium text-cyan-200 underline"
+              >
+                See all plans and billing options
+              </Link>
+            ) : null}
+            {!focusedMonthly ? (
             <section className="mt-8 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 sm:p-5">
               <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">Token packs</h2>
               {!nativeApp && <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/55">
@@ -830,7 +846,7 @@ export default function MonetizationPurchaseSurface({
                 ))}
               </div>
             </section>
-
+            ) : null}
             {nativeApp && <button type="button" onClick={restorePurchases} className="mt-6 text-sm text-cyan-200 underline">Restore Purchases</button>}
             {nativeApp && <button type="button" onClick={() => void manageNativeSubscriptions().catch((cause) => setCheckoutError(cause instanceof Error ? cause.message : "Unable to open subscription settings."))} className="ml-4 mt-6 text-sm text-cyan-200 underline">Manage Subscriptions</button>}
 

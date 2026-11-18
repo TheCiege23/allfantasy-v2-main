@@ -57,7 +57,9 @@ import {
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { RebuildPlanCard } from '@/components/core-app/screens/RebuildPlanCard'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
-import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
+import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { coreDepthLockCopy, lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
@@ -816,6 +818,7 @@ export function TradeCenter(props: {
 }) {
   const language = useOptionalLanguage().language
   const tcm = useMessages(tradeCenterMessages)
+  const depthCopy = coreDepthLockCopy(language)
   const lg = useMessages(tradesLeagueGuideMessages)
   /* The live "Trade deadline in 3d 4h" text, for a deadline with a close time; the headline uses it as is. */
   const liveDeadline = useTradeDeadlineCountdownText(props.deadlineCountdown)
@@ -2907,11 +2910,32 @@ export function TradeCenter(props: {
         </details>
       ) : null}
 
-      {result && depthAccess && depthLocked ? (
+      {result && depthAccess && depthLocked && !blocked && !noSignal ? (
         <div className="af-tc-mstep-wrap">
-          <CoreDepthLock access={depthAccess} what={lockSubjectText('The full trade breakdown', language)} lang={language} />
+          <CoreDepthLock
+            access={depthAccess}
+            what={lockSubjectText('The full trade breakdown', language)}
+            benefit={depthCopy.tradeBreakdownBenefit}
+            source="lock_trade_breakdown"
+            lang={language}
+          >
+            <TradeReviewLink
+              draft={{
+                give: giveAssets.filter(valuedByVerdict),
+                get: getAssets.filter(valuedByVerdict),
+                leagueId: props.league?.id,
+                format: props.dynasty ? 'dynasty' : props.leagueType === 'keeper' ? 'keeper' : 'redraft',
+                sport: normalizeToSupportedSport(props.sport),
+              }}
+              source="lock_trade_breakdown"
+              viewerId={props.viewerId}
+              storageError={depthCopy.tradeDraftStorageError}
+            >
+              {depthCopy.tradeReviewWithTokens}
+            </TradeReviewLink>
+          </CoreDepthLock>
         </div>
-      ) : intel ? (
+      ) : !depthLocked && intel ? (
         <details className="af-tc-analysis-fold">
         <summary>{copy("Deeper trade strategy and partner context")}</summary>
         <section className="af-tc-dos" data-section="breakdown">

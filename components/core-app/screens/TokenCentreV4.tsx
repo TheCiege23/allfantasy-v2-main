@@ -1,12 +1,16 @@
 'use client'
 
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
+import { STARTER_TOKEN_PACK_SKU } from '@/lib/monetization/catalog'
+import { safeBackPath } from '@/lib/monetization/lockReturn'
+import { purchaseReturnPath } from '@/lib/monetization/upgradeDestination'
 import { useNativeIapPrices } from '@/lib/monetization/native-iap-client'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { getTokenPurchasableRule, type TokenBuyer } from '@/lib/tokens/tokenPurchasable'
@@ -81,6 +85,15 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
   const g = useMessages(tokensGuideMessages)
   const { balance, loading: balanceLoading } = useTokenBalance()
   const postPurchase = usePostPurchaseSync({})
+  const search = useSearchParams()
+  const starterOffer = search?.get('offer') === 'starter'
+  const back = safeBackPath(search?.get('back'))
+  const returnPath = purchaseReturnPath('/tokens', search)
+  const allPacksParams = new URLSearchParams(returnPath.split('?')[1] ?? '')
+  allPacksParams.delete('offer')
+  const allPacksHref = `/tokens${allPacksParams.size ? `?${allPacksParams}` : ''}`
+  const featuredRule = getTokenPurchasableRule(search?.get('ruleCode'))
+  const availablePacks = starterOffer ? packs.filter((pack) => pack.sku === STARTER_TOKEN_PACK_SKU) : packs
   const locale = getAppIntlLocale()
 
   const [rules, setRules] = useState<SpendRule[]>([])
@@ -127,12 +140,13 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
 
   /** What one Chimmy question costs, so the balance and each pack can say what they buy. */
   const chimmyCost = useMemo(() => rules.find((r) => r.code === CHIMMY_RULE)?.tokenCost ?? null, [rules])
+  const featuredCost = rules.find((rule) => rule.code === featuredRule?.code)?.tokenCost
   const head = tokensHeadline(balance, balanceLoading, chimmyCost)
 
   async function buy(sku: string) {
     setError(null)
     setPendingSku(sku)
-    const res = await resolveCheckoutUrl({ sku, productType: 'token_pack', returnPath: '/tokens' })
+    const res = await resolveCheckoutUrl({ sku, productType: 'token_pack', returnPath })
     if (!res.ok) {
       setError(res.error)
       setPendingSku(null)
@@ -188,7 +202,7 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
           <Link href="/pricing" className="af-tkg-nav-link">
             {g.seePlans}
           </Link>
-          <Link href="/core" className="af-tkg-nav-cta" data-testid="tokens-back-to-app">
+          <Link href={back ?? "/core"} className="af-tkg-nav-cta" data-testid="tokens-back-to-app">
             {g.backToApp}
           </Link>
         </span>
@@ -217,13 +231,16 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
         <h2 className="af-tk-h2" id="af-tkg-packs-h">
           {g.packsTitle}
         </h2>
+        {starterOffer && featuredRule && featuredCost ? (
+          <p className="af-tk-sub">{g.featuredCost(featuredRule.label, featuredCost.toLocaleString(locale))}</p>
+        ) : null}
         <div className="af-tk-packs">
-          {packs.map((p) => (
+          {availablePacks.map((p) => (
             <div key={p.sku} className="af-tk-pack">
               <span className="af-tk-pack-num af-num">{p.tokenAmount != null ? p.tokenAmount.toLocaleString(locale) : '—'}</span>
               <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
               <span className="af-tk-pack-price af-num">{nativeApp ? (nativePrices[p.sku] ?? 'Loading store price…') : `$${p.amountUsd.toFixed(2)}`}</span>
-              {p.tokenAmount != null && chimmyCost ? (
+              {p.tokenAmount != null && !featuredRule && chimmyCost ? (
                 <span className="af-tk-pack-about" data-testid={`tokens-pack-about-${p.sku}`}>
                   {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString(locale))}
                 </span>
@@ -236,7 +253,7 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
                 type="button"
                 className="af-tk-btn"
                 data-testid={`tokens-buy-cta-${p.sku}`}
-                disabled={pendingSku === p.sku || (nativeApp && !nativePrices[p.sku])}
+                disabled={pendingSku != null || (nativeApp && !nativePrices[p.sku])}
                 onClick={() => buy(p.sku)}
               >
                 {pendingSku === p.sku ? `${t('tokens.v4.loading')}…` : t('tokens.v4.packBuy')}
@@ -244,6 +261,9 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
             </div>
           ))}
         </div>
+        {starterOffer ? (
+          <Link href={allPacksHref} className="af-tkg-nav-link">{g.packsTitle} →</Link>
+        ) : null}
       </section>
 
       {/* ── What tokens buy ──────────────────────────────────────────────────────── */}

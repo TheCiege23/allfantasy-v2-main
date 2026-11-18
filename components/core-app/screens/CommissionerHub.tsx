@@ -232,6 +232,16 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         ) : null}
       </header>
 
+      {depth && !depth.unlocked ? (
+        <CoreDepthLock
+          access={depth}
+          what={t('Season reports and automation')}
+          benefit={t('Monitor league activity and health and automate weekly commissioner work.')}
+          source="lock_commissioner_season"
+          lang={language}
+        />
+      ) : null}
+
       {/* ── Cockpit (item 1) — the tiles, carried by the key-art band ─────── */}
       <section
         className="afh-hero"
