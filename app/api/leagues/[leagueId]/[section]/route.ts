@@ -32,6 +32,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'automation-preset': () => import('../automation-preset/handler'),
   'auto-switch-injured': () => import('../auto-switch-injured/handler'),
   'commissioner-hub': () => import('../commissioner-hub/handler'),
+  'connected-leagues': () => import('../connected-leagues/handler'),
   'autocoach-settings': () => import('../autocoach-settings/handler'),
   'awards': () => import('../awards/handler'),
   'best-ball-war-room': () => import('../best-ball-war-room/handler'),
