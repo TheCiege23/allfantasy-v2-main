@@ -10,7 +10,7 @@
 
 export type TokensHeadline =
   | { kind: 'loading' }
-  /** The read failed. /tokens is behind sign-in (app/tokens/layout.tsx), so this is never "signed out". */
+  /** The read failed. /tokens requires sign-in, so this is never "signed out". */
   | { kind: 'unavailable' }
   | { kind: 'balance'; balance: number; questions: number | null }
 
