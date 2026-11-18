@@ -62,9 +62,12 @@ export function readCopyLeague(leagueSettings: unknown, sport: string | null | u
 }
 
 export function withCopyLeague(leagueSettings: unknown, state: CopyLeagueState): Record<string, unknown> {
+  const settings = obj(leagueSettings) ?? {}
+  // Other fields under the key (part 2's `realGames`) are kept: this writes only who is which team.
+  const existing = obj(settings[COPY_LEAGUE_SETTINGS_KEY]) ?? {}
   return {
-    ...(obj(leagueSettings) ?? {}),
-    [COPY_LEAGUE_SETTINGS_KEY]: { enabled: state.enabled, sport: state.sport, teams: state.teams, previous: state.previous },
+    ...settings,
+    [COPY_LEAGUE_SETTINGS_KEY]: { ...existing, enabled: state.enabled, sport: state.sport, teams: state.teams, previous: state.previous },
   }
 }
 

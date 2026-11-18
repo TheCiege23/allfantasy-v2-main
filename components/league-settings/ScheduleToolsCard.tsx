@@ -17,6 +17,19 @@ type Matchup = { id: string; homeRosterId: string; awayRosterId: string | null; 
 type Week = { week: number; locked: boolean; matchups: Matchup[] }
 type ScheduleState = { weeks: Week[]; playoffStartWeek: number | null }
 type Message = { kind: 'ok' | 'error'; text: string } | null
+type RealWeek = { week: number; loaded: boolean; real: number; total: number }
+
+/** "5–8, 10, 12–14" — compact week ranges for a sentence. */
+export function weekRanges(weeks: readonly number[]): string {
+  const sorted = [...weeks].sort((a, b) => a - b)
+  const out: string[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    const start = sorted[i]!
+    while (i + 1 < sorted.length && sorted[i + 1] === sorted[i]! + 1) i++
+    out.push(start === sorted[i] ? String(start) : `${start}–${sorted[i]}`)
+  }
+  return out.join(', ')
+}
 
 const MID_SEASON = 'mid_season_confirmation_required'
 
@@ -34,13 +47,35 @@ export function ScheduleToolsCard({ leagueId, onChanged }: { leagueId: string; o
   const [customMsg, setCustomMsg] = useState<Message>(null)
   const [week, setWeek] = useState<number | null>(null)
   const [pairs, setPairs] = useState<CustomPair[]>([])
+  const [copyLeague, setCopyLeague] = useState(false)
+  const [realGames, setRealGames] = useState<Record<string, Array<[string, string | null]>>>({})
+  const [realWeeks, setRealWeeks] = useState<RealWeek[] | null>(null)
+  const [realMsg, setRealMsg] = useState<Message>(null)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/redraft/schedule?leagueId=${encodeURIComponent(leagueId)}`, { cache: 'no-store' }).catch(() => null)
-    const data = res && res.ok ? ((await res.json().catch(() => null)) as { schedule?: ScheduleState; customWeeks?: number[] } | null) : null
+    const data = res && res.ok
+      ? ((await res.json().catch(() => null)) as { schedule?: ScheduleState; customWeeks?: number[]; copyLeague?: boolean; realGames?: Record<string, Array<[string, string | null]>> } | null)
+      : null
     setState(data?.schedule ?? null)
     setCustomWeeks(Array.isArray(data?.customWeeks) ? data!.customWeeks! : [])
+    setCopyLeague(data?.copyLeague === true)
+    setRealGames(data?.realGames ?? {})
   }, [leagueId])
+
+  // Copy league: what the stored NFL games cover (writes nothing).
+  const previewReal = useCallback(async () => {
+    const res = await fetch('/api/redraft/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leagueId, action: 'real_schedule_preview' }),
+    }).catch(() => null)
+    const data = res && res.ok ? ((await res.json().catch(() => null)) as { weeks?: RealWeek[] } | null) : null
+    setRealWeeks(data?.weeks ?? [])
+  }, [leagueId])
+  useEffect(() => {
+    if (copyLeague) void previewReal()
+  }, [copyLeague, previewReal])
 
   useEffect(() => {
     void load()
@@ -123,6 +158,30 @@ export function ScheduleToolsCard({ leagueId, onChanged }: { leagueId: string; o
     }
   }
 
+  const applyReal = async () => {
+    setBusy('randomize')
+    setRealMsg(null)
+    try {
+      const out = await post({ action: 'real_schedule_apply' })
+      if (!out.ok) {
+        setRealMsg({ kind: 'error', text: String(out.data.error ?? t('commControl.scheduleFailed')) })
+        return
+      }
+      const weeksSet = ((out.data.weeks as RealWeek[] | undefined) ?? []).filter((w) => w.loaded).map((w) => w.week)
+      setRealMsg({ kind: 'ok', text: t('commControl.realDone').replace('{{w}}', weekRanges(weeksSet)) })
+      await load()
+      await previewReal()
+      onChanged?.()
+    } catch {
+      setRealMsg({ kind: 'error', text: t('commControl.scheduleFailed') })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const isReal = (week: number, p: CustomPair) =>
+    (realGames[String(week)] ?? []).some(([h, a]) => h === p.home && a === p.away)
+
   const setPair = (i: number, side: 'home' | 'away', value: string) =>
     setPairs((ps) => ps.map((p, j) => (j === i ? { ...p, [side]: side === 'away' && value === '' ? null : value } : p)))
 
@@ -153,6 +212,34 @@ export function ScheduleToolsCard({ leagueId, onChanged }: { leagueId: string; o
         {msg(randomMsg)}
       </section>
 
+      {copyLeague ? (
+        <section className={box} aria-labelledby="sched-real-title" data-testid="schedule-real">
+          <p id="sched-real-title" className="text-[13px] font-semibold text-white">{t('commControl.realTitle')}</p>
+          <p className="text-[12px] leading-relaxed text-white/55">{t('commControl.realHelp')}</p>
+          {realWeeks === null ? null : realWeeks.some((w) => w.loaded) ? (
+            <>
+              <p className="text-[12px] font-semibold text-white/80" data-testid="schedule-real-coverage">
+                {t('commControl.realCoverage')
+                  .replace('{{w}}', weekRanges(realWeeks.filter((w) => w.loaded).map((w) => w.week)))
+                  .replace('{{n}}', String(realWeeks.filter((w) => w.loaded).reduce((n, w) => n + w.real, 0)))
+                  .replace('{{m}}', String(realWeeks.filter((w) => w.loaded).reduce((n, w) => n + w.total, 0)))}
+              </p>
+              {realWeeks.some((w) => !w.loaded) ? (
+                <p className="text-[12px] text-white/45" data-testid="schedule-real-missing">
+                  {t('commControl.realMissing').replace('{{w}}', weekRanges(realWeeks.filter((w) => !w.loaded).map((w) => w.week)))}
+                </p>
+              ) : null}
+              <button type="button" onClick={() => void applyReal()} disabled={busy !== null} className={`${button} bg-blue-500/15 text-blue-200`} data-testid="schedule-real-apply">
+                {t('commControl.realApply')}
+              </button>
+            </>
+          ) : (
+            <p className="text-[12px] text-amber-300" data-testid="schedule-real-none">{t('commControl.realNone')}</p>
+          )}
+          {msg(realMsg)}
+        </section>
+      ) : null}
+
       <section className={box} aria-labelledby="sched-custom-title" data-testid="schedule-custom-week">
         <p id="sched-custom-title" className="text-[13px] font-semibold text-white">{t('commControl.customTitle')}</p>
         <p className="text-[12px] leading-relaxed text-white/55">{t('commControl.customHelp')}</p>
@@ -165,11 +252,14 @@ export function ScheduleToolsCard({ leagueId, onChanged }: { leagueId: string; o
         </select>
         <div className="space-y-2">
           {pairs.map((p, i) => (
-            <div key={i} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" data-testid="schedule-custom-pair">
+            <div key={i} className="grid grid-cols-[1fr_56px_1fr] items-center gap-2 sm:grid-cols-[1fr_92px_1fr]" data-testid="schedule-custom-pair">
               <select aria-label={`${t('commControl.customTeam')} ${i + 1}`} className={select} value={p.home} onChange={(e) => setPair(i, 'home', e.target.value)}>
                 {teams.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
-              <span className="text-[12px] font-bold text-white/40">vs</span>
+              <span className="flex flex-col items-center text-[12px] font-bold text-white/40">
+                vs
+                {current && isReal(current.week, p) ? <span className="rounded-lg bg-blue-500/20 px-1.5 text-center text-[11px] font-extrabold leading-tight text-blue-200 sm:whitespace-nowrap sm:rounded-full" data-testid="schedule-real-tag">{t('commControl.realTag')}</span> : null}
+              </span>
               <select aria-label={`${t('commControl.customOpponent')} ${i + 1}`} className={select} value={p.away ?? ''} onChange={(e) => setPair(i, 'away', e.target.value)}>
                 {odd ? <option value="">{t('commControl.customBye')}</option> : null}
                 {teams.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
