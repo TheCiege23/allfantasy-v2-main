@@ -10,14 +10,18 @@
  * `--list` prints the leagues the staging-connected Fantrax accounts can see
  * (id and name only). Neither mode prints a Secret ID.
  *
- * Writes ONE thing: the `FantraxLeague` snapshot row the normal import writes.
- * It does not commit the league into the app.
+ * By default it writes ONE thing: the `FantraxLeague` snapshot row the normal
+ * import writes. Add `--commit` after the league id to also commit the league
+ * into the app on staging and read its `future_draft_picks` rows back.
  */
 import { prisma } from '@/lib/prisma'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
 import { getFantraxLeagues } from '@/lib/league-import/fantrax/fantraxApi'
 import { listFantraxOwnedTeams } from '@/lib/league-import/fantrax/fantraxTeamSelection'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
+import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
+import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
+import { persistImportedLeagueFromNormalization } from '@/lib/league-import/ImportedLeagueCommitService'
 import {
   futurePicksFromStoredInventory,
   madePicksFromStoredBoard,
@@ -102,7 +106,50 @@ async function main() {
   }
 
   const n = normalized.normalized
+
+  /*
+   * `--commit` also commits the league into the app on staging, through the same
+   * gate and commit service the real import uses, then reads `future_draft_picks`
+   * back so the traded picks can be checked where they finally land.
+   */
+  let committed: Record<string, unknown> | null = null
+  if (process.argv.includes('--commit')) {
+    const gate = await assertImportCommissioner({
+      appUserId: owned.userId, provider: 'fantrax', sourceLeagueId: owned.sourceId,
+      requireCommissioner: true,
+    })
+    if (!gate.ok || !gate.sourceManagerId) throw new Error('FANTRAX_MEMBERSHIP_GATE_FAILED')
+    const persisted = await persistImportedLeagueFromNormalization({
+      userId: owned.userId, provider: 'fantrax', normalized: n,
+      canonicalBundle: buildCanonicalImportBundle(n),
+      importerSourceManagerId: gate.sourceManagerId,
+    })
+    const [teams, picks] = await Promise.all([
+      prisma.leagueTeam.findMany({
+        where: { leagueId: persisted.league.id },
+        select: { externalId: true, teamName: true },
+      }),
+      prisma.$queryRaw<Array<{ pickSeason: number; round: number; originalRosterId: string; currentOwnerId: string; traded: boolean }>>`
+        SELECT "pickSeason", "round", "originalRosterId", "currentOwnerId", "traded"
+        FROM "future_draft_picks" WHERE "leagueId" = ${persisted.league.id}
+        ORDER BY "pickSeason", "round", "originalRosterId"`,
+    ])
+    const teamName = new Map(teams.map((t) => [t.externalId, t.teamName]))
+    committed = {
+      leagueId: persisted.league.id,
+      verification: gate.verification,
+      storedTeams: teams.length,
+      incompleteSteps: persisted.incompleteSteps,
+      futureDraftPickRows: picks.length,
+      rowsNotMarkedTraded: picks.filter((p) => !p.traded).length,
+      rowsWithUnknownTeam: picks.filter((p) => !teamName.has(p.originalRosterId) || !teamName.has(p.currentOwnerId)).length,
+      futureDraftPicks: picks.map((p) =>
+        `${p.pickSeason} R${p.round}: ${teamName.get(p.originalRosterId) ?? '?'} -> ${teamName.get(p.currentOwnerId) ?? '?'}`).sort(),
+    }
+  }
+
   console.log(JSON.stringify({
+    committed,
     target: 'staging',
     league: { name: row.leagueName, season: row.season, sport: row.sport, teams: row.teamCount },
     snapshotUpdatedAt: row.updatedAt,
