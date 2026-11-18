@@ -20,7 +20,8 @@ export async function resolveOnClockRosterIdForLeague(leagueId: string): Promise
       picks: { select: { overall: true, playerName: true, position: true, pickMetadata: true } },
     },
   })
-  if (!session) return null
+  // An auction has no team "on the clock": anyone may bid (see auction/multiTeamAuction.ts).
+  if (!session || session.draftType === 'auction') return null
   const slotOrder = (Array.isArray(session.slotOrder) ? session.slotOrder : []) as unknown as SlotOrderEntry[]
   const tradedPicks = (Array.isArray(session.tradedPicks) ? session.tradedPicks : []) as unknown as TradedPickRecord[]
   const current = applyTradedOwnerToCurrentPick(

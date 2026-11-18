@@ -149,6 +149,12 @@ export async function resolveActingRoster(
   opts: { allowCoOwner?: boolean } = {},
 ): Promise<ActingTeam> {
   const held = await listHeldTeams(leagueId, userId)
+  // Nothing named by the caller: with several teams, fall back to the team the manager last switched to,
+  // read from the request in flight. Code that was never handed the request gets the same answer as a route.
+  if (held.length > 1 && !(typeof requestedRosterId === 'string' && requestedRosterId.trim())) {
+    const remembered = await rememberedActiveTeamIds()
+    if (remembered.length > 0) requestedRosterId = `${PREFERRED_PREFIX}${remembered.join('.')}`
+  }
   if (held.length === 0 && opts.allowCoOwner !== false) {
     const coOwned = await acceptedCoOwnerRosterId(leagueId, userId)
     if (coOwned) {

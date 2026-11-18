@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -231,7 +232,7 @@ export async function loadTradeEngineRosterContext(args: {
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId: args.leagueId },
-    select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+    select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true },
   })
 
   const claimedTeam = teams.find(t => t.claimedByUserId === args.userId)
@@ -241,7 +242,7 @@ export async function loadTradeEngineRosterContext(args: {
   const userPlatformId = viewer?.ok ? viewer.team.platformUserId : claimedTeam?.platformUserId ?? args.userId
   const userRoster = viewer?.ok
     ? rosters.find(r => r.id === viewer.roster.id)
-    : rosters.find(r => r.platformUserId === args.userId) ?? rosters.find(r => r.platformUserId === userPlatformId)
+    : rosters.find(r => isRosterManagedBy(r, args.userId)) ?? rosters.find(r => r.platformUserId === userPlatformId)
   if (!userRoster) {
     args.dataGaps.push('No synced roster row for your account in this league — lineup impact uses trade assets only.')
     return {

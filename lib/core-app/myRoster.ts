@@ -1,3 +1,5 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
+import { rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
 import type { PrismaClient } from '@prisma/client'
 
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
@@ -65,9 +67,12 @@ export async function findMyRoster(
    */
   rosterId?: string | null,
 ): Promise<MyRosterLookup> {
-  if (rosterId) {
+  // The team named, else the team this manager last switched to (lib/league/viewerTeams.ts). Either
+  // must be one they run: their first team, or a further team that names them as manager.
+  const wanted = rosterId ? [rosterId] : await rememberedActiveTeamIds()
+  if (wanted.length > 0) {
     const named = await prisma.roster
-      .findFirst({ where: { leagueId, id: rosterId, platformUserId: userId }, select: { id: true, playerData: true } })
+      .findFirst({ where: { ...managedRosterWhere(leagueId, userId), id: { in: wanted } }, select: { id: true, playerData: true } })
       .catch(() => null)
     if (named) return { found: true, playerData: named.playerData, rosterId: named.id }
   }
