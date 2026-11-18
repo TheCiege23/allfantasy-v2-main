@@ -33,20 +33,21 @@ describe('parseFantraxTradeHistoryCsv', () => {
     if (!r.ok) throw new Error(r.error)
     expect(r.skipped).toEqual([])
     expect(r.trades.map((t) => t.teams)).toEqual([
-      ['Harbor Owls', 'Mesa Comets'],
-      ['Lake Herons', 'Mesa Comets'],
-      ['Pine Bears', 'Dune Foxes'],
+      ['#27 Harbor Owls', '#9 Mesa Comets'],
+      ['#18 Lake Herons', '#9 Mesa Comets'],
+      ['#1 Pine Bears', '#11 Dune Foxes'],
     ])
     const [first] = r.trades
-    expect(fantraxCsvTradeSide(first, 'Mesa Comets')).toEqual({
+    // Labels are kept as written: the "#N" can be part of a team's name (see the module header).
+    expect(fantraxCsvTradeSide(first, '#9 Mesa Comets')).toEqual({
       received: [
-        { kind: 'pick', season: 2027, round: 1, originalOwner: 'Harbor Owls' },
-        { kind: 'pick', season: 2028, round: 4, originalOwner: 'Harbor Owls' },
+        { kind: 'pick', season: 2027, round: 1, originalOwner: '#27 Harbor Owls' },
+        { kind: 'pick', season: 2028, round: 4, originalOwner: '#27 Harbor Owls' },
         { kind: 'budget', amount: 5000 },
       ],
       gave: [{ kind: 'player', name: 'Quarterback One', proTeam: 'PHI', position: 'SFX' }],
     })
-    expect(fantraxCsvTradeSide(first, 'Harbor Owls').received).toEqual([{ kind: 'player', name: 'Quarterback One', proTeam: 'PHI', position: 'SFX' }])
+    expect(fantraxCsvTradeSide(first, '#27 Harbor Owls').received).toEqual([{ kind: 'player', name: 'Quarterback One', proTeam: 'PHI', position: 'SFX' }])
     expect(r.trades[2].moves).toHaveLength(3)
   })
 
@@ -74,7 +75,7 @@ describe('parseFantraxTradeHistoryCsv', () => {
     const r = parseFantraxTradeHistoryCsv(csv)
     if (!r.ok) throw new Error(r.error)
     expect(r.trades).toHaveLength(2)
-    expect(r.trades.map((t) => [...t.teams].sort()).sort()).toEqual([['Dune Foxes', 'Pine Bears'], ['Lake Herons', 'Mesa Comets']])
+    expect(r.trades.map((t) => [...t.teams].sort()).sort()).toEqual([['#1 Pine Bears', '#2 Dune Foxes'], ['#3 Lake Herons', '#4 Mesa Comets']])
   })
 
   it('a three-team trade is one trade', () => {
@@ -87,7 +88,7 @@ describe('parseFantraxTradeHistoryCsv', () => {
     const r = parseFantraxTradeHistoryCsv(csv)
     if (!r.ok) throw new Error(r.error)
     expect(r.trades).toHaveLength(1)
-    expect(r.trades[0].teams).toEqual(['Pine Bears', 'Dune Foxes', 'Lake Herons'])
+    expect(r.trades[0].teams).toEqual(['#1 Pine Bears', '#2 Dune Foxes', '#3 Lake Herons'])
   })
 
   it('the same export gives the same ids, in any row order; a different trade gets a different id', () => {

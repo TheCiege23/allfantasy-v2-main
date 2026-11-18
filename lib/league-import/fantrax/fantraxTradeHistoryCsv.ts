@@ -15,8 +15,11 @@
  * It is kept (the smallest in the trade) because LeagueTrade.week is required, but nothing should rank by it; the
  * trade's date is the fact.
  *
- * ⚠ TEAM LABELS CARRY A DISPLAY PREFIX — "#4 Team A". It is Fantrax's standings number, not an id, and it
- * changes as the standings do, so it is stripped. Matching a label to a roster is the caller's job.
+ * 🛑 TEAM LABELS ARE KEPT EXACTLY AS WRITTEN — "#4 Team A" stays "#4 Team A". This reader first stripped the "#N "
+ * as a standings number, and on the first real league (2026-11-18) the number was PART OF THE TEAM NAME: the league
+ * stores "#27 Harbor Owls", so every stripped label missed and an upload of five trades added none. Which reading
+ * holds differs by league, so the reader does not choose; the planner matches the exact name first and the
+ * prefix-stripped name only as a fallback (`fantraxTradeHistoryPlan.ts`).
  *
  * Nothing is dropped silently: a row that cannot be read is returned in `skipped` with the reason.
  *
@@ -130,7 +133,7 @@ function readAsset(player: string, proTeam: string, position: string): FantraxCs
   if (pick) {
     const round = Number(pick[2])
     if (round < 1) return `"${text}" has no usable round.`
-    return { kind: 'pick', season: Number(pick[1]), round, originalOwner: stripFantraxStandingPrefix(pick[3]) }
+    return { kind: 'pick', season: Number(pick[1]), round, originalOwner: pick[3].trim() }
   }
   const budget = BUDGET.exec(text)
   if (budget) {
@@ -164,8 +167,8 @@ export function parseFantraxTradeHistoryCsv(text: string): FantraxCsvParseResult
   const good: Row[] = []
   for (const { line, cells } of rows.slice(1)) {
     const get = (name: string) => (col[name] >= 0 ? String(cells[col[name]] ?? '') : '')
-    const from = stripFantraxStandingPrefix(get('From'))
-    const to = stripFantraxStandingPrefix(get('To'))
+    const from = get('From').trim()
+    const to = get('To').trim()
     if (!from || !to) { skipped.push({ line, reason: 'From or To is empty.' }); continue }
     if (from === to) { skipped.push({ line, reason: 'From and To are the same team.' }); continue }
     const dateText = get('Date (EST)').trim()
