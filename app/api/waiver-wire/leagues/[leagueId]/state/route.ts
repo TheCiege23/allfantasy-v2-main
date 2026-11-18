@@ -1,3 +1,4 @@
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -17,10 +18,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  const [leagueAsOwner, rosterAsMember] = await Promise.all([
+  // The team shown: the named one when the manager holds it, else their first (lib/league/viewerTeams.ts).
+  const [leagueAsOwner, rosterAsMember, coOwnerRosterId] = await Promise.all([
     (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    (prisma as any).roster.findFirst({ where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId }, select: { id: true, playerData: true, redraftRosterId: true } }),
+    resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(req)),
+    acceptedCoOwnerRosterId(leagueId, userId),
   ])
   if (!leagueAsOwner && !rosterAsMember) {
     return NextResponse.json({ error: "League not found" }, { status: 404 })
@@ -43,7 +45,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         season: {
           leagueId: leagueId,
         },
-        ...(coOwnerRosterId ? { id: rosterAsMember?.redraftRosterId ?? '__unlinked_coowner__' } : { ownerId: userId }),
+        ...(rosterAsMember?.redraftRosterId
+          ? { id: rosterAsMember.redraftRosterId }
+          : coOwnerRosterId ? { id: '__unlinked_coowner__' } : { ownerId: userId }),
       },
       select: {
         faabBalance: true,
