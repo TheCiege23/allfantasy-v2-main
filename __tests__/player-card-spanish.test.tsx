@@ -478,7 +478,7 @@ describe('player card — Spanish', () => {
 })
 
 describe('player card — loader reasons are held to their source', () => {
-  const SOURCES = ['lib/core-app/playerCard.ts', 'lib/trade-block/importedTradeBlock.ts'].map((p) => readFileSync(join(process.cwd(), p), 'utf8')).join('\n')
+  const SOURCES = ['lib/core-app/playerCard.ts', 'lib/core-app/playerMarketValue.ts', 'lib/trade-block/importedTradeBlock.ts'].map((p) => readFileSync(join(process.cwd(), p), 'utf8')).join('\n')
 
   it.each(PLAYER_CARD_REASON_KEYS.map((k) => [k]))('"%s" is still written verbatim, and has Spanish', (key) => {
     expect(SOURCES).toContain(key)

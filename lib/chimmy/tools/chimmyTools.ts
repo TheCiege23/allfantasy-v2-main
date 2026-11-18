@@ -294,7 +294,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_value',
       description:
-        "What ONE named player is worth — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. In an NBA league in scope it returns that league's own value: fantasy points (or category score) over the best free agent, rest of season, plus a dynasty value in a dynasty league — the same pricing the Trade Center grades with. Otherwise it returns the AllFantasy 0-10000 NFL value scale, long-term asset value for TRADING; only a few hundred players carry a published NFL value, and a miss is NOT evidence the player is worthless. Never a weekly points projection or a start/sit ranking.",
+        "What ONE named player is worth — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. In an NBA league in scope it returns that league's own value: fantasy points (or category score) over the best free agent, rest of season, plus a dynasty value in a dynasty league — the same pricing the Trade Center grades with. Otherwise it returns the player's NFL market value — the SAME number his player card shows — on this league's own chart (dynasty or redraft, one-QB or superflex), or the cross-league chart with no league in scope: 0-10000, long-term asset value for TRADING, with his rank and 7-day move. Kickers, defenders and deep reserves are often unpriced, and a miss is NOT evidence the player is worthless. Never a weekly points projection or a start/sit ranking.",
       parameters: {
         type: 'object',
         properties: {
@@ -1340,7 +1340,8 @@ export async function executeChimmyTool(
           const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
           if (board != null) return board
         }
-        return await buildPlayerValueContext({ playerName: asked })
+        // The player card's number, on this league's chart when one is in scope (`playerMarketValue.ts`).
+        return await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId ?? null })
       }
 
       /* No league gate: the standard projection remains useful without one. When a verified
