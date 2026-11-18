@@ -26,6 +26,12 @@ import {
   type WaiverDecisionBridgeArgs,
 } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
+import {
+  loadRosterProjectionBasis,
+  priceRosterForLeague,
+  type RosterLeagueProjection,
+  type RosterProjectionBasis,
+} from './rosterLeagueProjections'
 import { loadRosterValueGradeSliceCached, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
@@ -244,6 +250,13 @@ export interface DecisionOsGroundingPacket {
    * tackle-heavy setup, so these cannot be cached sport+format the way a market board can.
    */
   idpKickerValues?: GroundedSlice<ValueLookup[]>
+
+  /**
+   * The asker's roster priced for the feed's week under THIS league's scoring — the number My Team shows
+   * (`rosterLeagueProjections.ts`). `projections` above is one canonical format for every league; this is the
+   * league's own. NFL only; asked for whenever projections are.
+   */
+  rosterProjections?: GroundedSlice<RosterLeagueProjection[]>
 
   /**
    * R3.3 (2.2) — "Where am I weak?" in value terms: this roster's positions ranked against the
@@ -663,21 +676,23 @@ const CONTEXT_SLICE_NAMES = [
 ] as const
 
 /** The slice, or a stated gap when it cannot finish in the time left. Never throws. */
-export function withSliceDeadline(
+export function withSliceDeadline<T = ValueLookup[]>(
   remainingMs: number,
-  work: Promise<GroundedSlice<ValueLookup[]>>,
-): Promise<GroundedSlice<ValueLookup[]>> {
-  const late = absent<ValueLookup[]>({
+  work: Promise<GroundedSlice<T>>,
+  /** The gap when it runs out of time. Defaults to the IDP/kicker wording this was written for. */
+  lateGap: GroundingGap = {
     reason: 'not_computed',
     detail: 'IDP and kicker values did not finish in time for this answer.',
     remedy: 'They are priced per request; asking again usually includes them.',
-  })
+  },
+): Promise<GroundedSlice<T>> {
+  const late = absent<T>(lateGap)
   if (remainingMs <= 0) {
     work.catch(() => undefined)
     return Promise.resolve(late)
   }
   let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<GroundedSlice<ValueLookup[]>>((resolve) => {
+  const timeout = new Promise<GroundedSlice<T>>((resolve) => {
     timer = setTimeout(() => resolve(late), remainingMs)
   })
   return Promise.race([work.catch(() => late), timeout]).finally(() => {
@@ -933,6 +948,15 @@ export async function buildDecisionOsGroundingPacket(
         ),
       )
     : Promise.resolve(null)
+
+  /*
+   * The league's rulebook and the feed's week for the roster projections, read now so only the pricing waits for
+   * the roster (`rosterLeagueProjections.ts`). A non-NFL league answers without a query.
+   */
+  const pRosterBasis: Promise<RosterProjectionBasis | null> =
+    want.projections && !projectionKill && leagueId && args.userId
+      ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport }))
+      : Promise.resolve(null)
 
   const pCommissioner =
     leagueId && args.userId && !commishKill
@@ -1484,6 +1508,35 @@ export async function buildDecisionOsGroundingPacket(
    * does the real work: 10 of 94 NFL leagues roster IDP slots and 19 roster a kicker, so four
    * leagues in five return before a single query runs.
    */
+  /*
+   * The roster's league-scored projections. Like IDP/kicker it needs the ROSTER, so it starts here — and BEFORE the
+   * IDP/kicker hop's await, so the two second hops overlap rather than queue. Same deadline as that hop.
+   */
+  let rosterProjections: GroundedSlice<RosterLeagueProjection[]> = absent<RosterLeagueProjection[]>(NOT_REQUESTED)
+  let pRosterProjections: Promise<GroundedSlice<RosterLeagueProjection[]>> | null = null
+  const rosterBasis = await pRosterBasis
+  if (want.projections && projectionKill) rosterProjections = absent<RosterLeagueProjection[]>(projectionKill)
+  else if (rosterBasis && !contextFacts) {
+    rosterProjections = absent<RosterLeagueProjection[]>({
+      reason: 'not_computed',
+      detail: 'The context engine did not return a roster, so your players could not be priced under this league\'s scoring.',
+      remedy: 'It retries on the next request; nothing on your side needs changing.',
+    })
+  } else if (rosterBasis) {
+    pRosterProjections = time(
+      'rosterProjections',
+      withSliceDeadline<RosterLeagueProjection[]>(
+        IDP_KICKER_DEADLINE_MS - (Date.now() - startedAt),
+        priceRosterForLeague({ basis: rosterBasis, rosterValue: contextFacts?.roster?.value ?? null, sport: args.sport }),
+        {
+          reason: 'not_computed',
+          detail: 'Your roster\'s projections under this league\'s scoring did not finish in time for this answer.',
+          remedy: 'Asking again usually includes them; My Team shows the same numbers.',
+        },
+      ),
+    )
+  }
+
   let idpKickerValues: GroundedSlice<ValueLookup[]> = absent<ValueLookup[]>(NOT_REQUESTED)
   if (want.idpKicker && idpKickerKill) idpKickerValues = absent<ValueLookup[]>(idpKickerKill)
   else if (want.idpKicker && leagueId && !contextFacts) {
@@ -1538,6 +1591,8 @@ export async function buildDecisionOsGroundingPacket(
     )
   }
 
+  if (pRosterProjections) rosterProjections = await pRosterProjections
+
   /*
    * A slice whose read ran out of budget says so, instead of a reason that sends someone looking at the wrong
    * system ("rules could not be resolved", "engine did not return"). Only absent slices are restamped.
@@ -1556,6 +1611,7 @@ export async function buildDecisionOsGroundingPacket(
   marketValues = stamp('marketValues', marketValues)
   devyValues = stamp('devyValues', devyValues)
   projections = stamp('projections', projections)
+  rosterProjections = stamp('rosterProjections', rosterProjections)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
   portfolio = stamp('portfolio', portfolio)
@@ -1581,6 +1637,7 @@ export async function buildDecisionOsGroundingPacket(
     ['marketValues', marketValues as GroundedSlice<unknown>],
     ['devyValues', devyValues as GroundedSlice<unknown>],
     ['projections', projections as GroundedSlice<unknown>],
+    ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
   ]
 
   return {
@@ -1601,6 +1658,7 @@ export async function buildDecisionOsGroundingPacket(
     waiverDecision,
     commissionerHealthDecision,
     idpKickerValues,
+    rosterProjections,
     rosterValueGrade,
     gaps: collectGaps(slices),
     meta: {

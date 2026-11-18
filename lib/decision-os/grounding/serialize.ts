@@ -46,6 +46,10 @@ function ageLine(asOf: string | null, now: number): string | null {
  */
 const MAX_ITEMS = 8
 
+/** The roster's league-scored projections list the whole roster: a 25-man roster cut to eight reads as complete. */
+const ROSTER_PROJECTIONS_SLICE = "Your roster this week (this league's scoring)"
+const MAX_ITEMS_BY_SLICE: Readonly<Record<string, number>> = { [ROSTER_PROJECTIONS_SLICE]: 30 }
+
 /** Trim a prose slice so one long saved analysis cannot crowd out every other fact. */
 const MAX_PROSE = 1200
 
@@ -131,12 +135,20 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
 
   const { ordered, promoted } = orderByRosterRelevance(value, onRoster)
 
+  const cap = MAX_ITEMS_BY_SLICE[name] ?? MAX_ITEMS
   const rows: string[] = []
-  for (const item of ordered.slice(0, MAX_ITEMS)) {
+  if (name === ROSTER_PROJECTIONS_SLICE) {
+    const first = value[0] as { week?: unknown; season?: unknown } | null
+    const when = typeof first?.week === 'number' ? `Week ${first.week}${first.season ? ` ${String(first.season)}` : ''}` : 'This week'
+    rows.push(
+      `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
+    )
+  }
+  for (const item of ordered.slice(0, cap)) {
     const line = renderItem(item)
     if (line) rows.push(`    · ${line}`)
   }
-  const hidden = ordered.length - MAX_ITEMS
+  const hidden = ordered.length - cap
   if (hidden > 0) {
     /*
      * ⚠ THE MODEL MUST BE TOLD WHICH EIGHT THESE ARE. Showing the asker's own players without
@@ -279,6 +291,18 @@ function renderDecision(o: Record<string, unknown>): string[] {
 function renderItem(item: unknown): string | null {
   if (item == null || typeof item !== 'object') return null
   const o = item as Record<string, unknown>
+
+  /*
+   * RosterLeagueProjection — the asker's roster under THIS league's scoring (`rosterLeagueProjections.ts`).
+   * 🛑 MUST BE THE FIRST BRANCH: it also carries `playerName` and `points`, and that branch would label
+   * the league's own number "canonical preset, NOT this league". A null is said in words, never printed as 0.
+   */
+  if (o.leagueScored === true && (o.slot === 'starter' || o.slot === 'bench')) {
+    const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : 'unidentified player'
+    const pos = o.position ? ` (${String(o.position)})` : ''
+    const pts = typeof o.points === 'number' ? `${fmt(o.points)} pts` : 'no projection line this week (NOT zero)'
+    return `${o.slot === 'starter' ? 'starter' : 'bench'}: ${who}${pos} ${pts}`
+  }
 
   // ValueLookup — only `status: 'ok'` carries a number. The other three are honest absences and
   // are already reported as gaps; repeating them per-player would drown the real values.
@@ -511,6 +535,11 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Market player values', packet.marketValues as GroundedSlice<unknown>],
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
+    /*
+     * The asker's roster under this league's scoring — the number My Team shows. Named so the model prefers it over
+     * the canonical rows above for anyone on this roster.
+     */
+    [ROSTER_PROJECTIONS_SLICE, packet.rosterProjections as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
