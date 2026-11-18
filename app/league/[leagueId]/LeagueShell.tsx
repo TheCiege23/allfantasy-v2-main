@@ -16,6 +16,8 @@ import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import '@/components/league/league-type-skin.css'
 import { LeagueTypeHero } from '@/components/league/LeagueTypeHero'
+import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { LeaguePlayerNewsTab } from '@/components/league/LeaguePlayerNewsTab'
 import { redraftSkinSport, resolveLeagueSkin } from '@/lib/league/leagueTypeSkin'
 import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
@@ -550,6 +552,10 @@ export function LeagueShell({
         { id: 'legacy', label: 'Legacy' },
         { id: 'war_room', label: 'War Room' },
         { id: 'league_chat', label: 'League Chat' },
+        // Sleeper's League → Activity and News (owner's page review, 2026-11-17). Both land in the
+        // League group (components/decide/leagueTabGroups.ts sends unknown ids there).
+        { id: 'activity', label: 'Activity' },
+        { id: 'news', label: 'News' },
       ]
       if (isCommissioner) core.push({ id: 'commissioner', label: 'Commissioner' })
       // Native leagues: Settings is the Sleeper-style League Settings page (?view=settings), for
@@ -669,6 +675,9 @@ export function LeagueShell({
       // Slice 3: full-chain league history (LegacyHome). Appended for every
       // general/imported league; the group bar surfaces it as the Legacy group.
       { id: 'legacy', label: 'Legacy' },
+      // Sleeper's League → Activity and News, for every general/imported league (League group).
+      { id: 'activity', label: 'Activity' },
+      { id: 'news', label: 'News' },
     ]
   }, [
     nativeWorkspace,
@@ -883,6 +892,8 @@ export function LeagueShell({
       draft_intel: 'draft_intel',
       live_intel: 'draft_intel',
       legacy: 'legacy',
+      activity: 'activity',
+      news: 'news',
       league_chat: 'league_chat',
       chat: 'league_chat',
       commissioner: 'commissioner',
@@ -2806,6 +2817,10 @@ function LeagueTabRouter({
           userTeam={userTeam ? { id: userTeam.id, teamName: userTeam.teamName } : null}
         />
       )
+    case 'activity':
+      return <LeagueActivityTab leagueId={leagueId} />
+    case 'news':
+      return <LeaguePlayerNewsTab leagueId={leagueId} sport={String(selectedLeague.sport ?? 'NFL')} />
     case 'league_chat':
       /*
        * 10a. This case used to render a card telling the reader that chat was

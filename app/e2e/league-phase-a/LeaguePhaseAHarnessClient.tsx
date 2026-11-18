@@ -14,7 +14,9 @@ import { LEAGUE_SKINS, type LeagueSkin } from '@/lib/league/leagueTypeSkin'
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-workspace.css'
 import '@/components/league/league-type-skin.css'
-import { SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_TRADES_PANEL } from './sampleData'
+import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { LeaguePlayerNewsTab } from '@/components/league/LeaguePlayerNewsTab'
+import { SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_TRADES_PANEL } from './sampleData'
 
 /*
  * Dev-only harness: answer the three reads these surfaces make with SAMPLE DATA, so the page renders
@@ -29,6 +31,10 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
     if (url.includes('/api/leagues/harness-league/matchup-center')) return json({ payload: SAMPLE_MATCHUP })
     if (url.includes('/api/league/trades-panel')) return json(SAMPLE_TRADES_PANEL)
     if (url.includes('/api/league/history')) return json(SAMPLE_HISTORY)
+    if (url.includes('/api/app/leagues/harness-league/chat/moves')) return json(SAMPLE_MOVES)
+    if (url.includes('/api/league/roster')) return json(SAMPLE_ROSTER)
+    if (url.includes('/api/sleeper/players')) return json(SAMPLE_PLAYER_MAP)
+    if (url.includes('/api/leagues/harness-league/player-news')) return json(SAMPLE_NEWS)
     return real(input, init)
   }
 }
@@ -46,6 +52,14 @@ const PLAYERS: DisplayPlayerMap = {
   p3: { id: 'p3', name: 'Matthew Golden', position: 'WR', team: 'GB', projectedPoints: 15.39, byeWeek: 11 },
   p4: { id: 'p4', name: 'Trevin Wallace', position: 'LB', team: 'NYJ', projectedPoints: 1.98, injuryStatus: 'Out' },
   p5: { id: 'p5', name: 'Chris Brazzell II', position: 'WR', team: 'CAR', projectedPoints: 0, injuryStatus: 'Injured Reserve' },
+}
+
+/** SAMPLE DATA — an NBA roster for the NG view. */
+const NBA_PLAYERS: DisplayPlayerMap = {
+  b1: { id: 'b1', name: 'Jalen Brunson', position: 'PG', team: 'NYK', projectedPoints: 44.1 },
+  b2: { id: 'b2', name: 'Anthony Edwards', position: 'SG', team: 'MIN', projectedPoints: 46.2 },
+  b3: { id: 'b3', name: 'Jayson Tatum', position: 'SF', team: 'BOS', projectedPoints: 47.8, injuryStatus: 'Questionable' },
+  b4: { id: 'b4', name: 'Victor Wembanyama', position: 'C', team: 'SAS', projectedPoints: 52.0 },
 }
 
 export function LeaguePhaseAHarnessClient() {
@@ -109,6 +123,28 @@ export function LeaguePhaseAHarnessClient() {
             ) : null}
             {view === 'trades' ? <TradesTab league={league} teams={[]} /> : null}
             {view === 'history' ? <LegacyHome league={league} leagueId="harness-league" /> : null}
+            {view === 'activity' ? <LeagueActivityTab leagueId="harness-league" /> : null}
+            {view === 'news' ? <LeaguePlayerNewsTab leagueId="harness-league" sport="NFL" /> : null}
+            {view === 'ng' ? (
+              // NBA roster on a day two clubs have no game: NG in AF blue in the points column.
+              <div className="flex flex-col gap-1">
+                {(['b1', 'b2', 'b3', 'b4'] as const).map((id, i) => (
+                  <RosterRow
+                    key={id}
+                    playerId={id}
+                    sport="NBA"
+                    players={NBA_PLAYERS}
+                    playersLoading={false}
+                    onPlayerClick={() => {}}
+                    slotLabel={NBA_PLAYERS[id].position}
+                    week={5}
+                    season={2026}
+                    noGameTeams={new Set(['MIN', 'SAS'])}
+                    liveScore={i === 0 ? 31.5 : null}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
         </main>
       </div>

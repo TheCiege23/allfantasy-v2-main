@@ -23,6 +23,9 @@ import { ManagerH2H } from '@/components/decide/ManagerH2H'
 import { TradeLedgerGraded } from '@/components/decide/TradeLedgerGraded'
 import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import { LeagueRafters } from '@/components/league/LeagueRafters'
+import { LeagueLegend } from '@/components/league/LeagueLegend'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import './broadcast-deck.css'
 
 type ApiResponse =
@@ -349,6 +352,10 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
           </div>
         </>
       )}
+      {/* Stat corrections + the league legend, for every league whatever its history state. */}
+      {!loading ? (
+        <LeagueLegend hostLabel={isNativePlatform(league.platform) ? null : sourcePlatformLabel(league.platform)} />
+      ) : null}
     </div>
   )
 }
