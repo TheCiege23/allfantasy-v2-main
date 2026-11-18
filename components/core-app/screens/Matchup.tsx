@@ -1329,6 +1329,37 @@ export function Matchup({ data }: MatchupProps) {
         {data.extraMatchup ? (
           <p className="af-mu-basis" data-testid="matchup-extra-matchup">{data.extraMatchup.line}</p>
         ) : null}
+        {/* A league that plays several games a week: every one of them, the open one marked. */}
+        {data.weekGames && data.weekGames.length > 1 ? (
+          <nav aria-label={copy('This week\'s games')} data-testid="matchup-week-games" style={{ marginTop: 12 }}>
+            <h3 className="af-label">{copy('This week\'s games')} ({data.weekGames.length})</h3>
+            <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+              {data.weekGames.map((g) => (
+                <li key={g.game}>
+                  <Link
+                    href={`/core/matchup?league=${encodeURIComponent(data.league.id)}${data.week.available ? `&week=${data.week.data.week}` : ''}&game=${g.game}`}
+                    prefetch={false}
+                    aria-current={g.selected ? 'true' : undefined}
+                    data-testid={`matchup-week-game-${g.game}`}
+                    style={{
+                      display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                      minHeight: 44, padding: '8px 12px', borderRadius: 10, textDecoration: 'none', color: 'inherit',
+                      border: g.selected ? '1px solid currentColor' : '1px solid rgba(127,127,127,0.35)',
+                      fontWeight: g.selected ? 700 : 400,
+                    }}
+                  >
+                    <span>{copy('Game')} {g.game} · {copy('vs')} {g.opponentName ?? copy('Opponent not identified')}</span>
+                    <span>
+                      {g.result == null
+                        ? copy('Not scored yet')
+                        : `${g.yourPoints.toFixed(2)} – ${g.opponentPoints.toFixed(2)} · ${copy(g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Tie')}`}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ) : null}
       </section>
 
       {/* ── What the week turns on: three cards, each only when the data answers it ── */}
