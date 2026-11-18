@@ -68,6 +68,8 @@ export const railRowMessages = defineMessages({
     tiedAtLine: 'tied at the line',
     aboveChop: (margin: string) => `+${margin} above chop`,
     alive: 'alive',
+    /* An imported elimination league that has knocked you out (railRecordRank.ts `knockedOutWeek`). */
+    knockedOutWeek: (week: number) => `Knocked out · Week ${week}`,
     /* RailRowBody */
     syncPaused: 'Sync paused',
     updatesDelayed: 'Updates delayed',
@@ -168,6 +170,7 @@ export const railRowMessages = defineMessages({
     tiedAtLine: 'empatado en la línea',
     aboveChop: (margin) => `+${margin} sobre el corte`,
     alive: 'vivo',
+    knockedOutWeek: (week) => `Eliminado · semana ${week}`,
     syncPaused: 'Sincronización en pausa',
     updatesDelayed: 'Actualizaciones retrasadas',
     lastResult: 'Último resultado',
