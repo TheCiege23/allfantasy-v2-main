@@ -130,8 +130,15 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
     // The trade window's grade preview needs a database; answer "not graded" so the window renders.
     if (url.includes('/api/leagues/harness-league/trades/grade-preview')) return json({ grade: null })
     if (url.includes('/api/redraft/schedule')) {
-      if ((init?.method ?? 'GET') === 'GET') return json({ schedule: harnessSchedule, customWeeks: [8] })
+      if ((init?.method ?? 'GET') === 'GET') {
+        // Copy league (part 2): week 5's first pairing is a real game.
+        const w5 = harnessSchedule.weeks[4]!.matchups[0]!
+        return json({ schedule: harnessSchedule, customWeeks: [8], copyLeague: true, realGames: { '5': [[w5.homeRosterId, w5.awayRosterId]] } })
+      }
       const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string; times?: number }
+      if (body.action === 'real_schedule_preview' || body.action === 'real_schedule_apply') {
+        return json({ ok: true, weeks: Array.from({ length: 10 }, (_, i) => ({ week: i + 5, loaded: i < 8, real: i < 8 ? 2 + (i % 3) : 0, total: i < 8 ? 6 : 0 })) })
+      }
       if (body.action === 'randomize') return json({ ok: true, posted: body.times ?? 1, regeneratedFromWeek: 5 })
       return json({ ok: true })
     }
