@@ -1,4 +1,5 @@
 import { readFantraxDivisions, STANDINGS_DIVISIONS_KEY } from '@/lib/league-import/standingsDivisions'
+import { GAMES_PER_WEEK_SETTINGS_KEY, inferGamesPerWeek, MAX_GAMES_PER_WEEK } from '@/lib/schedule-runtime/gamesPerWeek'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { usesFantraxPeriodCalendar } from '@/lib/league-import/fantrax/fantraxProSports'
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
@@ -7,6 +8,11 @@ import type { FantraxImportPayload } from './types'
 
 export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = {
   map(source) {
+    const gamesPerWeek = Math.min(MAX_GAMES_PER_WEEK, inferGamesPerWeek(
+      source.schedule.flatMap((week) => week.matchups
+        .filter((matchup) => !matchup.isPlayoff)
+        .map((matchup) => ({ week: week.week, homeRosterId: matchup.teamId2, awayRosterId: matchup.teamId1 }))),
+    ))
     const inferredScoring =
       source.settings?.scoringType ??
       (source.league.isDevy ? 'devy' : source.league.sport === 'NCAAF' ? 'college' : null)
@@ -52,6 +58,9 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
       faab_budget: null,
       roster_positions: source.settings?.rosterPositions.map((slot) => `${slot.position}:${slot.count}`) ?? [],
       fantrax_settings: source.settings?.raw ?? null,
+      // How many games each team plays in a week (Fantrax leagues can play 3 or 5), read from the
+      // schedule itself. Only set above 1, so an ordinary league's settings are untouched.
+      ...(gamesPerWeek > 1 ? { [GAMES_PER_WEEK_SETTINGS_KEY]: gamesPerWeek } : {}),
       // Divisions were dropped until 2026-11-18. `null` clears a stale key, as for Sleeper and ESPN.
       [STANDINGS_DIVISIONS_KEY]: readFantraxDivisions((source.settings?.raw as { divisionByTeamId?: Record<string, string> } | null | undefined)?.divisionByTeamId),
     } satisfies NormalizedLeagueSettings
