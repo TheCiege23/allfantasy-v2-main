@@ -84,6 +84,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'rookie_devy_lock', // lib/league/rookieDevyLock.ts
   'rookie_draft_order', // lib/league/rookieDraftOrder.ts
   'schedule_custom_weeks', // lib/schedule-runtime/customWeeks.ts — weeks a commissioner set by hand
+  'copy_league', // lib/league/copyLeague.ts — which real team each manager took
   'draft_order_mode', // lib/draft-lottery/lotteryConfigStorage.ts
   'draft_lottery_config', // ditto
   'draft_lottery_last_seed', // ditto

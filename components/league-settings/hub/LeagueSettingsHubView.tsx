@@ -108,7 +108,7 @@ export type HubViewData = {
 }
 
 /** Live panels the Commissioner Hub embeds; the fetching owner supplies them, a fixture preview may not. */
-export type HubSlots = { rivalryWeek?: ReactNode; storyline?: ReactNode }
+export type HubSlots = { rivalryWeek?: ReactNode; storyline?: ReactNode; copyLeague?: ReactNode }
 
 export type HubCallbacks = {
   onToggleSetting: (field: string, next: boolean) => void
@@ -268,7 +268,7 @@ export function LeagueSettingsHubView({
               </div>
             </div>
           ) : null}
-          {tab === 'my' ? <MyTab data={data} cb={cb} /> : null}
+          {tab === 'my' ? <MyTab data={data} cb={cb} slots={slots} /> : null}
           {tab === 'setup' ? <SetupTab data={data} cb={cb} busyField={busyField} /> : null}
           {tab === 'members' ? <MembersTab data={data} cb={cb} /> : null}
           {tab === 'hub' ? <CommissionerHubTab data={data} cb={cb} slots={slots} /> : null}
@@ -728,7 +728,7 @@ function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCal
 
 /* ---------------------------------------------------------------- My tab */
 
-function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
+function MyTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots?: HubSlots }) {
   const { t } = useT()
   const [name, setName] = useState<string | null>(null)
   const [status, setStatus] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
@@ -788,6 +788,8 @@ function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
           )}
         </div>
       </Card>
+      {/* Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): take a real team; renders nothing elsewhere. */}
+      {slots?.copyLeague ?? null}
 
       <Card id="notifications" title="Notifications" sub="What pings you about this league">
         {n === undefined ? <Loading /> : n === null ? (

@@ -7,6 +7,8 @@ import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonCo
 import { useEntitlements } from '@/hooks/useEntitlements'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { CO_COMMISSIONER_SCOPES, type CoCommissionerScope } from '@/lib/league/coCommissionerScopes'
+import { afOptionsSummary } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import { CopyLeaguePanel } from '@/components/league-settings/CopyLeaguePanel'
 
 /**
  * Settings › League Setup › "AllFantasy options" (owner's page review #12–15, Phase C2): the AllFantasy-only
@@ -54,10 +56,16 @@ export function AfOptionsSettingsPanel({ leagueId }: { leagueId: string }) {
   // League rules are the `league` area: a co-commissioner without it sees them read-only (lib/league/commissionerAccess.ts).
   const scopes = payload.commissionerScopes ?? CO_COMMISSIONER_SCOPES
   const canEdit = Boolean(payload.canEdit) && scopes.includes('league')
+  const league = payload.league as Record<string, unknown>
+  // The odd-team and keeper sections only where the league has them (the sport is copy league's own panel).
+  const hasRuleSections = afOptionsSummary(league.leagueType as string | null, Number(league.leagueSize ?? league.teamCount ?? 0)) !== null
   return (
     <>
       {midSeasonDialog}
-      <LeagueSettingsPanel
+      <div className="px-6 pt-6">
+        <CopyLeaguePanel leagueId={leagueId} mode="commissioner" />
+      </div>
+      {hasRuleSections ? <LeagueSettingsPanel
         leagueId={leagueId}
         initialData={payload.league}
         settingsSnapshot={payload.settingsSnapshot ?? {}}
@@ -66,7 +74,7 @@ export function AfOptionsSettingsPanel({ leagueId }: { leagueId: string }) {
         save={save}
         debouncedSave={debouncedSave}
         only="af-options"
-      />
+      /> : null}
     </>
   )
 }
