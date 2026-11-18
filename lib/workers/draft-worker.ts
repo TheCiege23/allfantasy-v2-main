@@ -1,3 +1,4 @@
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -887,13 +888,14 @@ export class DraftWorker {
     const context = await this.getContext(draftId)
     const roster = await prisma.roster.findUnique({
       where: { id: teamId },
-      select: { platformUserId: true },
+      select: { platformUserId: true, managerUserId: true },
     })
+    const managerId = roster ? rosterManagerKey(roster) : null
 
-    if (roster?.platformUserId && !String(roster.platformUserId).startsWith('orphan-')) {
+    if (managerId && !managerId.startsWith('orphan-')) {
       const intel = await publishDraftIntelState({
         leagueId: context.leagueId,
-        userId: String(roster.platformUserId),
+        userId: managerId,
         trigger: 'manual',
       }).catch(() => null)
 

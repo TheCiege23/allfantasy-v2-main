@@ -3,7 +3,8 @@
  */
 
 import { isRosterManagedBy } from '@/lib/league/rosterManager'
-import { listHeldTeams } from '@/lib/league/viewerTeams'
+import { listHeldTeams, rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
+import { chooseDraftRosterId, resolveOnClockRosterIdForLeague } from './onClockRoster'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
@@ -114,9 +115,9 @@ export async function getCurrentUserRosterIdsForLeague(
  * Current user's roster id for this league (for draft room: "am I on the clock?" and auto-pick).
  * Returns null if the user has no roster in the league.
  *
- * With several teams this is the one named by `requestedRosterId` when the user holds it, otherwise
- * their first (a stable order). A caller deciding whose turn it is should use
- * `getCurrentUserRosterIdsForLeague` instead, so the user's other teams are not missed.
+ * With several teams this is the one named by `requestedRosterId` when the user holds it; otherwise the
+ * one on the clock in the league's live draft, so "is it my turn" and "pick for my team" are about the
+ * team that is up; otherwise the team they last switched to; otherwise their first.
  */
 export async function getCurrentUserRosterIdForLeague(
   leagueId: string,
@@ -124,9 +125,16 @@ export async function getCurrentUserRosterIdForLeague(
   requestedRosterId?: string | null
 ): Promise<string | null> {
   const rosterIds = await getCurrentUserRosterIdsForLeague(leagueId, userId)
+  if (rosterIds.length <= 1) return rosterIds[0] ?? null
+  // Several teams: the one named, else the one on the clock (so the room is always about the team that
+  // is up), else the team they last switched to, else the first.
   const requested = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
   if (requested && rosterIds.includes(requested)) return requested
-  return rosterIds[0] ?? null
+  const [onClockRosterId, rememberedRosterIds] = await Promise.all([
+    resolveOnClockRosterIdForLeague(leagueId).catch(() => null),
+    rememberedActiveTeamIds(),
+  ])
+  return chooseDraftRosterId({ rosterIds, onClockRosterId, rememberedRosterIds })
 }
 
 /**

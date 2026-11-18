@@ -4,6 +4,7 @@
  * (league GET excludes source=draft), while the draft chat GET merges these in when sync is on.
  */
 
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 
@@ -60,14 +61,14 @@ async function resolveActorAppUserId(input: PostDraftPickChatEventInput): Promis
 
   const roster = await prisma.roster.findFirst({
     where: { id: input.rosterId, leagueId: input.leagueId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
     select: { userId: true },
   })
 
-  const candidates = [direct, roster?.platformUserId, league?.userId].filter(
+  const candidates = [direct, roster ? rosterManagerKey(roster) : null, league?.userId].filter(
     (id): id is string => typeof id === 'string' && id.trim().length > 0,
   )
   if (candidates.length === 0) return null

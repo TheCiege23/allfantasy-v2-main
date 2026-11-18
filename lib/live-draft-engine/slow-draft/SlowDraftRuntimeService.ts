@@ -1,3 +1,4 @@
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
 import { loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
@@ -116,12 +117,11 @@ export async function tryQueueAutoPick(
 
   const onClockRoster = await prisma.roster.findUnique({
     where: { id: rosterId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
-  const queueUserId =
-    onClockRoster?.platformUserId && !String(onClockRoster.platformUserId).startsWith('orphan-')
-      ? String(onClockRoster.platformUserId)
-      : null
+  // The draft queue belongs to the manager, who may run this team under a key of its own.
+  const onClockManagerId = onClockRoster ? rosterManagerKey(onClockRoster) : null
+  const queueUserId = onClockManagerId && !onClockManagerId.startsWith('orphan-') ? onClockManagerId : null
   if (!queueUserId) return { success: false }
 
   const queueRow = draftSession.queues.find((q) => q.userId === queueUserId)

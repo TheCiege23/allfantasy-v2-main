@@ -49,6 +49,20 @@ function readActiveTeamIds(cookieValue: string | null | undefined): string[] {
     .slice(0, ACTIVE_TEAMS_MAX)
 }
 
+/**
+ * The teams this request's manager last switched to, read from the request in flight. For server code
+ * that is not handed the request (the draft helpers). Empty outside a request.
+ */
+export async function rememberedActiveTeamIds(): Promise<string[]> {
+  try {
+    const { cookies } = await import('next/headers')
+    const store = await cookies()
+    return readActiveTeamIds(store.get(ACTIVE_TEAMS_COOKIE)?.value)
+  } catch {
+    return []
+  }
+}
+
 /** The cookie value after switching to `rosterId`, dropping the league's other teams from the list. */
 export function activeTeamsCookieAfterSwitch(current: string | null | undefined, rosterId: string, leagueRosterIds: readonly string[]): string {
   const others = new Set(leagueRosterIds)
