@@ -749,6 +749,13 @@ async function loadDash34Data(
     timing.read('roster', () => rosterOr.length
       ? prisma.roster.findMany({
           where: { OR: rosterOr },
+          /*
+           * Newest first, because `rosterByLeague` keeps the FIRST roster per league. A re-import can
+           * leave a stale second roster for the same team under another owner id (ESPN `565010384`:
+           * one frozen since 2026-09-17 still listing 15 players beside the emptied current one), and
+           * unordered it could win — flagging "Fix lineup" on a team knocked out weeks ago.
+           */
+          orderBy: { updatedAt: 'desc' },
           select: { id: true, leagueId: true, playerData: true },
         }).catch(fellBack(options, 'rosters', []))
       : Promise.resolve([])),
