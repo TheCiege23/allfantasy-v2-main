@@ -6339,6 +6339,8 @@ export const translations: Record<string, Record<string, string>> = {
     "commControl.rivalryNoHistory": "No rivalry history between these two yet.",
     "commControl.rivalryCopy": "Copy pairings to paste elsewhere",
     "commControl.rivalryCopied": "Copied",
+    "commControl.rivalryImportedHelp": "This league's schedule lives on its own platform, so it cannot be changed from here. These are each team's biggest rival, from the head-to-head games on file, close games and divisions. Copy them and set that week up there.",
+    "commControl.rivalryImportedShow": "Show rivalry pairings",
     "teamSwitcher.label": "Running team",
     "teamSwitcher.help": "You run {{n}} teams in this league. Lineups, waivers, trades and picks apply to the team chosen here.",
     "teamSwitcher.failed": "Could not switch teams. Try again.",

@@ -2400,6 +2400,8 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.rivalryNoHistory": "Todavía no hay historial de rivalidad entre estos dos.",
   "commControl.rivalryCopy": "Copiar los enfrentamientos para pegarlos en otro lugar",
   "commControl.rivalryCopied": "Copiado",
+  "commControl.rivalryImportedHelp": "El calendario de esta liga está en su propia plataforma, así que no se puede cambiar desde aquí. Estos son los mayores rivales de cada equipo, según los enfrentamientos registrados, los partidos cerrados y las divisiones. Cópialos y configura esa semana allí.",
+  "commControl.rivalryImportedShow": "Ver los emparejamientos de rivalidad",
   "teamSwitcher.label": "Equipo activo",
   "teamSwitcher.help": "Diriges {{n}} equipos en esta liga. Las alineaciones, reclamos, intercambios y selecciones se aplican al equipo elegido aquí.",
   "teamSwitcher.failed": "No se pudo cambiar de equipo. Inténtalo de nuevo.",
