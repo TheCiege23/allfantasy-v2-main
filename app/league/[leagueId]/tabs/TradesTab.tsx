@@ -36,6 +36,7 @@ import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
+import { TradeProposeGrid } from '@/components/league/TradeProposeGrid'
 import {
   groupTradeTimelineBySeason,
   tradeSeasonFromIso,
@@ -1131,6 +1132,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [err, setErr] = useState<string | null>(null)
   const [watch, setWatch] = useState<Set<string>>(() => readWatchSet(league.id))
   const [proposeOpen, setProposeOpen] = useState(false)
+  /** Set when the trade window is opened from the Propose grid: that manager and player, preselected. */
+  const [proposeFor, setProposeFor] = useState<{ rosterId: string; playerId: string } | null>(null)
+  const tradeBlockPlayerIds = useMemo(() => new Set(tradeBlock.map((t) => t.playerId)), [tradeBlock])
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
   const [reversing, setReversing] = useState<LeagueTradeHistoryItem | null>(null)
@@ -2003,6 +2007,22 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         </section>
       ) : null}
 
+      {/* ── Propose a trade: every manager's players as tiles (owner's page review #9) ── */}
+      {!loading && !err ? (
+        <TradeProposeGrid
+          leagueId={league.id}
+          platform={league.platform}
+          tradeBlockPlayerIds={tradeBlockPlayerIds}
+          watched={watch}
+          onToggleWatch={toggleWatch}
+          onProposeFor={(rosterId, playerId) => {
+            setProposeFor({ rosterId, playerId })
+            setProposeOpen(true)
+          }}
+          onBlockChanged={() => void load({ background: true })}
+        />
+      ) : null}
+
       {/* ── Actions ──────────────────────────────────────────────────── */}
       {!loading && !err && !nothingAtAll ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -2022,13 +2042,19 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
       <ProposeTradeModal
         open={proposeOpen}
-        onClose={() => setProposeOpen(false)}
+        onClose={() => {
+          setProposeOpen(false)
+          setProposeFor(null)
+        }}
         leagueId={league.id}
         teams={teams}
         platform={league.platform}
         sport={league.sport}
+        initialPartnerRosterId={proposeFor?.rosterId ?? null}
+        initialGetPlayerId={proposeFor?.playerId ?? null}
         onSubmitted={() => {
           setProposeOpen(false)
+          setProposeFor(null)
           void load()
         }}
       />

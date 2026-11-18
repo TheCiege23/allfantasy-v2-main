@@ -20,7 +20,7 @@ import { TeamFuturePicks } from '@/components/league/TeamFuturePicks'
 import { LeagueStandings } from '@/components/standings/LeagueStandings'
 import { MemberLineupSettings } from '@/components/league/MemberLineupSettings'
 import { AutoSwitchOwnerCard } from '@/components/league/AutoSwitchOwnerCard'
-import { SAMPLE_FUTURE_PICKS, SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_STANDINGS, SAMPLE_TRADES_PANEL } from './sampleData'
+import { SAMPLE_FUTURE_PICKS, SAMPLE_HISTORY, SAMPLE_MATCHUP, SAMPLE_MOVES, SAMPLE_NEWS, SAMPLE_PLAYER_MAP, SAMPLE_ROSTER, SAMPLE_STANDINGS, SAMPLE_TRADE_ROSTERS, SAMPLE_TRADES_PANEL } from './sampleData'
 
 /*
  * Dev-only harness: answer the three reads these surfaces make with SAMPLE DATA, so the page renders
@@ -83,6 +83,9 @@ if (typeof window !== 'undefined' && !(window as unknown as { __afPhaseAFetch?: 
       if (url.includes('scope=league')) return json(harnessAuto)
       return json({ rosterId: 'r1', setting: harnessAuto.teams[0]!.setting, ownerHasPro: true })
     }
+    if (url.includes('/api/leagues/harness-league/trades/rosters')) return json(SAMPLE_TRADE_ROSTERS)
+    // The trade window's grade preview needs a database; answer "not graded" so the window renders.
+    if (url.includes('/api/leagues/harness-league/trades/grade-preview')) return json({ grade: null })
     return real(input, init)
   }
 }
