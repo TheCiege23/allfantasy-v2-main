@@ -428,10 +428,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   if (canEdit) {
     sections.push({
       id: 'commissioner',
-      title: 'Commissioner tools',
+      // The Commissioner Hub (owner's page review #16) replaces "Commissioner tools"; the sub-page it
+      // used to name is the lineups / locks / schedule / members panel and league history.
+      title: 'Commissioner Hub',
       rows: [
         { id: 'league-ai', label: 'League Chimmy', value: 'Helpers & commissioner intelligence', target: 'ai' },
-        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls and league history', target: 'commissioner-tools' },
+        { id: 'commissioner-tools', label: 'Lineups, locks & schedule', value: 'Lineups, locks, schedule, members and league history', target: 'commissioner-tools' },
         { id: 'dues', label: 'Dues & payouts', value: 'Track who has paid', target: 'dues' },
         { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
         { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },

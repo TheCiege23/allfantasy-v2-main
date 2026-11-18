@@ -1,8 +1,9 @@
 'use client'
 
 /**
- * Presentational League Settings hub — four Sleeper-parity tabs (My Settings, League
- * Setup, Members, Record Book) in the AllFantasy league surface. Pure props in, callbacks
+ * Presentational League Settings hub — Sleeper-parity tabs (My Settings, League Setup, Members,
+ * Record Book) plus the Commissioner Hub (owner's page review #16, Phase C), which a commissioner of
+ * an AllFantasy league sees between Members and Record Book. Lives in the AllFantasy league surface. Pure props in, callbacks
  * out: `LeagueSettingsHub` owns every fetch and save, and the /e2e preview renders this
  * same component from fixtures, so what the preview shows is what the league page renders.
  */
@@ -25,10 +26,11 @@ import {
   type HubStandingRow,
 } from '@/lib/league-settings-hub/hubModel'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import type { TaskCard } from '@/lib/core-app/commissioner/tasks'
 import type { CorrectionWeek } from '@/lib/league-settings-hub/recordBookModel'
 import { sportCopy, sportDisplayName } from '@/lib/league-settings-hub/sportProfile'
 
-export type HubTabId = 'my' | 'setup' | 'members' | 'record'
+export type HubTabId = 'my' | 'setup' | 'members' | 'hub' | 'record'
 
 type HubMember = {
   id: string
@@ -85,7 +87,16 @@ export type HubViewData = {
     | undefined
   /** Per week of `season`: final vs still open, when it was rescored, and (when checked) which players changed. */
   correctionWeeks: { season: number; weeks: CorrectionWeek[] } | null | undefined
+  /**
+   * Commissioner Hub "Needs you": the same task queue as /core's Commissioner Hub
+   * (`/api/leagues/[id]/commissioner-hub`). Absent or `undefined` while loading; `null` when it
+   * could not be read.
+   */
+  commissionerTasks?: { cards: TaskCard[]; overflow: TaskCard[] } | null
 }
+
+/** Live panels the Commissioner Hub embeds; the fetching owner supplies them, a fixture preview may not. */
+export type HubSlots = { rivalryWeek?: ReactNode; storyline?: ReactNode }
 
 export type HubCallbacks = {
   onToggleSetting: (field: string, next: boolean) => void
@@ -115,8 +126,17 @@ const TABS: Array<{ id: HubTabId; label: string }> = [
   { id: 'my', label: 'My Settings' },
   { id: 'setup', label: 'League Setup' },
   { id: 'members', label: 'Members' },
+  { id: 'hub', label: 'Commissioner Hub' },
   { id: 'record', label: 'Record Book' },
 ]
+
+/**
+ * The Commissioner Hub tab: commissioners and co-commissioners of an AllFantasy league. An imported
+ * league's commissioner tools live on its host platform, and a manager has nothing to run here.
+ */
+export function showsCommissionerHub(data: Pick<HubViewData, 'canEdit' | 'importedFrom'>): boolean {
+  return data.canEdit && !data.importedFrom
+}
 
 export function LeagueSettingsHubView({
   data,
@@ -124,6 +144,7 @@ export function LeagueSettingsHubView({
   initialTab = 'setup',
   busyField = null,
   advanced,
+  slots,
 }: {
   data: HubViewData
   cb: HubCallbacks
@@ -132,8 +153,15 @@ export function LeagueSettingsHubView({
   busyField?: string | null
   /** Optional "Advanced settings" escape hatch to the full legacy editor. */
   advanced?: { label: string; onOpen: () => void }
+  /** Live panels for the Commissioner Hub tab (Rivalry Week, Storyline). */
+  slots?: HubSlots
 }) {
-  const [tab, setTab] = useState<HubTabId>(initialTab)
+  const hubAllowed = showsCommissionerHub(data)
+  const [picked, setTab] = useState<HubTabId>(initialTab)
+  // The payload arrives after the first render, so `canEdit` can flip: a hub tab asked for before it
+  // is known lands on League Setup until it is.
+  const tab: HubTabId = picked === 'hub' && !hubAllowed ? 'setup' : picked
+  const tabs = hubAllowed ? TABS : TABS.filter((tb) => tb.id !== 'hub')
   const { language } = useOptionalLanguage()
   const tr = useMemo<HubTr>(() => ({
     lang: language,
@@ -170,7 +198,7 @@ export function LeagueSettingsHubView({
 
       <div className="af-lsh-tabbar">
       <div className="af-lsh-tabs" role="tablist" aria-label={t('League settings')}>
-        {TABS.map((tb) => (
+        {tabs.map((tb) => (
           <button
             key={tb.id}
             type="button"
@@ -229,6 +257,7 @@ export function LeagueSettingsHubView({
           {tab === 'my' ? <MyTab data={data} cb={cb} /> : null}
           {tab === 'setup' ? <SetupTab data={data} cb={cb} busyField={busyField} /> : null}
           {tab === 'members' ? <MembersTab data={data} cb={cb} /> : null}
+          {tab === 'hub' ? <CommissionerHubTab data={data} cb={cb} slots={slots} /> : null}
           {tab === 'record' ? <RecordTab data={data} /> : null}
         </div>
       </div>
@@ -266,6 +295,7 @@ function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; labe
     return out
   }
   if (tab === 'members') return [{ id: 'commissioners', label: 'Commissioners' }, { id: 'coowners', label: 'Co-Owners' }, { id: 'managers', label: 'Managers' }, { id: 'invite', label: 'Invite' }]
+  if (tab === 'hub') return HUB_SECTIONS.map((s) => ({ id: s.id, label: s.label }))
   return [{ id: 'history', label: 'League History' }, { id: 'standings', label: 'All-Time Standings' }, { id: 'highs', label: 'High Scores' }, { id: 'corrections', label: 'Stat Corrections' }, { id: 'legend', label: 'League Legend' }]
 }
 
@@ -378,6 +408,154 @@ function GroupGrid({ groups, canEdit, busyField, onToggle }: { groups: HubGroup[
           ))}
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------- Commissioner Hub tab */
+
+/**
+ * The Commissioner Hub (owner's page review #16): it replaces the "Commissioner tools" entry. What
+ * needs the commissioner comes first; then one card per job, each opening the editor that already
+ * does it. Panel ids are League Settings sub-pages (lib/league-settings-home); `commissioner-tools:<view>`
+ * opens that sub-page on one of CommissionerControlPanel's views.
+ */
+const HUB_SECTIONS = [
+  { id: 'needs', label: 'Needs you' },
+  { id: 'season', label: 'Season controls' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'rivalry', label: 'Rivalry Week' },
+  { id: 'options', label: 'League options' },
+  { id: 'storyline', label: 'Storyline' },
+] as const
+
+type HubLink = { label: string; description: string; panel?: string; href?: string; testid: string }
+
+const SEASON_LINKS: HubLink[] = [
+  { label: 'Edit lineups and records', description: 'Set any team’s lineup, then rescore the week.', panel: 'commissioner-tools:edit-lineups', testid: 'hub-edit-lineups' },
+  { label: 'Lock a roster', description: 'Stop a team from adding, dropping or trading.', panel: 'commissioner-tools:lock-roster', testid: 'hub-lock-roster' },
+  { label: 'Member settings', description: 'Chimmy lineup and auto-switch injured starters, team by team.', panel: 'commissioner-tools:member-settings', testid: 'hub-member-settings' },
+  { label: 'Co-commissioners', description: 'Who can run the league with you.', panel: 'commissioner-tools:update-commissioners', testid: 'hub-co-commissioners' },
+  { label: 'Score adjustments', description: 'Add or take away points for a team in a week.', panel: 'score-adjustments', testid: 'hub-score-adjustments' },
+  { label: 'Dues & payouts', description: 'Track who has paid. AllFantasy never holds the money.', panel: 'dues', testid: 'hub-dues' },
+  { label: 'Settings lock', description: 'Lock the rules for the season.', panel: 'settings-lock', testid: 'hub-settings-lock' },
+]
+
+const SCHEDULE_LINKS: HubLink[] = [
+  { label: 'Edit the schedule', description: 'Rebuild it, or swap two teams’ opponents in a week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-edit-schedule' },
+  { label: 'Divisions', description: 'How many, their names, who is in each, and division rivals twice.', panel: 'divisions', testid: 'hub-divisions' },
+]
+
+const NO_PLAYOFF_KINDS: ReadonlySet<HubKind> = new Set<HubKind>(['survivor', 'big_brother', 'guillotine'])
+const ROOKIE_ORDER_KINDS: ReadonlySet<HubKind> = new Set<HubKind>(['dynasty', 'devy', 'c2c'])
+
+export function leagueOptionLinks(kind: HubKind, leagueId: string): HubLink[] {
+  const out: HubLink[] = [{ label: `${HUB_KIND_META[kind].label} rules`, description: 'The rules only this league type has.', panel: rulesEditorFor(kind), testid: 'hub-format-rules' }]
+  if (kind === 'survivor') {
+    out.push({ label: 'Idols', description: 'How many idols, their powers, and when they expire.', href: `/survivor/${encodeURIComponent(leagueId)}/settings`, testid: 'hub-survivor-idols' })
+  }
+  if (!NO_PLAYOFF_KINDS.has(kind)) {
+    out.push({ label: 'Playoffs', description: 'Playoff teams, byes, and the median game.', panel: 'playoffs', testid: 'hub-playoffs' })
+  }
+  out.push({ label: 'League Chimmy', description: 'Chimmy’s helpers for managers, and what Chimmy watches for you.', panel: 'ai', testid: 'hub-league-chimmy' })
+  out.push(
+    ROOKIE_ORDER_KINDS.has(kind)
+      ? { label: 'Draft and rookie order', description: 'Draft settings, and how next season’s rookie order is set.', panel: 'draft', testid: 'hub-draft' }
+      : { label: 'Draft', description: 'Draft type, clock, rounds and order.', panel: 'draft', testid: 'hub-draft' },
+  )
+  return out
+}
+
+const TASK_DOT: Record<TaskCard['severity'], string> = { bad: '#ef4444', warn: '#f59e0b', info: '#3b82f6' }
+
+function HubLinks({ links, cb }: { links: HubLink[]; cb: HubCallbacks }) {
+  const { t } = useT()
+  return (
+    <div className="af-lsh-list">
+      {links.map((l) => (
+        <div key={l.testid} className="af-lsh-row">
+          <div className="af-lsh-row-copy">
+            <span>{t(l.label)}</span>
+            <span>{t(l.description)}</span>
+          </div>
+          {l.href ? (
+            <a className="af-lsh-btn" data-size="sm" href={l.href} data-testid={l.testid}>{t('Open')}</a>
+          ) : (
+            <button type="button" className="af-lsh-btn" data-size="sm" onClick={() => cb.onOpenEditor(l.panel as string)} data-testid={l.testid}>{t('Open')}</button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TaskRow({ card }: { card: TaskCard }) {
+  const { t } = useT()
+  return (
+    <div className="af-lsh-row" data-testid="hub-task">
+      <span className="af-lsh-dot" aria-hidden style={{ width: 10, height: 10, background: TASK_DOT[card.severity] }} />
+      <div className="af-lsh-row-copy" style={{ flex: '1 1 auto' }}>
+        <span>{card.title}</span>
+        {card.detail ? <span>{card.detail}</span> : null}
+      </div>
+      {card.action ? (
+        <a
+          className="af-lsh-btn"
+          data-size="sm"
+          href={card.action.href}
+          {...(card.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        >
+          {card.action.label || t('Open')}
+        </a>
+      ) : null}
+    </div>
+  )
+}
+
+function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots?: HubSlots }) {
+  const { t } = useT()
+  const [showAll, setShowAll] = useState(false)
+  const tasks = data.commissionerTasks
+  const count = tasks ? tasks.cards.length + tasks.overflow.length : 0
+  return (
+    // `display: contents` keeps the cards direct items of `.af-lsh-stack`, so they get its gap.
+    <div data-testid="league-settings-hub-commissioner" style={{ display: 'contents' }}>
+      <Card id="needs" title={tasks && count ? `Needs you · ${count}` : 'Needs you'} sub="What needs you in this league, most urgent first.">
+        {tasks === undefined ? (
+          <Loading lines={2} />
+        ) : tasks === null ? (
+          <p className="af-lsh-empty">{t('Could not load what needs you. Try again in a minute.')}</p>
+        ) : count === 0 ? (
+          <p className="af-lsh-empty" data-testid="hub-tasks-empty">{t('Nothing needs you right now.')}</p>
+        ) : (
+          <div className="af-lsh-list">
+            {tasks.cards.map((c) => <TaskRow key={c.id} card={c} />)}
+            {showAll ? tasks.overflow.map((c) => <TaskRow key={c.id} card={c} />) : null}
+            {tasks.overflow.length && !showAll ? (
+              <div className="af-lsh-row">
+                <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={() => setShowAll(true)}>
+                  {t(`Show ${tasks.overflow.length} more`)}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </Card>
+      <Card id="season" title="Season controls" sub="Lineups, locks, members and points, for any team.">
+        <HubLinks links={SEASON_LINKS} cb={cb} />
+      </Card>
+      <Card id="schedule" title="Schedule" sub="Who plays whom each week.">
+        <HubLinks links={SCHEDULE_LINKS} cb={cb} />
+      </Card>
+      <Card id="rivalry" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
+        {slots?.rivalryWeek ?? <HubLinks links={[{ label: 'Set up Rivalry Week', description: 'Preview the pairs, then apply them to that week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-rivalry-open' }]} cb={cb} />}
+      </Card>
+      <Card id="options" title="League options" sub="The same settings as League Setup, with the editors that change them.">
+        <HubLinks links={leagueOptionLinks(data.kind, data.leagueId)} cb={cb} />
+      </Card>
+      <Card id="storyline" title="Storyline" sub="How Chimmy tells your season in the league chat.">
+        {slots?.storyline ?? <p className="af-lsh-empty">{t('Storyline loads here on the league page.')}</p>}
+      </Card>
     </div>
   )
 }

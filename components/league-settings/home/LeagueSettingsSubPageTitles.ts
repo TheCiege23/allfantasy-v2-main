@@ -20,7 +20,7 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   'co-commissioners': 'Co-commissioners',
   divisions: 'Divisions',
   ai: 'League Chimmy',
-  'commissioner-tools': 'Commissioner tools',
+  'commissioner-tools': 'Lineups, locks & schedule',
   dues: 'Dues & payouts',
   'settings-lock': 'Settings lock',
   'score-adjustments': 'Score adjustments',

@@ -107,7 +107,7 @@ import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboa
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import type { LeagueRailData } from '@/components/league/native/LeagueRail'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
-import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
+import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
@@ -1023,7 +1023,7 @@ export function LeagueShell({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialPanel, setSettingsInitialPanel] = useState<string | null>(null)
   /** Native leagues: which League Settings sub-page an old settings entry asked for (nonce remounts). */
-  const [settingsHomeRequest, setSettingsHomeRequest] = useState<{ subPage: SettingsSubPageId | null; nonce: number }>({
+  const [settingsHomeRequest, setSettingsHomeRequest] = useState<{ subPage: SettingsSubPageId | null; nonce: number; view?: string | null }>({
     subPage: null,
     nonce: 0,
   })
@@ -1342,7 +1342,9 @@ export function LeagueShell({
       const target = resolveLegacySettingsPanel(initialPanel)
       if (target !== undefined) {
         setSettingsOpen(false)
-        setSettingsHomeRequest((prev) => ({ subPage: target, nonce: prev.nonce + 1 }))
+        // `<sub-page>:<view>` (the Commissioner Hub's cards) opens that sub-page on one of its views.
+        const view = target ? settingsPanelView(initialPanel) : null
+        setSettingsHomeRequest((prev) => ({ subPage: target, nonce: prev.nonce + 1, view }))
         setActiveTab('settings')
         return
       }
@@ -1986,6 +1988,7 @@ export function LeagueShell({
                   isHeadCommissioner,
                   sleeperMemberMap: sleeperUsersByPlatformId,
                   onGoToDraftTab: () => setActiveTab('draft'),
+                  commissionerToolsView: settingsHomeRequest.view ?? null,
                 }}
                 onExit={
                   activeTab === 'settings'

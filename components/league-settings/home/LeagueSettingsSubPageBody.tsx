@@ -89,7 +89,7 @@ export function LeagueSettingsSubPageBody({
     case 'commissioner-tools':
       body = (
         <div className="space-y-10">
-          <CommissionerControlPanel leagueId={leagueId} />
+          <CommissionerControlPanel leagueId={leagueId} initialView={ctx.commissionerToolsView ?? null} />
           <LeagueHistoryPanel leagueId={leagueId} />
           {ctx.isHeadCommissioner ? (
             <DeleteLeagueFromAfPanel leagueId={leagueId} currentUserId={ctx.userId} leagueOwnerUserId={ctx.league.userId} platform={ctx.league.platform} leagueName={ctx.league.name} />
