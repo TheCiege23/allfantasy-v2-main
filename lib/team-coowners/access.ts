@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 
 /** A staged deployment may briefly run before the additive table exists; fail closed. */
@@ -19,7 +20,7 @@ export async function acceptedCoOwnerRosterId(leagueId: string, userId: string):
   if ((currentTeam?.claimedByUserId ?? null) !== row.claimedOwnerId) return null
   // A user who has since claimed a team cannot manage a second team's roster.
   const [primary, claimedTeam] = await Promise.all([
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    prisma.roster.findFirst({ where: managedRosterWhere(leagueId, userId), select: { id: true } }),
     prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { id: true } }),
   ])
   if (primary || claimedTeam) return null

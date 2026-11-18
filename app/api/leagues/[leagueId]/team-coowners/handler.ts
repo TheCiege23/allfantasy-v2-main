@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -18,7 +19,7 @@ async function mayManage(leagueId: string, rosterId: string, actorId: string) {
 }
 async function ownsTeam(leagueId: string, userId: string) {
   const [roster, team] = await Promise.all([
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    prisma.roster.findFirst({ where: managedRosterWhere(leagueId, userId), select: { id: true } }),
     prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { id: true } }),
   ])
   return Boolean(roster || team)

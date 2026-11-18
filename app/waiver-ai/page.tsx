@@ -387,7 +387,7 @@ function normalizeLeagueFromList(rawLeague: unknown, userId: string | undefined)
   const ownRoster =
     rosters.find((entry) => {
       const roster = recordFromUnknown(entry)
-      return userId != null && roster?.platformUserId === userId
+      return userId != null && (roster?.platformUserId === userId || roster?.managerUserId === userId)
     }) ?? rosters[0]
 
   const ownRosterRecord = recordFromUnknown(ownRoster)

@@ -3,6 +3,7 @@
  * Deterministic data only. Chimmy never decides lineup, eligibility, scoring, or trade legality.
  */
 
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { isIdpLeague, getIdpLeagueConfig, getRosterDefaultsForIdpLeague } from '@/lib/idp'
 import { IDP_SCORING_PRESET_LABELS, IDP_POSITION_MODE_LABELS } from '@/lib/idp/IDPScoringPresets'
 import { prisma } from '@/lib/prisma'
@@ -14,11 +15,12 @@ export async function buildIdpContextForChimmy(
   const isIdp = await isIdpLeague(leagueId)
   if (!isIdp) return ''
 
+  const myTeamWhere = await viewingRosterWhere(leagueId, userId)
   const [config, defaults, roster] = await Promise.all([
     getIdpLeagueConfig(leagueId),
     getRosterDefaultsForIdpLeague(leagueId),
     (prisma as any).roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: myTeamWhere,
       select: { id: true, playerData: true },
     }),
   ])

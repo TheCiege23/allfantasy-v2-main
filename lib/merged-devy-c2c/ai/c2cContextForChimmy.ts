@@ -1,3 +1,4 @@
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 /**
  * PROMPT 5: Build C2C league context for Chimmy when user is in a College-to-Canton (merged devy) league.
@@ -23,10 +24,11 @@ export async function buildC2CContextForChimmy(
   if (!isC2C) return ''
   const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
 
+  const myTeamWhere = await viewingRosterWhere(leagueId, userId, coOwnerRosterId)
   const [config, roster, rights] = await Promise.all([
     getC2CConfig(leagueId),
     prisma.roster.findFirst({
-      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
+      where: myTeamWhere,
       select: { id: true },
     }),
     prisma.devyRights.findMany({

@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     const roster = league.rosters.find((r: any) =>
       r.platformUserId === sleeperUserId ||
       r.platformUserId === userId
-    );
+    ) ?? league.rosters.find((r: any) => isRosterManagedBy(r, userId));
     if (!roster) {
       return NextResponse.json({ overallScore: 0, insights: [], noRoster: true });
     }

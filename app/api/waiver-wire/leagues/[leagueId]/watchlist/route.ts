@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { watchlistKeyForUser } from '@/lib/league/teamScopedKey'
 import { requestedRosterIdFrom } from '@/lib/league/viewerTeams'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic"
 async function requireMember(leagueId: string, userId: string): Promise<boolean> {
   const [owner, roster] = await Promise.all([
     prisma.league.findFirst({ where: { id: leagueId, userId }, select: { id: true } }),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    prisma.roster.findFirst({ where: managedRosterWhere(leagueId, userId), select: { id: true } }),
   ])
   return Boolean(owner || roster || await acceptedCoOwnerRosterId(leagueId, userId))
 }

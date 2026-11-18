@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -220,7 +221,7 @@ async function findStoredPendingOffers(leagueId: string, userId: string, limit: 
 
   const native = await (async (): Promise<StoredPendingOffer[]> => {
     const owned = await prisma.roster
-      .findMany({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+      .findMany({ where: managedRosterWhere(leagueId, userId), select: { id: true } })
       .then((rows) => rows.map((r) => r.id))
       .catch(() => [] as string[])
     const coOwned = await acceptedCoOwnerRosterId(leagueId, userId).catch(() => null)

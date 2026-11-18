@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       select: { id: true, sport: true, userId: true, isDynasty: true, leagueType: true, leagueVariant: true, waiverHours: true, season: true, settings: true },
     }),
     (prisma as any).roster.findFirst({
-      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
+      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : managedRosterWhere(leagueId, userId),
       select: { id: true },
     }),
   ])

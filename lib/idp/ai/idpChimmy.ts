@@ -5,6 +5,7 @@
  * never given a hash-generated stat line.
  */
 
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { prisma } from '@/lib/prisma'
 import { requireAfSubUserIdOrThrow } from '@/lib/redraft/ai/requireAfSub'
 import { isIdpLeague } from '@/lib/idp'
@@ -186,7 +187,7 @@ async function assertIdpLeague(leagueId: string): Promise<void> {
 
 async function getRosterForUser(leagueId: string, userId: string) {
   const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: await viewingRosterWhere(leagueId, userId),
     select: { id: true, playerData: true },
   })
   return roster

@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { acceptedCoOwnerRosterId, coOwnerTableMissing } from '@/lib/team-coowners/access'
 
@@ -84,7 +85,7 @@ export async function resolveLeagueMembership(
   }
 
   const rosterCount = await prisma.roster.count({
-    where: { leagueId, platformUserId: userId },
+    where: managedRosterWhere(leagueId, userId),
   })
   if (rosterCount > 0) {
     return {
@@ -147,7 +148,7 @@ export async function memberLeaguePlatformIdsFor(userId: string | undefined | nu
       OR: [
         { userId },
         { redraftMembers: { some: { userId } } },
-        { rosters: { some: { platformUserId: userId } } },
+        { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
         { teams: { some: { claimedByUserId: userId } } },
       ],
     },

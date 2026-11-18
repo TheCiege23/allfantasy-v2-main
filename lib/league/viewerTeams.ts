@@ -189,6 +189,21 @@ export async function resolveViewingRoster(
   return first ? { rosterId: first.rosterId, redraftRosterId: first.redraftRosterId, heldCount: held.length } : null
 }
 
+/**
+ * The `where` for the team this user is looking at in a league: the co-owned team when they act as a
+ * co-owner, else the team named or last switched to, else their first. With no team it is the plain
+ * owner-key filter, which finds nothing, so callers keep their own "no team" handling.
+ */
+export async function viewingRosterWhere(
+  leagueId: string,
+  userId: string,
+  coOwnerRosterId?: string | null,
+): Promise<{ leagueId: string; id: string } | { leagueId: string; platformUserId: string }> {
+  if (coOwnerRosterId) return { leagueId, id: coOwnerRosterId }
+  const viewing = await resolveViewingRoster(leagueId, userId).catch(() => null)
+  return viewing ? { leagueId, id: viewing.rosterId } : { leagueId, platformUserId: userId }
+}
+
 /** Thrown by a lookup helper that cannot return a response itself; the route turns it into one. */
 export class ActingTeamRefused extends Error {
   constructor(public readonly result: Extract<ActingTeam, { ok: false }>) {
