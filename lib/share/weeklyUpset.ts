@@ -214,8 +214,10 @@ export async function getUpsetForCard(userId: string, leagueId: string, season: 
   const platformLeagueId = league.platformLeagueId
 
   const [result, [snap]] = await Promise.all([
-    prisma.weeklyMatchup.findUnique({
-      where: { leagueId_seasonYear_week_rosterId: { leagueId: platformLeagueId, seasonYear: season, week, rosterId } },
+    // The roster's first game of the week: the only one in a league that plays one game a week.
+    prisma.weeklyMatchup.findFirst({
+      where: { leagueId: platformLeagueId, seasonYear: season, week, rosterId },
+      orderBy: { game: 'asc' },
       select: { pointsFor: true, pointsAgainst: true, win: true },
     }),
     readOddsSnapshots([{ leagueId: platformLeagueId, rosterId }], season, week),

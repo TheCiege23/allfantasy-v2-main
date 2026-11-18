@@ -11,6 +11,7 @@
  * in — a bare league id would let anyone queue requests at any league.
  */
 
+import { readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -243,7 +244,11 @@ export async function POST(req: NextRequest) {
       { userId, leagueId: result.leagueId },
       tx,
     )
-    if (priorClaim?.viaOtherAccount) {
+    const multiTeamLeague = priorClaim?.viaOtherAccount
+      ? await tx.league.findUnique({ where: { id: result.leagueId }, select: { settings: true } })
+      : null
+    // The commissioner can allow one person to run several teams, each under its own account.
+    if (priorClaim?.viaOtherAccount && !readAllowMultiTeamManagers(multiTeamLeague?.settings)) {
       return {
         success: false as const,
         status: 409,

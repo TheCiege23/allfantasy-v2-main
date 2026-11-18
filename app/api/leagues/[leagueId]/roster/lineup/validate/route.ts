@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -29,7 +30,7 @@ export async function POST(
 
   const isComm = (await canCommissionerAct(leagueId, session.user.id, 'rosters'))
   const memberRoster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: session.user.id },
+    where: managedRosterWhere(leagueId, session.user.id),
     select: { id: true },
   })
   if (!isComm && !memberRoster && !await acceptedCoOwnerRosterId(leagueId, session.user.id)) {

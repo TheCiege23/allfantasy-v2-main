@@ -3,6 +3,7 @@
  * Uses unified dispatcher for in-app + email + SMS per user preferences.
  */
 
+import { rosterManagerKey, teamScopedKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { resolveAppUserIds } from '@/lib/notifications/resolveAppUserIds'
 import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
@@ -29,10 +30,12 @@ async function getLeagueName(leagueId: string): Promise<string | undefined> {
 export async function getAppUserIdForRoster(rosterId: string): Promise<string | null> {
   const roster = await prisma.roster.findUnique({
     where: { id: rosterId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
-  if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) return null
-  return (await resolveAppUserIds([roster.platformUserId]))[0] ?? null
+  // A manager's further team has a key of its own and names them (lib/league/rosterManager.ts).
+  const managerId = roster ? rosterManagerKey(roster) : null
+  if (!managerId || managerId.startsWith('orphan-')) return null
+  return (await resolveAppUserIds([managerId]))[0] ?? null
 }
 
 /**
@@ -49,11 +52,12 @@ export async function getAppUserIdForRoster(rosterId: string): Promise<string | 
 export async function getLeagueMemberAppUserIds(leagueId: string): Promise<string[]> {
   const rosters = await prisma.roster.findMany({
     where: { leagueId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
   const ids = new Set<string>()
   for (const r of rosters) {
-    if (r.platformUserId && !String(r.platformUserId).startsWith('orphan-')) ids.add(r.platformUserId)
+    const managerId = rosterManagerKey(r)
+    if (managerId && !managerId.startsWith('orphan-')) ids.add(managerId)
   }
   const resolved = await resolveAppUserIds(Array.from(ids))
   /*
@@ -581,17 +585,17 @@ async function buildDraftStartingEmailsByUser(
   const slotByRosterId = new Map(slotOrder.map((entry) => [entry.rosterId, entry.slot]))
   const rosters = await prisma.roster.findMany({
     where: { leagueId },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, managerUserId: true },
   })
   const baseUrl = getBaseUrl()
   for (const roster of rosters) {
-    const userId = roster.platformUserId
+    const userId = rosterManagerKey(roster)
     if (!userId || String(userId).startsWith('orphan-')) continue
     const slot = slotByRosterId.get(roster.id)
     if (slot == null) continue
     // A failed queue read must not render the "your queue is empty" warning
     // for a queue we simply could not see — that member keeps the plain email.
-    const loaded = await loadDraftQueueForUser(leagueId, userId).catch(() => null)
+    const loaded = await loadDraftQueueForUser(leagueId, userId, { queueKey: teamScopedKey(roster) }).catch(() => null)
     if (!loaded) continue
     out.set(
       userId,

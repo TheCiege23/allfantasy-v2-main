@@ -1,3 +1,4 @@
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { NextResponse } from 'next/server';
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason';
 import { getServerSession } from 'next-auth';
@@ -420,9 +421,9 @@ export async function POST(req: Request) {
     const isGuillotineRequest =
       String(leagueVariantEffective ?? '').toLowerCase() === 'guillotine' ||
       String(requestedLeagueType ?? '').toLowerCase() === 'guillotine';
-    if (!isGuillotineRequest && typeof leagueSizeInput === 'number' && leagueSizeInput > 32) {
+    if (!isGuillotineRequest && typeof leagueSizeInput === 'number' && leagueSizeInput > MAX_NATIVE_TEAMS) {
       return NextResponse.json(
-        { error: 'Leagues support up to 32 teams (Guilly leagues up to 35).' },
+        { error: `Leagues support up to ${MAX_NATIVE_TEAMS} teams.` },
         { status: 400 }
       );
     }

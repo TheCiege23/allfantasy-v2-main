@@ -1,3 +1,4 @@
+import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -178,6 +179,7 @@ export async function POST(req: NextRequest) {
       medianGame,
       divisionByRoster: divisions?.byRoster ?? null,
       divisionRivalsTwice: divisions?.rivalsTwice === true,
+      gamesPerWeek: readGamesPerWeek(league.settings),
     })
     for (const s of slots) {
       if (s.type === 'median') continue

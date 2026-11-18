@@ -2,6 +2,7 @@
  * AI League Advisor — aggregates roster, injuries, and optional waiver/trade context; calls OpenAI for advice.
  */
 
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { matchInjuryRowsToPlayers, type InjuryPlayerLookup } from '@/lib/injuries/matchInjuryRows'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
@@ -27,19 +28,25 @@ Rules:
 export interface GetAdvisorInput {
   leagueId: string
   userId: string
+  /** The team to advise on, for a manager who runs several in this league (`Roster.id`). */
+  rosterId?: string | null
 }
 
-async function getLeagueAndRoster(leagueId: string, userId: string) {
+async function getLeagueAndRoster(leagueId: string, userId: string, rosterId?: string | null) {
   const league = await (prisma as any).league.findFirst({
     where: { id: leagueId, userId },
     select: { id: true, name: true, sport: true, platform: true },
   })
   if (!league) return null
 
-  const roster = await (prisma as any).roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-    select: { playerData: true, faabRemaining: true, waiverPriority: true },
-  })
+  // The named team, or the manager's first when they run several (a read: lib/league/viewerTeams.ts).
+  const viewing = await resolveViewingRoster(leagueId, userId, rosterId, { allowCoOwner: false })
+  const roster = viewing
+    ? await (prisma as any).roster.findFirst({
+        where: { leagueId, id: viewing.rosterId },
+        select: { playerData: true, faabRemaining: true, waiverPriority: true },
+      })
+    : null
   if (!roster) return null
 
   return { league, roster }
@@ -356,7 +363,7 @@ function buildDeterministicFallbackAdvice(input: {
 /** Build advisor context and call AI; return structured advice. */
 export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<LeagueAdvisorAdvice | null> {
   const { leagueId, userId } = input
-  const data = await getLeagueAndRoster(leagueId, userId)
+  const data = await getLeagueAndRoster(leagueId, userId, input.rosterId)
   if (!data) return null
 
   const { league, roster } = data

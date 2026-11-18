@@ -259,7 +259,7 @@ export async function persistTradedPicks(
     try {
       const values = batch.map(({ pick }) => Prisma.sql`(
         ${randomUUID()}, ${leagueId}, ${pick.season}, ${pick.round},
-        ${pick.original_roster_id}, ${pick.current_owner_roster_id}, TRUE, NOW(), NOW()
+        ${pick.original_roster_id}, ${pick.current_owner_roster_id}, ${pick.traded !== false}, NOW(), NOW()
       )`)
       await prisma.$executeRaw`
         INSERT INTO "future_draft_picks" (
@@ -270,7 +270,7 @@ export async function persistTradedPicks(
         ON CONFLICT ("leagueId", "pickSeason", "round", "originalRosterId")
         DO UPDATE SET
           "currentOwnerId" = EXCLUDED."currentOwnerId",
-          "traded" = TRUE,
+          "traded" = EXCLUDED."traded",
           "updatedAt" = NOW()
       `
       return {

@@ -1,3 +1,4 @@
+import { resolveActingRoster } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 import { createHash } from 'node:crypto'
@@ -79,10 +80,18 @@ type ActionRosterRow = {
   playerData: unknown
 }
 
-/** The asker's own roster in a native league, found the way the lineup save route finds it. */
-export async function loadOwnRoster(leagueId: string, userId: string): Promise<ActionRosterRow | null> {
+/**
+ * The roster a Chimmy action applies to: the asker's own team in a native league.
+ *
+ * A manager who runs several teams must name one (`rosterId`); with none named this answers null, the
+ * same as having no team, so a move is never prepared for a guessed team (lib/league/viewerTeams.ts).
+ * Co-owned teams are not acted on from here, as before.
+ */
+export async function loadOwnRoster(leagueId: string, userId: string, rosterId?: string | null): Promise<ActionRosterRow | null> {
+  const acting = await resolveActingRoster(leagueId, userId, rosterId, { allowCoOwner: false }).catch(() => null)
+  if (!acting?.ok) return null
   return prisma.roster
-    .findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true, platformUserId: true, playerData: true } })
+    .findFirst({ where: { leagueId, id: acting.rosterId }, select: { id: true, platformUserId: true, playerData: true } })
     .catch(() => null)
 }
 

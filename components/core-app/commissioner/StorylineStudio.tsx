@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
-import { formatForPlatform, platformDisplayName } from '@/lib/storyline-studio/copyFormat'
+import { formatForPlatform, formatWeekForPlatform, platformDisplayName } from '@/lib/storyline-studio/copyFormat'
 import { studioCopy, WEEKDAY_NAMES } from '@/lib/storyline-studio/studioCopy'
 import type { StoryHook } from '@/lib/storyline-studio/types'
 
@@ -63,6 +63,7 @@ export function StorylineStudio({ leagueId }: { leagueId: string }) {
   const [view, setView] = useState<View | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [copiedWeek, setCopiedWeek] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -106,6 +107,29 @@ export function StorylineStudio({ leagueId }: { leagueId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [endpoint],
   )
+
+  async function copyWeek() {
+    if (!view || !view.entitled) return
+    const text = formatWeekForPlatform(
+      {
+        heading: `${t('Week')} ${view.week ?? ''} ${t('storylines')}`.replace(/\s+/g, ' ').trim(),
+        sections: [
+          ...view.hooks.byMatchup.map(({ matchup, hooks }) => ({
+            title: `${view.teams[matchup.a] ?? '—'} vs ${view.teams[matchup.b] ?? '—'}`,
+            lines: hooks.map((hook) => hook.text),
+          })),
+          { title: t('League-wide'), lines: view.hooks.league.map((hook) => hook.text) },
+        ],
+      },
+      view.native ? 'allfantasy' : view.platform,
+    )
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedWeek(true)
+    } catch {
+      setMessage(text)
+    }
+  }
 
   if (error) return <p className="af-ch-muted">{error}</p>
   if (!view) return <p className="af-ch-muted">{t('Loading storylines…')}</p>
@@ -215,6 +239,14 @@ export function StorylineStudio({ leagueId }: { leagueId: string }) {
         <h4 className="af-ch-recipe-label af-ss-week">
           {t('Week')} {view.week} · {view.season}
         </h4>
+      ) : null}
+      {!empty ? (
+        <div>
+          <button type="button" className="af-btn af-btn--ghost" data-testid="storyline-copy-week" onClick={() => void copyWeek()}>
+            {copiedWeek ? t('Copied') : t('Copy the whole week')}
+          </button>
+          <p className="af-ch-recipe-desc">{t('Every storyline below as plain text, ready to paste into a league chat on any platform.')}</p>
+        </div>
       ) : null}
       {empty ? <p className="af-ch-recipe-desc">{t('No head-to-head games this week, and nothing league-wide to say yet.')}</p> : null}
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { ActiveTeamSwitcher } from '@/components/league/ActiveTeamSwitcher'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   isAllFantasyAdpEnabled,
@@ -5527,7 +5528,13 @@ export function DraftRoomPageClient({
           />
         ) : null
       }
-      auctionStrip={auctionPanelProps ? <AuctionSpotlightPanel {...auctionPanelProps} /> : undefined}
+      auctionStrip={auctionPanelProps ? (
+        <>
+          {/* Shown only to a manager who runs several teams here: which team the bids are for. */}
+          <ActiveTeamSwitcher leagueId={leagueId} variant="auction" onSwitched={() => { void fetchSession() }} />
+          <AuctionSpotlightPanel {...auctionPanelProps} />
+        </>
+      ) : undefined}
       mobileBidDock={auctionPanelProps ? <AuctionBidDock {...auctionPanelProps} /> : undefined}
       // A finished draft has no pool to pick from; the phone Players tab (and the
       // non-premium desktop layout) shows the recap, report card and share instead.

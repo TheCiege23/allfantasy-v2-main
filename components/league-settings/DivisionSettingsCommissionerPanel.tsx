@@ -21,6 +21,7 @@ import {
   DEFAULT_DIVISION_PLAYOFF_RULE,
   DIVISION_PLAYOFF_RULES,
   divisionCountAllowed,
+  STANDARD_DIVISION_COUNTS,
   evenDivisionSizes,
   type DivisionPlayoffRule,
 } from '@/lib/league/divisions/leagueDivisions'
@@ -48,10 +49,7 @@ interface TeamSlot {
 }
 
 const DIVISION_COUNT_OPTIONS = [
-  { value: 0, label: 'No' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4' },
+  ...STANDARD_DIVISION_COUNTS.map((value) => ({ value, label: value === 0 ? 'No' : String(value) })),
 ]
 
 const TRIBE_COUNT_OPTIONS = [
@@ -232,7 +230,11 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
     const uneven = sizes.some((n) => n > cap) || (complete && Math.max(...sizes) - Math.min(...sizes) > 1)
     return uneven ? sizes : null
   }, [isSurvivor, count, teams.length, teamsByDivision])
-  const countOptions = isSurvivor ? TRIBE_COUNT_OPTIONS : DIVISION_COUNT_OPTIONS
+  // A standard league lists the counts it can fill, plus the first one it cannot, so the reason shows.
+  const firstBlockedDivisionCount = DIVISION_COUNT_OPTIONS.find((opt) => !divisionCountAllowed(teams.length, opt.value))?.value ?? null
+  const countOptions = isSurvivor
+    ? TRIBE_COUNT_OPTIONS
+    : DIVISION_COUNT_OPTIONS.filter((opt) => firstBlockedDivisionCount == null || opt.value <= Math.max(firstBlockedDivisionCount, 4))
 
   const sportMatch = isSurvivor ? null : divisionSportMatch(sport, count)
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('division.loading')}</div>
@@ -274,7 +276,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           </button>
 
           {dropdownOpen && isCommissioner && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
               {countOptions.map((opt) => {
                 const blocked = !isSurvivor && !divisionCountAllowed(teams.length, opt.value)
                 return (

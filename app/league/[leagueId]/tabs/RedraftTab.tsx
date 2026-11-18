@@ -165,14 +165,28 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     }
   }, [selectedRosterId, currentWeek])
 
+  /*
+   * Every game the selected team plays this week. One in an ordinary league; several in a league that
+   * plays more than one game a week (settings: games per team each week), where each is its own
+   * result. The league-median game is not a head-to-head and is left out.
+   */
+  const myWeekGames = useMemo(
+    () => (selectedRosterId
+      ? matchups.filter((m) => !(m as { isMedianMatchup?: boolean | null }).isMedianMatchup && m.awayRosterId != null
+          && (m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId))
+      : []),
+    [matchups, selectedRosterId],
+  )
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null)
   const visibleMatchup = useMemo(() => {
     if (!selectedRosterId) return matchups[0] ?? null
     return (
+      myWeekGames.find((m) => m.id === selectedGameId) ??
       matchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId) ??
       matchups[0] ??
       null
     )
-  }, [matchups, selectedRosterId])
+  }, [matchups, myWeekGames, selectedGameId, selectedRosterId])
 
   // An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts).
   const extraMatchup = useMemo(() => {
@@ -188,12 +202,17 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
   const visibleLiveMatchup = useMemo(() => {
     const liveMatchups = liveScoring?.matchups ?? []
     if (!selectedRosterId) return liveMatchups[0] ?? null
+    // The live game for the SAME pairing as the game on screen, so the score and the names agree.
+    const samePairing = visibleMatchup
+      ? liveMatchups.find((m) => m.homeRosterId === visibleMatchup.homeRosterId && m.awayRosterId === visibleMatchup.awayRosterId)
+      : undefined
     return (
-      liveMatchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId) ??
-      liveMatchups[0] ??
+      samePairing ??
+      (myWeekGames.length > 1 ? undefined : liveMatchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId)) ??
+      (myWeekGames.length > 1 ? null : liveMatchups[0]) ??
       null
     )
-  }, [liveScoring, selectedRosterId])
+  }, [liveScoring, selectedRosterId, visibleMatchup, myWeekGames.length])
 
   return (
     <div className="space-y-4 px-4 py-4">
@@ -259,6 +278,39 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
                 playoffRuntime.teams.find((team) => team.rosterId === rosterId)?.displayName ?? (rosterId ? rosterId.slice(0, 6) : '')
               }
             />
+          ) : null}
+
+          {myWeekGames.length > 1 ? (
+            <nav aria-label="This week's games" data-testid="redraft-week-games" className="rounded-2xl border border-white/10 bg-[#0a1220] p-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">This week&apos;s games ({myWeekGames.length})</p>
+              <ul className="mt-2 grid gap-2">
+                {myWeekGames.map((game, index) => {
+                  const home = game.homeRosterId === selectedRosterId
+                  const opponent = home ? game.awayRoster : game.homeRoster
+                  const mine = home ? game.homeScore : game.awayScore
+                  const theirs = home ? game.awayScore : game.homeScore
+                  const open = game.id === visibleMatchup?.id
+                  return (
+                    <li key={game.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGameId(game.id)}
+                        aria-pressed={open}
+                        data-testid={`redraft-week-game-${index + 1}`}
+                        className={`flex min-h-[44px] w-full flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-[13px] ${open ? 'border-[#ff9ec0]/60 bg-[#ff3d81]/10 font-semibold text-white' : 'border-white/10 text-white/80'}`}
+                      >
+                        <span>Game {index + 1} · vs {opponent?.teamName?.trim() || opponent?.ownerName || 'Opponent'}</span>
+                        <span className="tabular-nums">
+                          {mine != null && theirs != null
+                            ? `${mine.toFixed(1)} – ${theirs.toFixed(1)} · ${mine > theirs ? 'Win' : mine < theirs ? 'Loss' : 'Tie'}`
+                            : 'Not final'}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </nav>
           ) : null}
 
           <MatchupView

@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import 'server-only'
 import { finderPlayerHref, finderTeamHref } from '@/lib/core-app/finderGuide'
 import { createHash } from 'node:crypto'
@@ -25,13 +26,13 @@ async function startingLeagues(identity: ResolvedPlayerIdentity, userId: string,
       NOT: { slotType: { in: ['bench', 'BENCH', 'Bench', 'ir', 'IR', 'taxi', 'TAXI', 'devy', 'DEVY', 'pro_bench', 'pro_ir', 'college', 'free_agent'] } },
       roster: { ownerId: userId, leagueId: { in: leagueIds }, season: { status: { notIn: [...FINISHED_SEASON_STATUSES] } } } },
       select: { roster: { select: { leagueId: true } } } }),
-    prisma.roster.findMany({ where: { leagueId: { in: leagueIds } }, select: { leagueId: true, platformUserId: true, playerData: true,
+    prisma.roster.findMany({ where: { leagueId: { in: leagueIds } }, select: { leagueId: true, platformUserId: true, managerUserId: true, playerData: true,
       redraftRoster: { select: { ownerId: true } }, league: { select: { platform: true, teams: { select: { platformUserId: true, claimedByUserId: true } } } } } }),
     prisma.userProfile.findUnique({ where: { userId }, select: { sleeperUserId: true } }),
   ])
   const leagues = new Set(native.map(r => r.roster.leagueId))
   for (const roster of imported) {
-    const owns = roster.platformUserId === userId || roster.redraftRoster?.ownerId === userId ||
+    const owns = isRosterManagedBy(roster, userId) || roster.redraftRoster?.ownerId === userId ||
       !!profile?.sleeperUserId && roster.platformUserId === profile.sleeperUserId ||
       roster.league.teams.some(t => t.platformUserId === roster.platformUserId && t.claimedByUserId === userId)
     if (!owns) continue

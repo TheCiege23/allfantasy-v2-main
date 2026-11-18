@@ -461,7 +461,7 @@ function resolveSettings(input: {
       ? 'consolation'
       : 'none'
   const supportWarnings: string[] = []
-  if (playoffTeamCount > 16) supportWarnings.push('Playoff brackets above 16 teams are not supported by the G40 runtime.')
+  if (playoffTeamCount > 32) supportWarnings.push('Playoff brackets above 32 teams are not supported.')
   if (input.teamCount < 2) supportWarnings.push('At least two teams are required for playoff generation.')
   return {
     playoffTeamCount,

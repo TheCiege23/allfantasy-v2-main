@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const [leagueAsOwner, rosterAsMember] = await Promise.all([
     (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    (prisma as any).roster.findFirst({ where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId }, select: { id: true } }),
+    (prisma as any).roster.findFirst({ where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : managedRosterWhere(leagueId, userId), select: { id: true } }),
   ])
   if (!leagueAsOwner && !rosterAsMember) {
     return NextResponse.json({ error: "League not found" }, { status: 404 })

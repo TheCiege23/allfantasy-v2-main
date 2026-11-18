@@ -105,6 +105,7 @@ import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
+import { ActiveTeamSwitcher } from '@/components/league/ActiveTeamSwitcher'
 import type { LeagueRailData } from '@/components/league/native/LeagueRail'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
 import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-settings-home/settingsEntryRouting'
@@ -1822,6 +1823,7 @@ export function LeagueShell({
                 onOpenCommissionerSettings={() => setCommissionerSettingsOpen(true)}
               />
             ) : null}
+            <ActiveTeamSwitcher leagueId={league.id} />
             {!nativeWorkspace && showDevyHero ? (
               <DevyLeagueHomeHero
                 leagueName={selectedLeague.name ?? 'League'}

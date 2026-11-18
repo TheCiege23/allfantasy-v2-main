@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { randomUUID } from "crypto"
 import { getServerSession } from "next-auth"
 import { NextRequest, NextResponse } from "next/server"
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
   // place for the 1-tier join gate; invite-code joins stay exempt because they are explicit invites.
 
   const alreadyInLeague = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: managedRosterWhere(leagueId, userId),
     select: { id: true },
   })
   if (alreadyInLeague) {

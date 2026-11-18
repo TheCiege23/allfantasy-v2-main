@@ -1,3 +1,5 @@
+import { draftQueueKeyForRoster } from '@/lib/league/teamScopedKey'
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
 import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
@@ -143,8 +145,10 @@ async function appendLatestAuctionPickToRoster(
 async function loadNominatorQueue(sessionId: string, rosterId: string, draftedNames: Set<string>): Promise<AuctionNomination[]> {
   let order: Array<Record<string, unknown>> = []
   try {
-    const roster = await prisma.roster.findFirst({ where: { id: rosterId }, select: { platformUserId: true } })
-    const userId = roster?.platformUserId && !String(roster.platformUserId).startsWith('orphan-') ? String(roster.platformUserId) : null
+    const roster = await prisma.roster.findFirst({ where: { id: rosterId }, select: { platformUserId: true, managerUserId: true } })
+    const managerId = roster ? rosterManagerKey(roster) : null
+    // Each team has its own queue; an unowned team has none.
+    const userId = managerId && !managerId.startsWith('orphan-') ? (await draftQueueKeyForRoster(rosterId)) ?? managerId : null
     if (!userId) return []
     const row = await prisma.draftQueue.findUnique({ where: { sessionId_userId: { sessionId, userId } }, select: { order: true } })
     if (Array.isArray(row?.order)) order = row.order as Array<Record<string, unknown>>

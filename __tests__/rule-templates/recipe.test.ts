@@ -52,9 +52,9 @@ describe('stateFromRecipe — goes through the import path\'s validation', () =>
     expect(s.dynasty).toMatchObject({ rookieDraftOrderMethod: 'max_pf', taxiSlotCount: 5, faabBudget: 250, waiverType: 'faab' })
   })
   it('an unsupported format or team count falls back to a valid one', () => {
-    const s = stateFromRecipe({ ...recipeFromLeague(dynastySource), leagueType: 'not_a_format', teamCount: 99 })
+    const s = stateFromRecipe({ ...recipeFromLeague(dynastySource), leagueType: 'not_a_format', teamCount: 999 })
     expect(s.leagueType).toBe('redraft')
-    expect(s.teamCount).not.toBe(99)
+    expect(s.teamCount).not.toBe(999)
   })
   it('dynasty rules are not laid onto a redraft league', () => {
     const base = stateFromRecipe({ ...recipeFromLeague(dynastySource), leagueType: 'redraft', dynasty: null })

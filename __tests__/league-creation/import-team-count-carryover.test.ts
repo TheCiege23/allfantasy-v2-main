@@ -1,6 +1,7 @@
 /**
  * Import carryover keeps the imported league's team count for redraft, dynasty, keeper and best
- * ball even when the native create list for that type lacks it (a 9- or 32-team dynasty import).
+ * ball even when the native create list for that type lacks it (a 9-team best ball import).
+ * Dynasty itself now takes every size from 4 to 250 natively.
  * Native creation keeps today's lists, the requested count must still equal the import's, and the
  * special modes (Zombie here) stay on their lists.
  */
@@ -83,8 +84,17 @@ describe('import carryover keeps the imported team count', () => {
     }))
   })
 
-  it('still refuses a native 9-team dynasty', async () => {
+  it('accepts a native 9-team dynasty', async () => {
     const res = await post(body(9))
+    expect(res.status).toBe(200)
+    expect(leagueFindUnique).not.toHaveBeenCalled()
+  })
+
+  it('accepts a 9-team best ball carryover, and still refuses it as a native create', async () => {
+    importedLeague(9)
+    expect((await post(body(9, 'best_ball', { sourceLeagueId: 'imported-1' }))).status).toBe(200)
+    vi.clearAllMocks()
+    const res = await post(body(9, 'best_ball'))
     expect(res.status).toBe(400)
     // Refused for its team count, not for some other field in the body.
     expect((await res.json()).error).toMatch(/team count/i)
@@ -116,12 +126,19 @@ describe('import carryover keeps the imported team count', () => {
 })
 
 describe('validateCreatePayload and the imported team count', () => {
-  it('refuses an off-list dynasty count unless it is the import carryover count', () => {
-    expect(validateCreatePayload(body(9)).ok).toBe(false)
-    expect(validateCreatePayload(body(9), { importedTeamCount: 9 }).ok).toBe(true)
-    expect(validateCreatePayload(body(32), { importedTeamCount: 32 }).ok).toBe(true)
-    // The allowance is for the import's own count only, and never past 32.
-    expect(validateCreatePayload(body(32), { importedTeamCount: 9 }).ok).toBe(false)
-    expect(validateCreatePayload(body(33), { importedTeamCount: 33 }).ok).toBe(false)
+  it('refuses an off-list best ball count unless it is the import carryover count', () => {
+    expect(validateCreatePayload(body(9, 'best_ball')).ok).toBe(false)
+    expect(validateCreatePayload(body(9, 'best_ball'), { importedTeamCount: 9 }).ok).toBe(true)
+    expect(validateCreatePayload(body(32, 'best_ball'), { importedTeamCount: 32 }).ok).toBe(true)
+    // The allowance is for the import's own count only, and never past 250.
+    expect(validateCreatePayload(body(32, 'best_ball'), { importedTeamCount: 9 }).ok).toBe(false)
+    expect(validateCreatePayload(body(251, 'best_ball'), { importedTeamCount: 251 }).ok).toBe(false)
+  })
+
+  it('takes every dynasty size from 4 to 250 natively, and nothing past it', () => {
+    for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams)).ok).toBe(true)
+    expect(validateCreatePayload(body(3)).ok).toBe(false)
+    expect(validateCreatePayload(body(251)).ok).toBe(false)
+    expect(validateCreatePayload(body(251), { importedTeamCount: 251 }).ok).toBe(false)
   })
 })

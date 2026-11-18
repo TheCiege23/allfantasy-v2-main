@@ -14,6 +14,7 @@
  * is empty it sets the matching `availability` flag and records a `missingDataFlags` entry.
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
@@ -190,7 +191,7 @@ export async function buildBestBallWarRoomContext(
       bbMatchupFormat: true,
       bbScoringPeriod: true,
       settings: true,
-      rosters: { select: { id: true, platformUserId: true, playerData: true } },
+      rosters: { select: { id: true, platformUserId: true, managerUserId: true, playerData: true } },
       teams: { select: { teamName: true, ownerName: true, platformUserId: true } },
     },
   })
@@ -333,7 +334,7 @@ export async function buildBestBallWarRoomContext(
       ties: standing?.ties ?? 0,
       pointsFor: standing?.pointsFor ?? 0,
       playoffSeed: standing?.rank ?? null,
-      isUserTeam: r.platformUserId === userId,
+      isUserTeam: isRosterManagedBy(r, userId),
       players: (rawByRoster.get(r.id) ?? []).map(toPlayerFact),
     }
   })

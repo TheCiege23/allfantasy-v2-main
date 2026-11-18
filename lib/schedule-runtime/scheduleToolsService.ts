@@ -12,6 +12,7 @@
  *
  * Only a regular-season week that has not started can change — the rule swaps and regeneration already use.
  */
+import { readGamesPerWeek } from './gamesPerWeek'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
@@ -95,6 +96,8 @@ export async function randomizeSchedule(input: {
 type WeekContext = {
   season: { id: string; leagueId: string; season: number }
   rosterIds: string[]
+  /** Head-to-head games each team plays a week (./gamesPerWeek.ts). */
+  gamesPerWeek: number
 }
 
 async function editableWeek(seasonId: string, week: number, now: Date): Promise<WeekContext | Refusal> {
@@ -104,6 +107,7 @@ async function editableWeek(seasonId: string, week: number, now: Date): Promise<
       id: true, leagueId: true, sport: true, season: true, currentWeek: true, playoffStartWeek: true,
       rosters: { select: { id: true } },
       schedule: { select: { week: true, status: true, homeScore: true, awayScore: true } },
+      league: { select: { settings: true } },
     },
   })
   if (!season) return { ok: false, status: 404, code: 'SEASON_NOT_FOUND', message: 'Season not found.' }
@@ -113,7 +117,11 @@ async function editableWeek(seasonId: string, week: number, now: Date): Promise<
   if (weekHasStarted(week, { currentWeek: season.currentWeek, sport: season.sport, seasonYear: season.season, now, persisted: season.schedule })) {
     return { ok: false, status: 409, code: 'WEEK_STARTED', message: `Week ${week} has already started, so its matchups can no longer change.` }
   }
-  return { season: { id: season.id, leagueId: season.leagueId, season: season.season }, rosterIds: season.rosters.map((r) => r.id) }
+  return {
+    season: { id: season.id, leagueId: season.leagueId, season: season.season },
+    rosterIds: season.rosters.map((r) => r.id),
+    gamesPerWeek: readGamesPerWeek(season.league?.settings),
+  }
 }
 
 /** Read-modify-write of `League.settings` inside the caller's transaction. */
@@ -149,7 +157,7 @@ export async function setCustomWeek(input: {
     return { ok: true, week, cleared: true }
   }
 
-  const check = checkCustomPairs(input.pairs, ctx.rosterIds)
+  const check = checkCustomPairs(input.pairs, ctx.rosterIds, ctx.gamesPerWeek)
   if (!check.ok) return { ok: false, status: 400, code: check.code, message: check.message }
 
   const before = await prisma.redraftMatchup.findMany({

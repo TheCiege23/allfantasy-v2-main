@@ -15,7 +15,7 @@
  * Pure.
  */
 
-export const MAX_PLAYOFF_TEAMS = 16
+export const MAX_PLAYOFF_TEAMS = 32
 const MAX_ROUNDS_OFF = 4
 
 function nextPowerOfTwo(n: number): number {
@@ -82,7 +82,7 @@ export function isNaturalByePlan(teamCount: number, roundsOff: readonly number[]
 
 /**
  * Every valid plan for a team count, natural first, then fewest rounds. Small by construction:
- * non-increasing sequences of 0..4 over at most 16 seeds.
+ * non-increasing sequences of 0..4 over at most 32 seeds.
  */
 export function validByePlans(teamCount: number, limit = 8): number[][] {
   if (!Number.isInteger(teamCount) || teamCount < 2 || teamCount > MAX_PLAYOFF_TEAMS) return []

@@ -97,7 +97,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { userId },
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
-                { rosters: { some: { platformUserId: userId } } },
+                { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
                 { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
@@ -561,7 +561,7 @@ export async function getDashboardLeagueListForUser(
                 { userId },
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
-                { rosters: { some: { platformUserId: userId } } },
+                { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
                 { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.

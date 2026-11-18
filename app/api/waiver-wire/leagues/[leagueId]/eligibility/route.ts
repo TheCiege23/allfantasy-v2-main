@@ -1,5 +1,5 @@
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -24,11 +24,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  const roster = await prisma.roster.findFirst({
-    where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
+  // Eligibility is for one team: the manager's own, a named one of several, or a co-owned team.
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  const roster = acting.ok ? { id: acting.rosterId } : null
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))

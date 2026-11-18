@@ -19,6 +19,10 @@ const ES: Record<string, string> = {
   'League-wide': 'Toda la liga',
   Week: 'Semana',
   Copy: 'Copiar',
+  'Copy the whole week': 'Copiar toda la semana',
+  'Every storyline below as plain text, ready to paste into a league chat on any platform.':
+    'Todas las historias de abajo en texto simple, listas para pegar en el chat de una liga en cualquier plataforma.',
+  storylines: 'historias',
   Copied: 'Copiado',
   'Post to league chat': 'Publicar en el chat de la liga',
   Posted: 'Publicado',

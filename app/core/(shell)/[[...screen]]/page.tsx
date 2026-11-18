@@ -3030,9 +3030,14 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
     const n = typeof sp.week === 'string' ? Number(sp.week) : NaN
     return Number.isInteger(n) && n >= 1 && n <= 30 ? n : null
   })()
+  // Which of the team's games to open, in a league that plays several a week. Ignored otherwise.
+  const matchupGameParam = (() => {
+    const n = typeof sp.game === 'string' ? Number(sp.game) : NaN
+    return Number.isInteger(n) && n >= 1 && n <= 7 ? n : null
+  })()
   const matchup =
     activeKey === 'matchup' && selectedLeagueId
-      ? await getMatchupData(selectedLeagueId, userId, matchupWeekParam, leagueCtx).catch((e: unknown) => {
+      ? await getMatchupData(selectedLeagueId, userId, matchupWeekParam, leagueCtx, matchupGameParam).catch((e: unknown) => {
           console.error('[core/matchup] read failed', e)
           matchupLoadFailed = true
           return null

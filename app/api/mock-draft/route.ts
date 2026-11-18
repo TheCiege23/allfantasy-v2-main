@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import crypto from 'crypto'
 import { getNativeLeagueMock } from '@/lib/mock-draft/native-league'
 import { leagueMockRoomFacts } from '@/lib/mock-draft/leagueMockRoomFacts'
@@ -390,7 +391,7 @@ export async function GET(req: NextRequest) {
   const userLookup = new Map(sleeperUsers.map((user) => [user.user_id, user]))
   const leagueTeamLookup = new Map((league?.teams ?? []).map((team) => [team.externalId, team]))
   const ownRosterData =
-    league?.rosters.find((roster) => roster.platformUserId === userId)?.playerData ?? null
+    (league?.rosters.find((roster) => roster.platformUserId === userId) ?? league?.rosters.find((roster) => isRosterManagedBy(roster, userId)))?.playerData ?? null
 
   const detectedUserRosterId = inferUserRosterId({
     ownRosterData,

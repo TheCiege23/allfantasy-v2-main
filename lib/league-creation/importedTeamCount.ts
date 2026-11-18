@@ -15,10 +15,12 @@
  * today's lists until each is confirmed to handle other sizes.
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
+
 const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
 
-/** Same ceiling as redraft's 2-32 catalog range. */
-const IMPORTED_TEAM_COUNT_MAX = 32
+/** Same ceiling as a native redraft league. */
+const IMPORTED_TEAM_COUNT_MAX = MAX_NATIVE_TEAMS
 
 /** True when `teamCount` may be used for `leagueType` in an import carryover. */
 export function isImportedTeamCountAllowed(

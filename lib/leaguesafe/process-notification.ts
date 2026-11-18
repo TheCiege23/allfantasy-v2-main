@@ -6,7 +6,10 @@ import { LS_PARSER_VERSION, parseLeagueSafeNotification } from "./notification-p
 
 export type ProcessingResult = "parsed" | "unparseable" | "unchanged" | "conflict" | "rejected" | "not_found"
 
-/** Explicit admin action only. Never called by capture, a trigger, or a background job. */
+/**
+ * Run by the admin's explicit parse action. The inbound capture also runs it, but only when
+ * LS_AUTO_PROCESS=1 (off by default); nothing else calls it.
+ */
 export async function processLeagueSafeNotification(id: string, allowedDomains: string[]): Promise<ProcessingResult> {
   const row = await prisma.leagueSafeRawEmail.findUnique({ where: { id }, select: {
     id: true, messageId: true, receivedAt: true, rawBody: true, processingStatus: true,

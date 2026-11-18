@@ -4,6 +4,7 @@
  * POST: manager or commissioner submits promotion (rightsId + promotedProPlayerId).
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -117,9 +118,9 @@ export async function POST(
   const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   const roster = await prisma.roster.findFirst({
     where: { leagueId, id: right.rosterId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
-  const isOwner = roster?.platformUserId === userId || (await acceptedCoOwnerRosterId(leagueId, userId)) === right.rosterId
+  const isOwner = isRosterManagedBy(roster, userId) || (await acceptedCoOwnerRosterId(leagueId, userId)) === right.rosterId
   if (!commissioner && !isOwner) {
     return NextResponse.json({ error: 'Only the rights holder or commissioner can promote' }, { status: 403 })
   }

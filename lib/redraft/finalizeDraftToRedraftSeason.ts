@@ -1,3 +1,4 @@
+import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
@@ -409,6 +410,7 @@ export async function ensureScheduleForNewSeason(params: {
   if (rosters.length < 2) return
   // The commissioner's divisions (best-effort: a failed read schedules without them, as before).
   const divisions = await loadSeasonRosterDivisions(params.leagueId, rosters)
+  const scheduleLeague = await prisma.league.findUnique({ where: { id: params.leagueId }, select: { settings: true } }).catch(() => null)
 
   /*
    * A late start schedules only the weeks left: a full round-robin generated for that many weeks and
@@ -426,6 +428,7 @@ export async function ensureScheduleForNewSeason(params: {
       medianGame: params.medianGame,
       divisionByRoster: divisions?.byRoster ?? null,
       divisionRivalsTwice: divisions?.rivalsTwice === true,
+      gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings),
     },
   ).map((slot) => ({ ...slot, week: slot.week + startWeek - 1 }))
 

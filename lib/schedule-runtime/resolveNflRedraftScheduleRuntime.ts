@@ -1,3 +1,4 @@
+import { inferGamesPerWeek, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
@@ -275,6 +276,8 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
     medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
     divisionRivalsTwice,
+    // An imported schedule states its own shape; a native one follows the league's setting.
+    gamesPerWeek: imported ? inferGamesPerWeek(imported.matchups) : Math.max(readGamesPerWeek(season.league?.settings), inferGamesPerWeek(season.schedule.map(toScheduleMatchupInput))),
   })
 
   return {
@@ -392,11 +395,13 @@ export async function generateNflRedraftScheduleForSeason(input: {
   }
 
   const { teams, divisionRivalsTwice } = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
+  const scheduleLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
   const draw = (order: readonly string[] | undefined) =>
     generateCanonicalRegularSeasonSchedule({
       rules,
       teams: order ? inOrder(teams, (t) => t.rosterId, order) : teams,
       divisionRivalsTwice,
+      gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings),
       totalWeeks: season.totalWeeks,
       playoffStartWeek: season.playoffStartWeek,
     })
@@ -435,7 +440,7 @@ export async function generateNflRedraftScheduleForSeason(input: {
   const customWeeks = readCustomWeeks(league?.settings, season.season)
   const rosterIds = teams.map((t) => t.rosterId)
   const withCustom = (matchups: typeof generated.matchups) =>
-    applyCustomWeeks(matchups, customWeeks, { fromWeek, regularSeasonWeeks: generated.regularSeasonWeeks, rosterIds })
+    applyCustomWeeks(matchups, customWeeks, { fromWeek, regularSeasonWeeks: generated.regularSeasonWeeks, rosterIds, gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings) })
   const kept = withCustom(generated.matchups)
   const nameOf = new Map(teams.map((t) => [t.rosterId, t.displayName]))
   // A draw is shown by the first week it can change: a custom week reads the same in every draw.

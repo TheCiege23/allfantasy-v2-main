@@ -1,3 +1,4 @@
+import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
@@ -117,6 +118,7 @@ export async function ensureNextRedraftSeasonShell(
         medianGame: completedSeason.medianGame,
         divisionByRoster: divisions?.byRoster ?? null,
         divisionRivalsTwice: divisions?.rivalsTwice === true,
+        gamesPerWeek: readGamesPerWeek(league.settings),
       },
     )
     for (const s of slots) {

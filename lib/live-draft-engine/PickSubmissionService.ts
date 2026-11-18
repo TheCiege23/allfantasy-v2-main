@@ -179,7 +179,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     currentOnClockRosterId: onClockRosterId,
     existingPicks: session.picks
       .filter((p) => !isDraftPickRowEmpty(p))
-      .map((p) => ({ playerName: p.playerName, position: p.position })),
+      .map((p) => ({ playerName: p.playerName, position: p.position, playerId: p.playerId ?? null })),
+    playerId: input.playerId ?? null,
     sessionStatus: session.status,
     commissionerOverride: input.commissionerOverride === true || input.source === 'commissioner',
   })

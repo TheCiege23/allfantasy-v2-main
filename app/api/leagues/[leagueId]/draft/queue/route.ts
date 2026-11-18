@@ -3,6 +3,8 @@
  * PUT: Save draft queue (order array).
  */
 
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -74,10 +76,12 @@ export async function PUT(
         { status: 403 }
       )
     }
-    const roster = await prisma.roster.findUnique({
-      where: { leagueId_platformUserId: { leagueId, platformUserId: userId } },
-      select: { id: true, settings: true },
-    })
+    // The preference is stored on a team: the manager's own, or the named one of several.
+    const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req, body), { allowCoOwner: false })
+    if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+    const roster = acting.ok
+      ? await prisma.roster.findFirst({ where: { id: acting.rosterId, leagueId }, select: { id: true, settings: true } })
+      : null
     if (roster) {
       await prisma.roster.update({
         where: { id: roster.id },
@@ -91,7 +95,8 @@ export async function PUT(
     }
   }
 
-  await persistDraftQueue(userId, prepared.prepared)
+  // Saved to the queue of the team the room is about for this manager.
+  await persistDraftQueue(await draftQueueKeyForUser(leagueId, userId), prepared.prepared)
 
   return NextResponse.json({
     ok: true,

@@ -48,6 +48,17 @@ describe('persistTradedPicks — bulk persistence', () => {
     expect(boundValues()).toEqual(expect.arrayContaining(['lea-abc', 2026, 2028, '1', '7', '12']))
   })
 
+  it('stores a pick as traded unless the provider says it has not moved, and lets a later import correct it', async () => {
+    await invokePersist('lea-abc', [
+      { season: 2027, round: 1, original_roster_id: '1', current_owner_roster_id: '7' },
+      { season: 2027, round: 1, original_roster_id: '2', current_owner_roster_id: '2', traded: false },
+    ])
+    // Sleeper and MFL rows carry no flag and stay traded; a Fantrax own pick is stored as not traded.
+    expect(boundValues().filter((v) => typeof v === 'boolean')).toEqual([true, false])
+    const sql = (mocks.executeRaw.mock.calls[0][0] as TemplateStringsArray).join(' ')
+    expect(sql).toContain('"traded" = EXCLUDED."traded"')
+  })
+
   it('keeps the last owner for a duplicate key while preserving processed-input counts', async () => {
     const result = await invokePersist('lea-abc', [
       { season: 2026, round: 1, original_roster_id: '1', current_owner_roster_id: '7' },
