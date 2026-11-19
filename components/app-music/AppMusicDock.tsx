@@ -315,6 +315,19 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     return () => musicBus.setActions(null)
   }, [visible, playYouTube, stopAll, startApple, connectApple, disconnectApple, search, playApple, appleToggle])
 
+  /**
+   * Tells the page the corner box is up, so the page can make room for it instead of
+   * sliding cards under it (af-app-music.css, `data-af-music-box`). Only the corner:
+   * in the chat or in a page's own slot the player covers nothing of the page.
+   */
+  const inCorner = visible && !!yt && placeYouTube(screen, slot).where === 'corner'
+  useEffect(() => {
+    if (!inCorner) return
+    const root = document.documentElement
+    root.setAttribute('data-af-music-box', '')
+    return () => root.removeAttribute('data-af-music-box')
+  }, [inCorner])
+
   if (!visible || !yt) return null
 
   const place = placeYouTube(screen, slot)
