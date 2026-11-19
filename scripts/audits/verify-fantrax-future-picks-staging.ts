@@ -5,7 +5,7 @@
  *     scripts/audits/verify-fantrax-future-picks-staging.ts <fantrax-league-id> [flags] [team name ...]
  *
  * With no flag it imports the league's snapshot (the one write the normal import makes) and prints
- * the traded and home picks the importer derived.
+ * the future picks the importer carried, and which of them have changed hands.
  *
  *   --refresh            also apply the scheduled sync's `traded_picks` step to the league already
  *                        in the app, and report what it wrote and cleared
@@ -78,9 +78,10 @@ async function main() {
     target: 'staging',
     league: { name: n.league.name, season: n.league.season, teams: n.rosters.length, inApp: league?.id ?? null },
     draftPicks: n.draft_picks.length,
-    tradedPicks: n.traded_picks?.length ?? null,
-    returnedPicks: n.returned_picks?.length ?? null,
+    /* Fantrax lists every future pick, so this is the whole inventory; `traded` below is the moved ones. */
+    futurePickRows: n.traded_picks?.length ?? null,
     traded: (n.traded_picks ?? [])
+      .filter((p) => p.traded !== false)
       .map((p) => `${p.season} R${p.round}: ${label(p.original_roster_id)} -> ${label(p.current_owner_roster_id)}`)
       .sort(),
   }

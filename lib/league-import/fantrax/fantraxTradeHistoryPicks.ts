@@ -17,7 +17,7 @@
  * ⚠ THE LAST TRADE WINS, NOT THE LAST ROW. Fantrax exports newest first, so the trades are sorted
  * by their own timestamp before being applied: a pick traded A -> B and then B -> C must end on C
  * whichever way the file is ordered. A pick that ends back with its original team is reported as
- * returned, which is what clears a stale "traded" row for it.
+ * returned, so the caller can store it as that team's own again.
  *
  * Pure: no database, no provider. Ids are the league's own team ids (`LeagueTeam.externalId`), as
  * the planned trade facts already carry them.

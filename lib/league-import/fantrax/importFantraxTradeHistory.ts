@@ -32,7 +32,7 @@ export type FantraxTradeHistoryImportResult =
        * Future picks placed from this export, in rounds Fantrax's API does not publish. `null` when
        * that step could not run; the trades above are saved either way.
        */
-      laterRoundPicks: { traded: number; cleared: number } | null
+      laterRoundPicks: { traded: number; returned: number } | null
     }
   | { ok: false; status: 400 | 404 | 409; error: string }
 
@@ -89,7 +89,7 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
    * ⚠ FAILS SOFT. The trades are already saved; a problem placing picks must not turn a good
    * upload into an error. `laterRoundPicks: null` says the step did not run.
    */
-  let laterRoundPicks: { traded: number; cleared: number } | null = null
+  let laterRoundPicks: { traded: number; returned: number } | null = null
   try {
     const snapshot = await prisma.fantraxLeague.findFirst({
       where: { OR: [{ sourceLeagueId: league.platformLeagueId }, { id: league.platformLeagueId }] },
@@ -104,15 +104,26 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
       publishedRounds: published,
       afterSeason: typeof league.season === 'number' ? league.season : null,
     })
-    laterRoundPicks = { traded: 0, cleared: 0 }
-    if (ownership.traded.length > 0 || ownership.returned.length > 0) {
-      const { persistTradedPicks, clearReturnedTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
-      if (ownership.traded.length > 0) {
-        laterRoundPicks.traded = (await persistTradedPicks(args.leagueId, ownership.traded)).written
-      }
-      if (ownership.returned.length > 0) {
-        laterRoundPicks.cleared = (await clearReturnedTradedPicks(args.leagueId, ownership.returned)).cleared
-      }
+    laterRoundPicks = { traded: ownership.traded.length, returned: ownership.returned.length }
+    /*
+     * One upsert for both. A Fantrax league's stored rows are its whole inventory, own picks
+     * included, each flagged with whether it has changed hands — so a pick that ended back with
+     * its original team is written as that team's own (`traded: false`), the same way the
+     * import corrects one, rather than removed.
+     */
+    const rows = [
+      ...ownership.traded,
+      ...ownership.returned.map((pick) => ({
+        season: pick.season,
+        round: pick.round,
+        original_roster_id: pick.original_roster_id,
+        current_owner_roster_id: pick.original_roster_id,
+        traded: false,
+      })),
+    ]
+    if (rows.length > 0) {
+      const { persistTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
+      await persistTradedPicks(args.leagueId, rows)
     }
   } catch {
     laterRoundPicks = null
