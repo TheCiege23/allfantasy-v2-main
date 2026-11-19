@@ -45,6 +45,14 @@ support_matrix:
       status: probed
       captured: 2026-10-31
       fixtures: [fixtures/scoreboard.NBA.20261106.json, fixtures/scoreboard.NBA.20251209.json, fixtures/scoreboard.NBA.20251213.json, fixtures/scoreboard.NBA.20251216.json]
+    teams: { status: probed_full, fixture: fixtures/teams.NBA.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+  NHL:
+    sport_path: hockey/nhl
+    teams: { status: probed_full, fixture: fixtures/teams.NHL.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+  MLB:
+    sport_path: baseball/mlb
+    teams: { status: probed_full, fixture: fixtures/teams.MLB.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    fantasy_league: { status: probed, fixture: fixtures/fantasy-league.MLB.2026.json, captured: 2026-10-03, see: fantasy_mlb }
   NCAAB:
     sport_path: basketball/mens-college-basketball
     teams: { status: probed, fixture: fixtures/teams.NCAAB.json }
@@ -124,6 +132,20 @@ endpoints:
       team_count: 362        # Division I; every one isActive=true, every one has logos (14 each)
       league: { abbreviation: NCAAM, season: { year: 2027, displayName: "2026-27" } }
       full_body_bytes: 3239022   # committed fixture is a key-union trim (53/53 key paths kept)
+    measured_2026_11_19:
+      # NBA, NHL and MLB, for the copy-league team tables (lib/league/copyLeagueTeamTables.ts, which
+      # __tests__/league/copy-league-team-tables.test.ts pins to these captures). Committed UNTRIMMED: the
+      # point is the complete team list, and a key-union trim would drop teams.
+      NBA: { http_status: 200, team_count: 30, inactive: 0, all_star: 0, logos_per_team: 16, league: { abbreviation: NBA, season: { year: 2027, displayName: "2026-27" } }, fixture_bytes: 304533 }
+      NHL: { http_status: 200, team_count: 32, inactive: 0, all_star: 0, logos_per_team: 16, league: { abbreviation: NHL, season: { year: 2027, displayName: "2026-27" } }, fixture_bytes: 324944 }
+      MLB: { http_status: 200, team_count: 30, inactive: 0, all_star: 0, logos_per_team: 16, league: { abbreviation: MLB, season: { year: 2026, displayName: "2026" } }, fixture_bytes: 304519 }
+      default_logo: "logos[] entry whose rel has 'default' and not 'dark': https://a.espncdn.com/i/teamlogos/<sport>/500/<abbreviation lower-case>.png for every one of the 92 teams"
+      codes_worth_knowing:
+        - "NHL Utah is UTAH (Utah Mammoth); there is no ARI. NBA Utah is also UTAH (Utah Jazz)."
+        - "MLB White Sox are CHW and their crest is chw.png. Rolling Insights spells them CWS, and lib/sport-teams/SportTeamMetadataRegistry.ts builds cws.png."
+        - "MLB Athletics are ATH, displayName 'Athletics' with no city; Arizona is ARI (Rolling Insights: AZ)."
+        - "NBA uses ESPN's short codes: GS, NY, NO, SA, UTAH, WSH."
+      cross_check: "Every MLB displayName equals the 30 names in contracts/rolling-insights/fixtures/schedule-season.MLB.json."
     envelope: >
       { sports: [ { leagues: [ { abbreviation, season, teams: [ { team: {...} } ] } ] } ] }
     fields:

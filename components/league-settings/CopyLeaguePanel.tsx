@@ -19,11 +19,11 @@ import type { CopyLeagueView } from '@/lib/league/copyLeagueService'
 const copyLeagueMessages = defineMessages({
   en: {
     title: 'Copy league',
-    commishSub: 'Every manager takes a real NFL team: its name and logo replace the team’s own. Managers pick until the draft; you can assign or swap teams any time.',
+    commishSub: (league: string): string => `Every manager takes a real ${league} team: its name and logo replace the team’s own. Managers pick until the draft; you can assign or swap teams any time.`,
     turnOn: 'Copy league',
     picked: (n: number, total: number): string => `${n} of ${total} teams have a real team.`,
     mineTitle: 'Your real team',
-    mineSub: 'This is a copy league: take a real NFL team and it becomes your team’s name and logo. Each team can be taken once.',
+    mineSub: (league: string): string => `This is a copy league: take a real ${league} team and it becomes your team’s name and logo. Each team can be taken once.`,
     choose: 'Choose a team',
     none: 'No team yet',
     taken: (who: string): string => `taken by ${who}`,
@@ -36,11 +36,11 @@ const copyLeagueMessages = defineMessages({
   },
   es: {
     title: 'Liga copia',
-    commishSub: 'Cada mánager toma un equipo real de la NFL: su nombre y logo reemplazan los del equipo. Los mánagers eligen hasta el draft; tú puedes asignar o intercambiar equipos cuando quieras.',
+    commishSub: (league: string): string => `Cada mánager toma un equipo real de la ${league}: su nombre y logo reemplazan los del equipo. Los mánagers eligen hasta el draft; tú puedes asignar o intercambiar equipos cuando quieras.`,
     turnOn: 'Liga copia',
     picked: (n: number, total: number): string => `${n} de ${total} equipos tienen un equipo real.`,
     mineTitle: 'Tu equipo real',
-    mineSub: 'Esta es una liga copia: toma un equipo real de la NFL y será el nombre y el logo de tu equipo. Cada equipo se puede tomar una vez.',
+    mineSub: (league: string): string => `Esta es una liga copia: toma un equipo real de la ${league} y será el nombre y el logo de tu equipo. Cada equipo se puede tomar una vez.`,
     choose: 'Elige un equipo',
     none: 'Todavía sin equipo',
     taken: (who: string): string => `ya es de ${who}`,
@@ -111,7 +111,7 @@ export function CopyLeaguePanel({ leagueId, mode }: { leagueId: string; mode: 'm
     return (
       <section className="flex flex-col gap-3 rounded-xl border border-blue-500/40 bg-blue-500/[0.06] px-4 py-3" data-testid="copy-league-mine">
         <h3 className="m-0 text-[15px] font-bold text-white">{c.mineTitle}</h3>
-        <p className="m-0 text-[13px] leading-relaxed text-white/60">{c.mineSub}</p>
+        <p className="m-0 text-[13px] leading-relaxed text-white/60">{c.mineSub(view.sport)}</p>
         <div className="flex items-center gap-3">
           <Crest src={real?.logo ?? null} />
           <select
@@ -151,7 +151,7 @@ export function CopyLeaguePanel({ leagueId, mode }: { leagueId: string; mode: 'm
       <div className="flex items-center justify-between gap-3">
         <span className="flex min-w-0 flex-col gap-1">
           <h3 id="copy-league-title" className="m-0 text-[15px] font-bold text-white">{c.title}</h3>
-          <span className="text-[13px] leading-relaxed text-white/60">{c.commishSub}</span>
+          <span className="text-[13px] leading-relaxed text-white/60">{c.commishSub(view.sport)}</span>
         </span>
         <button
           type="button"

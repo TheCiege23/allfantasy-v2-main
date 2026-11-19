@@ -35,6 +35,7 @@ import {
   republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
+import { isDynastyForWrite } from '@/lib/league-import/leagueTypeWrite'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
@@ -202,7 +203,9 @@ async function applyLeagueState(
     scoringPresetId: refreshedScoringPresetId,
     status: normalized.league.status ?? undefined,
     leagueSize: typeof normalized.league.leagueSize === 'number' ? normalized.league.leagueSize : undefined,
-    isDynasty: normalized.league.isDynasty,
+    // A person's confirmed dynasty type keeps the flag on; without this every sync rewrote Fantrax's
+    // `false` over it (Fantrax cannot say dynasty). See `isDynastyForWrite`.
+    isDynasty: isDynastyForWrite({ providerIsDynasty: normalized.league.isDynasty, existingSettings }),
     rosterSize: normalized.league.rosterSize ?? undefined,
     starters: (rosterPositions ?? undefined) as Prisma.InputJsonValue | undefined,
     settings: mergedSettings as Prisma.InputJsonValue,

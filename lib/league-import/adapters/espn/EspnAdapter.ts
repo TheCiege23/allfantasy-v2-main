@@ -77,6 +77,14 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       raw.commissionerTeamIds,
       raw.teams.map((team) => team.teamId),
     )
+    /*
+     * ESPN reports a default acquisition budget (100) even for a league that does
+     * not use one, so storing it verbatim gave every team "$100 left" in a
+     * waiver-priority league. Only an explicit "no budget" clears it; when the
+     * settings block is missing we do not know, and keep what ESPN sent.
+     */
+    const noWaiverBudget = raw.settings != null && raw.settings.usesFaab === false
+
     const rosters = raw.teams.map((team) => ({
       source_team_id: team.teamId,
       source_manager_id: team.managerId,
@@ -94,7 +102,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       starter_slot_by_id: team.starterSlotById,
       reserve_ids: team.reservePlayerIds,
       taxi_ids: [],
-      faab_remaining: team.faabRemaining,
+      faab_remaining: noWaiverBudget ? null : team.faabRemaining,
       waiver_priority: team.waiverPriority,
     }))
 
@@ -230,7 +238,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         schedule_unit: 'week',
         matchup_frequency: matchupFrequency,
         waiver_type: raw.settings?.usesFaab ? 'faab' : 'priority',
-        faab_budget: raw.settings?.acquisitionBudget ?? null,
+        faab_budget: noWaiverBudget ? null : raw.settings?.acquisitionBudget ?? null,
         roster_positions: rosterPositions.map((slot) => `${slot.slot}:${slot.count}`),
         scoring_settings: receptionRule ? { rec: receptionRule.points } : undefined,
         espn_settings: raw.settings?.raw ?? null,

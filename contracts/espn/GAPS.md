@@ -13,6 +13,14 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `R-05` | `headshot` is **omitted**, not null, when ESPN has no photo; the derived CDN URL then **404s** | 40/49 athletes carry it; all 40 load; all 9 without it 404 at `.../mens-college-basketball/players/full/{id}.png`. So the field is authoritative — no point constructing URLs for athletes that lack it. |
 | `R-06` | `jersey` is a **string** | `"5"`, `"55"`. `SportsPlayer.number` is an int. |
 
+## Resolved by probe, 2026-11-19 — NBA, NHL and MLB team lists, do NOT re-test
+
+| ID | Finding | Evidence |
+|---|---|---|
+| `R-07` | `teams?limit=1000` returns every club: NBA **30**, NHL **32**, MLB **30**, all `isActive`, none `isAllStar` | `fixtures/teams.{NBA,NHL,MLB}.json`, committed untrimmed; counts in `ENDPOINTS.yaml` `teams.measured_2026_11_19` |
+| `R-08` | The list is current: NHL has **Utah Mammoth** (`UTAH`) and no Arizona; MLB has **Athletics** (`ATH`, no city) and no Oakland | Same fixtures. `lib/sport-teams/SportTeamMetadataRegistry.ts` still lists NHL `ARI` and MLB `OAK` — it is NOT the place to read current teams from |
+| `R-09` | Each team's default 500px crest is `teamlogos/<sport>/500/<abbreviation lower-case>.png`; the White Sox are `CHW`/`chw.png` (Rolling Insights and the registry say `CWS`) | `logos[]` with `rel` `default`, for all 92 teams. Crests from this CDN were already in use for every sport's team logo; no new image-rights question (compare `E-05`, which is about player headshots) |
+
 ## Measured against our data, 2026-10-01 (read-only, no provider calls)
 
 | ID | Finding |

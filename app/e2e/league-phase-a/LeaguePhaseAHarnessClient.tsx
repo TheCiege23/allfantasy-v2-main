@@ -70,12 +70,23 @@ const harnessSchedule = {
     }
   }),
 }
-// Copy leagues (docs/league-page/COPY_LEAGUES_DESIGN.md): 12 teams, 4 already holding a real NFL team.
-let harnessCopy = {
-  available: true, enabled: true, locked: false, canManage: true, myLeagueTeamId: 'c3',
-  teams: harnessTeams.map((name, i) => ({ leagueTeamId: `c${i}`, teamName: name, ownerName: name, code: ['BUF', 'KC', null, 'PHI', null, 'DET', null, null, null, null, null, null][i] ?? null })),
-  catalog: copyLeagueTeams('NFL'),
+// Copy leagues (docs/league-page/COPY_LEAGUES_DESIGN.md): 12 teams, 4 already holding a real team.
+// `?view=copyleague&copySport=NBA|NHL|MLB` shows the same league in that sport (default NFL).
+const HARNESS_COPY_CODES: Record<string, Array<string | null>> = {
+  NFL: ['BUF', 'KC', null, 'PHI', null, 'DET'],
+  NBA: ['GS', 'BOS', null, 'OKC', null, 'NY'],
+  NHL: ['EDM', 'UTAH', null, 'TOR', null, 'VGK'],
+  MLB: ['LAD', 'NYY', null, 'ATH', null, 'CHW'],
 }
+function harnessCopyFor(sport: string) {
+  const codes = HARNESS_COPY_CODES[sport] ?? HARNESS_COPY_CODES.NFL!
+  return {
+    available: true, enabled: true, sport, locked: false, canManage: true, myLeagueTeamId: 'c3',
+    teams: harnessTeams.map((name, i) => ({ leagueTeamId: `c${i}`, teamName: name, ownerName: name, code: codes[i] ?? null })),
+    catalog: copyLeagueTeams(sport),
+  }
+}
+let harnessCopy = harnessCopyFor('NFL')
 const harnessDivisions = {
   config: { count: 4, names: ['East', 'North', 'South', 'West'], teamAssignments: Object.fromEntries(harnessTeams.map((_, i) => [`t${i}`, i % 4])), aiNamingEnabled: false, rivalsTwice: false, lastUpdatedAt: null, lastUpdatedBy: null },
   isCommissioner: true, isSurvivor: false, sport: 'NFL', leagueVariant: null,
@@ -185,6 +196,9 @@ export function LeaguePhaseAHarnessClient() {
   const requested = String(params?.get('skin') ?? 'dynasty')
   const skin: LeagueSkin = (LEAGUE_SKINS as readonly string[]).includes(requested) ? (requested as LeagueSkin) : 'dynasty'
   const view = String(params?.get('view') ?? 'matchup')
+  const copySport = String(params?.get('copySport') ?? 'NFL').toUpperCase()
+  // Set before the panels mount and fetch (their first GET reads it); once per sport, so picks made on the page stay.
+  if (view === 'copyleague' && harnessCopy.sport !== copySport && copyLeagueTeams(copySport).length > 0) harnessCopy = harnessCopyFor(copySport)
   const league = {
     id: 'harness-league', name: 'Defense IDP For Life', sport: 'NFL', season: 2026, teamCount: 16,
     leagueType: skin === 'redraft' ? 'redraft' : 'dynasty', isDynasty: skin !== 'redraft', platform: 'sleeper',

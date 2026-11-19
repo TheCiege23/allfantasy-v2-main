@@ -459,7 +459,7 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
   const out: HubAfOption[] = []
   const teamCount = num(l.teamCount) ?? num(l.leagueSize)
 
-  // Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): NFL leagues hosted on AllFantasy.
+  // Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): NFL, NBA, NHL and MLB leagues hosted on AllFantasy.
   const sport = str(l.sport)
   if (copyLeagueAvailable(sport)) {
     const copy = readCopyLeague(snap, sport)
@@ -467,7 +467,7 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
     out.push({
       key: 'copyLeague',
       label: 'Copy league',
-      description: 'Every manager takes a real NFL team, and its name and logo become the team’s own.',
+      description: `Every manager takes a real ${copy.sport} team, and its name and logo become the team’s own.`,
       value: copy.enabled ? (teamCount != null ? `${picked} of ${teamCount} teams have a real team` : 'Copy league is on') : 'Copy league is off',
       panel: 'af-options',
     })
