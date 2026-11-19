@@ -607,22 +607,29 @@ export function DraftRoomPageClient({
       : 'Loading player pool...'
   const effectiveDraftSport = draftPool?.sport ?? sport
 
+  const poolPicks = useMemo(() => {
+    const picks = session?.picks ?? []
+    const pools = session?.rosterPlayerPools
+    const rosterId = session ? resolveEffectiveCurrentPick(session)?.rosterId ?? session.currentUserRosterId : null
+    if (!pools || !rosterId) return picks
+    return picks.filter(p => pools[p.rosterId] === pools[rosterId])
+  }, [session])
   const draftedNames = useMemo(
     () =>
       new Set(
-        (session?.picks ?? [])
+        poolPicks
           .map((p) => normalizeDraftedPlayerName(p.playerName))
           .filter(Boolean),
       ),
-    [session?.picks],
+    [poolPicks],
   )
   const draftedPlayerIds = useMemo(() => {
     const s = new Set<string>()
-    for (const p of session?.picks ?? []) {
+    for (const p of poolPicks) {
       if (p.playerId) s.add(String(p.playerId).trim())
     }
     return s
-  }, [session?.picks])
+  }, [poolPicks])
   /** Single source for on-clock team, overall, and timer anchor — derived only from `session`. */
   const draftCore = useMemo(
     () => (session ? buildDraftRoomCoreState(session) : null),

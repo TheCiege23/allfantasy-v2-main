@@ -381,7 +381,8 @@ export async function resolveNflRedraftWaiverRuntime(input: {
     }
   })
 
-  const activePlayerIds = new Set(rosterPlayers.map((player) => player.playerId))
+  const playerPools = await loadPlayerPools(season.leagueId,{seasonId:season.id,settings:league?.settings ?? null})
+  const activePlayerIds = new Set(playerPools ? [] : rosterPlayers.map((player) => player.playerId))
   const freeAgents = input.includeFreeAgents
     ? await prisma.sportsPlayer
         .findMany({
@@ -414,6 +415,7 @@ export async function resolveNflRedraftWaiverRuntime(input: {
     week,
     rules,
     rosters: rosterInputs,
+    playerPools,
     claims: claimInputs,
     transactions: transactions.map(toRuntimeTransaction),
     freeAgents: freeAgentInputs,
@@ -688,6 +690,9 @@ export async function cancelNflRedraftWaiverClaim(input: {
   return { claim }
 }
 
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { checkPoolTransfers } from '@/lib/league/player-pools/ownership'
+
 function playerMetaForResult(state: NflRedraftWaiverRuntimeState, playerId: string): NflRedraftWaiverPlayerInput {
   const freeAgent = state.freeAgents.find((player) => player.playerId === playerId)
   return freeAgent ?? { playerId, playerName: playerId, position: 'UNK', team: null, sport: 'NFL', slotType: 'BENCH' }
@@ -701,6 +706,10 @@ async function applyProcessResult(input: {
   if (result.success && result.resultType === 'won') {
     const meta = playerMetaForResult(input.state, result.addPlayerId)
     await prisma.$transaction(async (tx) => {
+      if (input.state.playerPools) {
+        const conflict = await checkPoolTransfers(input.state.leagueId,[{toRosterId:result.rosterId,playerId:result.addPlayerId}],input.state.seasonId,tx)
+        if (conflict) throw new Error(conflict)
+      }
       if (result.dropPlayerId) {
         await assertNotReservedByPirateClaim(tx, result.rosterId, result.dropPlayerId)
         const drop = await tx.redraftRosterPlayer.updateMany({
@@ -910,6 +919,10 @@ async function addNflRedraftFreeAgentLocked(
   }
   const move = result.result
   await prisma.$transaction(async (tx) => {
+    if (resolved.state.playerPools) {
+      const conflict = await checkPoolTransfers(season.leagueId,[{toRosterId:move.rosterId,playerId:move.addPlayerId}],season.id,tx)
+      if (conflict) throw new Error(conflict)
+    }
     await assertStealThreeWaiverHoldCleared(tx, season.leagueId, move.addPlayerId)
     if (move.dropPlayerId) {
       await assertNotReservedByPirateClaim(tx, move.rosterId, move.dropPlayerId)

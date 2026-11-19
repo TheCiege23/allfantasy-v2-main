@@ -15,6 +15,8 @@ import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './creat
 import { maxPlayoffStartWeekFor } from './regularSeasonCap'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { poolOf } from '@/lib/league/player-pools/policy'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
@@ -573,10 +575,12 @@ export async function syncCompletedDraftToRedraftSeason(
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
 
   const importedSnapshot = session.draftModeLabel === 'imported_rosters'
+  const pools = await loadPlayerPools(leagueId, {settings:league.settings,seasonId:season.id})
+  const importedKey = (rosterId: string, playerId: string) => JSON.stringify([poolOf(pools, rosterId),playerId])
   const importedPlayerIds = importedSnapshot
     ? new Set((await prisma.redraftRosterPlayer.findMany({
-        where: { roster: { seasonId: season.id } }, select: { playerId: true },
-      })).map(row => row.playerId))
+        where: { roster: { seasonId: season.id } }, select: { playerId: true, rosterId:true },
+      })).map(row => importedKey(row.rosterId,row.playerId)))
     : null
   const importedPlayers: Prisma.RedraftRosterPlayerCreateManyInput[] = []
 
@@ -638,7 +642,7 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    const existingActive = importedPlayerIds ? importedPlayerIds.has(playerId) : await prisma.redraftRosterPlayer.findFirst({
+    const existingActive = importedPlayerIds ? importedPlayerIds.has(importedKey(pick.rosterId,playerId)) : await prisma.redraftRosterPlayer.findFirst({
       where: {
         rosterId: mapping.redraftRoster.id,
         playerId,
@@ -668,7 +672,7 @@ export async function syncCompletedDraftToRedraftSeason(
     if (importedPlayerIds) {
       // A retry of the immutable imported draft cannot insert its pick twice, including overlapping requests.
       importedPlayers.push({ ...data, id: 'import-pick:' + pick.id })
-      importedPlayerIds.add(playerId)
+      importedPlayerIds.add(importedKey(pick.rosterId,playerId))
       continue
     }
     const createdRow = await prisma.redraftRosterPlayer.create({ data })

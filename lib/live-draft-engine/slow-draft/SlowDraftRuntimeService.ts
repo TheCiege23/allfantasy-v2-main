@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { instantAutopickReason, shouldPickNow } from '@/lib/live-draft-engine/instantAutopick'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague, isSoftTimerEnabled } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { submitBestAvailableAutopickForExpiredTimer } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
 import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/RosterFitValidation'
@@ -131,7 +133,7 @@ export async function tryQueueAutoPick(
     : []
   if (queueOrder.length === 0) return { success: false }
 
-  const draftedNames = new Set(draftSession.picks.map((p) => normalizeName(p.playerName)))
+  const draftedNames = new Set(picksInPool(draftSession.picks,await loadPlayerPools(leagueId),rosterId).map((p) => normalizeName(p.playerName)))
   const queuePlayerUnavailable = queueOrder.some((entry) => draftedNames.has(normalizeName(String(entry.playerName ?? ''))))
   const queueCandidates = queueOrder.filter((entry) => {
     const playerName = String(entry.playerName ?? '').trim()

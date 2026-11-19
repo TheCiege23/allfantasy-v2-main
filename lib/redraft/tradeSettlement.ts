@@ -28,6 +28,7 @@ import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { assignSeasonDraftLineup } from '@/lib/tournament/seasonDraftPolicy'
 import type { readSeasonTradePolicy } from '@/lib/tournament/seasonTradePolicy'
 
+import { checkPoolTransfers } from '@/lib/league/player-pools/ownership'
 export type TradeSettlementTx = Prisma.TransactionClient
 
 export type SettlementAssetRow = {
@@ -90,6 +91,10 @@ export async function settleRedraftTradeAssets(
   let playersMoved = 0
   let picksRecorded = 0
   const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true, settings: true, zombieLeague: { select: { id: true } } } }) : null
+  if (league && input.leagueId) {
+    const conflict = await checkPoolTransfers(input.leagueId, assets, undefined, tx, league.settings ?? null)
+    if (conflict) throw new Error(conflict)
+  }
   if (seasonSetupBlocked(league?.settings) && !policy) throw new Error('A tournament trade requires the frozen trade policy.')
   if (league?.zombieLeague && input.leagueId) {
     const { lockItemLeague } = await import('@/lib/zombie/beta2025ItemService')

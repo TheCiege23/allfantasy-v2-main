@@ -13,6 +13,8 @@
  */
 
 import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -94,7 +96,9 @@ export async function POST(
   const draftConfig = await getDraftConfigForLeague(leagueId)
   const queueSizeLimit = normalizeDraftQueueSizeLimit(draftConfig?.queue_size_limit)
   const normalizedQueue = dedupeQueueEntries(normalizeQueueEntries(queue, queueSizeLimit))
-  const draftedNames = normalizeDraftedNameSet(draftSession.picks)
+  const pools = await loadPlayerPools(leagueId)
+  const team = pools ? await resolveViewingRoster(leagueId,userId,requestedRosterIdFrom(req,body)) : null
+  const draftedNames = normalizeDraftedNameSet(!pools ? draftSession.picks : team ? [...picksInPool(draftSession.picks,pools,team.rosterId)] : [])
   const cleanedQueue = removeDraftedPlayersFromQueue(normalizedQueue, draftedNames)
   queue = cleanedQueue.queue
   if (queue.length < 2) {

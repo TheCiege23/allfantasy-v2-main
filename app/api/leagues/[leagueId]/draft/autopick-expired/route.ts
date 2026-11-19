@@ -43,6 +43,8 @@ type AutoPickCandidate = {
 
 export const dynamic = 'force-dynamic'
 
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
@@ -111,7 +113,7 @@ export async function POST(
   const queueRow = draftSession.queues.find((q) => q.userId === userId)
   const order = (queueRow?.order as Array<{ playerName: string; position: string; team?: string | null; playerId?: string | null }>) ?? []
   const draftedNames = new Set(
-    draftSession.picks
+    picksInPool(draftSession.picks,await loadPlayerPools(leagueId),onClockRosterId)
       .filter((p) => !isDraftPickRowEmpty(p))
       .map((p) => p.playerName.trim().toLowerCase()),
   )

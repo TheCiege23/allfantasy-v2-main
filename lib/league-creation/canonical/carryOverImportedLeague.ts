@@ -1,4 +1,5 @@
 import { parseStandingsDivisions } from '@/lib/league-import/standingsDivisions'
+import { readPlayerPoolScope, teamPoolResolver } from '@/lib/league/player-pools/policy'
 import { DIVISION_CONFIG_KEY, readDivisionConfig, validateDivisionSetup, type LeagueDivisionConfig } from '@/lib/league/divisions/leagueDivisions'
 import { extraTeamOwnerKey } from '@/lib/league/rosterManager'
 import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY, multiTeamManagersSupported, readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
@@ -227,7 +228,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   const sourcePlayerIdsByRoster = sourceRosters.map((roster) => importedOwnedPlayerIds(roster.playerData))
   const sourceIds = [...new Set(sourcePlayerIdsByRoster.flat())]
   const totalPlayers = sourcePlayerIdsByRoster.reduce((count, ids) => count + ids.length, 0)
-  if (totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Native rosters support one copy per player. Check the source league’s player-copy rules before conversion.')
+  if (readPlayerPoolScope(target.settings) === 'league' && totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Native rosters support one copy per player. Check the source league’s player-copy rules before conversion.')
   const columns = leagueIdentityColumns(sourceIds, args.sport, source.platform)
   if (sourceIds.length && !columns.length) {
     refuse(`Player identities from ${source.platform} cannot yet be translated to a native roster.`)
@@ -348,6 +349,18 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     }
     const check = validateDivisionSetup(divisionConfig, [...nativeTeamByProviderId.values()])
     if (!check.ok) refuse('Imported divisions need commissioner review: ' + check.error)
+  }
+  if (readPlayerPoolScope(target.settings) !== 'league') {
+    const group = teamPoolResolver({...asRecord(target.settings), ...(divisionConfig ? {[DIVISION_CONFIG_KEY]:divisionConfig} : {})})
+    const held = new Set<string>()
+    for (const [i,team] of orderedTeams.entries()) {
+      const pool = group(nativeTeamByProviderId.get(team.externalId)!)
+      for (const p of playerPicksBySlot[i]) {
+        const copy = JSON.stringify([pool,p.nativeId])
+        if (held.has(copy)) refuse('Two imported teams own the same player in the selected player pool.')
+        held.add(copy)
+      }
+    }
   }
   let overall = 1
   const maxPlayers = Math.max(0, ...playerPicksBySlot.map((rosterPicks) => rosterPicks.length))

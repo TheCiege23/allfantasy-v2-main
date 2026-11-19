@@ -28,6 +28,8 @@ import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 import { guardCandidates, loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 
 export type AutopickFallbackPoolEntry = {
@@ -268,7 +270,8 @@ export async function loadAutopickDraftContextForOnClock(
 
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
-  const draftedNames = new Set(draftSession.picks.map((p) => p.playerName.trim().toLowerCase()))
+  const pools = await loadPlayerPools(leagueId)
+  const draftedNames = new Set(picksInPool(draftSession.picks, pools, onClockRosterId).map((p) => p.playerName.trim().toLowerCase()))
   /*
    * Players already on a league roster are refused by pick validation (rosteredPlayerGuard.ts); a refused
    * autopick retries the same player and stalls the clock. So they leave the candidate pool here, by name
@@ -276,7 +279,7 @@ export async function loadAutopickDraftContextForOnClock(
    * stored name differs from the pool's ("Jr.", a nickname). Keepers and dispersal drafts are not
    * autopicked from this pool, so the guard's exemptions do not apply here.
    */
-  const rosteredPlayers = await loadLeagueRosteredPlayers(leagueId).catch(() => null)
+  const rosteredPlayers = await loadLeagueRosteredPlayers(leagueId, pools ? onClockRosterId : undefined).catch(() => null)
   if (rosteredPlayers) for (const name of rosteredPlayers.byName.keys()) draftedNames.add(name)
 
   const league = await prisma.league.findUnique({

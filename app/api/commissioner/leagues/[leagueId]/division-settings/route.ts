@@ -7,6 +7,9 @@
  * Handles AI naming requests.
  */
 import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { poolSetupError,readPlayerPoolScope } from '@/lib/league/player-pools/policy'
+import { lockPlayerPools } from '@/lib/league/player-pools/load'
+import { validateCurrentPoolOwnership } from '@/lib/league/player-pools/changeLayout'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { logAction } from '@/server/services/auditService'
 import { NextRequest, NextResponse } from 'next/server'
@@ -105,6 +108,8 @@ export async function GET(
 
   return NextResponse.json({
     config,
+    playerPoolScope:readPlayerPoolScope(settings),
+    divisionConferences:Array.isArray(settings.division_conferences) ? settings.division_conferences : [],
     isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'league'),
     isSurvivor,
     sport: league.sport,
@@ -194,17 +199,28 @@ export async function PUT(
     lastUpdatedBy: session.user.id,
   }
 
-  await prisma.league.update({
-    where: { id: leagueId },
-    data: {
-      settings: toPrismaJsonInput({
-        ...currentSettings,
-        [DIVISION_CONFIG_KEY]: updatedConfig,
-        // Also write num_divisions for backward compat
-        num_divisions: count,
-      }),
-    },
-  })
+  const poolScope = body.playerPoolScope ?? readPlayerPoolScope(currentSettings)
+  const conferences = body.divisionConferences ?? currentSettings.division_conferences ?? []
+  const poolError = poolSetupError(poolScope,count,conferences,currentTeamIds.length)
+  if (poolError || (poolScope !== 'league' && currentTeamIds.some(id => teamAssignments[id] === undefined))) {
+    return NextResponse.json({error:poolError ?? 'Assign every team to a division.'},{status:400})
+  }
+  const patch = {[DIVISION_CONFIG_KEY]:updatedConfig,num_divisions:count,player_pool_scope:poolScope,division_conferences:conferences}
+  if (poolScope === 'league' && readPlayerPoolScope(currentSettings) === 'league') {
+    await prisma.league.update({where:{id:leagueId},data:{settings:toPrismaJsonInput({...currentSettings,...patch})}})
+  } else {
+    try {
+      await prisma.$transaction(async tx=>{
+        await lockPlayerPools(tx,leagueId)
+        const fresh = await tx.league.findUniqueOrThrow({where:{id:leagueId},select:{settings:true}})
+        const next = {...fresh.settings as Record<string,unknown>,...patch}
+        await validateCurrentPoolOwnership(tx,leagueId,next)
+        await tx.league.update({where:{id:leagueId},data:{settings:toPrismaJsonInput(next)}})
+      },{timeout:30000})
+    } catch (error) {
+      return NextResponse.json({error:error instanceof Error ? error.message : 'Unable to change player pools.'},{status:409})
+    }
+  }
 
   // Notify league chat of division changes
   const changes: { field: string; oldValue: string; newValue: string }[] = []

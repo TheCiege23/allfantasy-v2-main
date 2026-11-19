@@ -37,6 +37,8 @@ import {
   DRAFT_PICK_STALE_OVERALL,
   type PickAuthorityCode,
 } from './pickAuthorityCodes'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 import { loadLeagueRosteredPlayers, rosteredHolder } from './rosteredPlayerGuard'
 import { logStructured } from '@/lib/logging/structured'
 import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEvent'
@@ -172,12 +174,13 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   const resolvedOwner = resolvePickOwner(round, slot, slotOrder, tradedPicks)
   const effectiveRosterId = input.rosterId ?? resolvedOwner?.rosterId ?? current.rosterId
   const onClockRosterId = resolvedOwner?.rosterId ?? current.rosterId
+  const pools = await loadPlayerPools(input.leagueId)
   const validation = validatePickSubmission({
     playerName: input.playerName,
     position: input.position,
     rosterId: effectiveRosterId,
     currentOnClockRosterId: onClockRosterId,
-    existingPicks: session.picks
+    existingPicks: picksInPool(session.picks, pools, effectiveRosterId)
       .filter((p) => !isDraftPickRowEmpty(p))
       .map((p) => ({ playerName: p.playerName, position: p.position, playerId: p.playerId ?? null })),
     playerId: input.playerId ?? null,
@@ -243,7 +246,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig != null
   const namesAPlayer = (input.position || '').toUpperCase() !== 'SKIP' && (!input.assetType || input.assetType === 'player')
   if (!seasonContext && !isDispersalDraft && namesAPlayer && input.source !== 'keeper' && input.source !== 'promoted_devy') {
-    const holder = rosteredHolder(await loadLeagueRosteredPlayers(input.leagueId), input)
+    const holder = rosteredHolder(await loadLeagueRosteredPlayers(input.leagueId, pools ? effectiveRosterId : undefined), input)
     if (holder) {
       return { success: false, error: `${input.playerName} is already on a roster in this league.`, code: DRAFT_PICK_DUPLICATE_PLAYER }
     }

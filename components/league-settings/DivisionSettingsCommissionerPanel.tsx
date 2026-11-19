@@ -77,6 +77,9 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
   const [isSurvivor, setIsSurvivor] = useState(false)
   const [sport, setSport] = useState<string | null>(null)
 
+  const [poolScope,setPoolScope] = useState<'league'|'conference'|'division'>('league')
+  const [conferenceByDivision,setConferenceByDivision] = useState<number[]>([])
+  const [savedPools,setSavedPools] = useState({scope:'league',conferences:[] as number[]})
   const [count, setCount] = useState(0)
   const [names, setNames] = useState<string[]>([])
   const [teamAssignments, setTeamAssignments] = useState<Record<string, number>>({})
@@ -104,6 +107,9 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         setIsSurvivor(data.isSurvivor ?? false)
         setSport(typeof data.sport === 'string' ? data.sport : null)
         const cfg: DivisionConfig = data.config ?? { count: 0, names: [], teamAssignments: {}, aiNamingEnabled: false, lastUpdatedAt: null, lastUpdatedBy: null }
+        const scope = data.playerPoolScope ?? 'league'
+        const conferences = data.divisionConferences ?? []
+        setPoolScope(scope); setConferenceByDivision(conferences); setSavedPools({scope,conferences})
         setCount(cfg.count)
         setNames(cfg.names)
         setTeamAssignments(cfg.teamAssignments)
@@ -172,19 +178,21 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/division-settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled, ...(isSurvivor ? {} : { playoffRule, rivalsTwice }) }),
+        body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled, playerPoolScope:poolScope, divisionConferences: Array.from({length:count},(_,i)=>conferenceByDivision[i] ?? i%2), ...(isSurvivor ? {} : { playoffRule, rivalsTwice }) }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('leagueSettings.saveFailed')); return }
+      setSavedPools({scope:poolScope,conferences:conferenceByDivision})
       setSavedConfig(data.config)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setSaving(false) }
-  }, [leagueId, count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, isSurvivor])
+  }, [leagueId, count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, isSurvivor, poolScope, conferenceByDivision])
 
   const resetToSaved = useCallback(() => {
     if (savedConfig) {
+      setPoolScope(savedPools.scope as typeof poolScope); setConferenceByDivision(savedPools.conferences)
       setCount(savedConfig.count)
       setNames(savedConfig.names)
       setTeamAssignments(savedConfig.teamAssignments)
@@ -192,17 +200,18 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       setPlayoffRule(savedConfig.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
       setRivalsTwice(savedConfig.rivalsTwice === true)
     }
-  }, [savedConfig])
+  }, [savedConfig,savedPools])
 
   const hasChanges = useMemo(() => {
     if (!savedConfig) return count > 0
     return count !== savedConfig.count
       || JSON.stringify(names) !== JSON.stringify(savedConfig.names)
+      || poolScope !== savedPools.scope || JSON.stringify(conferenceByDivision) !== JSON.stringify(savedPools.conferences)
       || JSON.stringify(teamAssignments) !== JSON.stringify(savedConfig.teamAssignments)
       || aiNamingEnabled !== savedConfig.aiNamingEnabled
       || playoffRule !== (savedConfig.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
       || rivalsTwice !== (savedConfig.rivalsTwice === true)
-  }, [count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, savedConfig])
+  }, [count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, savedConfig, poolScope, savedPools, conferenceByDivision])
 
   // Group teams by division
   const teamsByDivision = useMemo(() => {
@@ -251,6 +260,20 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           {isSurvivor ? t('division.tribeSubtitle') : t('division.subtitle')}
         </p>
       </div>
+
+      {!isSurvivor && <fieldset className="space-y-2" disabled={!isCommissioner}>
+        <legend>Player ownership</legend>
+        <select aria-label="Player pool" value={poolScope} onChange={e=>setPoolScope(e.target.value as typeof poolScope)}>
+          <option value="league">One player pool for the whole league</option>
+          <option value="division">One player pool per division</option>
+          <option value="conference">One player pool per conference</option>
+        </select>
+        {poolScope === 'conference' && names.map((name,i)=><label key={i} className="block">{name} conference
+          <select aria-label={name+' conference'} value={conferenceByDivision[i] ?? i%2}
+            onChange={e=>setConferenceByDivision(Array.from({length:count},(_,j)=>i===j ? Number(e.target.value) : conferenceByDivision[j] ?? j%2))}>
+            {Array.from({length:count},(_,j)=><option key={j} value={j}>Conference {j+1}</option>)}
+          </select></label>)}
+      </fieldset>}
 
       {/* ===== NUM OF DIVISIONS / TRIBES ===== */}
       <div className="space-y-2">

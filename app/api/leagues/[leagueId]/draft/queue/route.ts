@@ -4,7 +4,7 @@
  */
 
 import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
-import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveViewingRoster, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -64,7 +64,8 @@ export async function PUT(
    * lib/draft-room/saveDraftQueue.ts, shared with a confirmed Chimmy queue card. Checked BEFORE the
    * AF Pro preference write below, so a refused queue changes nothing at all.
    */
-  const prepared = await prepareDraftQueueSave(leagueId, queue)
+  const team = await resolveViewingRoster(leagueId,userId,requestedRosterIdFrom(req,body))
+  const prepared = await prepareDraftQueueSave(leagueId, queue,team?.rosterId)
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
 
   if (typeof body.aiManageDraftQueueEnabled === 'boolean') {

@@ -1,3 +1,6 @@
+import { readPlayerPoolScope } from '@/lib/league/player-pools/policy'
+import { loadPlayerPools,poolRosterIds } from '@/lib/league/player-pools/load'
+import { requestedRosterIdFrom,resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
@@ -68,8 +71,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   }
 
   try {
+    let scopedIds: string[] | undefined
+    let poolSeason: string | undefined
+    if (readPlayerPoolScope(league.settings) !== 'league') {
+      const viewing = await resolveViewingRoster(leagueId,userId,requestedRosterIdFrom(req),{allowCoOwner:true})
+      if (!viewing) return NextResponse.json({error:'Choose a franchise to view its waiver pool.'},{status:400})
+      poolSeason = (await prisma.redraftSeason.findFirst({where:{leagueId},orderBy:{season:'desc'},select:{id:true}}))?.id
+      scopedIds = poolRosterIds(await loadPlayerPools(leagueId,{settings:league.settings,seasonId:poolSeason}),viewing.rosterId)
+    }
     const allRosters = await (prisma as any).roster.findMany({
-      where: { leagueId },
+      where: { leagueId, ...(scopedIds ? {id:{in:scopedIds}} : {}) },
       select: { playerData: true },
     })
 
@@ -80,6 +91,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       }
     }
 
+    if (scopedIds && poolSeason) {
+      const owned = await prisma.redraftRosterPlayer.findMany({where:{roster:{seasonId:poolSeason},rosterId:{in:scopedIds},droppedAt:null},select:{playerId:true}})
+      for (const p of owned) rosteredIds.add(p.playerId)
+    }
     // NHL dynasty only (lib/waiver-wire/nhlProspectFreeAgency.ts). Everywhere else this is false and
     // the route below is exactly what it was.
     const offerProspects = offersNhlProspectFreeAgency(league)

@@ -14,6 +14,9 @@ import { withLeagueWaiverLock } from '@/lib/waiver-wire/leagueWaiverLock'
 import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
 import { sendWaiverResultNotices, waiverResultNotices } from './waiverResultNotices'
 
+import { loadPlayerPools, poolRosterIds } from '@/lib/league/player-pools/load'
+import { poolOf } from '@/lib/league/player-pools/policy'
+import { checkPoolTransfers } from '@/lib/league/player-pools/ownership'
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
 /**
@@ -232,6 +235,7 @@ async function processWaiverWindowLocked(
   }
 
   const results: ProcessedClaim[] = []
+  const pools = await loadPlayerPools(leagueId, {seasonId})
   const acquiredPlayerIds = new Set<string>()
 
   for (const claim of claims) {
@@ -257,7 +261,8 @@ async function processWaiverWindowLocked(
       results.push(await denyClaim(claim.id, 'Insufficient FAAB balance.'))
       continue
     }
-    if (acquiredPlayerIds.has(claim.addPlayerId)) {
+    const copyKey = JSON.stringify([poolOf(pools,claim.rosterId),claim.addPlayerId])
+    if (acquiredPlayerIds.has(copyKey)) {
       results.push(await denyClaim(claim.id, 'Another claim in this waiver run already won this player.'))
       continue
     }
@@ -267,6 +272,7 @@ async function processWaiverWindowLocked(
         playerId: claim.addPlayerId,
         droppedAt: null,
         roster: { seasonId },
+        ...(pools ? {rosterId:{in:poolRosterIds(pools,claim.rosterId)}} : {}),
       },
       select: { rosterId: true },
     })
@@ -286,6 +292,10 @@ async function processWaiverWindowLocked(
     // gaining the claimed one.
     try {
       await runWaiverSettlement(async (tx: Prisma.TransactionClient) => {
+        if (pools) {
+          const conflict = await checkPoolTransfers(leagueId,[{toRosterId:claim.rosterId,playerId:claim.addPlayerId}],seasonId,tx)
+          if (conflict) throw new Error(conflict)
+        }
         if (claim.dropPlayerId) {
           await assertNotReservedByPirateClaim(tx, claim.rosterId, claim.dropPlayerId)
           const dropResult = await tx.redraftRosterPlayer.updateMany({
@@ -376,7 +386,7 @@ async function processWaiverWindowLocked(
       isDefensive: isDefensivePosition(meta.position),
     }).catch(() => null)
 
-    acquiredPlayerIds.add(claim.addPlayerId)
+    acquiredPlayerIds.add(copyKey)
     await moveApprovedRosterToBack(seasonId, claim.rosterId).catch(() => null)
     results.push({ claimId: claim.id, status: 'approved', reason: meta.warning ?? undefined })
   }

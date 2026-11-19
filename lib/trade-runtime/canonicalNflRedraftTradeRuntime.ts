@@ -559,7 +559,7 @@ export function buildNflRedraftTradeRuntimeState(input: {
 function playerOwnerMap(teams: NflRedraftTradeTeamState[]): Map<string, { rosterId: string; player: NflRedraftTradePlayerInput }> {
   const out = new Map<string, { rosterId: string; player: NflRedraftTradePlayerInput }>()
   for (const team of teams) {
-    for (const player of team.players) out.set(player.playerId, { rosterId: team.rosterId, player })
+    for (const player of team.players) out.set(JSON.stringify([team.rosterId,player.playerId]), { rosterId: team.rosterId, player })
   }
   return out
 }
@@ -618,7 +618,7 @@ export function validateNflRedraftTradeProposal(input: {
   const rosterIds = new Set(participantTeams.map((team) => team.rosterId))
   const ownerByPlayerId = playerOwnerMap(input.state.teams)
   // Empty on the NFL redraft runtime, so every outgoing player leaves the sender's count as before.
-  const limitExempt = new Set(input.state.teams.flatMap((team) => team.rosterLimitExemptPlayerIds ?? []))
+  const limitExempt = new Set(input.state.teams.flatMap(team => (team.rosterLimitExemptPlayerIds ?? []).map(id=>JSON.stringify([team.rosterId,id]))))
   const seenAssets = new Set<string>()
   const playerDelta = new Map<string, number>(participantTeams.map((team) => [team.rosterId, 0]))
   const faabDelta = new Map<string, number>(participantTeams.map((team) => [team.rosterId, 0]))
@@ -638,7 +638,7 @@ export function validateNflRedraftTradeProposal(input: {
 
     const key =
       asset.assetType === 'player'
-        ? `player:${asset.playerId ?? ''}`
+        ? JSON.stringify(['player',asset.fromRosterId,asset.playerId])
         : asset.assetType === 'faab'
           ? `faab:${asset.fromRosterId}:${asset.toRosterId}`
           : asset.assetType === 'draft_pick'
@@ -651,7 +651,7 @@ export function validateNflRedraftTradeProposal(input: {
 
     if (asset.assetType === 'player') {
       if (!asset.playerId) return validationFailure('INVALID_ASSET', 'Player trade assets require playerId.')
-      const owner = ownerByPlayerId.get(asset.playerId)
+      const owner = ownerByPlayerId.get(JSON.stringify([asset.fromRosterId,asset.playerId]))
       if (!owner || owner.rosterId !== asset.fromRosterId) {
         return validationFailure('PLAYER_NOT_OWNED', `${asset.playerName ?? asset.playerId} is not active on the sending roster.`)
       }
@@ -659,7 +659,7 @@ export function validateNflRedraftTradeProposal(input: {
         return validationFailure('LOCKED_PLAYER', `${owner.player.playerName} is locked and cannot be traded.`)
       }
       // A reserve-slot player was never in the sender's count; he arrives on the bench, so he is in the receiver's.
-      if (!limitExempt.has(asset.playerId)) {
+      if (!limitExempt.has(JSON.stringify([asset.fromRosterId,asset.playerId]))) {
         playerDelta.set(asset.fromRosterId, (playerDelta.get(asset.fromRosterId) ?? 0) - 1)
       }
       playerDelta.set(asset.toRosterId, (playerDelta.get(asset.toRosterId) ?? 0) + 1)

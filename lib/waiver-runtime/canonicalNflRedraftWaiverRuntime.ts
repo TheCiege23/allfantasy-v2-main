@@ -206,6 +206,7 @@ export type NflRedraftFreeAgentAddResult =
   | { ok: false; validation: NflRedraftWaiverValidationResult; events: CanonicalLeagueRuntimeEvent[] }
 
 export type NflRedraftWaiverRuntimeState = {
+  playerPools?: Record<string,string> | null
   leagueId: string
   seasonId: string
   season: number
@@ -419,6 +420,7 @@ export function resolveNflRedraftWaiverSettings(input: {
 }
 
 export function buildNflRedraftWaiverRuntimeState(input: {
+  playerPools?: Record<string,string> | null
   leagueId: string
   seasonId: string
   season: number
@@ -467,6 +469,7 @@ export function buildNflRedraftWaiverRuntimeState(input: {
     generatedAtIso: now.toISOString(),
     settings,
     teams,
+    playerPools:input.playerPools,
     priorityOrder,
     pendingClaims,
     transactions,
@@ -504,11 +507,17 @@ function orderClaimStates(
   return a.claimId.localeCompare(b.claimId)
 }
 
-function rosteredPlayerMap(teams: NflRedraftWaiverTeamState[]): Map<string, string> {
+import { poolOf, type PlayerPools } from '@/lib/league/player-pools/policy'
+
+function copyKey(pools: PlayerPools | undefined, rosterId: string, playerId: string) {
+  return JSON.stringify([poolOf(pools ?? null,rosterId),playerId])
+}
+
+function rosteredPlayerMap(teams: NflRedraftWaiverTeamState[], pools: PlayerPools | undefined): Map<string, string> {
   const map = new Map<string, string>()
   for (const team of teams) {
     for (const player of team.players) {
-      map.set(player.playerId, team.rosterId)
+      map.set(copyKey(pools,team.rosterId,player.playerId), team.rosterId)
     }
   }
   return map
@@ -546,8 +555,8 @@ export function validateNflRedraftWaiverClaim(input: {
     return { ok: false, code: 'DUPLICATE_PENDING_CLAIM', message: 'This roster already has a pending claim for that player.' }
   }
 
-  const rosteredBy = rosteredPlayerMap(input.state.teams)
-  const currentOwner = rosteredBy.get(input.claim.addPlayerId)
+  const rosteredBy = rosteredPlayerMap(input.state.teams,input.state.playerPools)
+  const currentOwner = rosteredBy.get(copyKey(input.state.playerPools,team.rosterId,input.claim.addPlayerId))
   if (currentOwner) {
     return {
       ok: false,
@@ -730,7 +739,7 @@ export function processNflRedraftWaiverClaims(input: {
   const teams = cloneTeams(input.state.teams)
   const teamById = new Map(teams.map((team) => [team.rosterId, team]))
   const freeAgents = freeAgentMap(input.state.freeAgents)
-  const rosteredBy = rosteredPlayerMap(teams)
+  const rosteredBy = rosteredPlayerMap(teams,input.state.playerPools)
   const ordered = [...input.state.pendingClaims].sort((a, b) => orderClaimStates(a, b, teamById, settings))
   const satisfiedGroups = new Set<string>()
   const results: NflRedraftWaiverProcessResult[] = []
@@ -808,7 +817,7 @@ export function processNflRedraftWaiverClaims(input: {
       continue
     }
 
-    const owner = rosteredBy.get(claim.addPlayerId)
+    const owner = rosteredBy.get(copyKey(input.state.playerPools,claim.rosterId,claim.addPlayerId))
     if (owner) {
       pushFail(owner === claim.rosterId ? 'Player is already on this roster.' : 'Player is no longer available.')
       continue
@@ -842,8 +851,8 @@ export function processNflRedraftWaiverClaims(input: {
     const index = teams.findIndex((team) => team.rosterId === claim.rosterId)
     if (index >= 0) teams[index] = nextTeam
     teamById.set(claim.rosterId, nextTeam)
-    rosteredBy.set(claim.addPlayerId, claim.rosterId)
-    if (claim.dropPlayerId) rosteredBy.delete(claim.dropPlayerId)
+    rosteredBy.set(copyKey(input.state.playerPools,claim.rosterId,claim.addPlayerId), claim.rosterId)
+    if (claim.dropPlayerId) rosteredBy.delete(copyKey(input.state.playerPools,claim.rosterId,claim.dropPlayerId))
     satisfiedGroups.add(claim.conditionalGroupId)
 
     const tx: NflRedraftWaiverTransactionState = {

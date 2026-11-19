@@ -1,3 +1,4 @@
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
@@ -689,6 +690,7 @@ export async function buildSessionSnapshot(
   return {
     id: session.id,
     leagueId: session.leagueId,
+    rosterPlayerPools: await loadPlayerPools(leagueId),
     status: session.status as any,
     draftType: session.draftType as any,
     rounds: session.rounds,

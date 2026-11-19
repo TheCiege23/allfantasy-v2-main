@@ -36,6 +36,7 @@ export interface TradedPickRecord {
 }
 
 export interface DraftSessionSnapshot {
+  rosterPlayerPools?: Record<string, string> | null
   id: string
   leagueId: string
   status: DraftSessionStatus

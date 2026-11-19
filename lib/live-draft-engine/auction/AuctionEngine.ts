@@ -31,6 +31,8 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
 import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, resolveServerRookieStatus } from '@/lib/live-draft-engine/serverRookieStatus'
 import { recordAuctionBid } from '@/lib/live-draft-engine/auction/auctionBidLog'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool,poolOf } from '@/lib/league/player-pools/policy'
 import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 
 const DEFAULT_BUDGET = 200
@@ -191,11 +193,11 @@ async function _nominatePlayerCore(
   }
 
   if (session.draftModeLabel === 'rookie') {
-    const available = await loadRookieAuctionAvailability(leagueId)
+    const available = await loadRookieAuctionAvailability(leagueId,nominatorRosterId)
     if (!available(nomination)) return { success: false, error: 'This player is already on a league roster.' }
   } else if (!season && session.draftModeLabel !== 'dispersal' && (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig == null) {
     // Any other auction in a league whose season rosters already exist (see rosteredPlayerGuard.ts).
-    if (rosteredHolder(await loadLeagueRosteredPlayers(leagueId), nomination)) {
+    if (rosteredHolder(await loadLeagueRosteredPlayers(leagueId,nominatorRosterId), nomination)) {
       return { success: false, error: 'This player is already on a league roster.' }
     }
   }
@@ -209,7 +211,7 @@ async function _nominatePlayerCore(
   if (!playerName) return { success: false, error: 'Player name required' }
 
   const existingNames = new Set(
-    session.picks.map((p) => p.playerName.trim().toLowerCase())
+    picksInPool(session.picks,await loadPlayerPools(leagueId),nominatorRosterId).map((p) => p.playerName.trim().toLowerCase())
   )
   if (existingNames.has(playerName.toLowerCase())) {
     return { success: false, error: 'Player already drafted' }
@@ -313,6 +315,10 @@ async function _placeBidCore(
     return { success: false, error: 'Bidding window expired' }
   }
 
+  const playerPools = await loadPlayerPools(leagueId)
+  if (playerPools && poolOf(playerPools,rosterId) !== poolOf(playerPools,getAuctionNominationOrder(session.slotOrder as unknown as SlotOrderEntry[],state)[state.nominationOrderIndex]?.rosterId ?? '')) {
+    return { success:false, error:'This copy is being auctioned in another player pool.' }
+  }
   const seasonError = await validateSeasonDraftPlayer(leagueId, rosterId, session.picks, state.currentNomination)
   if (seasonError) return { success: false, error: seasonError }
   const config = await getAuctionConfigForLeague(leagueId, session)
@@ -485,7 +491,7 @@ async function _resolveAuctionWinCore(
   }
 
   if (winnerRosterId && session.draftModeLabel === 'rookie') {
-    const available = await loadRookieAuctionAvailability(leagueId)
+    const available = await loadRookieAuctionAvailability(leagueId,winnerRosterId)
     if (!available(state.currentNomination)) return { success: false, error: 'This player is already on a league roster.' }
   }
 

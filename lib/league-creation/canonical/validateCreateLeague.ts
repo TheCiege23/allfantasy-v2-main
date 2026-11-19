@@ -475,6 +475,17 @@ export function validateCreatePayload(
    * template bootstrap installs for this league type: `best_ball` for Classic Best Ball, the Guilly
    * template for a best ball Guilly league. Tight-but-possible is a wizard warning, not a refusal.
    */
+  if (schedule.playerPoolScope !== undefined) {
+    const scope = schedule.playerPoolScope
+    const count = Number(schedule.poolDivisionCount ?? 2)
+    const conferenceCount = Number(schedule.poolConferenceCount ?? 2)
+    const validCounts = Number.isInteger(count) && count >= 2 && count <= Math.min(32, Math.floor(data.teamCount / 2))
+    const validConferences = Number.isInteger(conferenceCount) && conferenceCount >= 2 && conferenceCount <= count
+    if (!['league', 'division', 'conference'].includes(String(scope)) || (scope !== 'league' &&
+      (!(formatId === 'redraft' || formatId === 'dynasty') || !validCounts || (scope === 'conference' && !validConferences)))) {
+      return {ok:false, status:400, error:'Invalid player pool configuration.', errors:[{path:'conceptSetup.playerPoolScope',message:'Choose valid divisions and conferences for these teams.'}]}
+    }
+  }
   const bestBallLeagueType =
     formatId === 'best_ball' ? 'best_ball' : formatId === 'guillotine' && schedule.guillotineBestBall === true ? 'guillotine' : null
   if (bestBallLeagueType) {

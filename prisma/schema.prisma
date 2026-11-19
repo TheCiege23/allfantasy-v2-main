@@ -15070,6 +15070,7 @@ model RedraftRoster {
 }
 
 model RedraftRosterPlayer {
+  poolOwnership   LeaguePlayerPoolOwnership?
   id              String        @id @default(cuid())
   rosterId        String
   playerId        String
@@ -15099,6 +15100,17 @@ model RedraftRosterPlayer {
 /// RedraftSeason relation (season is a plain Int here too, matching
 /// AfRosterMoveHistory, to avoid a field-name collision with the `season`
 /// scalar column).
+model LeaguePlayerPoolOwnership {
+  rosterPlayerId String @id
+  seasonId       String
+  poolKey        String
+  playerId       String
+  rosterPlayer   RedraftRosterPlayer @relation(fields: [rosterPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, poolKey, playerId], map: "league_player_pool_copy_key")
+  @@map("league_player_pool_ownership")
+}
+
 model RedraftRosterMoveHistory {
   id          String        @id @default(cuid())
   leagueId    String

@@ -1275,6 +1275,24 @@ export function LeagueBasicsStep({
         </label>
       ) : null}
 
+      {(state.leagueType === 'redraft' || state.leagueType === 'dynasty') && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-bold">Player ownership</legend>
+          <select aria-label="Player pool" value={state.playerPoolScope ?? 'league'}
+            onChange={e => onChange({playerPoolScope: e.target.value as CreateLeagueV2State['playerPoolScope']})}>
+            <option value="league">One player pool for the whole league</option>
+            <option value="conference">One player pool per conference</option>
+            <option value="division">One player pool per division</option>
+          </select>
+          {state.playerPoolScope && state.playerPoolScope !== 'league' && <div className="flex gap-3">
+            <label>Divisions <input type="number" min={2} max={Math.min(32, Math.floor(state.teamCount / 2))}
+              value={state.poolDivisionCount ?? 2} onChange={e => onChange({poolDivisionCount:Number(e.target.value)})} /></label>
+            {state.playerPoolScope === 'conference' && <label>Conferences <input type="number" min={2} max={state.poolDivisionCount ?? 2}
+              value={state.poolConferenceCount ?? 2} onChange={e => onChange({poolConferenceCount:Number(e.target.value)})} /></label>}
+          </div>}
+        </fieldset>
+      )}
+
       {/* A guillotine week has no opponent — every team plays the chop line — so there is no
           head-to-head game for a median game to double. Survivor Guilly chops the same way. */}
       {getEffectiveLeagueType(state) === 'guillotine' || getEffectiveLeagueType(state) === 'survivor_guillotine' ? null : (

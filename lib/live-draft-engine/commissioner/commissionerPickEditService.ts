@@ -70,6 +70,8 @@ export type CommissionerPickEditResult =
       warnings?: Array<{ message: string }>
     }
 
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 type PickRow = {
   id: string
   overall: number
@@ -256,7 +258,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
       include: {
         picks: { orderBy: { overall: 'asc' } },
-        league: { select: { id: true, sport: true, leagueVariant: true } },
+        league: { select: { id: true, sport: true, leagueVariant: true, settings: true } },
       },
     })
 
@@ -276,6 +278,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
       : []
     const teamCount = session.teamCount
     const picks = session.picks as unknown as PickRow[]
+    const pools = await loadPlayerPools(params.leagueId, { db: tx, settings: session.league?.settings ?? null })
     const leagueSport = session.league?.sport ?? session.sportType ?? 'NFL'
 
     const resolveCollegeAsset = async (playerId: string | null | undefined, playerName: string, position: string): Promise<NbaCollegeAssetType | null> => {
@@ -441,7 +444,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           throw Object.assign(new Error('playerName and position are required'), { status: 400 })
         }
         if (
-          isPlayerAlreadyDrafted(picks, {
+          isPlayerAlreadyDrafted([...picksInPool(picks,pools,pick.rosterId)], {
             excludePickId: pick.id,
             playerId: params.playerId ?? null,
             playerName,
@@ -553,9 +556,6 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         if (!playerName || !position) {
           throw Object.assign(new Error('playerName and position are required'), { status: 400 })
         }
-        if (isPlayerAlreadyDrafted(picks, { playerId: params.playerId ?? null, playerName, position })) {
-          throw Object.assign(new Error('Player is already drafted in this session'), { status: 409 })
-        }
 
         const existing = picks.find((p) => p.overall === overall)
         if (existing && !isDraftPickRowEmpty(existing)) {
@@ -581,6 +581,9 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           explicitRoster || resolvedOwner?.rosterId || slotOrder.find((s) => s.slot === slot)?.rosterId
         if (!onClockRosterId) {
           throw Object.assign(new Error('Unable to resolve pick owner'), { status: 400 })
+        }
+        if (isPlayerAlreadyDrafted([...picksInPool(picks,pools,onClockRosterId)], {playerId:params.playerId ?? null,playerName,position})) {
+          throw Object.assign(new Error('This player is already drafted in this pool.'),{status:409})
         }
         const displayName =
           (explicitRoster
@@ -726,6 +729,9 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         const rosterOk = await tx.roster.count({ where: { leagueId: params.leagueId, id: newRosterId } })
         if (!rosterOk) {
           throw Object.assign(new Error('newRosterId is not part of this league'), { status: 400 })
+        }
+        if (pools && !isDraftPickRowEmpty(pick) && isPlayerAlreadyDrafted([...picksInPool(picks,pools,newRosterId)], {...pick,excludePickId:pick.id})) {
+          throw Object.assign(new Error('The receiving pool already owns this player.'),{status:409})
         }
         if (newRosterId === pick.rosterId) {
           throw Object.assign(new Error('Pick already assigned to this roster'), { status: 400 })

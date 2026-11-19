@@ -1,3 +1,4 @@
+import { startingPoolLayout } from '@/lib/league/player-pools/policy'
 import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY } from '@/lib/league/multiTeamManagers'
 import { careerXpLevel, decideCareerJoin } from '@/lib/league-join/careerJoinGate'
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
@@ -1195,7 +1196,7 @@ export async function createCanonicalLeagueInTransaction(
     },
   })
 
-  await tx.leagueTeam.create({
+  const firstLeagueTeam = await tx.leagueTeam.create({
     data: {
       leagueId: league.id,
       externalId: roster.id,
@@ -1252,6 +1253,7 @@ export async function createCanonicalLeagueInTransaction(
       settings: { openSlot: true, aiManaged: false },
     })
     openTeams.push({
+      id: randomUUID(),
       leagueId: league.id,
       externalId: rosterId,
       ownerName: openTeamName,
@@ -1280,6 +1282,13 @@ export async function createCanonicalLeagueInTransaction(
   await tx.roster.createMany({ data: openRosters })
   await tx.leagueTeam.createMany({ data: openTeams })
   await tx.leagueEntrySlot.createMany({ data: slotData })
+  const poolScope = body.conceptSetup?.playerPoolScope
+  if ((formatId === 'redraft' || formatId === 'dynasty') && (poolScope === 'division' || poolScope === 'conference')) {
+    const poolLayout = startingPoolLayout(poolScope, Number(body.conceptSetup?.poolDivisionCount ?? 2),
+      Number(body.conceptSetup?.poolConferenceCount ?? 2), [firstLeagueTeam.id, ...openTeams.map(t => t.id!)])
+    Object.assign(mergedSettings, poolLayout)
+    await tx.league.update({where:{id:league.id},data:{settings:mergedSettings as Prisma.InputJsonValue}})
+  }
 
   const auctionBudget = body.draftType.toLowerCase().includes('auction') ? 200 : null
   // Dynasty devy-rounds opt-in (Option B slice): the trailing startup rounds become

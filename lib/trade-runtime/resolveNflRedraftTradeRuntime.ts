@@ -554,6 +554,8 @@ async function assertSurvivorTradeRulesOpen(
   return check
 }
 
+import { checkPoolTransfers } from '@/lib/league/player-pools/ownership'
+
 export async function createNflRedraftTradeProposal(input: CreateNflRedraftTradeProposalInput) {
   const resolved = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (!resolved.ok) throw new Error(resolved.reason)
@@ -567,6 +569,9 @@ export async function createNflRedraftTradeProposal(input: CreateNflRedraftTrade
     commissionerOverride: input.commissionerOverride,
   })
   if (!validation.ok) throw new Error(validation.message)
+
+  const poolConflict = await checkPoolTransfers(resolved.state.leagueId, input.assets, resolved.state.seasonId)
+  if (poolConflict) throw new Error(poolConflict)
 
   const proposalId = crypto.randomUUID()
   // Governance is the league's decision, never the caller's: see lib/redraft/tradeGovernance.ts.
@@ -666,6 +671,8 @@ async function applyExecutedTrade(input: {
   const survivorCheck = await assertSurvivorTradeRulesOpen(input.state.leagueId, proposal, input.commissionerOverride, true)
   const now = new Date()
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const conflict = await checkPoolTransfers(input.state.leagueId,proposal.assets,input.state.seasonId,tx)
+    if (conflict) throw new Error(conflict)
     const claimed = await tx.redraftTradeProposal.updateMany({
       where: { id: input.proposalId, status: 'pending' },
       data: { status: 'accepted', acceptedAt: now, processedAt: now },

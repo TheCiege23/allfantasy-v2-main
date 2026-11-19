@@ -17,6 +17,7 @@
  * commissioner typing an offline board): two real players can share a name, so a name match never
  * overrides an id.
  */
+import { loadPlayerPools, poolRosterIds } from '@/lib/league/player-pools/load'
 import { prisma } from '@/lib/prisma'
 
 type LeagueRosteredPlayers = {
@@ -32,14 +33,15 @@ function normalizeRosteredName(name: string | null | undefined): string {
   return String(name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-export async function loadLeagueRosteredPlayers(leagueId: string): Promise<LeagueRosteredPlayers> {
+export async function loadLeagueRosteredPlayers(leagueId: string, rosterId?: string): Promise<LeagueRosteredPlayers> {
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
     orderBy: { createdAt: 'desc' },
     select: { id: true },
   })
   if (!season) return EMPTY
-  const rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id, leagueId }, select: { id: true } })
+  const scopeIds = rosterId ? poolRosterIds(await loadPlayerPools(leagueId, {seasonId:season.id}), rosterId) : undefined
+  const rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id, leagueId, ...(scopeIds ? {id:{in:scopeIds}} : {}) }, select: { id: true } })
   if (rosters.length === 0) return EMPTY
   const rows = await prisma.redraftRosterPlayer.findMany({
     where: { rosterId: { in: rosters.map((r) => r.id) }, droppedAt: null },

@@ -108,6 +108,7 @@ export async function previewWaiverClaimEligibility(input: WaiverClaimEligibilit
   await checkWaiverEligibility(input, projection)
 }
 
+import { loadPlayerPools, poolRosterIds } from '@/lib/league/player-pools/load'
 async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projection?: {
   playerData: unknown; priorDrops: number
 }): Promise<void> {
@@ -160,8 +161,9 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
   const overrideAllowed = commissionerOverrideAllowed(engineConfig, settingsRow?.commissionerOverrideRules ?? null)
   const comm = overrideAllowed ? getCommissionerOverrides(input.claimMetadata) : {}
 
+  const poolIds = poolRosterIds(await loadPlayerPools(leagueId,{settings:league.settings}),rosterId)
   const rosteredElsewhere = await prisma.roster.findMany({
-    where: { leagueId },
+    where: { leagueId, ...(poolIds ? {id:{in:poolIds}} : {}) },
     select: { id: true, playerData: true },
   })
   if (rosterContainsPlayer(roster.playerData, addId)) {

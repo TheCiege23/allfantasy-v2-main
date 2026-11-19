@@ -102,6 +102,7 @@ async function formatTradesDisabledRefusal(leagueId: string, db: ValidationDb): 
   }
 }
 
+import { checkPoolTransfers } from '@/lib/league/player-pools/ownership'
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
@@ -110,6 +111,8 @@ export async function validateRedraftTradeProposalAtCreation(
   if (formatRefusal) return formatRefusal
   const base = await validateRedraftTradeProposalCore(input, db)
   if (!base.ok) return base
+  const conflict = await checkPoolTransfers(input.leagueId,input.assets,input.seasonId)
+  if (conflict) return {ok:false,code:"PLAYER_POOL_CONFLICT",message:conflict,source:base.source}
   // Survivor leagues add their own trade rules (tribe windows, played players, the weekly freeze).
   // One league read and out for every other league: lib/survivor/survivorTradeRuleHook.ts.
   const survivor = await checkSurvivorTradeRules({
@@ -232,8 +235,9 @@ async function validateOwnershipFallback(
     if (asset.assetType === 'player') {
       const playerId = asset.playerId?.trim()
       if (!playerId) return fail('INVALID_ASSET', 'Player trade assets require playerId.')
-      if (seenPlayers.has(playerId)) return fail('DUPLICATE_ASSET', 'Trade includes the same asset more than once.')
-      seenPlayers.add(playerId)
+      const copyKey = JSON.stringify([asset.fromRosterId,playerId])
+      if (seenPlayers.has(copyKey)) return fail('DUPLICATE_ASSET', 'Trade includes the same asset more than once.')
+      seenPlayers.add(copyKey)
       playerAssets.push({ playerId, playerName: asset.playerName?.trim() || null, fromRosterId: asset.fromRosterId })
     } else if (asset.assetType === 'faab') {
       const amount = faabAmountOf(asset)
@@ -257,9 +261,9 @@ async function validateOwnershipFallback(
       },
       select: { rosterId: true, playerId: true },
     })
-    const ownerOf = new Map(rows.map((row) => [row.playerId, row.rosterId]))
+    const owned = new Set(rows.map(row => JSON.stringify([row.rosterId,row.playerId])))
     for (const asset of playerAssets) {
-      if (ownerOf.get(asset.playerId) !== asset.fromRosterId) {
+      if (!owned.has(JSON.stringify([asset.fromRosterId,asset.playerId]))) {
         return fail('PLAYER_NOT_OWNED', `${asset.playerName ?? asset.playerId} is not active on the sending roster.`)
       }
     }

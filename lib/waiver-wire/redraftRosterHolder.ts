@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 
+import { loadPlayerPools, poolRosterIds } from '@/lib/league/player-pools/load'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
@@ -22,7 +23,7 @@ export async function redraftHolderOtherThan(
   input: { leagueId: string; genericRosterId: string; playerId: string },
 ): Promise<string | null> {
   try {
-    const league = await db.league.findUnique({ where: { id: input.leagueId }, select: { platform: true } })
+    const league = await db.league.findUnique({ where: { id: input.leagueId }, select: { platform: true, settings:true } })
     if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return null
     const newest = await db.redraftSeason.findFirst({
       where: { leagueId: input.leagueId },
@@ -30,8 +31,9 @@ export async function redraftHolderOtherThan(
       select: { id: true },
     })
     if (!newest) return null
+    const ids = poolRosterIds(await loadPlayerPools(input.leagueId,{db,settings:league.settings ?? null,seasonId:newest.id}),input.genericRosterId)
     const held = await db.redraftRosterPlayer.findFirst({
-      where: { playerId: input.playerId, droppedAt: null, roster: { seasonId: newest.id, leagueId: input.leagueId } },
+      where: { playerId: input.playerId, droppedAt: null, ...(ids ? {rosterId:{in:ids}} : {}), roster: { seasonId: newest.id, leagueId: input.leagueId } },
       select: { rosterId: true, roster: { select: { ownerId: true } } },
     })
     if (!held) return null

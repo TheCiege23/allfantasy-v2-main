@@ -72,6 +72,11 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
 
   const conceptSetup: Record<string, unknown> = {
     ...((lt === 'redraft' || lt === 'dynasty') && state.allowMultiTeamManagers ? { allowMultiTeamManagers: true } : {}),
+    ...((lt === 'redraft' || lt === 'dynasty') && state.playerPoolScope && state.playerPoolScope !== 'league' ? {
+      playerPoolScope: state.playerPoolScope,
+      poolDivisionCount: state.poolDivisionCount ?? 2,
+      poolConferenceCount: state.poolConferenceCount ?? 2,
+    } : {}),
     visibility: state.privacy,
     isPublic: state.privacy === 'public',
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to

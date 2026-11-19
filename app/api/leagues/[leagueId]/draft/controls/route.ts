@@ -163,6 +163,8 @@ async function loadFallbackCandidates(leagueId: string, sport: string): Promise<
  * Every commissioner control that succeeds is written to the league log with who did it
  * (lib/draft-room/commissionerDraftActions.ts). Timer ticks are automation and are not.
  */
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
@@ -483,7 +485,7 @@ async function handleDraftControl(
       const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
       const draftEligiblePositions = rosterRules?.draftEligiblePositions
       const draftedNames = new Set(
-        draftSession.picks
+        picksInPool(draftSession.picks,await loadPlayerPools(leagueId),onClockRosterId)
           .filter((pick) => !isDraftPickRowEmpty(pick))
           .map((pick) => normalizeName(pick.playerName)),
       )

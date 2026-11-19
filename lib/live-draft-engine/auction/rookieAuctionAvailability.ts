@@ -1,14 +1,16 @@
 import 'server-only'
+import { loadPlayerPools,poolRosterIds } from '@/lib/league/player-pools/load'
 import { prisma } from '@/lib/prisma'
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 
 /** A follow-up draft can award only players who are not already on a current roster. */
-export async function loadRookieAuctionAvailability(leagueId: string) {
+export async function loadRookieAuctionAvailability(leagueId: string, rosterId?: string) {
   const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true } })
   if (!season) throw new Error('Current league rosters are unavailable. Try again before nominating a player.')
+  const idsInPool = rosterId ? poolRosterIds(await loadPlayerPools(leagueId,{seasonId:season.id}),rosterId) : undefined
   const [rostered, rights, c2cPlayers] = await Promise.all([
     prisma.redraftRosterPlayer.findMany({
-      where: { droppedAt: null, roster: { leagueId, seasonId: season.id } },
+      where: { droppedAt: null, roster: { leagueId, seasonId: season.id }, ...(idsInPool ? {rosterId:{in:idsInPool}} : {}) },
       select: { playerId: true, playerName: true },
     }),
     prisma.devyRights.findMany({ where: { leagueId, state: { not: 'RIGHTS_EXPIRED' } }, select: { devyPlayerId: true, promotedProPlayerId: true } }),

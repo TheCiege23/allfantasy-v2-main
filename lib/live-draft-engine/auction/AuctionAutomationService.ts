@@ -1,6 +1,8 @@
 import { draftQueueKeyForRoster } from '@/lib/league/teamScopedKey'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, loadSeasonDraftPlayers } from '@/lib/tournament/seasonDraftRuntime'
@@ -254,7 +256,7 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
     const normalizedSport = normalizeToSupportedSport(
       (session.league?.sport as string | null | undefined) ?? session.sportType ?? DEFAULT_SPORT
     ) as LeagueSport
-    const draftedNames = new Set(session.picks.map((pick) => normalizeName(pick.playerName)))
+    const draftedNames = new Set(picksInPool(session.picks,await loadPlayerPools(leagueId),currentNominator.rosterId).map((pick) => normalizeName(pick.playerName)))
     let first: AuctionNomination | undefined
     if (season) {
       const pool = await loadSeasonDraftPlayers(leagueId, season.config.sport)
@@ -277,9 +279,9 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
       const resolve = isRookieRestrictedPlayerPool(session.playerPool) ? await loadServerRookieStatusResolver(leagueId) : null
       // Mirrors nominatePlayer's roster check, so an automatic nomination is never one it would refuse.
       const isDispersal = session.draftModeLabel === 'dispersal' || (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig != null
-      const rostered = session.draftModeLabel === 'rookie' || isDispersal ? null : await loadLeagueRosteredPlayers(leagueId)
+      const rostered = session.draftModeLabel === 'rookie' || isDispersal ? null : await loadLeagueRosteredPlayers(leagueId,currentNominator.rosterId)
       const available = session.draftModeLabel === 'rookie'
-        ? await loadRookieAuctionAvailability(leagueId)
+        ? await loadRookieAuctionAvailability(leagueId,currentNominator.rosterId)
         : (candidate: AuctionNomination) => !rostered || !rosteredHolder(rostered, candidate)
       first = candidates.find(candidate => available(candidate) && isEligibleForPlayerPool(session.playerPool, resolve?.({ playerId: candidate.playerId, playerName: candidate.playerName }) ?? null))
     }

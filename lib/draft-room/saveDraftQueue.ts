@@ -1,4 +1,6 @@
 import 'server-only'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { picksInPool } from '@/lib/league/player-pools/policy'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeDraftQueueSizeLimit } from '@/lib/draft-defaults/DraftQueueLimitResolver'
@@ -36,14 +38,14 @@ export type PrepareDraftQueueResult =
   | { ok: false; status: 400 | 404; error: string }
 
 /** Everything the save does except the write. Never writes. */
-export async function prepareDraftQueueSave(leagueId: string, queue: unknown[]): Promise<PrepareDraftQueueResult> {
+export async function prepareDraftQueueSave(leagueId: string, queue: unknown[], rosterId?: string | null): Promise<PrepareDraftQueueResult> {
   const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       picks: {
-        select: { playerName: true },
+        select: { playerName: true,rosterId:true },
       },
     },
   })
@@ -74,7 +76,9 @@ export async function prepareDraftQueueSave(leagueId: string, queue: unknown[]):
     }
   }
 
-  const draftedNames = normalizeDraftedNameSet(draftSession.picks)
+  const pools = await loadPlayerPools(leagueId)
+  const unavailable = !pools ? draftSession.picks : rosterId ? [...picksInPool(draftSession.picks,pools,rosterId)] : []
+  const draftedNames = normalizeDraftedNameSet(unavailable)
   const cleaned = removeDraftedPlayersFromQueue(normalized, draftedNames)
   return { ok: true, prepared: { sessionId: draftSession.id, queue: cleaned.queue, removedCount: cleaned.removedCount, queueSizeLimit } }
 }

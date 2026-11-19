@@ -178,6 +178,9 @@ export interface CreateLeagueV2State {
   privacy: LeaguePrivacy
   /** Every team also plays the week's median score (`League.medianGame`). */
   medianGame: boolean
+  playerPoolScope?: 'league' | 'division' | 'conference'
+  poolDivisionCount?: number
+  poolConferenceCount?: number
   allowMultiTeamManagers?: boolean
   /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
   guillotineBestBall: boolean

@@ -24,6 +24,8 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 import { claimSnapshotWhere, isClaimSnapshotConflict, isRosterSnapshotConflict, rosterSnapshotWhere } from './claim-snapshot'
 import { withLeagueWaiverLock } from './leagueWaiverLock'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { poolOf } from '@/lib/league/player-pools/policy'
 import { redraftHolderOtherThan } from './redraftRosterHolder'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
@@ -237,10 +239,17 @@ async function processWaiverClaimsForLeagueLocked(
     if (t.externalId != null && t.currentRank != null) rankByPlatformUserId.set(t.externalId, t.currentRank)
   }
 
-  const rosteredByPlayer = new Map<string, string>()
+  const pools = await loadPlayerPools(leagueId,{settings:league.settings})
+  const ownership = new Map<string,Map<string,string>>()
+  function holders(rosterId: string) {
+    const key = poolOf(pools,rosterId)
+    let held = ownership.get(key)
+    if (!held) { held = new Map(); ownership.set(key,held) }
+    return held
+  }
   for (const r of allRosters as { id: string; playerData: unknown }[]) {
     const ids = getRosterPlayerIds(r.playerData)
-    for (const id of ids) rosteredByPlayer.set(id, r.id)
+    for (const id of ids) holders(r.id).set(id, r.id)
   }
 
   // Guilly blind FAAB auction (lib/guillotine/blindWaiverCutoff.ts): inside the window, claims made since
@@ -345,6 +354,7 @@ async function processWaiverClaimsForLeagueLocked(
   }> = []
 
   for (const claim of ordered) {
+    const rosteredByPlayer = holders(claim.rosterId)
     try {
     const roster = claim.roster
     const pushFail = async (msg: string, extra?: Record<string, unknown>) => {
