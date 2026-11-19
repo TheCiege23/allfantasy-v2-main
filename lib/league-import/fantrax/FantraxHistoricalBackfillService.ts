@@ -12,6 +12,7 @@ import type {
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { persistProviderTransactionFacts } from '@/lib/league-import/persistProviderTransactionFacts'
+import { fantraxDisplayName } from './fantraxPlayerName'
 import { persistSeasonStandingFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
@@ -266,6 +267,22 @@ function buildFantraxTransactionEntries(
   return entries
 }
 
+/**
+ * What a Fantrax draft pick keeps besides who took whom: the player as Fantrax named him when the board was read.
+ *
+ * Without it the archive can only name a pick through the player identity registry, which had no row for 193 of one
+ * league's 1,224 picks (staging, 2026-11-19) — they read "Player 05rlf", position "Unknown". The archive already
+ * prefers a pick's own `playerSnapshot` (it is what a Sleeper pick stores), so the name Fantrax gave is used first.
+ * No `sourceDraftId` and no `selectionRosterId`: the archive keys this draft by season and names the team from
+ * `managerId`, and both must stay as they are. Returns null when Fantrax supplied no name, leaving the pick as before.
+ */
+export function fantraxDraftFactMetadata(pick: Pick<FantraxImportDraftPick, 'playerName' | 'position' | 'team'>): Prisma.InputJsonObject | null {
+  const name = typeof pick.playerName === 'string' && pick.playerName.trim() ? fantraxDisplayName(pick.playerName) : null
+  if (!name) return null
+  const text = (value: string | null | undefined) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  return { provider: 'fantrax', playerSnapshot: { name, position: text(pick.position), team: text(pick.team) } }
+}
+
 async function persistFantraxSeasonWarehouseFacts(args: {
   leagueId: string
   payload: FantraxImportPayload
@@ -354,6 +371,7 @@ async function persistFantraxSeasonWarehouseFacts(args: {
         playerId: pick.playerId,
         managerId: pick.teamId,
         season,
+        ...(fantraxDraftFactMetadata(pick) ? { metadata: fantraxDraftFactMetadata(pick)! } : {}),
       },
     })
   )
