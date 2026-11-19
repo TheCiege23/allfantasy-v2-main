@@ -154,7 +154,6 @@ describe('in the prompt', () => {
       commissionerIntelligence: absent,
       leagueIntelligence: absent,
       portfolio: absent,
-      savedAnalysis: absent,
       rosterProjections,
       gaps: [],
       meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },

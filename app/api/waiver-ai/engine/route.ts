@@ -11,7 +11,6 @@ import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middle
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { shouldRunWaiverShadow, shouldRunWaiverLive, runWaiverShadowForEngine } from '@/lib/decision-os/waiver/shadow'
 import { toWaiverCard, type WaiverCard } from '@/lib/decision-os/waiver/waiverCardAdapter'
-import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { createWaiverOsLoaders } from '@/lib/decision-os/waiver-os'
@@ -244,27 +243,16 @@ const paidToolPost = withApiUsage({
         const liveResult = await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis }, waiverOsLoaders)
         if (liveResult.ran && liveResult.result) {
           const { decision } = liveResult.result
-          // Attach a saved three-brain analysis, if this user has one for this league. This is the
-          // last link in evidence -> analysis -> recommendation: the enrichment seam existed but had
-          // no caller, so a generated analysis reached nobody.
-          //
-          // Costs one indexed count when there is nothing to show, which is every request while
-          // AI spend is disabled. It cannot throw, and it cannot alter the verdict path -- only the
-          // explanation string -- so the card below renders identically when it declines.
-          const attached = await attachSavedAnalysis({
-            decision,
-            leagueId: input.leagueId,
-            userId,
-            tool: 'manager_intelligence',
-          })
-          const card = toWaiverCard(attached.decision)
+          // The saved three-brain analysis was retired 2026-11-19 (re-score build item 9): nothing produced one,
+          // so this read one indexed count per request to find nothing.
+          const card = toWaiverCard(decision)
           decisionOs = {
             decisionId: decision.decision_id,
             card,
             confidence: card.confidence,
             legal: card.legal,
           }
-          emitLiveTelemetry('waiver.claim', { enriched: true, ai_explained: attached.enriched, ai_reason: attached.reason, latency_ms: Date.now() - liveStart, leagueId: input.leagueId }, decision.decision_id)
+          emitLiveTelemetry('waiver.claim', { enriched: true, latency_ms: Date.now() - liveStart, leagueId: input.leagueId }, decision.decision_id)
         } else {
           emitLiveTelemetry('waiver.claim', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, leagueId: input.leagueId })
         }

@@ -543,8 +543,6 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
-    // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
-    ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
     /*
      * R2 — decisions bridged from the live engines (waiver, commissioner health).
      *

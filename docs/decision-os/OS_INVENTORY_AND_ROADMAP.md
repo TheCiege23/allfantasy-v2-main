@@ -133,7 +133,7 @@ learning loop ⚠ · multi-model ❌ · operability ⚠.
 | 6 | Trade reach: summarize offers past 3; provider trades/drafts in manager records | S–M |
 | 7 | Learning loop: outcomes calibrate waiver/trade/commissioner advice | L — **waiver + trade shipped 2026-11-19** (see note below) |
 | 8 | Draft: one engine in the draft room; a pick before the draft | M — **shipped 2026-11-19** (see note below) |
-| 9 | Three-brain: schedule `runManagedIntelligence` or retire `savedAnalysis` | M |
+| 9 | Three-brain: schedule `runManagedIntelligence` or retire `savedAnalysis` | M — **retired 2026-11-19, owner's call** (see note below) |
 | 10 | Cleanup: retired label engine in `import-players` / `fantasy-os-exec-sync` | S |
 
 **Item 7, 2026-11-19 — what shipped and what did not.** The ledger's graded record (bench check, waiver panel #1
@@ -154,6 +154,16 @@ in an auction, or when the draft cannot be read. *A pick before the draft:* off 
 the user's OWN next turn, with the players ADP has going in the picks before it left out (`planForOwnPick.ts`, opt-in
 `planForOwnTurn`). It used to rank the pick on the clock, which before the draft is overall pick 1. The pick outlook
 and the shadow compare stay on the current board, and a planned pick is not written to the forward-test recorder.
+
+**Item 9, 2026-11-19 — retired, the owner's choice over scheduling it.** Nothing ever produced a three-brain run
+(`runManagedIntelligence` had no caller), so every reader of a saved analysis found nothing: the `savedAnalysis`
+packet slice (an entitlement-checked read on every Chimmy turn), and `attachSavedAnalysis` in the waiver engine,
+trade proposals and the Commissioner Hub (an indexed count per request, batched in the hub). All four are removed,
+with the slice's feed flag and loader; the maintenance cron no longer runs the three-brain refresh/reconcile
+drains, so `DECISION_OS_MAINTENANCE_ENABLED` does nothing there now. Scheduling it instead would have meant 3–4
+model calls per league per tool on every refresh. The library under `lib/decision-os/three-brain/` stays, unused;
+`aiAuthorityPolicy` is still read by Chimmy's answer contract. Live Chimmy still takes the first usable model
+answer (`ResponseAggregator.ts`), so the hub's multi-model axis stays ❌ by decision rather than by omission.
 
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
