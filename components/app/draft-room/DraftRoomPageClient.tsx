@@ -4206,6 +4206,7 @@ export function DraftRoomPageClient({
   const chatPanelNode = useMemo(
     () => (
       <DraftChatDock
+        collapsible={false}
         messages={chatMessagesWithAi}
         onSend={handleSendChat}
         sending={chatSending}
