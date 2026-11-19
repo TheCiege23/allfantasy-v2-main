@@ -1,3 +1,4 @@
+import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
 import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
@@ -621,7 +622,12 @@ export async function syncCompletedDraftToRedraftSeason(
       }
     }
 
-    const playerId = stablePlayerId(session.id, pick)
+    // A pick saved with no player id is looked up before it gets a made-up one: a made-up id matches
+    // no stat row, so the player would never score (lib/draft/resolveMissingPickPlayerId.ts).
+    const registryId = String(pick.playerId ?? '').trim()
+      ? null
+      : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
+    const playerId = registryId ?? stablePlayerId(session.id, pick)
 
     const existingActive = await prisma.redraftRosterPlayer.findFirst({
       where: {

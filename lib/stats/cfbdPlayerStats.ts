@@ -4,6 +4,7 @@ import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 import { prisma } from '@/lib/prisma'
 import { createCfbdGameLogCollector, planCfbdGameLogs, type CfbdGameLogReport } from '@/lib/stats/cfbdGameLogs'
+import { appearancesOfWeek, decideWeekFetch, gamesPlayedFrom, readWeekAppearances, weekAppearancesKey, type WeekAppearances } from '@/lib/stats/cfbdWeekFetchPlan'
 
 /**
  * cfbdPlayerStats — NCAAF season stat lines from CollegeFootballData, and (since 2026-09-23) the
@@ -34,6 +35,8 @@ import { createCfbdGameLogCollector, planCfbdGameLogs, type CfbdGameLogReport } 
 
 const CFBD_BASE = CFBD_BASE_URL
 const STAT_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/** A settled week's appearances: kept past the end of the season it belongs to. */
+const WEEK_APPEARANCES_TTL_MS = 400 * 24 * 60 * 60 * 1000
 
 /**
  * CFBD's season endpoint carries NO games-played field (54 stat types, none of
@@ -41,59 +44,90 @@ const STAT_TTL_MS = 7 * 24 * 60 * 60 * 1000
  * actually appears in. Without it every projection is correctly refused, since
  * per-game rates would otherwise divide by an assumed number.
  */
+type WeekPlan = { isComplete: (week: number) => boolean; hasStarted: (week: number) => boolean }
+type GamesPlayedReport = { weeksFetched: number[]; weeksFromStore: number[]; weeksNotStarted: number[] }
+
+/**
+ * Games played per player, asking CFBD only for the weeks that can still change
+ * (lib/stats/cfbdWeekFetchPlan.ts). With no plan it asks for every week, as it always did.
+ */
 async function fetchGamesPlayed(
   season: number,
   key: string,
   maxWeek = 15,
   /** Each week's raw games, handed on before they are discarded (the game-log collector). */
   onWeek?: (week: number, games: unknown[]) => void,
-): Promise<Map<string, number>> {
-  const appearances = new Map<string, Set<string>>()
+  plan?: WeekPlan | null,
+): Promise<{ counts: Map<string, number>; report: GamesPlayedReport }> {
+  const report: GamesPlayedReport = { weeksFetched: [], weeksFromStore: [], weeksNotStarted: [] }
+  const weeks: WeekAppearances[] = []
+
+  // Settled weeks kept by an earlier run. A failed read only costs the saving, never the count.
+  const stored = new Map<number, WeekAppearances>()
+  if (plan) {
+    try {
+      const keys = Array.from({ length: maxWeek }, (_, i) => weekAppearancesKey(season, i + 1))
+      const rows = await prisma.sportsDataCache.findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
+      for (const row of rows) {
+        const week = keys.indexOf(row.cacheKey) + 1
+        const kept = readWeekAppearances(row.data)
+        if (week >= 1 && kept) stored.set(week, kept)
+      }
+    } catch {
+      stored.clear()
+    }
+  }
 
   for (let week = 1; week <= maxWeek; week += 1) {
+    const complete = plan ? plan.isComplete(week) : false
+    const decision = plan
+      ? decideWeekFetch({ isComplete: complete, hasStarted: plan.hasStarted(week), cached: stored.has(week) })
+      : 'fetch'
+    if (decision === 'cached') {
+      weeks.push(stored.get(week) as WeekAppearances)
+      report.weeksFromStore.push(week)
+      continue
+    }
+    if (decision === 'not_started') {
+      report.weeksNotStarted.push(week)
+      continue
+    }
     try {
       const res = await fetch(
         `${CFBD_BASE}/games/players?year=${season}&week=${week}&seasonType=regular`,
         { cache: 'no-store', headers: { Authorization: `Bearer ${key}` } },
       )
-      if (!res.ok) continue
+      if (!res.ok) {
+        // We could not ask. A week kept earlier is still the right count for it.
+        const kept = stored.get(week)
+        if (kept) weeks.push(kept)
+        continue
+      }
       const games = (await res.json()) as unknown
       if (!Array.isArray(games)) continue
+      report.weeksFetched.push(week)
       // Never let the collector break the games-played count it rides along with.
       try {
         onWeek?.(week, games)
       } catch {
         /* reported by the collector itself */
       }
-
-      for (const game of games as Record<string, unknown>[]) {
-        const gameId = String(game.id ?? '')
-        if (!gameId) continue
-        for (const team of (game.teams ?? []) as Record<string, unknown>[]) {
-          for (const category of (team.categories ?? []) as Record<string, unknown>[]) {
-            for (const type of (category.types ?? []) as Record<string, unknown>[]) {
-              for (const athlete of (type.athletes ?? []) as Record<string, unknown>[]) {
-                const id = athlete.id == null ? null : String(athlete.id)
-                if (!id) continue
-                let set = appearances.get(id)
-                if (!set) {
-                  set = new Set<string>()
-                  appearances.set(id, set)
-                }
-                set.add(gameId)
-              }
-            }
-          }
-        }
+      const appearances = appearancesOfWeek(games)
+      weeks.push(appearances)
+      // A settled, written week does not change again: keep it, so no later run asks for it.
+      if (complete && Object.keys(appearances).length > 0) {
+        const cacheKey = weekAppearancesKey(season, week)
+        const expiresAt = new Date(Date.now() + WEEK_APPEARANCES_TTL_MS)
+        await prisma.sportsDataCache
+          .upsert({ where: { cacheKey }, update: { data: appearances, expiresAt }, create: { cacheKey, data: appearances, expiresAt } })
+          .catch(() => undefined)
       }
     } catch {
       // A missing week is missing data, not a reason to abandon the season.
     }
   }
 
-  const counts = new Map<string, number>()
-  for (const [id, set] of appearances) counts.set(id, set.size)
-  return counts
+  return { counts: gamesPlayedFrom(weeks), report }
 }
 
 /**
@@ -246,6 +280,8 @@ type CfbdStatSyncResult = {
   /** Per-game lines kept from the same `/games/players` responses. Absent when not attempted. */
   conversions?: Awaited<ReturnType<typeof syncRecentNcaafConversions>>
   gameLogs?: CfbdGameLogReport
+  /** Which weeks were asked of CFBD this run, read from the store, or skipped as not started. */
+  weekCalls?: { weeksFetched: number[]; weeksFromStore: number[]; weeksNotStarted: number[] }
 }
 
 function cfbdKey(): string | null {
@@ -373,8 +409,10 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
   const collector = plan ? createCfbdGameLogCollector(plan) : null
 
   // Derived separately because the season endpoint has no game count.
-  const gamesPlayed = await fetchGamesPlayed(season, key, 15, collector ? (w, g) => collector.offer(w, g) : undefined)
+  const played = await fetchGamesPlayed(season, key, 15, collector ? (w, g) => collector.offer(w, g) : undefined, plan)
+  const gamesPlayed = played.counts
   result.gamesPlayedResolved = gamesPlayed.size
+  result.weekCalls = played.report
 
   const expiresAt = new Date(now.getTime() + STAT_TTL_MS)
 
