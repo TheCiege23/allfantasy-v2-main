@@ -1,3 +1,4 @@
+import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
@@ -564,6 +565,8 @@ export async function syncCompletedDraftToRedraftSeason(
   let redraftPlayersCreated = 0
   let redraftPlayersAlreadyPresent = 0
   let skippedPicks = 0
+  // Rows this run created on the bench, in pick order: a rookie draft's go to the taxi squad below.
+  const draftedBenchRows: DraftedRookieRow[] = []
 
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
 
@@ -636,7 +639,7 @@ export async function syncCompletedDraftToRedraftSeason(
 
     const slotType = inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
 
-    await prisma.redraftRosterPlayer.create({
+    const createdRow = await prisma.redraftRosterPlayer.create({
       data: {
         rosterId: mapping.redraftRoster.id,
         playerId,
@@ -649,6 +652,7 @@ export async function syncCompletedDraftToRedraftSeason(
         acquisitionType: 'drafted',
       },
     })
+    if (slotType === 'bench' && createdRow?.id) draftedBenchRows.push({ rowId: createdRow.id, rosterId: mapping.redraftRoster.id })
 
     redraftPlayersCreated += 1
   }
@@ -710,6 +714,20 @@ export async function syncCompletedDraftToRedraftSeason(
         })
       })
     }
+  }
+
+  /*
+   * A rookie draft's picks go onto the taxi squad while it has room (placeDraftedRookiesOnTaxi.ts).
+   * After the housekeeping above, so spots it freed count. Must not fail draft completion.
+   */
+  if (session.playerPool === 'rookies_only' && draftedBenchRows.length > 0) {
+    await placeDraftedRookiesOnTaxi(leagueId, draftedBenchRows).catch((err) => {
+      console.warn('[syncCompletedDraftToRedraftSeason] rookies not placed on the taxi squad', {
+        leagueId,
+        seasonId: season.id,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
   }
 
   await ensureScheduleForNewSeason({
