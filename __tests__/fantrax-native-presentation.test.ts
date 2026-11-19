@@ -20,7 +20,7 @@ describe('source presentation authorization and scope',()=>{
 })
 
 describe('Points For in a league that plays several games a period', () => {
-  it('counts a team\'s period score once, and still adds every opponent to Points Against', () => {
+  it('counts a team\'s period score once, and averages the period\'s opponents for Points Against', () => {
     const rosters = [{ id: 'ra' }, { id: 'rb' }, { id: 'rc' }]
     const game = (week: number, homeRosterId: string, homeScore: number, awayRosterId: string, awayScore: number) =>
       ({ week, type: 'regular', status: 'final', homeRosterId, awayRosterId, homeScore, awayScore })
@@ -28,8 +28,9 @@ describe('Points For in a league that plays several games a period', () => {
     const matchups = [game(1, 'ra', 120, 'rb', 100), game(1, 'ra', 120, 'rc', 90), game(1, 'rb', 100, 'rc', 90)] as any
     const table = projectFantraxStandings(rosters, matchups)
     const of = (id: string) => table.find((row: any) => row.id === id)!
-    expect(of('ra')).toMatchObject({ wins: 2, losses: 0, pointsFor: 120, pointsAgainst: 190 })
-    expect(of('rb')).toMatchObject({ wins: 1, losses: 1, pointsFor: 100, pointsAgainst: 210 })
-    expect(of('rc')).toMatchObject({ wins: 0, losses: 2, pointsFor: 90, pointsAgainst: 220 })
+    // Points Against is the average of the period's opponents: a faced 100 and 90, and so on.
+    expect(of('ra')).toMatchObject({ wins: 2, losses: 0, pointsFor: 120, pointsAgainst: 95 })
+    expect(of('rb')).toMatchObject({ wins: 1, losses: 1, pointsFor: 100, pointsAgainst: 105 })
+    expect(of('rc')).toMatchObject({ wins: 0, losses: 2, pointsFor: 90, pointsAgainst: 110 })
   })
 })

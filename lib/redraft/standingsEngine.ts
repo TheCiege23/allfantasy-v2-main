@@ -1,3 +1,4 @@
+import { createWeeklyPointsAgainst } from '@/lib/redraft/weeklyPointsAgainst'
 import { accumulateTeamTotals, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
 import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
@@ -59,6 +60,7 @@ export async function updateStandings(
   const rotoStats = new Map<string, TeamStatTotals[]>()
   const seenRotoPeriods = new Set<string>()
   const pointsForCounted = new Set<string>()
+  const weeklyPointsAgainst = createWeeklyPointsAgainst()
   let matchupsCounted = 0
   for (const matchup of matchups) {
     if (!matchup.awayRosterId) continue
@@ -88,8 +90,9 @@ export async function updateStandings(
      * Points For counts a team's weekly score ONCE, however many games it plays that week. In a league
      * that plays several games a week (settings: games per team each week) the same weekly score is
      * the team's score in every one of those games, so adding it per game made a five-games league's
-     * Points For read five times its real total (owner's call, 2026-11-19). Points Against still adds
-     * each opponent's score, since those are different teams. A one-game league is unchanged.
+     * Points For read five times its real total (owner's call, 2026-11-19). Points Against is each
+     * week's AVERAGE opponent score, on the same scale (lib/redraft/weeklyPointsAgainst.ts), and is
+     * added after the loop. A one-game league is unchanged.
      */
     for (const [id, row, score] of [[matchup.homeRosterId, home, homeScore], [matchup.awayRosterId, away, awayScore]] as const) {
       const key = `${id}:${matchup.week}`
@@ -97,8 +100,8 @@ export async function updateStandings(
       pointsForCounted.add(key)
       row.pointsFor += score
     }
-    home.pointsAgainst += awayScore
-    away.pointsAgainst += homeScore
+    weeklyPointsAgainst.add(matchup.homeRosterId, matchup.week, awayScore)
+    weeklyPointsAgainst.add(matchup.awayRosterId, matchup.week, homeScore)
 
     const snapshot = matchup.lineupSnapshots as Record<string, any> | null
     const categoryResult = snapshot?.categoryMatchup
@@ -130,6 +133,12 @@ export async function updateStandings(
     }
 
     matchupsCounted += 1
+  }
+
+  // Points Against: each week's average opponent score (see the loop above).
+  for (const [id, against] of weeklyPointsAgainst.totals()) {
+    const row = rows.get(id)
+    if (row) row.pointsAgainst += against
   }
 
   // The extra matchup an odd-team league plays instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts).

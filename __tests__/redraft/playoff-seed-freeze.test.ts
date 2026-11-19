@@ -96,7 +96,7 @@ describe('playoffSeedsFrozen', () => {
  * For read five times its real total (found on a 36-team walkthrough, owner's call 2026-11-19).
  */
 describe('Points For in a multi-game week', () => {
-  it('counts the weekly score once, adds every opponent to Points Against, and keeps each game a result', async () => {
+  it('counts the weekly score once, averages the week\'s opponents for Points Against, and keeps each game a result', async () => {
     // Week 1: a (120) plays b, c and d; week 2: a (100) plays b only.
     h.matchups = [
       { id: 'm1', week: 1, homeRosterId: 'a', awayRosterId: 'b', homeScore: 120, awayScore: 90, status: 'final' },
@@ -105,7 +105,8 @@ describe('Points For in a multi-game week', () => {
       { id: 'm4', week: 2, homeRosterId: 'b', awayRosterId: 'a', homeScore: 95, awayScore: 100, status: 'final' },
     ]
     await updateStandings('s', 1)
-    expect(data('a')).toMatchObject({ wins: 3, losses: 1, pointsFor: 220, pointsAgainst: 395 })
+    // Points Against is each week's average opponent: week 1 (90 + 80 + 130) / 3 = 100, week 2 = 95.
+    expect(data('a')).toMatchObject({ wins: 3, losses: 1, pointsFor: 220, pointsAgainst: 195 })
     expect(data('b')).toMatchObject({ wins: 0, losses: 2, pointsFor: 185, pointsAgainst: 220 })
   })
 
