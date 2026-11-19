@@ -45,6 +45,18 @@ describe('randomize', () => {
     expect((await screen.findByRole('status')).textContent).toBe('commControl.randomizeDone')
   })
 
+  it('one draw reads as "the draw", never "1 draws"', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { schedule, customWeeks: [] })).mockResolvedValueOnce(reply(200, { posted: 1, regeneratedFromWeek: 5 })).mockResolvedValue(reply(200, { schedule, customWeeks: [] }))
+    render(<ScheduleToolsCard leagueId="L1" />)
+    const fewer = await screen.findByRole('button', { name: 'commControl.randomizeFewer' })
+    for (let i = 0; i < 10; i++) fireEvent.click(fewer)
+    expect(screen.getByTestId('schedule-randomize-count').textContent).toBe('1')
+    fireEvent.click(screen.getByTestId('schedule-randomize-run'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(sent(1)).toEqual({ leagueId: 'L1', action: 'randomize', times: 1 })
+    expect((await screen.findByRole('status')).textContent).toBe('commControl.randomizeDoneOne')
+  })
+
   it('mid-season, asks first and retries with the confirmation; a no sends nothing more', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true).mockReturnValueOnce(false)
     const mid = { error: 'Weeks that have started stay. Rebuild the rest?', code: 'mid_season_confirmation_required' }
