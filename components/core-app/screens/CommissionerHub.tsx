@@ -46,6 +46,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { FantraxTradeHistoryUpload } from '@/components/core-app/commissioner/FantraxTradeHistoryUpload'
+import { WaiverBudgetControl } from '@/components/core-app/commissioner/WaiverBudgetControl'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
@@ -400,6 +401,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-muted">{data.history.tradeAvailable ? t('No trade records on file.') : t('Trade history unavailable.')}</p>
         )}
         <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
+        {/* The budget a budget move in a trade is priced against — set here only where the platform's import records none. */}
+        {league.waiverBudget?.settableHere ? <WaiverBudgetControl leagueId={league.id} initial={league.waiverBudget.value} /> : null}
         {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
         {league.platform.toLowerCase() === 'fantrax' && (league.sport ?? 'NFL').toUpperCase() === 'NFL' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
         <h3>{t('Draft archive')}</h3>
