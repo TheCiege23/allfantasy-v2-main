@@ -24,7 +24,9 @@
 #
 # PW_INSTALL_RETRY_DELAY overrides the first backoff in seconds (tests set it to 0).
 # PW_DEPS_ATTEMPT_TIMEOUT overrides the per-attempt cap on the apt phase (default 300s).
-# PW_APT_WAIT_BUDGET caps the total time spent waiting for a timed-out attempt's apt (default 360s);
+# PW_APT_WAIT_BUDGET caps the total time spent waiting for a timed-out attempt's apt (default 1200s);
+# PW_APT_STALL_SECONDS gives up sooner when that apt has made no progress for this long (default 180s);
+# PW_APT_PROGRESS_PATHS is what "progress" is measured on (default apt's download cache and dpkg's log);
 # PW_APT_WAIT_POLL is that wait's poll interval (default 5s; tests set it to 1).
 
 set -u
@@ -61,23 +63,52 @@ retry() {
 # its re-run). That leftover apt was still making progress, so it is WAITED FOR, never killed: killing dpkg
 # mid-install can leave packages half-configured, which is worse than the slow mirror.
 #
-# Bounded by one budget shared across every wait, so a hung apt cannot run the job into its timeout.
-apt_wait_left="${PW_APT_WAIT_BUDGET:-360}"
+# 🛑 A FIXED 6-MINUTE WAIT WAS TOO SHORT FOR A SLOW MIRROR (2026-11-18, PR #3857). One 13.5 MB package took 3.5
+# minutes; the leftover apt was still downloading — package 72 of 186 — when the wait gave up, the retry died on the
+# lock, and WebKit failed its launch check while the packages it needed were still arriving. So the wait now follows
+# PROGRESS: it continues while apt's download cache or dpkg's log is still growing, gives up after
+# PW_APT_STALL_SECONDS without either changing, and never runs past one overall budget shared by every wait — so a
+# hung apt still cannot run mobile-smoke (45-minute job) into its timeout.
+apt_wait_left="${PW_APT_WAIT_BUDGET:-1200}"
+apt_stall_limit="${PW_APT_STALL_SECONDS:-180}"
 apt_wait_poll="${PW_APT_WAIT_POLL:-5}"
+apt_progress_paths="${PW_APT_PROGRESS_PATHS:-/var/cache/apt/archives /var/log/dpkg.log}"
 apt_busy() {
   command -v pgrep >/dev/null 2>&1 || return 1
   pgrep -x apt-get >/dev/null 2>&1 || pgrep -x apt >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1
 }
+# Bytes under the progress paths. apt's partial-download directory is root-only, so this reads through sudo when it
+# can; a path that cannot be read counts 0 rather than failing the wait.
+apt_progress_mark() {
+  local reader=()
+  # Only through sudo when it works without a prompt; otherwise read what this user can.
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then reader=(sudo -n); fi
+  # shellcheck disable=SC2086 # the paths are a space-separated list on purpose
+  "${reader[@]}" du -sb $apt_progress_paths 2>/dev/null | awk '{ s += $1 } END { print s + 0 }'
+}
 wait_for_apt() {
   apt_busy || return 0
-  echo "== waiting for the previous attempt's apt to finish (up to ${apt_wait_left}s left)"
+  echo "== waiting for the previous attempt's apt to finish (up to ${apt_wait_left}s left; gives up after ${apt_stall_limit}s with no progress)"
+  local last stalled=0 now
+  last="$(apt_progress_mark)"
   while apt_busy; do
     if [ "$apt_wait_left" -le 0 ]; then
       echo "::warning::apt from a timed-out attempt is still running; the wait budget is spent."
       return 1
     fi
+    if [ "$stalled" -ge "$apt_stall_limit" ]; then
+      echo "::warning::apt from a timed-out attempt is still running but has made no progress for ${stalled}s; giving up on it."
+      return 1
+    fi
     sleep "$apt_wait_poll"
     apt_wait_left=$((apt_wait_left - apt_wait_poll))
+    now="$(apt_progress_mark)"
+    if [ "$now" != "$last" ]; then
+      stalled=0
+      last="$now"
+    else
+      stalled=$((stalled + apt_wait_poll))
+    fi
   done
   echo "== the previous attempt's apt finished"
 }
@@ -113,6 +144,12 @@ for attempt in 1 2; do
   # Whatever the attempt left running finishes first: the retry would otherwise fail on its lock, and the
   # packages it was installing are exactly the ones this phase wants.
   wait_for_apt || true
+  # A retry while that apt still holds the lock can only fail on it ("Could not get lock"): skip it and let the
+  # launch check below say whether what did get installed is enough.
+  if apt_busy; then
+    echo "::warning::skipping the retry: apt from the timed-out attempt still holds the dpkg lock."
+    break
+  fi
   if [ "$attempt" -lt 2 ]; then
     echo "::warning::'${deps_cmd[*]}' failed (attempt $attempt of 2); retrying in ${deps_delay}s"
     sleep "$deps_delay"

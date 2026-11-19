@@ -58,7 +58,7 @@ export function FantraxTradeHistoryUpload({ leagueId }: { leagueId: string }) {
       <p className="af-ch-muted">
         {t('Fantrax does not send completed trades to AllFantasy. Download the trade history from Fantrax (Transaction History, Trade) as a CSV and upload it here. Uploading the same file again does not add anything twice.')}
       </p>
-      <p className="af-ch-muted">{t('A trade that moved budget is graded only once this league’s waiver budget is set in league settings.')}</p>
+      <p className="af-ch-muted">{t('A trade that moved budget is graded only once this league’s waiver budget is set above.')}</p>
       <label className="af-btn af-ch-publish-btn">
         {busy ? t('Uploading…') : t('Upload trade history CSV')}
         <input
