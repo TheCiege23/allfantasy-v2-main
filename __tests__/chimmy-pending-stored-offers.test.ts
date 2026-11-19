@@ -164,12 +164,37 @@ describe('Chimmy sees native and Sleeper offers', () => {
     expect(out).not.toContain('offer_id "af-1"')
   })
 
-  it('never shows more than three offers, redraft proposals first', async () => {
+  /*
+   * 🛑 THIS PINNED THE BUG (re-score 2026-11-17, build item 6). It asserted that a user with more offers waiting saw
+   * three under a header reading "(3)" — so Chimmy told them they had three. Now the real count is stated, the three
+   * expiring soonest are graded, and the rest are named without a grade.
+   */
+  it('grades the three expiring soonest, names the rest, and states the real count', async () => {
+    m.offers.mockResolvedValue([])
+    m.evaluate.mockImplementation(async ({ ref }: { ref: { tradeId: string } }) => graded(ref.tradeId, 'R-me', 'R-them'))
+    const day = (d: number) => new Date(`2026-11-${String(20 + d).padStart(2, '0')}T00:00:00.000Z`)
+    m.afTrades.mockResolvedValue(
+      [5, 1, 4, 2, 3].map((d) => ({ id: `af-day${d}`, expiresAt: day(d), proposerRoster: { platformUserId: 'u-rival' } })),
+    )
+    const out = (await buildPendingTradeDecisionContext('L', 'me'))!
+    expect(out).toContain('PENDING INCOMING TRADES (5)')
+    expect(out).toContain('The 3 expiring soonest are graded below')
+    expect(m.evaluate.mock.calls.map((c) => c[0].ref.tradeId)).toEqual(['af-day1', 'af-day2', 'af-day3'])
+    expect(out.indexOf('af-day1')).toBeLessThan(out.indexOf('af-day5'))
+    expect(out).toMatch(/af-day4[^\n]*\n  Grade: not computed in this answer/)
+    expect(out).toMatch(/af-day5[^\n]*\n  Grade: not computed in this answer/)
+  })
+
+  it('at the read cap, says there may be more instead of calling the list complete', async () => {
+    m.offers.mockResolvedValue([])
+    m.evaluate.mockImplementation(async ({ ref }: { ref: { tradeId: string } }) => graded(ref.tradeId, 'R-me', 'R-them'))
     m.afTrades.mockImplementation(async ({ take }: { take: number }) =>
       Array.from({ length: take }, (_, i) => ({ id: `af-${i}`, expiresAt: null, proposerRoster: { platformUserId: 'u-rival' } })),
     )
     const out = (await buildPendingTradeDecisionContext('L', 'me'))!
-    expect(out).toContain('PENDING INCOMING TRADES (3)')
-    expect(m.afTrades.mock.calls[0]![0].take).toBe(3)
+    expect(m.afTrades.mock.calls[0]![0].take).toBe(10)
+    expect(out).toContain('PENDING INCOMING TRADES (at least 10)')
+    expect(out).toContain('Do not say this is every offer.')
+    expect(m.evaluate).toHaveBeenCalledTimes(3)
   })
 })

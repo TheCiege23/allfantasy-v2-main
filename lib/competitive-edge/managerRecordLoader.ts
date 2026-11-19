@@ -24,7 +24,7 @@ import { readSleeperTradeHistory } from './tradeEdgeLoader'
 import { readWaiverEdgeInput } from './waiverEdgeLoader'
 import { readDraftEdgeInput } from './draftEdgeLoader'
 import { readNativeHistory } from './nativeManagerHistory'
-import { providerDraftsReason, providerTradesReason, readProviderWaivers } from './providerManagerHistory'
+import { providerDraftsReason, providerTradesReason, readFantraxUploadedTrades, readProviderWaivers } from './providerManagerHistory'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 export type LeagueManagerRecords = {
@@ -77,6 +77,7 @@ export async function loadLeagueManagerRecords(input: {
     league: { id: league.id, platform, platformLeagueId: league.platformLeagueId, sport: String(league.sport), season: league.season },
     userId: input.userId,
     now,
+    teamOwnerIds: new Set(teams.flatMap((t) => (t.platformUserId?.trim() ? [t.platformUserId.trim()] : []))),
   })
 
   const records = targets.map((t) =>
@@ -137,6 +138,8 @@ async function readHistory(input: {
   league: { id: string; platform: string; platformLeagueId: string | null; sport: string; season: number }
   userId: string
   now: Date
+  /** Every team's person id in this league — how a provider's stored trade sides are matched to managers. */
+  teamOwnerIds: ReadonlySet<string>
 }): Promise<LeagueHistory> {
   const { league, now } = input
   const rules = await resolveWaiverRules(league.id, league.platform).catch(() => null)
@@ -181,9 +184,14 @@ async function readHistory(input: {
     }
   }
 
-  const waiverRead = await readProviderWaivers(league).catch(() => couldNotRead('Waiver'))
+  const [waiverRead, trades] = await Promise.all([
+    readProviderWaivers(league).catch(() => couldNotRead('Waiver')),
+    league.platform === 'fantrax'
+      ? readFantraxUploadedTrades(league, input.teamOwnerIds, now).catch(() => couldNotRead('Trade'))
+      : Promise.resolve({ available: false as const, reason: providerTradesReason(league.platform) }),
+  ])
   return {
-    trades: { available: false, reason: providerTradesReason(league.platform) },
+    trades,
     waivers: waiverRead.available
       ? {
           available: true,

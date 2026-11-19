@@ -39,8 +39,20 @@ import {
  * other `build*ContextForChimmy` adapters.
  */
 
-/** More than a few and the prompt block crowds out the rest of the grounding. */
-const MAX_PROPOSALS = 3
+/**
+ * Offers graded in full in one answer. More than a few and the prompt block crowds out the rest of the grounding.
+ *
+ * 🛑 THIS WAS ALSO THE NUMBER READ (re-score 2026-11-17, build item 6). A user with five offers waiting got three,
+ * under a header that said "(3)" — so Chimmy told them they had three trades waiting. Now up to `MAX_LISTED` are read,
+ * the most urgent `MAX_GRADED` are graded, the rest are named, and the count is the real one.
+ */
+const MAX_GRADED = 3
+/** Offers read per answer; past this the block says there may be more, rather than implying the inbox is complete. */
+export const MAX_LISTED = 10
+
+/** Printed under an offer past the graded few, so Chimmy neither grades it itself nor implies it was looked at. */
+const NOT_GRADED_HERE =
+  '  Grade: not computed in this answer (only the offers expiring soonest are). Do NOT grade it yourself; if the user asks about it, say the trade inbox shows its grade.'
 
 type PendingProposal = {
   id: string
@@ -157,16 +169,16 @@ const defaultDeps: PendingTradeDeps = {
         receiverRoster: { ownerId: userId },
       },
       orderBy: { createdAt: 'desc' },
-      take: MAX_PROPOSALS,
+      take: MAX_LISTED,
       select: PENDING_SELECT,
     })) as unknown as PendingProposal[]
     // A multi-team offer also waits on its third and fourth teams (lib/redraft/tradeParticipants.ts).
-    const mine = incoming.length < MAX_PROPOSALS ? await myRedraftRosterIds(leagueId, userId) : []
+    const mine = incoming.length < MAX_LISTED ? await myRedraftRosterIds(leagueId, userId) : []
     const asExtraTeam = mine.length
       ? ((await prisma.redraftTradeProposal.findMany({
           where: { leagueId, status: 'pending', additionalRosterIds: { hasSome: mine } },
           orderBy: { createdAt: 'desc' },
-          take: MAX_PROPOSALS,
+          take: MAX_LISTED,
           select: PENDING_SELECT,
         })) as unknown as PendingProposal[]).map((p) => ({
           ...p,
@@ -176,7 +188,7 @@ const defaultDeps: PendingTradeDeps = {
     const seen = new Set<string>()
     const merged = [...incoming, ...asExtraTeam]
       .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
-      .slice(0, MAX_PROPOSALS)
+      .slice(0, MAX_LISTED)
     const multi = merged.filter((p) => isMultiTeamTrade(p))
     if (multi.length === 0) return merged
     const names = await teamNamesFor([
@@ -393,43 +405,72 @@ export async function buildPendingTradeDecisionContext(
     return 'PENDING TRADES: could not be read just now. Do NOT tell the user whether they have trades waiting; say the trade inbox could not be reached.'
   }
   // Native AllFantasy and Sleeper offers, in the slots the redraft table left. Each source fails on its own.
-  const stored = await d.findStoredOffers(leagueId, userId, MAX_PROPOSALS - proposals.length).catch(() => [] as StoredPendingOffer[])
+  const stored = await d.findStoredOffers(leagueId, userId, MAX_LISTED - proposals.length).catch(() => [] as StoredPendingOffer[])
 
   if (proposals.length === 0 && stored.length === 0) return null
 
+  /*
+   * One list across the three sources, the soonest to expire first: those are the ones the user has to answer before
+   * they can come back for the rest. An offer with no expiry goes last. The sort is stable, so within a tie each
+   * source keeps its own newest-first order.
+   */
+  type Item = { kind: 'proposal'; p: PendingProposal } | { kind: 'stored'; o: StoredPendingOffer }
+  const expiry = (it: Item) => (it.kind === 'proposal' ? it.p.expiresAt : it.o.expiresAt)?.getTime() ?? Number.POSITIVE_INFINITY
+  const items: Item[] = [
+    ...proposals.map((p): Item => ({ kind: 'proposal', p })),
+    ...stored.map((o): Item => ({ kind: 'stored', o })),
+  ].sort((a, b) => expiry(a) - expiry(b))
+  const total = items.length
+  const atCap = total >= MAX_LISTED
+
   const lines: string[] = [
-    `PENDING INCOMING TRADES (${proposals.length + stored.length}) — awaiting this user's answer. Use ONLY these numbers and letters.`,
+    total > MAX_GRADED
+      ? `PENDING INCOMING TRADES (${atCap ? `at least ${total}` : total}) — awaiting this user's answer. The ${MAX_GRADED} expiring soonest are graded below; the others are listed without a grade. Use ONLY these numbers and letters.`
+      : `PENDING INCOMING TRADES (${total}) — awaiting this user's answer. Use ONLY these numbers and letters.`,
   ]
 
-  for (const p of proposals) {
-    const from = p.proposerRoster?.teamName ?? p.proposerRoster?.ownerName ?? 'another manager'
-    if (isMultiTeamTrade(p)) {
-      lines.push(...describeMultiTeamProposal(p, from))
-      continue
-    }
-    lines.push(
-      `- Proposal ${p.id} from ${from}: ${describeAssets(p)}.` +
-        (p.expiresAt ? ` Expires ${p.expiresAt.toISOString()}.` : '') +
-        ` Veto mode: ${p.vetoMode}.`
-    )
-
-    try {
-      const r = await d.evaluate({ leagueId, ref: { kind: 'redraft', proposalId: p.id }, userId, surface: 'chimmy-pending' })
-      if (!r.ok) {
-        lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
+  for (const [i, it] of items.entries()) {
+    const graded = i < MAX_GRADED
+    if (it.kind === 'proposal') {
+      const p = it.p
+      const from = p.proposerRoster?.teamName ?? p.proposerRoster?.ownerName ?? 'another manager'
+      if (isMultiTeamTrade(p)) {
+        lines.push(...describeMultiTeamProposal(p, from))
         continue
       }
-      lines.push(...gradeLines(r, from, describeAssets(p), d))
-      lines.push(...counterHint(r, p.id))
-    } catch {
-      // Never let the evaluator take down the whole grounding block.
-      lines.push('  Grade: evaluation failed. Do not substitute your own grade.')
+      lines.push(
+        `- Proposal ${p.id} from ${from}: ${describeAssets(p)}.` +
+          (p.expiresAt ? ` Expires ${p.expiresAt.toISOString()}.` : '') +
+          ` Veto mode: ${p.vetoMode}.`
+      )
+      if (!graded) {
+        lines.push(NOT_GRADED_HERE)
+        continue
+      }
+      try {
+        const r = await d.evaluate({ leagueId, ref: { kind: 'redraft', proposalId: p.id }, userId, surface: 'chimmy-pending' })
+        if (!r.ok) {
+          lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
+          continue
+        }
+        lines.push(...gradeLines(r, from, describeAssets(p), d))
+        lines.push(...counterHint(r, p.id))
+      } catch {
+        // Never let the evaluator take down the whole grounding block.
+        lines.push('  Grade: evaluation failed. Do not substitute your own grade.')
+      }
+      continue
     }
-  }
 
-  for (const o of stored) {
+    const o = it.o
     const source = o.ref.kind === 'provider' ? 'Sleeper offer' : 'AllFantasy offer'
     const expires = o.expiresAt ? ` Expires ${o.expiresAt.toISOString()}.` : ''
+    if (!graded) {
+      // Not evaluated, so its assets are not loaded: named by sender and id, which is what the user needs to find it.
+      lines.push(`- ${source} ${pendingOfferId(o.ref)} from ${o.from}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
+      lines.push(NOT_GRADED_HERE)
+      continue
+    }
     try {
       const r = await d.evaluate({ leagueId, ref: o.ref, userId, surface: 'chimmy-pending' })
       if (!r.ok) {
@@ -445,6 +486,9 @@ export async function buildPendingTradeDecisionContext(
       lines.push(`- ${source} from ${o.from}.${expires}`)
       lines.push('  Grade: evaluation failed. Do not substitute your own grade.')
     }
+  }
+  if (atCap) {
+    lines.push(`  …there may be more than ${MAX_LISTED} offers waiting; the trade inbox lists them all. Do not say this is every offer.`)
   }
 
   lines.push(
