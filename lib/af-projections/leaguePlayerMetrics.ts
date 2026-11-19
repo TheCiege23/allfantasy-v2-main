@@ -5,6 +5,7 @@ import { loadAfNflWeek, nflComponentRates } from './nflLeagueWeek'
 import { extractSeasonAggregate } from './core'
 import { prisma } from '@/lib/prisma'
 import { isSupportedSport } from '@/lib/sport-scope'
+import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { boardPlayerValue, boardUnit, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
@@ -161,7 +162,7 @@ async function loadFootballRates(league: {
     const rates = sport === 'NFL' && factors && typeof factors === 'object' && !Array.isArray(factors)
       ? nflComponentRates(factors) : field(factors, 'perGameRates')
     if (!rates) return []
-    const scored = computeLeagueProjectedPoints(rates, scoring)
+    const scored = sport === 'NCAAF' ? scoreNcaafProjection(rates, scoring, row.position) : computeLeagueProjectedPoints(rates, scoring)
     if (!scored || !Number.isFinite(scored.points)) return []
     return [{ playerId: row.playerId, playerName: row.playerName, position: row.position, perGame: scored.points }]
   })

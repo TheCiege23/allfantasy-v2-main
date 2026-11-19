@@ -318,7 +318,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       const position = onBoard?.byId.get(row.key)?.position ?? row.position
       if (!isStartableInSport(sport, slots, position)) continue
       if (ruledOut.has(row.key)) continue
-      const pts = onBoard ? boardPerGame(onBoard, row.key, 'wire') : priceSeasonRate(row, basis, scoring)
+      const pts = onBoard ? boardPerGame(onBoard, row.key, 'wire') : priceSeasonRate(row, basis, scoring, sport)
       if (pts == null) continue
       wire.push({ id: row.key, position, points: pts })
       rowByKey.set(row.key, row)
@@ -345,7 +345,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       seen.add(key)
       if (starterIds.has(id)) starterKeys.add(key)
       const row = myRows.get(key) ?? (onBoard ? allRows.get(key) : undefined)
-      const pts = row && !ruledOut.has(key) ? (onBoard ? boardPerGame(onBoard, key, 'roster') : priceSeasonRate(row, basis, scoring)) : null
+      const pts = row && !ruledOut.has(key) ? (onBoard ? boardPerGame(onBoard, key, 'roster') : priceSeasonRate(row, basis, scoring, sport)) : null
       if (row) rowByKey.set(key, row)
       if (pts != null) pointsByKey.set(key, pts)
       roster.push({ id: key, position: onBoard?.byId.get(key)?.position ?? row?.position ?? null, points: pts })

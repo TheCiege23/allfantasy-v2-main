@@ -138,7 +138,7 @@ export async function loadSeasonRateWaiverBoard(args: {
 
   /* One pricing path for both sides of the comparison: the board, or the season rate — never a mix. */
   const priceOf = (key: string, row: { perGame: number; components?: unknown } | undefined, use: 'wire' | 'roster'): number | null =>
-    onBoard ? boardPerGame(onBoard, key, use) : row ? priceSeasonRate(row as never, basis, scoring) : null
+    onBoard ? boardPerGame(onBoard, key, use) : row ? priceSeasonRate(row as never, basis, scoring, sport) : null
   /*
    * On a board, the board's position: it files a baseball pitcher SP or RP by his innings per outing and an
    * outfielder as OF, where the projection files every pitcher `P` — which would let a reliever fill a

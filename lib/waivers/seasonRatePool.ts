@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
 import type { WaiverValueBasis } from './waiverSportBasis'
@@ -316,11 +317,12 @@ export function priceSeasonRate(
   row: SeasonRateRow,
   basis: WaiverValueBasis,
   scoring: Record<string, unknown> | null,
+  sport?: string,
 ): number | null {
   if (basis === 'season_per_game_af_default') return Number.isFinite(row.perGame) ? row.perGame : null
   if (basis === 'season_per_game_league') {
     if (!scoring || !row.components) return null
-    const scored = computeLeagueProjectedPoints(row.components, scoring)
+    const scored = sport === 'NCAAF' ? scoreNcaafProjection(row.components, scoring, row.position) : computeLeagueProjectedPoints(row.components, scoring)
     return scored ? scored.points : null
   }
   return null
