@@ -31,6 +31,11 @@ export type NativeFinalGame = { week: number; homeRosterId: string; awayRosterId
 
 export type NativeStandingRow = {
   rosterId: string
+  /**
+   * The season's own id for this team (`RedraftRoster.id`). The playoff runtime (bracket, clinched /
+   * eliminated, champion) speaks in these, not in the league page's roster ids.
+   */
+  seasonRosterId: string
   teamName: string
   wins: number
   losses: number
@@ -107,6 +112,7 @@ export function buildNativeStandings(args: {
     const category = args.categoryRecord?.get(rosterId)
     return {
       rosterId,
+      seasonRosterId: r.id,
       teamName: args.nameFor(rosterId)?.trim() || r.teamName?.trim() || r.ownerName?.trim() || 'Team',
       wins: r.wins,
       losses: r.losses,

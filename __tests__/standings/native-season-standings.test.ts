@@ -59,6 +59,8 @@ describe('buildNativeStandings', () => {
       allPlay: true,
     })
     expect(standings[0]).toMatchObject({ rosterId: 'league-roster-1', teamName: 'The Commish' })
+    // And keep the season's own id beside it: the playoff runtime speaks in those.
+    expect(standings[0].seasonRosterId).toBe('season-1')
   })
 
   it('a category league carries its categories won and draws no all-play', () => {
@@ -146,6 +148,7 @@ describe('GET /api/leagues/[id]/scoring/standings', () => {
       [1, 'g-B', 'Bears', 1, 0, 718, 'W1', '1-0'],
       [2, 'g-A', 'Aces', 0, 1, 681, 'L1', '0-1'],
     ])
+    expect(body.standings.map((r: any) => r.seasonRosterId)).toEqual(['rB', 'rA'])
     // The viewer's row is one of them: the highlight has a row to land on.
     expect(body.standings.some((r: any) => r.rosterId === body.viewerRosterId)).toBe(true)
     expect(db.calls).toMatchObject({ fantasyStanding: 0, teamWeekResult: 0 })
