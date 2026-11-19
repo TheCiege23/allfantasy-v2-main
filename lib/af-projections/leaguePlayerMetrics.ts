@@ -1,4 +1,5 @@
 import 'server-only'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 import { loadAfNflWeek, nflComponentRates } from './nflLeagueWeek'
 import { extractSeasonAggregate } from './core'
@@ -47,6 +48,7 @@ export type LeaguePlayerMetric = LeaguePlayerMetricRate & {
 }
 
 export type LeaguePlayerMetrics = {
+  rosterTradeQuotes?: Record<string, { value: number | null; reason?: UnpricedReason }>
   leagueId: string
   sport: string
   season: number
@@ -251,19 +253,31 @@ export async function loadLeaguePlayerMetrics(args: {
     (!searchName || normalizePlayerName(row.playerName).includes(searchName)) &&
     (!wantedPosition || wantedPosition === 'ALL' || row.position === wantedPosition),
   ).slice(0, Math.max(1, Math.min(args.rosterIds?.length ?? args.playerIds?.length ?? 200, args.limit ?? 100)))
-  if (!selected.length) return { leagueId, sport, season, week, unit, rows: [] }
+  const independentQuotes = sport === 'NFL' && args.includeTradeValues !== false && Boolean(args.rosterIds?.length)
+  if (!selected.length && !independentQuotes) return { leagueId, sport, season, week, unit, rows: [] }
 
   const playerIds = selected.map((row) => row.playerId)
   const [identity, schedule, recordedTeams] = await Promise.all([
-    loadIdentityForKeys(prisma, sport, playerIds),
+    loadIdentityForKeys(prisma, sport, independentQuotes ? [...new Set([...playerIds, ...rosterKeys.keys()])] : playerIds),
     loadProjectionSchedule({ sport, season, week, now, day: args.day }).catch(() => new Map<string, TeamProjectionSchedule>()),
     loadRecordedTeams(sport, season, playerIds).catch(() => new Map<string, string>()),
   ])
+  const nflRoster = new Map<string, string>()
+  if (independentQuotes) {
+    for (const [key, rosterId] of rosterKeys) {
+      const id = leagueIdOf(identity.get(key), 'sleeperId')
+      if (id) nflRoster.set(rosterId, id)
+    }
+    const space = leagueIdColumn(league.platform, sport)
+    if (space === 'sleeperId' || space === 'rollingInsightsId') {
+      for (const id of args.rosterIds ?? []) if (/^\d+$/.test(id) && !nflRoster.has(id)) nflRoster.set(id, id)
+    }
+  }
   const [nflValues, collegeBase, specialists] = await Promise.all([
     args.includeTradeValues !== false && sport === 'NFL'
       ? loadAfTradeMarketRows(
         prisma,
-        selected.flatMap((row) => leagueIdOf(identity.get(row.playerId), 'sleeperId') ?? []),
+        [...nflRoster.values(), ...selected.flatMap((row) => leagueIdOf(identity.get(row.playerId), 'sleeperId') ?? [])],
         valueBookFor(league.settings, league.leagueType),
         now, true,
       )
@@ -337,5 +351,8 @@ export async function loadLeaguePlayerMetrics(args: {
       dynastyTradeValue: value?.available ? value.data.dynastyValue : collegeDynasty,
     }
   })
-  return { leagueId, sport, season, week, unit, rows }
+  const rosterTradeQuotes = independentQuotes ? Object.fromEntries([...nflRoster].map(([rosterId, id]) =>
+    [rosterId, { value: nflValues?.get(id)?.marketValue ?? specialists?.bySleeperId?.get(id)?.value ?? null,
+      reason: specialists?.unpricedReasonBySleeperId?.get(id) }])) : undefined
+  return { leagueId, sport, season, week, unit, rows, ...(rosterTradeQuotes ? { rosterTradeQuotes } : {}) }
 }

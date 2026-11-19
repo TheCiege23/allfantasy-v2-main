@@ -36,11 +36,17 @@ export function sportMarketAdjustments(deals: readonly SportDeal[], chart: Reado
     if (value.published) out.set(playerId, { percent: value.adjustmentPercent, trades: value.sampleSize })
   }
   const sorted = [...out.values()].map((v) => v.percent).sort((a, b) => a - b)
-  return isCentred(sorted[Math.floor(sorted.length / 2)]) ? out : new Map<string, SportMarketAdjustment>()
+  const mid = Math.floor(sorted.length / 2)
+  const median = sorted.length % 2 === 1 ? sorted[mid] : sorted.length ? (sorted[mid - 1]! + sorted[mid]!) / 2 : null
+  return isCentred(median) ? out : new Map<string, SportMarketAdjustment>()
 }
 
 function ids(raw: unknown): string[] | null {
   return Array.isArray(raw) && raw.every((id) => typeof id === 'string' && id.trim()) ? raw : null
+}
+
+function packageKey(given: string[], received: string[]): string {
+  return JSON.stringify([JSON.stringify([...given].sort()), JSON.stringify([...received].sort())].sort())
 }
 
 async function readDeals(sport: string, season: number, leagueType: string): Promise<SportDeal[]> {
@@ -105,9 +111,8 @@ async function readDeals(sport: string, season: number, leagueType: string): Pro
     const given = ids(isHistory ? f.drops : f.playersOutIds), received = ids(isHistory ? f.adds : f.playersInIds)
     const column = leagueIdColumn(source.platform, sport)
     if (column && given?.length && received?.length && playersOnly && (isHistory || (f.playersIn === received.length && f.playersOut === given.length))) {
-      const sides = (a: string[], b: string[]) => [JSON.stringify([...a].sort()), JSON.stringify([...b].sort())].sort().join('|')
       const previous = factDeals.get(key)
-      if (previous && sides(previous.given, previous.received) !== sides(given, received)) proven.set(key, false)
+      if (previous && packageKey(previous.given, previous.received) !== packageKey(given, received)) proven.set(key, false)
       factDeals.set(key, { key, column, given, received })
     }
     proven.set(key, proven.get(key) !== false && f.rosterIds.length === 2 && clean && playersOnly)
@@ -129,7 +134,7 @@ async function readDeals(sport: string, season: number, leagueType: string): Pro
     if (!column || !given?.length || !received?.length) continue
     if (group.some((row) => ids(row.picksGiven)?.length !== 0 || ids(row.picksReceived)?.length !== 0 ||
       (row.budgetGiven ?? 0) !== 0 || (row.budgetReceived ?? 0) !== 0)) continue
-    if ((t.budgetGiven == null || t.budgetReceived == null) && proven.get(key) !== true) continue
+    if (group.some(row => row.budgetGiven == null || row.budgetReceived == null) && proven.get(key) !== true) continue
     const same = (a: string[], b: unknown) => JSON.stringify([...a].sort()) === JSON.stringify(ids(b)?.sort())
     if (!group.every((r) => (same(given, r.playersGiven) && same(received, r.playersReceived)) ||
       (same(given, r.playersReceived) && same(received, r.playersGiven)))) continue
@@ -156,7 +161,15 @@ async function readDeals(sport: string, season: number, leagueType: string): Pro
       })
     }
   }
-  return [...new Map(deals.map((d) => [d.key, d])).values()]
+  const unique = new Map<string, SportDeal>()
+  const conflicts = new Set<string>()
+  for (const deal of deals) {
+    const previous = unique.get(deal.key)
+    if (previous && packageKey(previous.given, previous.received) !== packageKey(deal.given, deal.received)) conflicts.add(deal.key)
+    unique.set(deal.key, deal)
+  }
+  for (const key of conflicts) unique.delete(key)
+  return [...unique.values()]
 }
 
 // Cache the common evidence, never a league's scored chart or a failed database read.

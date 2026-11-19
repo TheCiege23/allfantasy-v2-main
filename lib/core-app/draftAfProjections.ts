@@ -6,38 +6,12 @@ import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/proj
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { rosterIdSpaceOf } from './rosterIdSpace'
 
-/**
- * AllFantasy's own projection for the players on a draft board — the AF number every other /core
- * surface already shows, plus the engine's rest-of-season total, which is the figure a draft is
- * actually about.
- *
- * ── WHAT IS RETURNED, PER SLEEPER ID ─────────────────────────────────────────────────────────
- *   `af`       this week's AF engine number, carried into the league's scoring by the player's
- *              provider line (`afEngineForLeague`) — identical to the AF he shows on My Team,
- *              Matchup and the player card, so a pick never reads differently on the board.
- *   `ros`      the engine's rest-of-season total from its season-long baseline row
- *              (`AFProjectionSnapshot`, `week: null`), GENERIC PPR — the engine has no component
- *              line to re-score and the provider publishes no season projection to carry it by.
- *              `rosWeeks` travels with it: a low total is indistinguishable from a late one without it.
- *
- * ── 🛑 SLEEPER-ID LEAGUES ONLY ────────────────────────────────────────────────────────────────
- * Both tables are keyed on Sleeper ids (the mirror) and the engine's own key (the snapshot). A draft
- * pick's `playerId` is the PROVIDER's id: an ESPN or Fleaflicker id is a number in Sleeper's range and
- * collides with real Sleeper players (see rosterIdSpace.ts). So anything but a Sleeper or native
- * league returns an empty map — the board shows no AF rather than a stranger's.
- *
- * ── THE ENGINE'S KEY IS NOT A SLEEPER ID ──────────────────────────────────────────────────────
- * `AFProjectionSnapshot.playerId` is our canonical uuid. The mirror row the weekly read already
- * fetched records it (`stats.canonicalPlayerId`), so the season rows are read by that key with no
- * name matching — a player the mirror does not carry simply has no `ros`.
- *
- * Failure-tolerant by construction: every read degrades to "no AF", never to an exception.
- */
-
+/** League boards use shared AF rates and the league's stored schedule.
+ * The optional no-league reader retains the legacy Sleeper projection contract. */
 export type DraftAfProjection = {
   /** This week's AF number under the league's scoring. Null when the engine has no weekly row. */
   af: number | null
-  /** Rest-of-season total, generic PPR. Null when no season baseline row carries one. */
+  /** Rest-of-season total in league scoring, or generic PPR on the legacy unscoped reader. */
   ros: number | null
   /** Games `ros` covers. */
   rosWeeks: number | null

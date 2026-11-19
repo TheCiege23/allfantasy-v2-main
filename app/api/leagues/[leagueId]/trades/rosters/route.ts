@@ -802,10 +802,12 @@ export async function GET(
   for (const roster of result) {
     for (const player of roster.players) {
       const row = metricByRosterId.get(player.id)
-      player.value = row?.dynastyTradeValue ?? row?.tradeValue ?? null
+      const quote = resolvedForLeague.has(player.id) ? metrics?.rosterTradeQuotes?.[player.id] : undefined
+      player.value = row?.dynastyTradeValue ?? row?.tradeValue ?? quote?.value ?? null
       player.weeklyProjection = metrics?.unit === 'fantasy points' ? row?.weekly ?? null : null
+      if (player.weeklyProjection != null) player.afProjection = player.weeklyProjection
       player.unpricedReason = player.value == null
-        ? playerUnpricedReason({ identified: resolvedForLeague.has(player.id), position: player.position, sport,
+        ? quote?.reason ?? playerUnpricedReason({ identified: resolvedForLeague.has(player.id), position: player.position, sport,
             marketLoaded: Boolean(metrics?.rows.length), leagueDerived: true })
         : null
     }
