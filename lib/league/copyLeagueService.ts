@@ -33,6 +33,8 @@ export type CopyLeagueView = {
   /** This league's sport has a verified team table and the league is hosted on AllFantasy. */
   available: boolean
   enabled: boolean
+  /** The league's sport, upper-case (NFL, NBA, NHL, MLB): the league the real teams come from. */
+  sport: string
   /** The draft has started: managers can no longer change their team; the commissioner still can. */
   locked: boolean
   canManage: boolean
@@ -65,6 +67,7 @@ export async function readCopyLeagueForViewer(leagueId: string, userId: string):
   return {
     available: native && copyLeagueAvailable(league.sport),
     enabled: state.enabled,
+    sport: state.sport,
     locked,
     canManage: await canCommissionerAct(leagueId, userId, 'league'),
     myLeagueTeamId: teams.find((t) => t.claimedByUserId === userId)?.id ?? null,
@@ -86,7 +89,7 @@ export async function changeCopyLeague(leagueId: string, userId: string, a: Copy
     return { ok: false, status: 409, code: 'IMPORTED_LEAGUE', message: 'This league is imported, so its team names come from the platform it lives on.' }
   }
   if (!copyLeagueAvailable(league.sport)) {
-    return { ok: false, status: 409, code: 'SPORT_UNSUPPORTED', message: 'Copy leagues are available for NFL leagues.' }
+    return { ok: false, status: 409, code: 'SPORT_UNSUPPORTED', message: 'Copy leagues are available for NFL, NBA, NHL and MLB leagues.' }
   }
   const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   const state = readCopyLeague(league.settings, league.sport)

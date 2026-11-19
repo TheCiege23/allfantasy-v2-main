@@ -81,7 +81,7 @@ schedule.
 - **PR 1, teams (2026-11-18):**
   - Code: `lib/league/copyLeague.ts` (rules), `lib/league/copyLeagueService.ts` (database), `/api/leagues/[id]/copy-league`, and `components/league-settings/CopyLeaguePanel.tsx`.
   - Where it shows: the manager's picker is in My Settings; the commissioner's on/off switch and assign/swap are on the AllFantasy options page; a "Copy league" row appears in League Setup and the Commissioner Hub.
-  - **NFL only for now, including the name and logo.** The NBA, NHL and MLB team lists in `lib/sport-teams/SportTeamMetadataRegistry.ts` hold abbreviations only and are partly out of date (NHL still lists ARI, MLB still lists OAK). Those three sports get name and logo once a verified team table exists; `copyLeagueTeams` is the one place to add it.
+  - **NFL, NBA, NHL and MLB (NBA/NHL/MLB added 2026-11-19).** The NBA, NHL and MLB team lists in `lib/sport-teams/SportTeamMetadataRegistry.ts` hold abbreviations only and are partly out of date (NHL still lists ARI, MLB still lists OAK), so they are not used. The three tables are `lib/league/copyLeagueTeamTables.ts`, generated from ESPN team-list captures (`contracts/espn/fixtures/teams.{NBA,NHL,MLB}.json`) and pinned to them by `__tests__/league/copy-league-team-tables.test.ts`. Codes are ESPN's (the crest file names), so do not change one once leagues use it. These three get name and logo only: the real-schedule tools stay NFL-only (`copyLeagueHasRealSchedule`), and the schedule route does not show that section for them.
 
 - **PR 2, real schedule (2026-11-18):**
   - Code: `lib/league/copyLeagueSchedule.ts` (games to weeks, coverage, pairing) and `lib/league/copyLeagueScheduleService.ts` (preview, and apply as custom weeks).
