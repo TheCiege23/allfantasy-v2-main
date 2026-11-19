@@ -13,10 +13,17 @@ import { installHarnessFetch, type HarnessFormat, type HarnessSeason, type Harne
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
 
+/**
+ * The tab list a native NFL redraft commissioner gets (LeagueShell `nflRedraftCore`), so the sidebar here is the one
+ * a real league shows: Sleeper's six tabs with their sub-tabs. Only the four tabs above render a screen; the rest open
+ * an empty panel.
+ */
 const TABS = [
-  { id: 'native_home', label: 'League home' }, { id: 'war_room', label: 'War Room' }, { id: 'scores', label: 'Live scores' },
-  { id: 'ai_coaching', label: 'Chimmy Coaching' }, { id: 'schedule', label: 'Schedule' }, { id: 'standings', label: 'Standings' },
-]
+  'native_home:League home', 'decide:Decide', 'ai_coaching:Chimmy Coaching', 'draft:Draft', 'draft_intel:Live Intel', 'roster:My Team',
+  'matchups:Matchups', 'schedule:Schedule', 'players:Players', 'waivers:Waivers', 'trades:Trades', 'standings:Standings',
+  'legacy:Legacy', 'war_room:War Room', 'scores:Live scores', 'league_chat:League Chat', 'activity:Activity', 'news:News',
+  'commissioner:Commissioner', 'settings:Settings',
+].map(entry => { const [id, label] = entry.split(':'); return { id: id!, label: label! } })
 
 /** The same season shape scripts/redraft-visual-capture.mjs uses per sport. */
 const SEASONS: Record<string, HarnessSeason> = {

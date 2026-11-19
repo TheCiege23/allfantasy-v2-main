@@ -36,7 +36,8 @@ function workspaceTabs(extra: { id: string; label: string }[]) {
     { id: 'legacy', label: 'Legacy' },
   ]
 }
-const flat = (groups: ReturnType<typeof buildNativeLeagueNavigation>) => groups.flatMap(g => g.items)
+/** Every screen the nav opens (sub-tabs included): what the phone Section picker lists as options. */
+const flat = (groups: ReturnType<typeof buildNativeLeagueNavigation>) => groups.flatMap(g => g.items.flatMap(i => i.children))
 const tEs = (key: string) => (translations as Record<string, Record<string, string>>).es?.[key] ?? translations.en[key] ?? key
 
 describe('Big Brother sidebar', () => {
@@ -56,9 +57,8 @@ describe('Big Brother sidebar', () => {
     expect(labels.filter((l, i) => labels.indexOf(l) !== i)).toEqual([])
   })
 
-  it('nothing in More tools is left on the "?" icon', () => {
-    const more = groups.find(g => g.id === 'more')
-    expect(more?.items.filter(i => i.icon === 'more').map(i => i.id)).toEqual([])
+  it('no sidebar entry is left on the "?" icon', () => {
+    expect(groups.flatMap(g => g.items).filter(i => i.icon === 'more').map(i => i.id)).toEqual([])
   })
 })
 
@@ -74,14 +74,16 @@ describe('the dedupe and icons are general, not Big Brother only', () => {
     const byId = Object.fromEntries(flat(groups).map(i => [i.id, i]))
     expect(byId.players?.label).toBe('Player search')
     expect(byId.commissioner?.label).toBe('Commissioner tools')
-    expect(byId.settings?.label).toBe('Commissioner')
+    expect(byId.settings?.label).toBe('League settings')
     expect(byId.waivers?.label).toBe('Players & waivers')
   })
 
-  it('a member does not see commissioner tools at all (unchanged)', () => {
+  it('a member gets the read-only League settings but no commissioner tools', () => {
+    // A native league's Settings is the League Settings page, read-only for members (LeagueShell); Sleeper shows the
+    // Settings tab to everyone. Commissioner tools stay the commissioner's.
     const member = flat(buildNativeLeagueNavigation(workspaceTabs([]), false)).map(i => i.id)
     expect(member).not.toContain('commissioner')
-    expect(member).not.toContain('settings')
+    expect(member).toContain('settings')
   })
 
   it('Spanish has the new labels', () => {
