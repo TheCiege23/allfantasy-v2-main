@@ -53,7 +53,7 @@ export function transaction() {
 describe('standalone carryover transaction', () => {
   it('preserves source starter and bench placement without retaining the source draft marker', async () => {
     const tx = transaction()
-    const sourceRosters = await tx.roster.findMany()
+    const sourceRosters: Array<{ playerData: Record<string, unknown> }> = await tx.roster.findMany()
     tx.roster.findMany.mockResolvedValue(sourceRosters.map((roster, index) => ({ ...roster, playerData: {
       ...roster.playerData,
       starters: index === 0 ? ['sleeper-1'] : [],
@@ -92,6 +92,23 @@ describe('standalone carryover transaction', () => {
       importCarryover: expect.objectContaining({ sourceSeason: 2026, history: expect.objectContaining({ matchups: 1 }) }),
     }) } }))
   })
+  it('keeps a commissioner’s second franchise separate and fills both seats with one membership', async () => {
+    const tx = transaction()
+    const teams: Array<{ claimedByUserId: string | null }> = await tx.leagueTeam.findMany()
+    tx.leagueTeam.findMany.mockResolvedValue(teams.map(team => ({ ...team, claimedByUserId: 'creator' })).reverse())
+    await carryOverImportedLeague(tx as never, {
+      sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'NFL', teamCount: 2,
+    })
+    expect(tx.roster.update.mock.calls.map(([r]) => [r.data.platformUserId, r.data.managerUserId]))
+      .toEqual([['creator', 'creator'], ['mgr:creator:native-roster-2', 'creator']])
+    expect(tx.leagueTeam.update.mock.calls[0][0].data.teamName).toBe('Aces')
+    expect(tx.redraftLeagueMember.create).not.toHaveBeenCalled()
+    expect(tx.leagueEntrySlot.updateMany).toHaveBeenCalledWith({
+      where: { leagueId: 'native', slotNumber: 2 }, data: { status: 'FILLED' },
+    })
+    expect(tx.league.update.mock.calls.at(-1)![0].data.settings.allow_multi_team_managers).toBe(true)
+  })
+
   it('carries claimed manager seats and produces a completed native draft snapshot', async () => {
     const tx = transaction()
     const count = await carryOverImportedLeague(tx as never, {

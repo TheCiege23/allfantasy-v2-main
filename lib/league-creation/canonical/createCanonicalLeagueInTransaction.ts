@@ -1,3 +1,4 @@
+import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY } from '@/lib/league/multiTeamManagers'
 import { careerXpLevel, decideCareerJoin } from '@/lib/league-join/careerJoinGate'
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
@@ -476,6 +477,9 @@ export async function createCanonicalLeagueInTransaction(
    * commissioner happened to open the invite panel, which minted a different code.
    */
   const conceptSetupForPrivacy = (body.conceptSetup ?? {}) as Record<string, unknown>
+  if ((formatId === 'redraft' || formatId === 'dynasty') && conceptSetupForPrivacy.allowMultiTeamManagers === true) {
+    mergedSettings[ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY] = true
+  }
   const leagueVisibility: 'public' | 'private' =
     bestBallSettings?.visibility === 'public' ||
     conceptSetupForPrivacy.visibility === 'public' ||
@@ -1231,40 +1235,32 @@ export async function createCanonicalLeagueInTransaction(
     rosterId: roster.id,
   })
 
+  const openRosters: Prisma.RosterCreateManyInput[] = []
+  const openTeams: Prisma.LeagueTeamCreateManyInput[] = []
   for (let slot = 2; slot <= managerCount; slot++) {
     const openTeamName = buildOpenTeamName(slot)
-    const openRoster = await tx.roster.create({
-      data: {
-        leagueId: league.id,
-        platformUserId: `open-slot-${league.id}-${slot}`,
-        playerData: {
-          draftPicks: [],
-          foundation: {
-            slotNumber: slot,
-            openTeam: true,
-            label: openTeamName,
-            createdBy: 'canonical_create',
-          },
-        },
-        settings: {
-          openSlot: true,
-          aiManaged: false,
-        },
+    const rosterId = randomUUID()
+    const platformUserId = `open-slot-${league.id}-${slot}`
+    openRosters.push({
+      id: rosterId,
+      leagueId: league.id,
+      platformUserId,
+      playerData: {
+        draftPicks: [],
+        foundation: { slotNumber: slot, openTeam: true, label: openTeamName, createdBy: 'canonical_create' },
       },
+      settings: { openSlot: true, aiManaged: false },
     })
-
-    await tx.leagueTeam.create({
-      data: {
-        leagueId: league.id,
-        externalId: openRoster.id,
-        ownerName: openTeamName,
-        teamName: openTeamName,
-        claimedByUserId: null,
-        platformUserId: openRoster.platformUserId,
-        isOrphan: true,
-        isCommissioner: false,
-        role: 'member',
-      },
+    openTeams.push({
+      leagueId: league.id,
+      externalId: rosterId,
+      ownerName: openTeamName,
+      teamName: openTeamName,
+      claimedByUserId: null,
+      platformUserId,
+      isOrphan: true,
+      isCommissioner: false,
+      role: 'member',
     })
 
     slotData.push({
@@ -1272,15 +1268,17 @@ export async function createCanonicalLeagueInTransaction(
       leagueId: league.id,
       slotNumber: slot,
       status: 'OPEN',
-      rosterId: openRoster.id,
+      rosterId,
     })
     draftSlotOrder.push({
       slot,
-      rosterId: openRoster.id,
+      rosterId,
       displayName: openTeamName,
       open: true,
     })
   }
+  await tx.roster.createMany({ data: openRosters })
+  await tx.leagueTeam.createMany({ data: openTeams })
   await tx.leagueEntrySlot.createMany({ data: slotData })
 
   const auctionBudget = body.draftType.toLowerCase().includes('auction') ? 200 : null
@@ -1400,7 +1398,7 @@ export async function createCanonicalLeagueInTransaction(
       leagueId: league.id,
       createdBy: appUserId,
       createdByRole: 'COMMISSIONER',
-      maxUses: 50,
+      maxUses: Math.max(50, managerCount),
       isActive: true,
       bypassRankGate: false,
     },

@@ -59,7 +59,8 @@ const tx = {
   $queryRaw: vi.fn(async () => []),
   roster: {
     findUnique: vi.fn(async (args: { where: { id?: string } }) => (args.where.id ? { id: args.where.id } : null)),
-    findMany: vi.fn(async () => []),
+    findFirst: vi.fn(async () => null),
+    findMany: vi.fn(async () => Array.from({ length: m.unclaimed }, (_, i) => ({ platformUserId: `open-${i}`, managerUserId: null }))),
     count: vi.fn(async () => m.unclaimed),
     create: m.rosterCreate,
   },

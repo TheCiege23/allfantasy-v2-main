@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       claimedByUserId: userId,
       role: { in: ['commissioner', 'co_commissioner'] },
     },
+    select: { league: { select: { leagueSize: true } } },
   })
 
   if (!leagueTeam) {
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
     data: {
       leagueId,
       createdBy: userId,
+      maxUses: Math.max(50, leagueTeam.league.leagueSize ?? 0),
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     },
   })

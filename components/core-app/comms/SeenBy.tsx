@@ -31,14 +31,12 @@ export function SeenBy({
 }: {
   messages: Msg[]
   receipts: Receipt[]
-  /** When absent, the last message with a sender is treated as the viewer's. */
+  /** The account that read this thread. */
   viewerUserId?: string | null
 }) {
-  if (messages.length === 0 || receipts.length === 0) return null
+  if (!viewerUserId || !messages.length || !receipts.length) return null
 
-  const mine = viewerUserId
-    ? [...messages].reverse().find((m) => m.senderUserId === viewerUserId)
-    : [...messages].reverse().find((m) => m.senderUserId)
+  const mine = [...messages].reverse().find((message) => message.senderUserId === viewerUserId)
   if (!mine) return null
 
   const sentAt = new Date(mine.createdAt).getTime()

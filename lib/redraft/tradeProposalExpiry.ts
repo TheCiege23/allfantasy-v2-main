@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 /**
  * Expire redraft trade proposals whose `expiresAt` has passed, on a schedule.
  *
@@ -138,15 +139,16 @@ export async function expireDueRedraftTradeProposals(opts?: {
       })
 
       const proposer = await prisma.redraftRoster
-        .findFirst({ where: { id: proposal.proposerRosterId }, select: { ownerId: true } })
+        .findFirst({ where: { id: proposal.proposerRosterId }, select: { ownerId: true, managerUserId: true } })
         .catch(() => null)
-      if (proposer?.ownerId) {
+      const managerId = seasonRosterManagerId(proposer)
+      if (managerId) {
         const sport = await resolveLeagueSport(proposal.leagueId).catch(() => 'NFL')
         await recordAfLearningEvent({
           eventType: 'trade_expired',
           sport,
           leagueId: proposal.leagueId,
-          userId: proposer.ownerId,
+          userId: managerId,
           source: 'redraft_trade_proposal',
           payload: { proposalId: proposal.id, expiredBy: 'schedule' },
         }).catch(() => {})

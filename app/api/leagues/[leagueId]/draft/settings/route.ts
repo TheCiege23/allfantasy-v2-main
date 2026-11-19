@@ -32,7 +32,7 @@ import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { readLeagueDraftPlaylist } from '@/lib/draft-room/draftPlaylistRead'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
-import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
+import { shuffleTimes, slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
@@ -507,7 +507,7 @@ export async function PATCH(
 
       if (teams.length > 0 && draftSession) {
         // Shuffle teams randomly
-        const shuffled = [...teams].sort(() => Math.random() - 0.5)
+        const shuffled = shuffleTimes(teams, 1)
 
         // Create slotOrder entries for draftSession
         randomizedSlotOrder = shuffled.map((team, index) => ({

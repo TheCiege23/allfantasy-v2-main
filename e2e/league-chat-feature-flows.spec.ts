@@ -172,7 +172,7 @@ test.describe("@db @messaging league chat feature flows", () => {
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ status: "ok", messages: list }),
+          body: JSON.stringify({ status: "ok", viewerUserId: "user-1", messages: list }),
         })
       }
 

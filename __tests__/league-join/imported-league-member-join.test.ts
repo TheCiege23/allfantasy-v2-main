@@ -59,6 +59,7 @@ vi.mock('@/lib/league-join/sleeperOwnershipClaim', () => ({
 const tx = {
   $queryRaw: vi.fn(async () => []),
   roster: {
+    findFirst: vi.fn(async () => null),
     findUnique: vi.fn(async () => null),
     findMany: vi.fn(async () => []),
     count: vi.fn(async () => 0),

@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -188,13 +189,16 @@ export async function loadRedraftTradeOffer(proposalId: string): Promise<Loaded 
   if (Array.isArray(proposal.additionalRosterIds) && proposal.additionalRosterIds.length > 0) return null
   const rosters = await prisma.redraftRoster.findMany({
     where: { id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } },
-    select: { id: true, ownerId: true, ownerName: true, teamName: true },
+    select: { id: true, ownerId: true, managerUserId: true, ownerName: true, teamName: true },
   })
   const proposer = rosters.find((r) => r.id === proposal.proposerRosterId)
   const receiver = rosters.find((r) => r.id === proposal.receiverRosterId)
-  if (!proposer?.ownerId || !receiver?.ownerId || proposer.ownerId === receiver.ownerId) return null
+  if (!proposer || !receiver) return null
+  const proposerUserId = seasonRosterManagerId(proposer)
+  const receiverUserId = seasonRosterManagerId(receiver)
+  if (!proposerUserId || !receiverUserId || proposerUserId === receiverUserId) return null
   const [names, leagueName] = await Promise.all([
-    namesFor([proposer.ownerId, receiver.ownerId]),
+    namesFor([proposerUserId, receiverUserId]),
     leagueNameOf(proposal.leagueId),
   ])
 
@@ -222,12 +226,12 @@ export async function loadRedraftTradeOffer(proposalId: string): Promise<Loaded 
     leagueId: proposal.leagueId,
     leagueName,
     proposer: {
-      manager: names.get(proposer.ownerId) ?? safeDisplayName([proposer.ownerName], 'A league mate'),
+      manager: names.get(proposerUserId) ?? safeDisplayName([proposer.ownerName], 'A league mate'),
       team: str(proposer.teamName),
       gives: proposal.assets.filter((a) => a.fromRosterId === proposer.id).map(label),
     },
     receiver: {
-      manager: names.get(receiver.ownerId) ?? safeDisplayName([receiver.ownerName], 'A league mate'),
+      manager: names.get(receiverUserId) ?? safeDisplayName([receiver.ownerName], 'A league mate'),
       team: str(receiver.teamName),
       gives: proposal.assets.filter((a) => a.fromRosterId === receiver.id).map(label),
     },
@@ -239,7 +243,7 @@ export async function loadRedraftTradeOffer(proposalId: string): Promise<Loaded 
     answerOn: null,
     createdAt: new Date(proposal.createdAt ?? Date.now()).toISOString(),
   }
-  return { card, proposerUserId: proposer.ownerId, receiverUserId: receiver.ownerId, postAsUserId: proposer.ownerId }
+  return { card, proposerUserId, receiverUserId, postAsUserId: proposerUserId }
 }
 
 // ── Live-draft pick trades (app/api/leagues/[leagueId]/draft/trade-proposals) ────────────────────

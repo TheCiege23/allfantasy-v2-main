@@ -478,7 +478,11 @@ async function nativeExtraMatchup(lc: LeagueContext, userId: string, weekParam: 
     if (!season) return null
     const week = weekParam ?? season.currentWeek
     if (!(week >= 1)) return null
-    const roster = await prisma.redraftRoster.findFirst({ where: { seasonId: season.id, ownerId: userId }, select: { id: true } })
+    const selectedTeam = await lc.claimedTeam()
+    const roster = await prisma.redraftRoster.findFirst({
+      where: { seasonId: season.id, ownerId: selectedTeam?.platformUserId ?? userId },
+      select: { id: true },
+    })
     if (!roster) return null
     return await readExtraMatchupViewForSeason({ seasonId: season.id, week, redraftRosterId: roster.id })
   } catch {

@@ -47,6 +47,17 @@ describe('imported roster materialization recovery', () => {
     expect(finalizeArtifacts).toHaveBeenCalledTimes(2)
   })
 
+  it('requires every franchise, including empty teams, and only counts this season', async () => {
+    db.league.findUnique.mockResolvedValue({ season: 2027, settings: { importCarryover: { teamCount: 4, playerCount: 2 } } })
+    db.redraftSeason.findFirst.mockResolvedValueOnce({ id: 'current', _count: { rosters: 3 } })
+      .mockResolvedValueOnce({ id: 'current', _count: { rosters: 4 } })
+    db.redraftRosterPlayer.count.mockResolvedValueOnce(2).mockResolvedValueOnce(3)
+    expect((await finalizeImportedCarryover('native')).complete).toBe(false)
+    expect((await finalizeImportedCarryover('native')).complete).toBe(false)
+    expect(db.redraftRosterPlayer.count).toHaveBeenCalledWith({ where: { roster: { seasonId: 'current' }, droppedAt: null } })
+    expect(db.league.update).not.toHaveBeenCalled()
+  })
+
   it('rejects leagues without a completed imported roster snapshot', async () => {
     db.draftSession.findFirst.mockResolvedValue(null)
     await expect(finalizeImportedCarryover('native-league')).rejects.toThrow('draft snapshot is missing')

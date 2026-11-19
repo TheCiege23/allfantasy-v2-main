@@ -1,3 +1,7 @@
+import { parseStandingsDivisions } from '@/lib/league-import/standingsDivisions'
+import { DIVISION_CONFIG_KEY, readDivisionConfig, validateDivisionSetup, type LeagueDivisionConfig } from '@/lib/league/divisions/leagueDivisions'
+import { extraTeamOwnerKey } from '@/lib/league/rosterManager'
+import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY, multiTeamManagersSupported, readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { Prisma } from '@prisma/client'
 import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
@@ -87,7 +91,7 @@ export function importedOwnedPlayerIds(data: unknown): string[] {
   return ownedIds
 }
 
-export function translateImportedRosterData(data: unknown, idMap: Map<string, string>, sourceLeagueId: string): Record<string, unknown> {
+export function translateImportedRosterData(data: unknown, idMap: Map<string, string>, sourceLeagueId: string, openTeam = false): Record<string, unknown> {
   const raw = asRecord(data)
   const players = Array.isArray(data) ? data : Array.isArray(raw.players) && raw.players.length ? raw.players : importedOwnedPlayerIds(data)
   const sections = asRecord(raw.lineup_sections)
@@ -104,7 +108,7 @@ export function translateImportedRosterData(data: unknown, idMap: Map<string, st
     taxi: mapPlayerRows(raw.taxi, idMap) ?? [],
     lineup_sections: Object.fromEntries(Object.entries(sections).map(([key, rows]) => [key, mapPlayerRows(rows, idMap)])),
     draftPicks: [],
-    foundation: { ...asRecord(raw.foundation), openTeam: false, carriedOverFromLeagueId: sourceLeagueId },
+    foundation: { ...asRecord(raw.foundation), openTeam, carriedOverFromLeagueId: sourceLeagueId },
   }
 }
 
@@ -180,7 +184,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
 }): Promise<number> {
   const [source, target, teams, rosters, slots, session] = await Promise.all([
     tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true, settings: true, season: true } }),
-    tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true, season: true } }),
+    tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true, season: true, leagueType: true, leagueVariant: true } }),
     tx.leagueTeam.findMany({
       where: { leagueId: args.sourceLeagueId, lifecycleState: { not: 'ARCHIVED' } },
       select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true, avatarUrl: true, isCommissioner: true, isCoCommissioner: true },
@@ -204,10 +208,18 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   if (teams.length !== args.teamCount || slots.length !== args.teamCount || !session) {
     refuse('Team count must match the imported league exactly to carry over every roster.')
   }
-  const creatorTeam = teams.find((team) => team.claimedByUserId === args.creatorUserId)
+  const creatorTeam = teams.find((team) => team.isCommissioner && team.claimedByUserId === args.creatorUserId)
+    ?? teams.find((team) => team.claimedByUserId === args.creatorUserId)
     ?? teams.find((team) => team.isCommissioner && !team.claimedByUserId)
   if (!creatorTeam) refuse('Claim your commissioner team in the import before carrying rosters over.')
   const orderedTeams = [creatorTeam, ...teams.filter((team) => team.id !== creatorTeam.id).sort((a, b) => a.externalId.localeCompare(b.externalId))]
+  const claimedManagers = orderedTeams.map((team, i) => i === 0 ? args.creatorUserId : team.claimedByUserId)
+    .filter((id): id is string => Boolean(id))
+  const hasSharedManager = new Set(claimedManagers).size !== claimedManagers.length
+  if (hasSharedManager && !multiTeamManagersSupported(target)) {
+    refuse('This league format requires a different manager for each claimed team.')
+  }
+  const assignedManagers = new Set<string>()
   const sourceRosters = orderedTeams.map((team) => matchImportedRoster(team, rosters))
   if (new Set(sourceRosters.map((roster) => roster.id)).size !== sourceRosters.length) {
     refuse('Multiple imported teams point to the same roster. Refresh the import first.')
@@ -215,7 +227,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   const sourcePlayerIdsByRoster = sourceRosters.map((roster) => importedOwnedPlayerIds(roster.playerData))
   const sourceIds = [...new Set(sourcePlayerIdsByRoster.flat())]
   const totalPlayers = sourcePlayerIdsByRoster.reduce((count, ids) => count + ids.length, 0)
-  if (totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Refresh it before carrying rosters over.')
+  if (totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Native rosters support one copy per player. Check the source league’s player-copy rules before conversion.')
   const columns = leagueIdentityColumns(sourceIds, args.sport, source.platform)
   if (sourceIds.length && !columns.length) {
     refuse(`Player identities from ${source.platform} cannot yet be translated to a native roster.`)
@@ -258,6 +270,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   const picks: Prisma.DraftPickCreateManyInput[] = []
   const playerPicksBySlot: Array<Array<{ nativeId: string; name: string; position: string; team: string | null }>> = []
   const draftSlotOrder: Array<{ slot: number; rosterId: string; displayName: string; open: boolean }> = []
+  const nativeTeamByProviderId = new Map<string, string>()
   const teamIds = new Map<string, string>()
   const rosterIds = new Map<string, string>()
   for (let i = 0; i < orderedTeams.length; i++) {
@@ -268,12 +281,17 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     const targetRoster = await tx.roster.findUnique({ where: { id: slot.rosterId }, select: { id: true, platformUserId: true } })
     if (!targetRoster) refuse('A target roster is missing.')
     const claimedUserId = i === 0 ? args.creatorUserId : team.claimedByUserId
-    const platformUserId = claimedUserId ?? targetRoster.platformUserId
+    const additionalTeam = Boolean(claimedUserId && assignedManagers.has(claimedUserId))
+    const platformUserId = additionalTeam && claimedUserId
+      ? extraTeamOwnerKey(claimedUserId, targetRoster.id)
+      : claimedUserId ?? targetRoster.platformUserId
+    if (claimedUserId) assignedManagers.add(claimedUserId)
     await tx.roster.update({
       where: { id: targetRoster.id },
       data: {
         platformUserId,
-        playerData: translateImportedRosterData(sourceRoster.playerData, idMap, args.sourceLeagueId) as Prisma.InputJsonValue,
+        managerUserId: claimedUserId,
+        playerData: translateImportedRosterData(sourceRoster.playerData, idMap, args.sourceLeagueId, !claimedUserId) as Prisma.InputJsonValue,
         faabRemaining: sourceRoster.faabRemaining,
         waiverPriority: sourceRoster.waiverPriority,
         settings: { openSlot: !claimedUserId, commissioner: i === 0 },
@@ -293,12 +311,15 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         role: i === 0 ? 'commissioner' : team.isCoCommissioner ? 'co_commissioner' : 'member',
       },
     })
+    nativeTeamByProviderId.set(team.externalId, nativeTeam.id)
     teamIds.set(team.id, nativeTeam.id)
     teamIds.set(team.externalId, nativeTeam.id)
     rosterIds.set(sourceRoster.id, targetRoster.id)
     rosterIds.set(team.externalId, targetRoster.id)
     if (claimedUserId && i > 0) {
-      await tx.redraftLeagueMember.create({ data: { leagueId: args.targetLeagueId, userId: claimedUserId, role: 'MEMBER', teamNumber: slot.slotNumber } })
+      if (!additionalTeam) {
+        await tx.redraftLeagueMember.create({ data: { leagueId: args.targetLeagueId, userId: claimedUserId, role: 'MEMBER', teamNumber: slot.slotNumber } })
+      }
       await tx.leagueEntrySlot.updateMany({ where: { leagueId: args.targetLeagueId, slotNumber: slot.slotNumber }, data: { status: 'FILLED' } })
     }
     draftSlotOrder.push({ slot: slot.slotNumber, rosterId: targetRoster.id, displayName: team.teamName, open: !claimedUserId })
@@ -309,6 +330,24 @@ export async function carryOverImportedLeague(tx: Tx, args: {
       rosterPicks.push({ nativeId, ...player })
     }
     playerPicksBySlot.push(rosterPicks)
+  }
+  const importedDivisions = parseStandingsDivisions(source.settings)
+  let divisionConfig: LeagueDivisionConfig | undefined
+  if (importedDivisions) {
+    const keys = Object.keys(importedDivisions.names)
+    const teamAssignments: Record<string, number> = {}
+    for (const [providerId, nativeId] of nativeTeamByProviderId) {
+      const index = keys.indexOf(importedDivisions.teams[providerId] ?? '')
+      if (index >= 0) teamAssignments[nativeId] = index
+    }
+    // Standings groups alone do not establish playoff qualification or rivalry scheduling.
+    divisionConfig = {
+      ...readDivisionConfig(target.settings), count: keys.length,
+      names: keys.map((key) => importedDivisions.names[key]!), teamAssignments,
+      playoffRule: 'none' as const, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString(),
+    }
+    const check = validateDivisionSetup(divisionConfig, [...nativeTeamByProviderId.values()])
+    if (!check.ok) refuse('Imported divisions need commissioner review: ' + check.error)
   }
   let overall = 1
   const maxPlayers = Math.max(0, ...playerPicksBySlot.map((rosterPicks) => rosterPicks.length))
@@ -348,6 +387,9 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     ...(mlbScoring?.scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
     settings: {
       ...asRecord(target.settings),
+      ...(divisionConfig ? { [DIVISION_CONFIG_KEY]: divisionConfig } : {}),
+      ...(multiTeamManagersSupported(target) && (hasSharedManager || readAllowMultiTeamManagers(source.settings))
+        ? { [ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY]: true } : {}),
       ...(mlbScoring ? {
         roster: mlbRoster,
         rosterSettings: mlbRoster,

@@ -1,3 +1,4 @@
+import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 
 type MinimalSeason = {
@@ -27,6 +28,7 @@ type MinimalRedraftRoster = {
   seasonId: string
   leagueId: string
   ownerId: string
+  managerUserId?: string | null
   ownerName: string
   teamName: string | null
   avatarUrl: string | null
@@ -214,6 +216,7 @@ async function maybeRepairRedraftRosterOwner(args: {
   })
 
   const currentOwnerId = trimmed(args.roster.ownerId)
+  if (isExtraTeamOwnerKey(currentOwnerId)) return { roster: args.roster, repairedOwnerId: null }
   if (!preferredOwnerId || !currentOwnerId || preferredOwnerId === currentOwnerId) {
     return { roster: args.roster, repairedOwnerId: null }
   }
@@ -256,6 +259,7 @@ async function maybeRepairRedraftRosterOwner(args: {
       seasonId: true,
       leagueId: true,
       ownerId: true,
+      managerUserId: true,
       ownerName: true,
       teamName: true,
       avatarUrl: true,
@@ -318,6 +322,7 @@ async function resolveRedraftRosterLookupCore(args: RedraftRosterLookupArgs): Pr
           seasonId: true,
           leagueId: true,
           ownerId: true,
+          managerUserId: true,
           ownerName: true,
           teamName: true,
           avatarUrl: true,
@@ -393,7 +398,9 @@ async function resolveRedraftRosterLookupCore(args: RedraftRosterLookupArgs): Pr
     }
   }
 
-  const requestedOwnerIdCandidates = buildRedraftOwnerIdCandidates({
+  // A manager's account identifies every team they hold. Only the franchise key identifies this one.
+  const secondTeamKey = [requestedGenericRoster?.platformUserId, requestedTeam?.platformUserId].find(isExtraTeamOwnerKey)
+  const requestedOwnerIdCandidates = secondTeamKey ? [secondTeamKey] : buildRedraftOwnerIdCandidates({
     claimedByUserId: requestedTeam?.claimedByUserId,
     teamPlatformUserId: requestedTeam?.platformUserId,
     genericRosterPlatformUserId: requestedGenericRoster?.platformUserId,
@@ -411,30 +418,31 @@ async function resolveRedraftRosterLookupCore(args: RedraftRosterLookupArgs): Pr
         seasonId: true,
         leagueId: true,
         ownerId: true,
+        managerUserId: true,
         ownerName: true,
         teamName: true,
         avatarUrl: true,
       },
     })
 
-    if (requestedMappedRoster) {
+    if (requestedMappedRoster || secondTeamKey) {
       return {
         result: {
           season,
           roster: requestedMappedRoster,
-          resolvedBy: 'requested_identity_map',
+          resolvedBy: requestedMappedRoster ? 'requested_identity_map' : null,
           repairedOwnerId: null,
           ownerIdCandidates: [],
           requestedOwnerIdCandidates,
           requestedRosterId,
           inferredLeagueId,
         },
-        repairContext: {
+        repairContext: requestedMappedRoster ? {
           roster: requestedMappedRoster,
           seasonId: season.id,
           team: requestedTeam,
           genericRoster: requestedGenericRoster,
-        },
+        } : null,
       }
     }
   }
@@ -507,6 +515,7 @@ async function resolveRedraftRosterLookupCore(args: RedraftRosterLookupArgs): Pr
       seasonId: true,
       leagueId: true,
       ownerId: true,
+      managerUserId: true,
       ownerName: true,
       teamName: true,
       avatarUrl: true,

@@ -91,7 +91,8 @@ describe('2026-09-19 league audit reproductions', () => {
     // validator matches (`settings.inviteCode`) is the invite row's token.
     expect(leagueData.settings.inviteCode).toBe(tx.leagueInvite.create.mock.calls[0][0].data.token)
     expect(tx.draftSession.create.mock.calls[0][0].data.teamCount).toBe(12)
-    expect(tx.roster.create).toHaveBeenCalledTimes(12)
+    expect(tx.roster.create).toHaveBeenCalledTimes(1)
+    expect(tx.roster.createMany.mock.calls[0][0].data).toHaveLength(11)
   })
 
   it('reproduces advanced superflex/IDP flags not changing the resolved roster', () => {

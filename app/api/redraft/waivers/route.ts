@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import { loadWaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-gate'
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
@@ -35,10 +36,10 @@ export async function GET(req: NextRequest) {
 
   const roster = await prisma.redraftRoster.findFirst({
     where: { id: rosterId, seasonId, leagueId: season.leagueId },
-    select: { ownerId: true },
+    select: { ownerId: true, managerUserId: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(season.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (seasonRosterManagerId(roster) !== userId && !await isAcceptedCoOwnerForRedraftRoster(season.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const claims = await prisma.redraftWaiverClaim.findMany({
     where: { seasonId, rosterId },
@@ -84,10 +85,10 @@ export async function POST(req: NextRequest) {
 
   const roster = await prisma.redraftRoster.findFirst({
     where: { id: rosterId, seasonId, leagueId },
-    select: { ownerId: true, waiverPriority: true },
+    select: { ownerId: true, managerUserId: true, waiverPriority: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (seasonRosterManagerId(roster) !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const phasePolicy = await loadWaiverPhasePolicy(leagueId, null)
   if (!phasePolicy.claimsAllowed) return NextResponse.json({ error: phasePolicy.reason, code: phasePolicy.code }, { status: 409 })
@@ -172,10 +173,10 @@ export async function DELETE(req: NextRequest) {
 
   const roster = await prisma.redraftRoster.findFirst({
     where: { id: rosterId, seasonId: c.seasonId, leagueId: c.leagueId },
-    select: { ownerId: true },
+    select: { ownerId: true, managerUserId: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(c.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (seasonRosterManagerId(roster) !== userId && !await isAcceptedCoOwnerForRedraftRoster(c.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (c.status !== 'pending') return NextResponse.json({ error: 'Only pending claims can be cancelled' }, { status: 409 })
 
   await prisma.redraftWaiverClaim.update({

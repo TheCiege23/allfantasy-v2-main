@@ -56,6 +56,7 @@ function buildTx() {
       create: vi.fn().mockResolvedValue({ id: 'chat-1' }),
     },
     roster: {
+      createMany: vi.fn().mockResolvedValue({ count: 11 }),
       create: vi.fn().mockImplementation(async (args?: any) => {
         rosterCreateCount += 1
         return {
@@ -65,6 +66,7 @@ function buildTx() {
       }),
     },
     leagueTeam: {
+      createMany: vi.fn().mockResolvedValue({ count: 11 }),
       create: vi.fn().mockImplementation(async () => {
         teamCreateCount += 1
         return { id: `team-${teamCreateCount}` }
@@ -221,8 +223,10 @@ describe('createCanonicalLeagueInTransaction contract', () => {
       }),
     )
 
-    expect(tx.roster.create).toHaveBeenCalledTimes(12)
-    expect(tx.leagueTeam.create).toHaveBeenCalledTimes(12)
+    expect(tx.roster.create).toHaveBeenCalledTimes(1)
+    expect(tx.roster.createMany.mock.calls[0][0].data).toHaveLength(11)
+    expect(tx.leagueTeam.create).toHaveBeenCalledTimes(1)
+    expect(tx.leagueTeam.createMany.mock.calls[0][0].data).toHaveLength(11)
     expect(tx.leagueTeam.create).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -233,16 +237,14 @@ describe('createCanonicalLeagueInTransaction contract', () => {
         }),
       }),
     )
-    expect(tx.leagueTeam.create).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        data: expect.objectContaining({
-          ownerName: 'Open Team 2',
-          teamName: 'Open Team 2',
-          isOrphan: true,
-        }),
-      }),
-    )
+    const secondRosterId = tx.roster.createMany.mock.calls[0][0].data[0].id
+    expect(secondRosterId).toEqual(expect.any(String))
+    expect(tx.leagueTeam.createMany.mock.calls[0][0].data[0]).toMatchObject({
+      ownerName: 'Open Team 2',
+      teamName: 'Open Team 2',
+      isOrphan: true,
+      externalId: secondRosterId,
+    })
 
     expect(tx.redraftLeagueMember.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -262,7 +264,7 @@ describe('createCanonicalLeagueInTransaction contract', () => {
           teamCount: 12,
           slotOrder: expect.arrayContaining([
             expect.objectContaining({ slot: 1, rosterId: 'roster-1', open: false }),
-            expect.objectContaining({ slot: 2, rosterId: 'roster-2', displayName: 'Open Team 2', open: true }),
+            expect.objectContaining({ slot: 2, rosterId: secondRosterId, displayName: 'Open Team 2', open: true }),
           ]),
         }),
       }),
@@ -291,7 +293,7 @@ describe('createCanonicalLeagueInTransaction contract', () => {
       expect.objectContaining({
         data: expect.arrayContaining([
           expect.objectContaining({ leagueId: 'league-1', slotNumber: 1, status: 'FILLED', rosterId: 'roster-1' }),
-          expect.objectContaining({ leagueId: 'league-1', slotNumber: 12, status: 'OPEN', rosterId: 'roster-12' }),
+          expect.objectContaining({ leagueId: 'league-1', slotNumber: 12, status: 'OPEN', rosterId: tx.roster.createMany.mock.calls[0][0].data[10].id }),
         ]),
       }),
     )
@@ -350,7 +352,8 @@ describe('createCanonicalLeagueInTransaction contract', () => {
         data: expect.objectContaining({ leagueId: 'league-1', roomType: 'league' }),
       }),
     )
-    expect(tx.roster.create).toHaveBeenCalledTimes(12)
+    expect(tx.roster.create).toHaveBeenCalledTimes(1)
+    expect(tx.roster.createMany.mock.calls[0][0].data).toHaveLength(11)
     expect(tx.leagueEntrySlot.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.arrayContaining([

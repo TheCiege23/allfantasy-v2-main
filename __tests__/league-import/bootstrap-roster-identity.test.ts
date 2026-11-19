@@ -149,6 +149,21 @@ beforeEach(() => {
   db.linked = new Map()
 })
 
+it('refreshes both Fantrax franchises for a verified manager without merging rosters', async () => {
+  const normalized = snapshot([team('B', 'shared', ['b']), team('A', 'shared', ['a'])])
+  normalized.source.source_provider = 'fantrax'
+  const importer = { userId: 'af-owner', sourceManagerId: 'shared' }
+  await bootstrapLeagueFromNormalizedImport(L, normalized, importer)
+  normalized.rosters.reverse()
+  await bootstrapLeagueFromNormalizedImport(L, normalized, importer)
+  expect(db.rosters).toHaveLength(2)
+  expect(new Set(db.rosters.map(row => row.platformUserId)).size).toBe(2)
+  for (const id of ['A', 'B']) {
+    expect(rowsOf(id)[0]).toMatchObject({ managerUserId: 'af-owner', playerData: { players: [id.toLowerCase()] } })
+    expect(db.teams.find(row => row.externalId === id)).toMatchObject({ claimedByUserId: 'af-owner' })
+  }
+})
+
 describe('🛑 a provider that reports no commissioner cannot clear one', () => {
   it('keeps a stored commissioner flag when the provider left it undefined (Fantrax, MFL, Fleaflicker)', async () => {
     await run([team('1', 'mgr-1', ['a'])])

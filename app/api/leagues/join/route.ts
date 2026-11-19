@@ -1,3 +1,4 @@
+import { managedRosterWhere, rosterManagerKey } from '@/lib/league/rosterManager'
 /**
  * POST /api/leagues/join — Join a league by invite code (and optional password).
  * Body: { code: string, password?: string }
@@ -217,8 +218,8 @@ export async function POST(req: NextRequest) {
     // Serialize capacity checks and seat claims for this league. Two requests must
     // not both accept the final open seat from the same pre-claim snapshot.
     await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${result.leagueId} FOR UPDATE`
-    const existing = await tx.roster.findUnique({
-      where: { leagueId_platformUserId: { leagueId: result.leagueId, platformUserId: userId } },
+    const existing = await tx.roster.findFirst({
+      where: managedRosterWhere(result.leagueId, userId),
       select: { id: true },
     })
     if (existing) {
@@ -275,7 +276,7 @@ export async function POST(req: NextRequest) {
       }),
       tx.roster.findMany({
         where: { leagueId: result.leagueId },
-        select: { platformUserId: true },
+        select: { platformUserId: true, managerUserId: true },
       }),
       tx.draftSession.findFirst({
         where: { leagueId: result.leagueId },
@@ -330,10 +331,11 @@ export async function POST(req: NextRequest) {
     }
 
     const realRosterUsers = await tx.appUser.findMany({
-      where: { id: { in: leagueRosters.map((r: { platformUserId: string }) => r.platformUserId) } },
+      where: { id: { in: leagueRosters.map(rosterManagerKey).filter((id): id is string => id !== null) } },
       select: { id: true },
     })
-    const claimedRosterCount = realRosterUsers.length
+    const people = new Set(realRosterUsers.map((user) => user.id))
+    const claimedRosterCount = leagueRosters.filter((roster) => people.has(rosterManagerKey(roster) ?? '')).length
 
     if (league.leagueSize != null && claimedRosterCount >= league.leagueSize) {
       return { success: false as const, status: 409, error: 'League is full' }
@@ -380,32 +382,7 @@ export async function POST(req: NextRequest) {
     // the manual picker at /api/leagues/{id}/claim-roster.
     let claimPrompt = false
     if (!claim.claimed) {
-      const unclaimedCount = await tx.roster.count({
-        where: {
-          leagueId: result.leagueId,
-          platformUserId: { not: userId },
-          NOT: {
-            platformUserId: {
-              in: (
-                await tx.appUser.findMany({
-                  where: {
-                    id: {
-                      in: (
-                        await tx.roster.findMany({
-                          where: { leagueId: result.leagueId },
-                          select: { platformUserId: true },
-                        })
-                      ).map((r: { platformUserId: string }) => r.platformUserId),
-                    },
-                  },
-                  select: { id: true },
-                })
-              ).map((u: { id: string }) => u.id),
-            },
-          },
-        },
-      })
-      if (unclaimedCount > 0) claimPrompt = true
+      claimPrompt = leagueRosters.some((roster) => !roster.managerUserId && !people.has(roster.platformUserId))
     }
 
     /*
@@ -542,7 +519,7 @@ export async function POST(req: NextRequest) {
       leagueId: result.leagueId,
       alreadyMember: false as const,
     }
-  })
+  }, { maxWait: 15000, timeout: 25000 })
 
   if (!joinResult.success) {
     if ('canRequest' in joinResult) return NextResponse.json(joinResult, { status: 403 })

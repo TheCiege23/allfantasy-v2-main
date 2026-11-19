@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
@@ -289,9 +290,9 @@ export async function POST(req: NextRequest) {
     })
     const expiredProposer = await prisma.redraftRoster.findFirst({
       where: { id: proposal.proposerRosterId },
-      select: { ownerId: true },
+      select: { ownerId: true, managerUserId: true },
     })
-    const expiredProposerOwnerId = expiredProposer?.ownerId
+    const expiredProposerOwnerId = seasonRosterManagerId(expiredProposer)
     if (expiredProposerOwnerId) {
       void resolveLeagueSport(proposal.leagueId).then((sport) =>
         recordAfLearningEvent({
@@ -320,11 +321,11 @@ export async function POST(req: NextRequest) {
 
   const seasonRosters = await prisma.redraftRoster.findMany({
     where: { seasonId: proposal.seasonId },
-    select: { id: true, ownerId: true },
+    select: { id: true, ownerId: true, managerUserId: true },
   })
   const rosterById = new Map(seasonRosters.map((r) => [r.id, r]))
-  const proposerOwnerId = rosterById.get(proposal.proposerRosterId)?.ownerId
-  const receiverOwnerId = rosterById.get(proposal.receiverRosterId)?.ownerId
+  const proposerOwnerId = seasonRosterManagerId(rosterById.get(proposal.proposerRosterId))
+  const receiverOwnerId = seasonRosterManagerId(rosterById.get(proposal.receiverRosterId))
   const coOwnerRosterId = await acceptedCoOwnerRosterId(proposal.leagueId, userId)
   const coOwnerRoster = coOwnerRosterId ? await prisma.roster.findFirst({
     where: { id: coOwnerRosterId, leagueId: proposal.leagueId }, select: { redraftRosterId: true },
@@ -342,11 +343,11 @@ export async function POST(req: NextRequest) {
    */
   const multiTeam = isMultiTeamTrade(proposal)
   const participantRosterIds = tradeParticipantRosterIds(proposal)
-  const controlsRoster = (rosterId: string) => rosterById.get(rosterId)?.ownerId === userId || rosterId === coOwnerRedraftId
+  const controlsRoster = (rosterId: string) => seasonRosterManagerId(rosterById.get(rosterId)) === userId || rosterId === coOwnerRedraftId
   /** The non-proposer teams in this trade that this user runs (multi-team only). */
   const actingPartyRosterIds = multiTeam ? tradePartiesToAccept(proposal).filter(controlsRoster) : []
   const isTradePartyOwner = participantRosterIds.some(controlsRoster)
-  const participantOwnerIds = participantRosterIds.map((id) => rosterById.get(id)?.ownerId)
+  const participantOwnerIds = participantRosterIds.map((id) => seasonRosterManagerId(rosterById.get(id)))
 
   if (action === 'cancel') {
     if (!isProposerOwner) {
@@ -753,7 +754,7 @@ export async function POST(req: NextRequest) {
     }
 
     const voteValue = action === 'vote_approve' ? 'approve' : 'veto'
-    const voterRoster = seasonRosters.find((r) => r.ownerId === userId || r.id === coOwnerRedraftId)
+    const voterRoster = seasonRosters.find((r) => seasonRosterManagerId(r) === userId || r.id === coOwnerRedraftId)
     const existingVote = await prisma.redraftTradeVote.findFirst({
       where: { proposalId: proposal.id, rosterId: voterRoster?.id },
     })

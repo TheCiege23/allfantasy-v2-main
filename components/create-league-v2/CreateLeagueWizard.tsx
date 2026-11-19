@@ -1268,6 +1268,13 @@ export function LeagueBasicsStep({
         </div>
       </div>
 
+      {state.leagueType === 'redraft' || state.leagueType === 'dynasty' ? (
+        <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-[color:var(--border-subtle)] px-4 py-3 text-sm font-bold">
+          <CheckBox checked={state.allowMultiTeamManagers === true} onChange={(checked) => onChange({ allowMultiTeamManagers: checked })} />
+          {t('createLeague.g30.multiTeamManagers.label')}
+        </label>
+      ) : null}
+
       {/* A guillotine week has no opponent — every team plays the chop line — so there is no
           head-to-head game for a median game to double. Survivor Guilly chops the same way. */}
       {getEffectiveLeagueType(state) === 'guillotine' || getEffectiveLeagueType(state) === 'survivor_guillotine' ? null : (
@@ -1476,6 +1483,13 @@ export function DraftStep({
             )
           })}
         </div>
+        {(leagueType === 'redraft' || leagueType === 'dynasty') && state.draftType === 'snake' && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={state.thirdRoundReversal}
+              onChange={(event) => onChange({ thirdRoundReversal: event.target.checked })} />
+            {t('createLeague.draft.thirdRoundReversal')}
+          </label>
+        )}
         {fieldErrors?.draftType ? (
           <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-300">{fieldErrors.draftType}</p>
         ) : null}

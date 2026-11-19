@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
 import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
@@ -571,6 +572,14 @@ export async function syncCompletedDraftToRedraftSeason(
 
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
 
+  const importedSnapshot = session.draftModeLabel === 'imported_rosters'
+  const importedPlayerIds = importedSnapshot
+    ? new Set((await prisma.redraftRosterPlayer.findMany({
+        where: { roster: { seasonId: season.id } }, select: { playerId: true },
+      })).map(row => row.playerId))
+    : null
+  const importedPlayers: Prisma.RedraftRosterPlayerCreateManyInput[] = []
+
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
       isDraftPickSkipped(pick) ||
@@ -629,7 +638,7 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    const existingActive = await prisma.redraftRosterPlayer.findFirst({
+    const existingActive = importedPlayerIds ? importedPlayerIds.has(playerId) : await prisma.redraftRosterPlayer.findFirst({
       where: {
         rosterId: mapping.redraftRoster.id,
         playerId,
@@ -645,22 +654,45 @@ export async function syncCompletedDraftToRedraftSeason(
 
     const slotType = inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
 
-    const createdRow = await prisma.redraftRosterPlayer.create({
-      data: {
-        rosterId: mapping.redraftRoster.id,
-        playerId,
-        playerName: pick.playerName,
-        position: pick.position || 'UNK',
-        team: pick.team ?? null,
-        sport: season.sport || String(session.sportType ?? 'NFL'),
-        slotType,
-        byeWeek: byeForTeam(byeByTeam, pick.team) ?? pick.byeWeek ?? null,
-        acquisitionType: 'drafted',
-      },
-    })
+    const data = {
+      rosterId: mapping.redraftRoster.id,
+      playerId,
+      playerName: pick.playerName,
+      position: pick.position || 'UNK',
+      team: pick.team ?? null,
+      sport: season.sport || String(session.sportType ?? 'NFL'),
+      slotType,
+      byeWeek: byeForTeam(byeByTeam, pick.team) ?? pick.byeWeek ?? null,
+      acquisitionType: 'drafted',
+    }
+    if (importedPlayerIds) {
+      // A retry of the immutable imported draft cannot insert its pick twice, including overlapping requests.
+      importedPlayers.push({ ...data, id: 'import-pick:' + pick.id })
+      importedPlayerIds.add(playerId)
+      continue
+    }
+    const createdRow = await prisma.redraftRosterPlayer.create({ data })
     if (slotType === 'bench' && createdRow?.id) draftedBenchRows.push({ rowId: createdRow.id, rosterId: mapping.redraftRoster.id })
 
     redraftPlayersCreated += 1
+  }
+
+  if (importedPlayers.length) {
+    const inserted = await prisma.redraftRosterPlayer.createMany({ data: importedPlayers, skipDuplicates: true })
+    redraftPlayersCreated += inserted.count
+    redraftPlayersAlreadyPresent += importedPlayers.length - inserted.count
+  }
+
+  // An imported franchise can be empty and still needs a season roster and a schedule.
+  if (session.draftModeLabel === 'imported_rosters' && Array.isArray(session.slotOrder)) {
+    for (const entry of session.slotOrder) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const rosterId = entry.rosterId
+      if (typeof rosterId !== 'string' || redraftRosterByGenericRosterId.has(rosterId)) continue
+      const mapping = await ensureRedraftRosterForGenericRoster({ seasonId: season.id, leagueId, genericRosterId: rosterId })
+      redraftRosterByGenericRosterId.set(rosterId, mapping)
+      if (mapping.created) redraftRostersCreated += 1
+    }
   }
 
   /*

@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
@@ -303,7 +304,7 @@ export async function POST(req: NextRequest) {
   if (additionalRosters.length !== additionalRosterIds.length) {
     return NextResponse.json({ error: 'Roster not found for season' }, { status: 404 })
   }
-  if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
+  if (seasonRosterManagerId(proposer) !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
   // Chimmy autopilot (AF Commissioner): a team nobody is running does not take trade offers.
@@ -516,10 +517,10 @@ export async function POST(req: NextRequest) {
       proposalId: created.id,
       leagueId,
       proposerUserId: userId,
-      receiverUserId: receiver.ownerId,
+      receiverUserId: seasonRosterManagerId(receiver),
       proposerName: safeDisplayName([proposer.teamName, proposer.ownerName], 'A league mate'),
       ...(multiTeam
-        ? { additionalUserIds: additionalRosters.map((r) => r.ownerId), teamCount: participantRosterIds.length }
+        ? { additionalUserIds: additionalRosters.map((r) => seasonRosterManagerId(r)), teamCount: participantRosterIds.length }
         : {}),
     })
   }

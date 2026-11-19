@@ -15,7 +15,7 @@
  * seat taken after the draft never reached `RedraftRoster.ownerId`, which the owner-repair logic
  * then refused to fix. Every path now goes through `assignLeagueSeat`.
  */
-import { extraTeamOwnerKey, isRosterManagedBy, managedRosterWhere } from '@/lib/league/rosterManager'
+import { extraTeamOwnerKey, isExtraTeamOwnerKey, isRosterManagedBy, managedRosterWhere, rosterManagerKey } from '@/lib/league/rosterManager'
 import { multiTeamManagersSupported, readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { Prisma } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -32,12 +32,12 @@ type Db = Prisma.TransactionClient
  * join route already counted this way; the invite previews did not.
  */
 export async function countSeatsHeldByPeople(db: Db, leagueId: string): Promise<number> {
-  const rosters = await db.roster.findMany({ where: { leagueId }, select: { platformUserId: true } })
-  const ids = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
+  const rosters = await db.roster.findMany({ where: { leagueId }, select: { platformUserId: true, managerUserId: true } })
+  const ids = [...new Set(rosters.map(rosterManagerKey).filter((key): key is string => key !== null))]
   if (ids.length === 0) return 0
   const people = await db.appUser.findMany({ where: { id: { in: ids } }, select: { id: true } })
   const personIds = new Set(people.map((p) => p.id))
-  return rosters.filter((r) => personIds.has(r.platformUserId)).length
+  return rosters.filter((r) => personIds.has(rosterManagerKey(r) ?? '')).length
 }
 
 /**
@@ -54,16 +54,30 @@ export async function countSeatsHeldByPeopleByLeague(
   if (leagueIds.length === 0) return out
   const rosters = await db.roster.findMany({
     where: { leagueId: { in: leagueIds } },
-    select: { leagueId: true, platformUserId: true },
+    select: { leagueId: true, platformUserId: true, managerUserId: true },
   })
-  const ids = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
+  const ids = [...new Set(rosters.map(rosterManagerKey).filter((key): key is string => key !== null))]
   if (ids.length === 0) return out
   const people = await db.appUser.findMany({ where: { id: { in: ids } }, select: { id: true } })
   const personIds = new Set(people.map((p) => p.id))
   for (const r of rosters) {
-    if (personIds.has(r.platformUserId)) out.set(r.leagueId, (out.get(r.leagueId) ?? 0) + 1)
+    if (personIds.has(rosterManagerKey(r) ?? '')) out.set(r.leagueId, (out.get(r.leagueId) ?? 0) + 1)
   }
   return out
+}
+
+async function updateMembershipAfterSeatLoss(tx: Db, leagueId: string, userId: string, commissionerId: string) {
+  const remaining = await tx.roster.findFirst({
+    where: managedRosterWhere(leagueId, userId), orderBy: { id: 'asc' }, select: { id: true },
+  })
+  if (remaining || userId === commissionerId) {
+    const seat = remaining ? await tx.leagueEntrySlot.findFirst({
+      where: { leagueId, rosterId: remaining.id }, select: { slotNumber: true },
+    }) : null
+    await tx.redraftLeagueMember.updateMany({ where: { leagueId, userId }, data: { teamNumber: seat?.slotNumber ?? null } })
+  } else {
+    await tx.redraftLeagueMember.deleteMany({ where: { leagueId, userId } })
+  }
 }
 
 type AssignLeagueSeatResult =
@@ -79,7 +93,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /** Keys a season roster may carry for a seat, from the roster's and team's owners before a change. */
-function seatOwnerKeys(rosterId: string, ...owners: Array<string | null | undefined>): string[] {
+function seatOwnerKeys(rosterId: string, ownerKey: string | null, ...otherKeys: Array<string | null | undefined>): string[] {
+  // A second team's manager id is also the primary team's season owner. Only move this team's rows.
+  const owners = isExtraTeamOwnerKey(ownerKey) ? [ownerKey] : [ownerKey, ...otherKeys]
   const keys = new Set<string>([`roster:${rosterId}`])
   for (const owner of owners) {
     const trimmed = String(owner ?? '').trim()
@@ -155,6 +171,7 @@ export async function assignLeagueSeat(
   if (!user) return { ok: false, code: 'USER_NOT_FOUND', message: 'That user does not exist.' }
 
   const previousOwner = roster.platformUserId
+  const previousManager = rosterManagerKey(roster)
   const alreadyHeld = isRosterManagedBy(roster, userId)
   // The key this team is stored under: the manager's user id, or a key of its own for a further team.
   let ownerKey = alreadyHeld ? previousOwner : userId
@@ -162,7 +179,7 @@ export async function assignLeagueSeat(
     const previousIsPerson = previousOwner
       ? Boolean(await tx.appUser.findUnique({ where: { id: previousOwner }, select: { id: true } }))
       : false
-    if (previousIsPerson && !args.replaceExisting) {
+    if ((roster.managerUserId || previousIsPerson) && !args.replaceExisting) {
       return { ok: false, code: 'ROSTER_TAKEN', message: 'That team is already claimed.' }
     }
     const other = await tx.roster.findFirst({
@@ -202,6 +219,7 @@ export async function assignLeagueSeat(
     select: { id: true, platformUserId: true, claimedByUserId: true, teamName: true, avatarUrl: true },
   })
 
+  const previousKeys = seatOwnerKeys(rosterId, previousOwner, team?.platformUserId, team?.claimedByUserId)
   const claimed = await tx.roster.updateMany({
     where: { id: rosterId, leagueId, platformUserId: previousOwner },
     data: {
@@ -224,8 +242,12 @@ export async function assignLeagueSeat(
   // Another claim may have committed after the ownership read. Never overwrite it.
   if (claimed.count !== 1) return { ok: false, code: 'ROSTER_TAKEN', message: 'That team is already claimed.' }
 
+  if (native && !alreadyHeld && team?.claimedByUserId && args.replaceExisting) {
+    await tx.leagueManagerClaim.deleteMany({ where: { leagueId, teamExternalId: rosterId, afUserId: team.claimedByUserId } })
+  }
+
   // A native open team takes its manager's name; an imported team keeps the name its league gave it.
-  const teamName = wasOpenTeam || !team?.teamName ? `${name}'s Team` : team.teamName
+  const teamName = (wasOpenTeam && !foundation.carriedOverFromLeagueId) || !team?.teamName ? `${name}'s Team` : team.teamName
   if (team) {
     await tx.leagueTeam.update({
       where: { id: team.id },
@@ -317,14 +339,13 @@ export async function assignLeagueSeat(
     update: teamNumber != null ? { teamNumber } : {},
   })
 
-  if (!alreadyHeld && previousOwner && args.replaceExisting && previousOwner !== league.userId) {
-    // The replaced person no longer holds a seat here.
-    await tx.redraftLeagueMember.deleteMany({ where: { leagueId, userId: previousOwner } })
+  if (!alreadyHeld && previousManager && args.replaceExisting) {
+    await updateMembershipAfterSeatLoss(tx, leagueId, previousManager, league.userId)
   }
 
   await moveSeasonOwnership(tx, {
     leagueId,
-    fromKeys: seatOwnerKeys(rosterId, previousOwner, team?.platformUserId, team?.claimedByUserId),
+    fromKeys: previousKeys,
     ownerId: ownerKey,
     managerUserId: userId,
     ownerName: name,
@@ -346,11 +367,12 @@ export async function releaseLeagueSeat(
   const { leagueId, rosterId } = args
   const [league, roster] = await Promise.all([
     tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
-    tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
+    tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, managerUserId: true, playerData: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND' }
 
   const previousOwner = roster.platformUserId || null
+  const previousManager = rosterManagerKey(roster)
   const vacantId = `orphan-${rosterId}`
   const native = isNativePlatform(league.platform)
   const playerData = asRecord(roster.playerData)
@@ -361,6 +383,7 @@ export async function releaseLeagueSeat(
     select: { id: true, platformUserId: true, claimedByUserId: true },
   })
 
+  const previousKeys = seatOwnerKeys(rosterId, previousOwner, team?.platformUserId, team?.claimedByUserId)
   await tx.roster.update({
     where: { id: rosterId },
     data: {
@@ -377,6 +400,9 @@ export async function releaseLeagueSeat(
     },
   })
   if (team) {
+    if (native && team.claimedByUserId) {
+      await tx.leagueManagerClaim.deleteMany({ where: { leagueId, teamExternalId: rosterId, afUserId: team.claimedByUserId } })
+    }
     await tx.leagueTeam.update({
       where: { id: team.id },
       data: {
@@ -405,24 +431,17 @@ export async function releaseLeagueSeat(
     }
   }
 
-  if (previousOwner) {
-    if (previousOwner === league.userId) {
-      // The commissioner keeps the league; they just no longer hold a team.
-      await tx.redraftLeagueMember.updateMany({ where: { leagueId, userId: previousOwner }, data: { teamNumber: null } })
-    } else {
-      await tx.redraftLeagueMember.deleteMany({ where: { leagueId, userId: previousOwner } })
-    }
-  }
+  if (previousManager) await updateMembershipAfterSeatLoss(tx, leagueId, previousManager, league.userId)
 
   // `roster:<id>` is the season key for a seat nobody holds; the next assignment moves it on.
   await moveSeasonOwnership(tx, {
     leagueId,
-    fromKeys: seatOwnerKeys(rosterId, previousOwner, team?.platformUserId, team?.claimedByUserId).filter(
+    fromKeys: previousKeys.filter(
       (k) => k !== `roster:${rosterId}`,
     ),
     ownerId: `roster:${rosterId}`,
     ownerName: 'Open team',
   })
 
-  return { ok: true, previousOwner }
+  return { ok: true, previousOwner: previousManager }
 }

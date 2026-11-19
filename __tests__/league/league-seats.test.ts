@@ -94,6 +94,7 @@ function nativeLeague() {
         settings: { openSlot: true, aiManaged: false },
       })),
     ]),
+    leagueManagerClaim: table([]),
     leagueTeam: table([
       { id: 't1', leagueId: 'L', externalId: 'r1', claimedByUserId: 'commish', platformUserId: 'commish', isCommissioner: true, isCoCommissioner: false, role: 'commissioner', isOrphan: false, teamName: "Commish's Team" },
       ...[2, 3, 4].map((n) => ({
@@ -149,6 +150,18 @@ describe('assignLeagueSeat', () => {
     expect(db.draftSession.rows[0].slotOrder[1]).toMatchObject({ rosterId: 'r3', displayName: 'Open Team 3', open: true })
     expect((await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })).ok).toBe(true)
     expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
+  })
+
+  it('releases one token claim while keeping the same manager’s other claim and membership', async () => {
+    const db = nativeLeague()
+    db.league.rows[0].settings = { allow_multi_team_managers: true }
+    for (const rosterId of ['r2', 'r3']) {
+      expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId, userId: 'amy' })).ok).toBe(true)
+      db.leagueManagerClaim.rows.push({ leagueId: 'L', teamExternalId: rosterId, afUserId: 'amy' })
+    }
+    await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })
+    expect(db.leagueManagerClaim.rows.map((claim: Row) => claim.teamExternalId)).toEqual(['r3'])
+    expect(db.redraftLeagueMember.rows).toContainEqual(expect.objectContaining({ userId: 'amy', teamNumber: 3 }))
   })
 
   it('leaves a draft that has started alone', async () => {
@@ -323,4 +336,18 @@ describe('releaseLeagueSeat', () => {
     await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'ben' })
     expect(db.redraftRoster.rows.find((r: Row) => r.id === 'rr2').ownerId).toBe('ben')
   })
+})
+
+it('counts every held franchise and preserves the manager’s other team when one is released', async () => {
+  const db = nativeLeague()
+  db.league.rows[0].settings = { allow_multi_team_managers: true }
+  for (const rosterId of ['r2', 'r3']) {
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId, userId: 'amy' })).ok).toBe(true)
+  }
+  expect(await countSeatsHeldByPeople(db, 'L')).toBe(3)
+  expect((await countSeatsHeldByPeopleByLeague(db, ['L'])).get('L')).toBe(3)
+  await releaseLeagueSeat(db, {leagueId: 'L', rosterId: 'r3'})
+  expect(db.redraftRoster.rows.find((r: Row) => r.id === 'rr2')?.ownerId).toBe('amy')
+  expect(db.redraftLeagueMember.rows.find((r: Row) => r.userId === 'amy')?.teamNumber).toBe(2)
+  expect(await countSeatsHeldByPeople(db, 'L')).toBe(2)
 })

@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
@@ -118,7 +119,7 @@ async function notifyEliminationVoids(input: {
     const rosterIds = [...new Set([input.rosterId, ...voided.flatMap((p) => tradeParticipantRosterIds(p))])]
     const rows = await prisma.redraftRoster.findMany({
       where: { id: { in: rosterIds } },
-      select: { id: true, ownerId: true, teamName: true, ownerName: true },
+      select: { id: true, ownerId: true, managerUserId: true, teamName: true, ownerName: true },
     })
     const byId = new Map(rows.map((r) => [r.id, r]))
     const nameOf = (id: string) => {
@@ -133,7 +134,7 @@ async function notifyEliminationVoids(input: {
       const multiTeam = isMultiTeamTrade(p)
       const others = participants
         .filter((id) => id !== input.rosterId)
-        .map((id) => byId.get(id)?.ownerId)
+        .map((id) => seasonRosterManagerId(byId.get(id)))
       notifyMultiTeamTradeParties({
         proposalId: p.id,
         leagueId: p.leagueId ?? input.leagueId,

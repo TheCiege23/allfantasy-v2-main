@@ -1,3 +1,5 @@
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
+import { multiTeamManagersSupported } from '@/lib/league/multiTeamManagers'
 import { IMPORTED_POINTS_AGAINST_KEY, importedPointsAgainstSnapshot } from './importedPointsAgainst'
 import { randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
@@ -767,7 +769,7 @@ export async function confirmOrTakeOverUnprovenClaim(args: {
     })) as { id: string; externalId: string; claimedByUserId: string } | null
     if (!held) return null
     holderClaim = (await (prisma as any).leagueManagerClaim.findFirst({
-      where: { leagueId, afUserId: held.claimedByUserId, isConfirmed: false },
+      where: { leagueId, afUserId: held.claimedByUserId, teamExternalId: held.externalId, isConfirmed: false },
       select: { id: true, teamExternalId: true },
     })) as { id: string; teamExternalId: string } | null
   } catch {
@@ -792,7 +794,7 @@ export async function confirmOrTakeOverUnprovenClaim(args: {
     await prisma.$transaction(async (tx: any) => {
       // This caller's own unconfirmed pick elsewhere in the league, if any, is released first.
       const ownPick = await tx.leagueManagerClaim.findFirst({
-        where: { leagueId, afUserId: userId },
+        where: { leagueId, afUserId: userId, claimSlot: 'primary' },
         select: { id: true, teamExternalId: true, isConfirmed: true },
       })
       if (ownPick?.isConfirmed) throw new Error('caller already holds a confirmed team in this league')
@@ -837,7 +839,7 @@ export async function confirmOrTakeOverUnprovenClaim(args: {
  * Mirrors `app/api/league/invite/claim/route.ts` deliberately rather than introducing a
  * second definition of "claim a team" — same target column (`LeagueTeam.claimedByUserId`),
  * same audit row (`LeagueManagerClaim`), same uniqueness the invite path already relies on
- * (`@@unique([leagueId, afUserId])`, `@@unique([leagueId, teamExternalId])`). Two definitions
+ * (one primary claim per manager, `@@unique([leagueId, teamExternalId])`). Two definitions
  * of what a claim means would drift, and the one difference that matters — invite requires a
  * token, this requires a provider-proven manager id — is upstream of this function, not in it.
  *
@@ -865,9 +867,40 @@ export async function claimExistingLeagueForMember(args: {
     },
     // Oldest first: with several copies already present, always the same one, never an arbitrary pick.
     orderBy: { createdAt: 'asc' },
-    select: { id: true, name: true, sport: true },
+    select: { id: true, name: true, sport: true, ...(provider === 'fantrax' ? { leagueType: true, leagueVariant: true, settings: true } : {}) },
   })
   if (!otherLeague) return null
+
+  if (provider === 'fantrax' && multiTeamManagersSupported(otherLeague)) {
+    // The commissioner gate supplied this provider identity. Claim every franchise it proves in one transaction.
+    const claimed = await prisma.$transaction(async (tx) => {
+      const available = await tx.leagueTeam.findMany({
+        where: { leagueId: otherLeague.id, platformUserId: sourceManagerId, claimedByUserId: null },
+        orderBy: { externalId: 'asc' }, select: { id: true, externalId: true },
+      })
+      if (!available.length) return false
+      const prior = await tx.leagueManagerClaim.findFirst({ where: { leagueId: otherLeague.id, afUserId: userId }, select: { id: true } })
+      const changed = await tx.leagueTeam.updateMany({
+        where: { id: { in: available.map(team => team.id) }, claimedByUserId: null },
+        data: { claimedByUserId: userId, isOrphan: false },
+      })
+      if (changed.count !== available.length) throw new Error('Fantrax team ownership changed. Refresh the import and retry.')
+      const teamIds = new Set(available.map(team => team.externalId))
+      const rosters = await tx.roster.findMany({ where: { leagueId: otherLeague.id }, select: { id: true, playerData: true } })
+      const rosterIds = rosters.filter(roster => teamIds.has(rosterSourceTeamId(roster.playerData) ?? '')).map(roster => roster.id)
+      if (rosterIds.length) await tx.roster.updateMany({ where: { id: { in: rosterIds } }, data: { managerUserId: userId } })
+      await tx.leagueManagerClaim.createMany({ data: available.map((team, index) => ({
+        leagueId: otherLeague.id, afUserId: userId, teamExternalId: team.externalId,
+        claimSlot: !prior && index === 0 ? 'primary' : 'team:' + team.externalId,
+        platformUserId: sourceManagerId, isConfirmed: true,
+      })) })
+      return true
+    })
+    if (claimed) return {
+      league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
+      historicalBackfill: null, existed: false, joinedExisting: true, incompleteSteps: [],
+    }
+  }
 
   /*
    * `platformUserId` is the column every provider's roster mapper already writes with the
@@ -950,7 +983,7 @@ export async function claimExistingLeagueForMember(args: {
     ])
   } catch (err) {
     /*
-     * `@@unique([leagueId, afUserId])` / `@@unique([leagueId, teamExternalId])` on
+     * The primary-claim unique key / `@@unique([leagueId, teamExternalId])` on
      * LeagueManagerClaim can lose a genuine CONCURRENT race — this request and the invite
      * path (or two of these) both passing the `team` lookup above before either commits. A
      * simple repeat click by the same user is handled above, before this transaction ever

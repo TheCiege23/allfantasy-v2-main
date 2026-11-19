@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 /**
  * Executes accepted redraft trades whose review window ended with no veto (./tradeReviewWindow.ts).
  * Hourly, from `/api/redraft/waiver-process` beside the offer-expiry sweep.
@@ -70,9 +71,9 @@ export async function processDueTradeReviews(opts?: { limit?: number; now?: Date
       const owners = await prisma.redraftRoster.findMany({
         // Every team in the trade; for two teams this is the proposer and the receiver, as before.
         where: { id: { in: tradeParticipantRosterIds(proposal) } },
-        select: { id: true, ownerId: true },
+        select: { id: true, ownerId: true, managerUserId: true },
       })
-      const ownerOf = (id: string) => owners.find((o) => o.id === id)?.ownerId ?? undefined
+      const ownerOf = (id: string) => seasonRosterManagerId(owners.find((o) => o.id === id))
       const settled = await finalizeRedraftTrade(
         proposal,
         ownerOf(proposal.proposerRosterId),

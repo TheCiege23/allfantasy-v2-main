@@ -131,12 +131,13 @@ function buildTx() {
     redraftLeagueSportIntegration: { create: ok('si') },
     redraftLeagueChatRoom: { create: ok('chat') },
     roster: {
+      createMany: vi.fn(async ({ data }) => ({ count: data.length })),
       create: vi.fn().mockImplementation(async (args?: Obj) => {
         n += 1
         return { id: `roster-${n}`, platformUserId: args?.data?.platformUserId ?? `p-${n}` }
       }),
     },
-    leagueTeam: { create: vi.fn().mockImplementation(async () => ({ id: `team-${++n}` })) },
+    leagueTeam: { createMany: vi.fn(async ({ data }) => ({ count: data.length })), create: vi.fn().mockImplementation(async () => ({ id: `team-${++n}` })) },
     redraftLeagueMember: { create: ok('m') },
     leagueEntrySlot: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     draftSession: { create: ok('ds') },
@@ -231,7 +232,7 @@ describe('the settings PATCH', () => {
     m.prisma.redraftSeason.findFirst.mockResolvedValue(null)
     m.prisma.redraftPlayoffRound.findFirst.mockResolvedValue(null)
   })
-  const wroteStart = () => m.prisma.league.update.mock.calls.some(([a]: [Obj]) => 'playoffStartWeek' in a.data)
+  const wroteStart = () => m.prisma.league.update.mock.calls.some(([a]) => 'playoffStartWeek' in a.data)
 
   it('NHL redraft, playoffs from week 26 (a 25-week regular season): 400, nothing written', async () => {
     const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffStartWeek: 26 })

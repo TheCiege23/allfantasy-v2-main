@@ -47,6 +47,12 @@ describe('redraft waiver results reach the manager', () => {
     )
   })
 
+  it('addresses a second franchise’s result to the manager account', async () => {
+    db.redraftRoster.findMany.mockResolvedValue([{ id: 'rr-chopped', ownerId: 'mgr:u-ann:team-2', managerUserId: 'u-ann' }])
+    await processWaiverWindow('L1', 's1')
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['u-ann'] })))
+  })
+
   it('🛑 a failed owner read costs the alert, never the run', async () => {
     db.redraftRoster.findMany.mockRejectedValue(new Error('db down'))
     const results = await processWaiverWindow('L1', 's1')

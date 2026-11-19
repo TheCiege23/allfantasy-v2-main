@@ -2,10 +2,8 @@
  * "A manager may run more than one team": a commissioner's opt-in for leagues where one person runs
  * several franchises.
  *
- * Each team still belongs to its own AllFantasy account (a roster has one owner per league). With the
- * setting off, a person whose other account already holds a team is refused a second one. With it on,
- * that refusal is lifted for this league, so a manager can take another team under another account.
- * Stored on `League.settings.allow_multi_team_managers`; only a stored `true` counts as on.
+ * Every franchise has a distinct roster key. When enabled, the same AllFantasy account may hold
+ * several of those rosters. Stored on `League.settings.allow_multi_team_managers`.
  */
 
 export const ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY = 'allow_multi_team_managers' as const

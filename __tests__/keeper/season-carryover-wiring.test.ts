@@ -103,12 +103,11 @@ function arrangeShellCreation() {
     medianGame: false,
   })
   mockTxRedraftSeasonCreate.mockResolvedValueOnce({ id: 'season-2' })
-  mockTxRedraftRosterCreate.mockImplementation(async ({ data }: { data: { ownerId: string } }) => ({ id: `r-${data.ownerId}` }))
   mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => unknown) =>
     cb({
       redraftSeason: { create: mockTxRedraftSeasonCreate },
-      redraftRoster: { create: mockTxRedraftRosterCreate },
-      redraftMatchup: { create: mockTxRedraftMatchupCreate },
+      redraftRoster: { createMany: mockTxRedraftRosterCreate },
+      redraftMatchup: { createMany: mockTxRedraftMatchupCreate },
       league: { update: mockTxLeagueUpdate },
     }),
   )
@@ -125,7 +124,7 @@ describe('ensureNextRedraftSeasonShell — team identity carries across seasons'
 
     await ensureNextRedraftSeasonShell('league-1', 'season-1')
 
-    const owners = mockTxRedraftRosterCreate.mock.calls.map((c) => c[0].data.ownerId)
+    const owners = mockTxRedraftRosterCreate.mock.calls[0][0].data.map((row: { ownerId: string }) => row.ownerId)
     expect(owners).toEqual(['commish-1', 'roster:R-2'])
   })
 
@@ -144,7 +143,7 @@ describe('ensureNextRedraftSeasonShell — team identity carries across seasons'
 
     await ensureNextRedraftSeasonShell('league-1', 'season-1')
 
-    const owners = mockTxRedraftRosterCreate.mock.calls.map((c) => c[0].data.ownerId)
+    const owners = mockTxRedraftRosterCreate.mock.calls[0][0].data.map((row: { ownerId: string }) => row.ownerId)
     expect(owners).toEqual(['commish-1', 'roster:R-2'])
     expect(new Set(owners).size).toBe(owners.length)
   })
@@ -177,16 +176,15 @@ describe('ensureNextRedraftSeasonShell', () => {
       userId: 'commish-1',
       teams: [
         { claimedByUserId: 'user-a', ownerName: 'A', teamName: 'Team A', avatarUrl: null },
-        { claimedByUserId: null, ownerName: 'B (commish)', teamName: 'Team B', avatarUrl: null },
+        { id: 'team-b', externalId: 'R-2', claimedByUserId: null, ownerName: 'Open', teamName: 'Team B', avatarUrl: null },
       ],
     })
     mockTxRedraftSeasonCreate.mockResolvedValueOnce({ id: 'season-2' })
-    mockTxRedraftRosterCreate.mockResolvedValueOnce({ id: 'r1' }).mockResolvedValueOnce({ id: 'r2' })
     mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => unknown) =>
       cb({
         redraftSeason: { create: mockTxRedraftSeasonCreate },
-        redraftRoster: { create: mockTxRedraftRosterCreate },
-        redraftMatchup: { create: mockTxRedraftMatchupCreate },
+        redraftRoster: { createMany: mockTxRedraftRosterCreate },
+        redraftMatchup: { createMany: mockTxRedraftMatchupCreate },
         league: { update: mockTxLeagueUpdate },
       }),
     )
@@ -197,15 +195,10 @@ describe('ensureNextRedraftSeasonShell', () => {
     expect(mockTxRedraftSeasonCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ leagueId: 'league-1', season: 2025, status: 'setup', sport: 'nfl' }),
     })
-    expect(mockTxRedraftRosterCreate).toHaveBeenCalledTimes(2)
-    expect(mockTxRedraftRosterCreate).toHaveBeenNthCalledWith(1, {
-      data: expect.objectContaining({ seasonId: 'season-2', ownerId: 'user-a' }),
-    })
-    // Unclaimed team falls back to the league owner, preserving the same
-    // ownership rule the (frontend-uncalled) POST /api/redraft/season route uses.
-    expect(mockTxRedraftRosterCreate).toHaveBeenNthCalledWith(2, {
-      data: expect.objectContaining({ seasonId: 'season-2', ownerId: 'commish-1' }),
-    })
+    expect(mockTxRedraftRosterCreate).toHaveBeenCalledWith({ data: [
+      expect.objectContaining({ seasonId: 'season-2', ownerId: 'user-a' }),
+      expect.objectContaining({ seasonId: 'season-2', ownerId: 'roster:R-2', managerUserId: null }),
+    ] })
     expect(mockTxLeagueUpdate).toHaveBeenCalledWith({ where: { id: 'league-1' }, data: { season: 2025 } })
   })
 })

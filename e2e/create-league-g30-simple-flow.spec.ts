@@ -83,7 +83,7 @@ async function installCreateLeagueFetchStub(page: Page) {
 }
 
 async function openCreate(page: Page) {
-  await page.goto('/create-league?e2eAuth=1')
+  await page.goto('/create-league?e2eAuth=1', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('g30-create-league-wizard')).toBeVisible({ timeout: 30_000 })
 }
 

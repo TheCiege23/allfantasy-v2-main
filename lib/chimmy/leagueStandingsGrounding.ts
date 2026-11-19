@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -20,21 +21,8 @@ import { prisma } from '@/lib/prisma'
  * game has been played this block says so in words and lists no records at all.
  */
 
-/** A full league fits comfortably; beyond this the prompt is being abused. */
-/**
- * ⚠ THIS CAP WAS BEING REPORTED AS THE LEAGUE SIZE. The header line said
- * `${rows.length} teams`, and rows.length is whatever `take` returned — so
- * KBFL, a 32-team dynasty league, was described to its own commissioner as
- * "20 teams". A confident, precise number produced entirely by a LIMIT clause.
- *
- * 40 covers the large dynasty and guillotine formats this platform actually
- * hosts (32-team is not rare here). The real defence is not the number though:
- * the true total is now counted separately and any truncation is stated, so a
- * cap can never again be mistaken for a fact.
- */
-const MAX_MANAGERS = 40
-
 type RosterRow = {
+  managerUserId?: string | null
   ownerId: string
   ownerName: string
   teamName: string | null
@@ -94,9 +82,10 @@ export async function buildLeagueStandingsContext(
   try {
     rows = (await prisma.redraftRoster.findMany({
       where: { seasonId: season.id },
-      take: MAX_MANAGERS,
+      take: MAX_NATIVE_TEAMS,
       select: {
         ownerId: true,
+        managerUserId: true,
         ownerName: true,
         teamName: true,
         wins: true,
@@ -128,7 +117,7 @@ export async function buildLeagueStandingsContext(
     totalTeams = rows.length
   }
 
-  const viewer = rows.find((r) => r.ownerId === userId) ?? null
+  const viewerTeams = rows.filter((r) => r.ownerId === userId || r.managerUserId === userId)
   const lines: string[] = [
     `LEAGUE STANDINGS AND MANAGERS — ${season.season} season, ${totalTeams} teams in the league.`,
   ]
@@ -160,7 +149,7 @@ export async function buildLeagueStandingsContext(
           .join(', ')}.`,
       )
     }
-    if (viewer) {
+    for (const viewer of viewerTeams) {
       lines.push(
         `This user manages ${viewer.teamName ?? viewer.ownerName}${
           viewer.faabBalance != null ? ` (FAAB ${viewer.faabBalance})` : ''
@@ -191,7 +180,7 @@ export async function buildLeagueStandingsContext(
   lines.push(`Standings (use ONLY these numbers; do not compute your own${complete ? '; PF/PA rank in brackets, PA #1 = faced the most points' : ''}):`)
   for (const r of sorted) {
     const ranks = pfRank && paRank ? { pf: pfRank.get(r.ownerId) ?? 0, pa: paRank.get(r.ownerId) ?? 0 } : null
-    lines.push(describeManager(r, viewer?.ownerId === r.ownerId, ranks))
+    lines.push(describeManager(r, r.managerUserId === userId || r.ownerId === userId, ranks))
   }
 
   if (complete && sorted.length > 1) {
@@ -207,13 +196,14 @@ export async function buildLeagueStandingsContext(
     lines.push(`KEY FACTS: ${facts.join(' ')}`)
   }
 
-  if (viewer) {
+  for (const viewer of viewerTeams) {
     lines.push(
       `THIS USER manages ${viewer.teamName ?? viewer.ownerName}: ${viewer.wins}-${viewer.losses}${
         viewer.ties > 0 ? `-${viewer.ties}` : ''
       }, ${viewer.pointsFor.toFixed(1)} points for.`,
     )
-  } else {
+  }
+  if (!viewerTeams.length && complete) {
     // Better to say it than to let the model pick a team and call it theirs.
     lines.push(
       'This user does not hold a team in this league, so do not attribute any of the above rosters to them.',

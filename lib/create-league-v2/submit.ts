@@ -9,7 +9,7 @@
 import { isSurvivorTwistPresetId, SURVIVOR_TWIST_PRESET_DEFAULT } from '@/lib/survivor/survivorTwistPresets'
 import type { CreateLeagueV2State } from './state'
 import { getDefaultKeeperSetup } from './state'
-import { getEffectiveLeagueType, isFootballLike, isDynastyConcept, resolveBestBallSetupForWizard } from './state'
+import { getEffectiveLeagueType, isDynastyConcept, resolveBestBallSetupForWizard } from './state'
 import { finalizeCanonicalCreatePayload } from '@/lib/league-creation/normalizeCreateLeaguePayload'
 import { resolveEffectiveDraftType, isThirdRoundReversalAvailable } from '@/lib/create-league-v2/rules-engine'
 import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
@@ -71,6 +71,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   const concept = state.idpSelected ? 'idp' : lt
 
   const conceptSetup: Record<string, unknown> = {
+    ...((lt === 'redraft' || lt === 'dynasty') && state.allowMultiTeamManagers ? { allowMultiTeamManagers: true } : {}),
     visibility: state.privacy,
     isPublic: state.privacy === 'public',
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
@@ -121,7 +122,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       if (typeof cents === 'number') conceptSetup.survivorEntryFeeAmountCents = cents
     }
   }
-  if (isFootballLike(state.sport) && state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
+  if (state.thirdRoundReversal && isThirdRoundReversalAvailable(state.draftType)) {
     conceptSetup.thirdRoundReversal = true
   }
   if (isDynastyConcept(lt) && state.dynasty) {

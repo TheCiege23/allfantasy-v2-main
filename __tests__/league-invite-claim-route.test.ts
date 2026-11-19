@@ -88,6 +88,7 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(async () => []),
     },
     platformIdentity: {
+      findFirst: vi.fn(async () => ({ id: 'verified' })),
       findMany: platformIdentityFindManyMock,
     },
     yahooConnection: {
@@ -338,6 +339,7 @@ describe('POST /api/league/invite/claim', () => {
 
     const res = await POST(req as any)
     expect(res.status).toBe(200)
+    expect(transactionMock).toHaveBeenCalledWith(expect.any(Function), { maxWait: 15_000, timeout: 25_000 })
     expect(assignLeagueSeatMock).toHaveBeenCalledWith(expect.anything(), {
       leagueId: 'league-1',
       rosterId: 'roster-3',
@@ -345,6 +347,37 @@ describe('POST /api/league/invite/claim', () => {
     })
     // The imported branch's roster lookup by sourceTeamId is not what decides a native claim.
     expect(rosterFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it('allows a retry for an already held team after the final invite use', async () => {
+    leagueInviteFindFirstMock.mockResolvedValue({
+      id: 'last-invite', leagueId: 'league-1', maxUses: 1, useCount: 1, expiresAt: null,
+      league: { platform: 'fantrax', settings: {} },
+    })
+    leagueTeamFindFirstMock.mockResolvedValue({ claimedByUserId: 'af-user-1' })
+    expect((await claim({ token: 'token', teamExternalId: 'last-team' })).status).toBe(200)
+    leagueTeamFindFirstMock.mockResolvedValue({ claimedByUserId: null })
+    expect((await claim({ token: 'token', teamExternalId: 'open-team' })).status).toBe(410)
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
+
+  it('records a provider-matched second Fantrax team without reusing the primary team key', async () => {
+    leagueInviteFindFirstMock.mockResolvedValue({
+      id: 'invite', leagueId: 'league-1', useCount: 2, maxUses: 250, expiresAt: null,
+      league: { platform: 'fantrax', leagueType: 'redraft', settings: {} },
+    })
+    rosterFindFirstMock.mockResolvedValue({ id: 'first-roster' })
+    platformIdentityFindManyMock.mockResolvedValue([{ platformUserId: 'verified-manager' }])
+    leagueTeamFindFirstMock.mockResolvedValue({ id: 'second-team', externalId: 'second',
+      platformUserId: 'verified-manager', claimedByUserId: null, isOrphan: false })
+    rosterFindManyMock.mockResolvedValue([{ id: 'second-roster', playerData: { source_team_id: 'second' } }])
+    expect((await claim({ token: 'token', teamExternalId: 'second' })).status).toBe(200)
+    expect(rosterUpdateMock).toHaveBeenCalledWith(expect.objectContaining({data: expect.objectContaining({
+      managerUserId: 'af-user-1', platformUserId: 'mgr:af-user-1:second-roster',
+    })}))
+    expect(leagueManagerClaimCreateMock).toHaveBeenCalledWith({data: expect.objectContaining({
+      afUserId: 'af-user-1', teamExternalId: 'second', claimSlot: 'team:second',
+    })})
   })
 
   it('refuses a second team to someone who already holds one', async () => {

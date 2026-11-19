@@ -1,4 +1,6 @@
-import { readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
+import { extraTeamOwnerKey, managedRosterWhere } from '@/lib/league/rosterManager'
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
+import { multiTeamManagersSupported, readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
@@ -18,6 +20,18 @@ const claimSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
+  try {
+    return await claimTeam(req)
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : null
+    if (code === 'P2002' || code === 'P2025') {
+      return NextResponse.json({ error: 'This invite or team changed. Refresh the invite to see the current seats.' }, { status: 409 })
+    }
+    throw error
+  }
+}
+
+async function claimTeam(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const userId = session?.user?.id
 
@@ -41,6 +55,9 @@ export async function POST(req: NextRequest) {
         select: {
           id: true,
           platform: true,
+          settings: true,
+          leagueType: true,
+          leagueVariant: true,
         },
       },
     },
@@ -54,10 +71,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invite expired' }, { status: 410 })
   }
 
-  if (invite.useCount >= invite.maxUses) {
-    return NextResponse.json({ error: 'Invite expired' }, { status: 410 })
-  }
-
   const team = await prisma.leagueTeam.findFirst({
     where: {
       leagueId: invite.leagueId,
@@ -65,6 +78,10 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  if (team?.claimedByUserId === userId) return NextResponse.json({ ok: true, leagueId: invite.leagueId })
+  if (invite.useCount >= invite.maxUses) {
+    return NextResponse.json({ error: 'Invite expired' }, { status: 410 })
+  }
   if (!team) {
     return NextResponse.json({ error: 'Team not found' }, { status: 404 })
   }
@@ -104,15 +121,19 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  if (existingClaim) {
-    return NextResponse.json({ error: 'You already have a team in this league' }, { status: 409 })
-  }
-
   const heldRoster = await prisma.roster.findFirst({
-    where: { leagueId: invite.leagueId, platformUserId: userId },
+    where: managedRosterWhere(invite.leagueId, userId),
     select: { id: true },
   })
-  if (heldRoster) {
+  const additionalTeam = Boolean(heldRoster || existingClaim)
+  const multiTeamEnabled = multiTeamManagersSupported(invite.league) && readAllowMultiTeamManagers(invite.league.settings)
+  // Fantrax may omit its multi-manager flag. A provider-matched account can reclaim its other franchise.
+  const provenFantraxTeam = additionalTeam && !multiTeamEnabled && invite.league.platform === 'fantrax' &&
+    eligibility === 'matched' && multiTeamManagersSupported(invite.league) && team.platformUserId != null &&
+    await prisma.platformIdentity.findFirst({
+      where: { userId, platform: 'fantrax', platformUserId: team.platformUserId, isVerified: true }, select: { id: true },
+    })
+  if (additionalTeam && !multiTeamEnabled && !provenFantraxTeam) {
     return NextResponse.json({ error: 'You already have a team in this league' }, { status: 409 })
   }
 
@@ -146,7 +167,10 @@ export async function POST(req: NextRequest) {
       { status: gate.code === 'LEAGUE_NOT_FOUND' ? 404 : 402 },
     )
 
-  const nextUseCount = invite.useCount + 1
+  const redeemInvite = {
+    where: { id: invite.id, isActive: true, useCount: { lt: invite.maxUses }, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+    data: { useCount: { increment: 1 } },
+  }
 
   /**
    * A team in a league created on AllFantasy is keyed by its roster id (`LeagueTeam.externalId`),
@@ -160,23 +184,21 @@ export async function POST(req: NextRequest) {
       const paid = await assertPaidJoinAllowed({ leagueId: invite.leagueId, userId, tx })
       if (!paid.ok) return { ok: false as const, code: paid.code, message: paid.message, payment: true as const }
       const seat = await assignLeagueSeat(tx, { leagueId: invite.leagueId, rosterId: teamExternalId, userId })
-      if (!seat.ok) return seat
+      if (!seat.ok || seat.alreadyHeld) return seat
       await linkDuesToRoster({ leagueId: invite.leagueId, userId, rosterId: seat.rosterId, tx })
       await tx.leagueManagerClaim.create({
         data: {
           leagueId: invite.leagueId,
           afUserId: userId,
+          ...(additionalTeam ? { claimSlot: 'team:' + teamExternalId } : {}),
           teamExternalId,
           platformUserId: userId,
           isConfirmed: true,
         },
       })
-      await tx.leagueInvite.update({
-        where: { id: invite.id },
-        data: { useCount: { increment: 1 }, isActive: nextUseCount < invite.maxUses },
-      })
+      await tx.leagueInvite.update(redeemInvite)
       return seat
-    })
+    }, { maxWait: 15_000, timeout: 25_000 })
     if (!result.ok) {
       if ('payment' in result) return refusePayment(result)
       const status = result.code === 'ROSTER_NOT_FOUND' ? 404 : 409
@@ -192,19 +214,14 @@ export async function POST(req: NextRequest) {
     where: { leagueId: invite.leagueId },
     select: { id: true, platformUserId: true, playerData: true },
   })
-  const rosterToClaim = rosters.find((roster) => {
-    const playerData = roster.playerData as Record<string, unknown> | null
-    const importData =
-      playerData && typeof playerData.import === 'object' && playerData.import
-        ? (playerData.import as Record<string, unknown>)
-        : null
-    const sourceTeamId = typeof importData?.sourceTeamId === 'string' ? importData.sourceTeamId.trim() : ''
-    return sourceTeamId === teamExternalId
-  })
+  const rosterToClaim = rosters.find((roster) => rosterSourceTeamId(roster.playerData) === teamExternalId)
+  if (additionalTeam && !rosterToClaim) {
+    return NextResponse.json({ error: 'Refresh the imported roster before claiming another team.' }, { status: 409 })
+  }
 
   await prisma.$transaction([
     prisma.leagueTeam.update({
-      where: { id: team.id },
+      where: { id: team.id, claimedByUserId: null },
       data: {
         claimedByUserId: userId,
         isOrphan: false,
@@ -215,7 +232,8 @@ export async function POST(req: NextRequest) {
           prisma.roster.update({
             where: { id: rosterToClaim.id },
             data: {
-              platformUserId: userId,
+              platformUserId: additionalTeam ? extraTeamOwnerKey(userId, rosterToClaim.id) : userId,
+              managerUserId: userId,
               playerData: {
                 ...((rosterToClaim.playerData as Record<string, unknown> | null) ?? {}),
                 import: {
@@ -232,6 +250,7 @@ export async function POST(req: NextRequest) {
       data: {
         leagueId: invite.leagueId,
         afUserId: userId,
+        ...(additionalTeam ? { claimSlot: 'team:' + teamExternalId } : {}),
         teamExternalId,
         platformUserId: team.platformUserId,
         isConfirmed: true,
@@ -242,13 +261,7 @@ export async function POST(req: NextRequest) {
       create: { leagueId: invite.leagueId, userId, role: 'MEMBER' },
       update: {},
     }),
-    prisma.leagueInvite.update({
-      where: { id: invite.id },
-      data: {
-        useCount: { increment: 1 },
-        isActive: nextUseCount < invite.maxUses,
-      },
-    }),
+    prisma.leagueInvite.update(redeemInvite),
   ])
   if (rosterToClaim) await linkDuesToRoster({ leagueId: invite.leagueId, userId, rosterId: rosterToClaim.id })
 

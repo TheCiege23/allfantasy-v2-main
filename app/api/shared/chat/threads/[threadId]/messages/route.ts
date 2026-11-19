@@ -169,6 +169,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
       const visible = applyBlockedVisibility(messages, blockSet)
       return NextResponse.json({
         status: 'ok',
+        viewerUserId: user.appUserId,
         messages: visible.messages,
         hiddenBlockedCount: visible.hiddenBlockedCount,
       })
@@ -199,6 +200,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
       const visible = applyBlockedVisibility(messages, blockSet)
       return NextResponse.json({
         status: 'ok',
+        viewerUserId: user.appUserId,
         messages: visible.messages,
         hiddenBlockedCount: visible.hiddenBlockedCount,
       })
@@ -223,6 +225,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ threadId:
   const visible = applyBlockedVisibility(messages, blockSet)
   return NextResponse.json({
     status: 'ok',
+    viewerUserId: user.appUserId,
     messages: visible.messages,
     hiddenBlockedCount: visible.hiddenBlockedCount,
   })

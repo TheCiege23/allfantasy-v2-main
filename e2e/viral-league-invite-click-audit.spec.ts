@@ -125,13 +125,8 @@ async function expectReferralMetric(
 }
 
 async function gotoInviteAcceptAndWait(page: Page, code: string, heading: RegExp | string) {
-  const headingLocator = page.getByRole('heading', { name: heading })
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.goto(`/invite/accept?code=${code}`, { waitUntil: 'domcontentloaded' })
-    if (await headingLocator.isVisible().catch(() => false)) return
-    await page.waitForTimeout(300 * (attempt + 1))
-  }
-  await expect(headingLocator).toBeVisible({ timeout: 15_000 })
+  await page.goto(`/invite/accept?code=${code}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 60_000 })
 }
 
 test.describe('@growth viral invite engine click audit', () => {
@@ -382,8 +377,9 @@ test.describe('@growth viral invite engine click audit', () => {
 
     await gotoInviteAcceptAndWait(page, 'VALID142', 'Invite Audit League')
     await page.getByRole('button', { name: 'Accept invite' }).click()
+    await expect(page).toHaveURL(/\/e2e\/viral-league-invite\?joined=1$/, { timeout: 60_000 })
     await expect(page.getByRole('heading', { name: 'Viral Invite Engine Harness' })).toBeVisible({
-      timeout: 15_000,
+      timeout: 60_000,
     })
 
     await gotoInviteAcceptAndWait(page, 'EXPIRED142', 'Expired Invite Audit League')

@@ -84,12 +84,13 @@ function buildTx() {
     redraftLeagueSportIntegration: { create: ok('si') },
     redraftLeagueChatRoom: { create: ok('chat') },
     roster: {
+      createMany: vi.fn(async ({ data }) => ({ count: data.length })),
       create: vi.fn().mockImplementation(async (args?: Obj) => {
         n += 1
         return { id: `roster-${n}`, platformUserId: args?.data?.platformUserId ?? `p-${n}` }
       }),
     },
-    leagueTeam: { create: vi.fn().mockImplementation(async () => ({ id: `team-${++n}` })) },
+    leagueTeam: { createMany: vi.fn(async ({ data }) => ({ count: data.length })), create: vi.fn().mockImplementation(async () => ({ id: `team-${++n}` })) },
     redraftLeagueMember: { create: ok('m') },
     leagueEntrySlot: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     draftSession: { create: ok('ds') },
@@ -289,7 +290,7 @@ describe('the settings PATCH refuses a bracket that outlasts the season', () => 
     m.prisma.redraftSeason.findFirst.mockResolvedValue(null)
     m.prisma.redraftPlayoffRound.findFirst.mockResolvedValue(null)
   })
-  const wrotePlayoffTeams = () => m.prisma.league.update.mock.calls.some(([a]: [Obj]) => 'playoffTeams' in a.data)
+  const wrotePlayoffTeams = () => m.prisma.league.update.mock.calls.some(([a]) => 'playoffTeams' in a.data)
 
   it('12 playoff teams from week 15 on a 17-week NFL season: 400, saying at most 8', async () => {
     const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffTeams: 12 })

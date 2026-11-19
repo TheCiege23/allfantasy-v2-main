@@ -23,11 +23,16 @@ export async function finalizeImportedCarryover(leagueId: string): Promise<{ com
   const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
   await runPostDraftFinalizationArtifacts(leagueId)
 
-  const [season, materializedPlayers] = await Promise.all([
-    prisma.redraftSeason.findFirst({ where: { leagueId }, select: { id: true } }),
-    prisma.redraftRosterPlayer.count({ where: { roster: { leagueId }, droppedAt: null } }),
-  ])
-  const complete = Boolean(season) && materializedPlayers >= expectedPlayers
+  const season = await prisma.redraftSeason.findFirst({
+    where: { leagueId, ...(league.season != null ? { season: league.season } : {}) },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, _count: { select: { rosters: true } } },
+  })
+  const materializedPlayers = season
+    ? await prisma.redraftRosterPlayer.count({ where: { roster: { seasonId: season.id }, droppedAt: null } })
+    : 0
+  const complete = Boolean(season) && materializedPlayers === expectedPlayers &&
+    (carryover.teamCount == null || season?._count.rosters === carryover.teamCount)
   if (complete && (!league.lifecycleState || league.lifecycleState === 'setup' || league.lifecycleState === 'post_draft')) {
     const opener = resolveDailySportSeasonStart(league.sport, league.season)
     const awaitingSeason = league.sport === 'MLB' && (!opener || Date.now() < Date.parse(opener))

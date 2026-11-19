@@ -43,12 +43,13 @@ function buildTx() {
     redraftLeagueChatRoom: { create: ok('chat') },
     bestBallContest: { create: ok('bbc') },
     roster: {
+      createMany: vi.fn(async ({ data }) => ({ count: data.length })),
       create: vi.fn().mockImplementation(async (args?: Obj) => {
         n += 1
         return { id: `roster-${n}`, platformUserId: args?.data?.platformUserId ?? `p-${n}` }
       }),
     },
-    leagueTeam: { create: vi.fn().mockImplementation(async () => ({ id: `team-${++n}` })) },
+    leagueTeam: { createMany: vi.fn(async ({ data }) => ({ count: data.length })), create: vi.fn().mockImplementation(async () => ({ id: `team-${++n}` })) },
     redraftLeagueMember: { create: ok('m') },
     leagueEntrySlot: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     draftSession: { create: ok('ds') },
@@ -68,7 +69,7 @@ async function create(sport: string, bestBall: Obj | null) {
   } as any
   await createCanonicalLeagueInTransaction(tx as any, 'u1', body, runPresetEngine({ ...body, commissionerId: 'u1' }))
   const data = tx.league.create.mock.calls[0][0].data as Obj
-  const update = tx.league.update.mock.calls.find(([a]: [Obj]) => 'playoffStartWeek' in (a.data ?? {}))
+  const update = tx.league.update.mock.calls.find(([a]) => 'playoffStartWeek' in (a.data ?? {}))
   return { data, column: (update ? update[0].data.playoffStartWeek : data.playoffStartWeek) as number | null }
 }
 

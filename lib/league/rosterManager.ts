@@ -33,6 +33,13 @@ export function rosterManagerKey(roster: ManagedRoster): string | null {
   return owner || null
 }
 
+/** A season roster keeps its team-specific owner key while its manager receives actions and messages. */
+export function seasonRosterManagerId(roster: { ownerId: string; managerUserId?: string | null }): string
+export function seasonRosterManagerId(roster: { ownerId?: string | null; managerUserId?: string | null } | null | undefined): string | undefined
+export function seasonRosterManagerId(roster: { ownerId?: string | null; managerUserId?: string | null } | null | undefined) {
+  return roster?.managerUserId ?? roster?.ownerId ?? undefined
+}
+
 /** A `where` for every roster this user runs in a league. */
 export function managedRosterWhere(leagueId: string, userId: string) {
   return { leagueId, OR: [{ platformUserId: userId }, { managerUserId: userId }] }

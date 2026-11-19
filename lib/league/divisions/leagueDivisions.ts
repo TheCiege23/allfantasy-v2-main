@@ -152,8 +152,8 @@ function matchLeagueTeam(
   return (
     teams.find((t) => wanted.has(t.id)) ??
     teams.find((t) => t.externalId != null && wanted.has(t.externalId)) ??
-    teams.find((t) => t.claimedByUserId != null && wanted.has(t.claimedByUserId)) ??
     teams.find((t) => t.platformUserId != null && wanted.has(t.platformUserId)) ??
+    teams.find((t) => t.claimedByUserId != null && wanted.has(t.claimedByUserId)) ??
     null
   )
 }

@@ -178,6 +178,7 @@ export interface CreateLeagueV2State {
   privacy: LeaguePrivacy
   /** Every team also plays the week's median score (`League.medianGame`). */
   medianGame: boolean
+  allowMultiTeamManagers?: boolean
   /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
   guillotineBestBall: boolean
   /** MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Absent = one week. */
@@ -379,6 +380,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   description: '',
   privacy: 'private',
   medianGame: false,
+  allowMultiTeamManagers: false,
   guillotineBestBall: false,
   draftDate: '',
   draftTime: '',

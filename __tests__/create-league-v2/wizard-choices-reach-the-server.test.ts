@@ -128,6 +128,13 @@ describe('soccer can be created', () => {
     vi.restoreAllMocks()
   })
 
+  it('sends a hockey commissioner’s third-round reversal choice to the create API', async () => {
+    await submitCreateLeagueV2(state({ sport: 'NHL', thirdRoundReversal: true, allowMultiTeamManagers: true, scoringPresetId: 'nhl_points' }))
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))
+    expect(body.conceptSetup).toMatchObject({ thirdRoundReversal: true, allowMultiTeamManagers: true })
+    expect(validateCreatePayload(body).ok).toBe(true)
+  })
+
   it('a default soccer redraft passes the wizard and the server validator', async () => {
     // `soccerPipeline: null` is what a state restored from before the default carries.
     const s = state({ sport: 'SOCCER', scoringPresetId: 'soc_points', soccerPipeline: null })

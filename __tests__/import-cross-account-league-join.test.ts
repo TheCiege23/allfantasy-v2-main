@@ -79,6 +79,28 @@ describe('claimExistingLeagueForMember — the happy path', () => {
     expect(result?.existed).toBe(false)
   })
 
+  it('links all Fantrax franchises proven by the same provider identity on a member import', async () => {
+    h.prisma.league.findFirst.mockResolvedValue({ ...OTHER_LEAGUE, leagueType: 'dynasty' })
+    const tx = {
+      leagueTeam: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'row-A', externalId: 'A' }, { id: 'row-B', externalId: 'B' }]),
+        updateMany: vi.fn().mockResolvedValue({ count: 2 }),
+      },
+      leagueManagerClaim: { findFirst: vi.fn().mockResolvedValue(null), createMany: vi.fn() },
+      roster: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'rA', playerData: { source_team_id: 'A' } }, { id: 'other', playerData: { source_team_id: 'C' } }]),
+        updateMany: vi.fn(),
+      },
+    }
+    h.prisma.$transaction.mockImplementationOnce(async (op: unknown) => (op as (client: typeof tx) => Promise<unknown>)(tx))
+    expect(await claimExistingLeagueForMember({ ...ARGS, provider: 'fantrax' })).toMatchObject({ joinedExisting: true })
+    expect(tx.leagueManagerClaim.createMany).toHaveBeenCalledWith({ data: [
+      expect.objectContaining({ teamExternalId: 'A', claimSlot: 'primary' }),
+      expect.objectContaining({ teamExternalId: 'B', claimSlot: 'team:B' }),
+    ] })
+    expect(tx.roster.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['rA'] } }, data: { managerUserId: ARGS.userId } })
+  })
+
   it('looks up the OTHER league by platform+externalId+season, excluding this user', async () => {
     h.prisma.league.findFirst.mockResolvedValue(OTHER_LEAGUE)
     h.prisma.leagueTeam.findFirst.mockResolvedValue(UNCLAIMED_TEAM)

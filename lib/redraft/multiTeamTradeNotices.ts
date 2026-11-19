@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 /**
  * Notices for the teams in a MULTI-TEAM redraft trade.
  *
@@ -161,7 +162,7 @@ export async function notifyMultiTeamTradeOutcome(input: {
     const rosterIds = tradeParticipantRosterIds(proposal)
     const rows = await prisma.redraftRoster.findMany({
       where: { id: { in: rosterIds } },
-      select: { id: true, ownerId: true, teamName: true, ownerName: true },
+      select: { id: true, ownerId: true, managerUserId: true, teamName: true, ownerName: true },
     })
     const byId = new Map(rows.map((r) => [r.id, r]))
     const nameOf = (id: string) => {
@@ -172,7 +173,7 @@ export async function notifyMultiTeamTradeOutcome(input: {
     notifyMultiTeamTradeParties({
       proposalId: proposal.id,
       leagueId: proposal.leagueId,
-      userIds: rosterIds.map((id) => byId.get(id)?.ownerId),
+      userIds: rosterIds.map((id) => seasonRosterManagerId(byId.get(id))),
       actorUserId: input.actorUserId,
       key: input.key,
       title: input.title,

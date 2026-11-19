@@ -113,7 +113,9 @@ describe('buildLeagueStandingsContext', () => {
     ])
 
     const out = await buildLeagueStandingsContext('lg1', 'a')
-    expect(out.indexOf('First')).toBeLessThan(out.indexOf('Third'))
+    expect(out).toContain('First')
+    expect(out).toContain('Third')
+    expect(out!.indexOf('First')).toBeLessThan(out!.indexOf('Third'))
   })
 
   /*
@@ -144,6 +146,20 @@ describe('buildLeagueStandingsContext', () => {
     expect(out).toContain('ONLY 2 of those 50 teams')
     expect(out).not.toContain('KEY FACTS')
     expect(out).not.toMatch(/PF 679\.0 \(#/)
+  })
+
+  it('includes both of a manager’s teams at opposite ends of a 250-team league', async () => {
+    mocks.rosterCount.mockResolvedValue(250)
+    mocks.rosterFindMany.mockResolvedValue(Array.from({ length: 250 }, (_, index) => roster({
+      ownerId: index === 0 ? 'viewer' : 'seat-' + index,
+      managerUserId: index === 249 ? 'viewer' : null,
+      teamName: 'Franchise ' + (index + 1), wins: 1, pointsFor: 250 - index,
+    })))
+    const out = await buildLeagueStandingsContext('lg1', 'viewer')
+    expect(mocks.rosterFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 250 }))
+    expect(out).toContain('THIS USER manages Franchise 1:')
+    expect(out).toContain('THIS USER manages Franchise 250:')
+    expect(out).not.toContain('truncated view')
   })
 
   it('returns null when the league has no redraft season on file', async () => {

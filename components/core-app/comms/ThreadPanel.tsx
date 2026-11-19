@@ -126,7 +126,8 @@ export function ThreadPanel({
   onAskChimmy?: (ask: ThreadAskChimmy) => void
 }) {
   const { data: session } = useSession()
-  const viewerId = session?.user?.id ?? null
+  const [messageViewerId, setMessageViewerId] = useState<string | null>(null)
+  const viewerId = messageViewerId ?? session?.user?.id ?? null
   const [threads, setThreads] = useState<PlatformThread[] | null>(null)
   const [openThread, setOpenThread] = useState<PlatformThread | null>(null)
   const [messages, setMessages] = useState<PlatformMessage[]>([])
@@ -205,12 +206,14 @@ export function ThreadPanel({
         { cache: 'no-store', signal: AbortSignal.timeout(15000) },
       )
       const data = (await res.json().catch(() => ({}))) as {
+        viewerUserId?: string
         messages?: PlatformMessage[]
         hiddenBlockedCount?: number
         error?: string
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load messages.')
       if (activeThreadId.current !== thread.id) return
+      setMessageViewerId(data.viewerUserId ?? null)
       setReadFailed(false)
       /*
        * A poll already in flight when you blocked someone can land after the block with their
@@ -268,6 +271,7 @@ export function ThreadPanel({
       /* A reply target belongs to one thread; it must not follow you into another. */
       setReplyTo(null)
       setMessages([])
+      setMessageViewerId(null)
       setPendingSends([])
       setReadFailed(false)
       setHiddenBlocked(0)

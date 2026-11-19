@@ -104,6 +104,16 @@ describe('🛑 the gate', () => {
     expect(h.compute).not.toHaveBeenCalled()
   })
 
+  it('prices an additional franchise for its assigned manager', async () => {
+    h.rosterFind.mockImplementation(async ({ where }: { where: { id: string } }) =>
+      where.id === 'r-mine'
+        ? { id: 'r-mine', ownerId: 'mgr:u1:r-mine', managerUserId: 'u1' }
+        : { id: 'r-theirs', ownerId: 'u2' },
+    )
+    expect((await POST(req())).status).toBe(200)
+    expect(h.compute).toHaveBeenCalledOnce()
+  })
+
   it('404s when a roster is not in this season/league', async () => {
     h.rosterFind.mockResolvedValue(null)
     expect((await POST(req())).status).toBe(404)

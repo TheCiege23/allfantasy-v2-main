@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -120,11 +121,11 @@ export async function POST(req: NextRequest) {
   // Learning events for both managers
   const seasonRosters = await prisma.redraftRoster.findMany({
     where: { seasonId: proposal.seasonId },
-    select: { id: true, ownerId: true },
+    select: { id: true, ownerId: true, managerUserId: true },
   })
   const rosterById = new Map(seasonRosters.map((r) => [r.id, r]))
-  const proposerOwnerId = rosterById.get(proposal.proposerRosterId)?.ownerId
-  const receiverOwnerId = rosterById.get(proposal.receiverRosterId)?.ownerId
+  const proposerOwnerId = seasonRosterManagerId(rosterById.get(proposal.proposerRosterId))
+  const receiverOwnerId = seasonRosterManagerId(rosterById.get(proposal.receiverRosterId))
 
   void recordTradeOutcomeForBothManagers({
     leagueId: proposal.leagueId,

@@ -8391,7 +8391,10 @@ model LeagueManagerClaim {
   isConfirmed    Boolean  @default(false)
   league         League   @relation(fields: [leagueId], references: [id])
 
-  @@unique([leagueId, afUserId])
+  /// Ordinary claims share the primary slot. Further franchises use a team-specific claim slot.
+  claimSlot      String   @default("primary")
+
+  @@unique([leagueId, afUserId, claimSlot])
   @@unique([leagueId, teamExternalId])
 }
 

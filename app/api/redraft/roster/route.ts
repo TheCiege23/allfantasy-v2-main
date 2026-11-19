@@ -647,7 +647,8 @@ export async function PATCH(req: NextRequest) {
     seasonId: targetLookup.season.id,
     leagueId: targetLookup.season.leagueId,
   })
-  if ((!viewerLookup.roster || viewerLookup.roster.id !== targetLookup.roster.id) &&
+  if (targetLookup.roster.managerUserId !== userId &&
+      (!viewerLookup.roster || viewerLookup.roster.id !== targetLookup.roster.id) &&
       !await isAcceptedCoOwnerForRedraftRoster(targetLookup.season.leagueId, targetLookup.roster.id, userId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

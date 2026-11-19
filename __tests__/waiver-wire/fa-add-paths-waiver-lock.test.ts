@@ -134,6 +134,7 @@ describe('the redraft waiver run and an instant add, interleaved', () => {
     h.release!()
     const [ran, added] = await Promise.all([run, add])
 
+    expect(db.$transaction.mock.contexts[0]).toBe(db)
     expect(holders('P')).toEqual(['rrA'])
     expect(ran).toEqual([{ claimId: 'c1', status: 'approved' }])
     expect(added).toBe('This player is already on another roster in this league.')

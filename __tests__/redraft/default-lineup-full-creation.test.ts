@@ -97,6 +97,7 @@ function buildTx() {
       create: vi.fn().mockResolvedValue({ id: 'chat-1' }),
     },
     roster: {
+      createMany: vi.fn(async ({ data }) => ({ count: data.length })),
       create: vi.fn().mockImplementation(async (args?: any) => {
         rosterCreateCount += 1
         return {
@@ -106,6 +107,7 @@ function buildTx() {
       }),
     },
     leagueTeam: {
+      createMany: vi.fn(async ({ data }) => ({ count: data.length })),
       create: vi.fn().mockImplementation(async () => {
         teamCreateCount += 1
         return { id: `team-${teamCreateCount}` }

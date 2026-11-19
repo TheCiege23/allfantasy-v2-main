@@ -82,6 +82,21 @@ describe('Phase B.1 — read-only identity resolver extraction', () => {
     vi.clearAllMocks()
   })
 
+  it.each([true, false])('resolves an explicit additional franchise without substituting the primary (present %s)', async (present) => {
+    const key = 'mgr:user-1:gen-2'
+    const { viewerRosterRow } = configureViewerScenario(key)
+    mocks.rosterFindFirst.mockResolvedValue({ ...viewerGenericRosterRow, id: 'gen-2', platformUserId: key })
+    mocks.leagueTeamFindFirst.mockResolvedValue({ ...viewerTeamRow, platformUserId: key })
+    mocks.redraftRosterFindFirst.mockImplementation(async ({ where }) => {
+      if (where.id) return null
+      expect(where.ownerId.in).toEqual([key])
+      return present ? viewerRosterRow : null
+    })
+    const found = await resolveRedraftRosterLookup({ userId: 'user-1', leagueId: 'lg-1', requestedRosterId: 'gen-2' })
+    expect(found.roster).toEqual(present ? viewerRosterRow : null)
+    expect(mocks.redraftRosterUpdate).not.toHaveBeenCalled()
+  })
+
   it('(1) read-only resolver returns the resolved roster as-stored (no repair)', async () => {
     const { viewerRosterRow } = configureViewerScenario('roster:gen-1')
 

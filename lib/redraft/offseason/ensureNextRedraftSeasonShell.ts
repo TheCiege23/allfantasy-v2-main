@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -68,18 +70,19 @@ export async function ensureNextRedraftSeasonShell(
   const previousRosters = await client.redraftRoster.findMany({
     where: { leagueId, seasonId: completedSeasonId },
     orderBy: { id: 'asc' },
-    select: { ownerId: true, ownerName: true, teamName: true, avatarUrl: true },
+    select: { ownerId: true, managerUserId: true, ownerName: true, teamName: true, avatarUrl: true },
   })
-  const shells: Array<{ ownerId: string; ownerName: string; teamName: string | null; avatarUrl: string | null }> = []
+  const shells: Array<{ ownerId: string; managerUserId: string | null; ownerName: string; teamName: string | null; avatarUrl: string | null }> = []
   if (previousRosters.length > 0) {
     shells.push(...previousRosters)
   } else {
     const used = new Set<string>()
     for (const t of league.teams) {
-      let ownerId = t.claimedByUserId ?? league.userId
+      const rosterKey = t.externalId || t.id
+      let ownerId = isExtraTeamOwnerKey(t.platformUserId) ? t.platformUserId! : t.claimedByUserId ?? `roster:${rosterKey}`
       if (used.has(ownerId)) ownerId = `roster:${t.externalId || t.id}`
       used.add(ownerId)
-      shells.push({ ownerId, ownerName: t.ownerName, teamName: t.teamName, avatarUrl: t.avatarUrl })
+      shells.push({ ownerId, managerUserId: t.claimedByUserId, ownerName: t.ownerName, teamName: t.teamName, avatarUrl: t.avatarUrl })
     }
   }
 
@@ -99,23 +102,11 @@ export async function ensureNextRedraftSeasonShell(
       },
     })
 
-    const rosters: { id: string }[] = []
-    const rosterTeam: Array<{ rosterId: string; ids: string[] }> = []
-    for (const t of shells) {
-      const r = await tx.redraftRoster.create({
-        data: {
-          seasonId: rs.id,
-          leagueId,
-          ownerId: t.ownerId,
-          ownerName: t.ownerName,
-          teamName: t.teamName,
-          avatarUrl: t.avatarUrl,
-        },
-      })
-      rosters.push({ id: r.id })
-      // An orphan team's owner id is `roster:<externalId or team id>`; either form names its team.
-      rosterTeam.push({ rosterId: r.id, ids: [t.ownerId, t.ownerId.startsWith('roster:') ? t.ownerId.slice('roster:'.length) : null].filter((v): v is string => Boolean(v)) })
-    }
+    const rosters = shells.map((team) => ({ ...team, id: randomUUID(), leagueId, seasonId: rs.id }))
+    if (rosters.length) await tx.redraftRoster.createMany({ data: rosters })
+    const rosterTeam = rosters.map(({ id, ownerId }) => ({
+      rosterId: id, ids: ownerId.startsWith('roster:') ? [ownerId, ownerId.slice(7)] : [ownerId],
+    }))
 
     const divisions = scheduleDivisionsForRosters(league.settings, league.teams, rosterTeam)
     const slots = generateSchedule(
@@ -130,20 +121,11 @@ export async function ensureNextRedraftSeasonShell(
         gamesPerWeek: readGamesPerWeek(league.settings),
       },
     )
-    for (const s of slots) {
-      if (s.type === 'median') continue
-      await tx.redraftMatchup.create({
-        data: {
-          seasonId: rs.id,
-          leagueId,
-          week: s.week,
-          type: 'regular',
-          homeRosterId: s.home,
-          awayRosterId: s.away,
-          isMedianMatchup: false,
-        },
-      })
-    }
+    const games = slots.filter((slot) => slot.type !== 'median').map((slot) => ({
+      seasonId: rs.id, leagueId, week: slot.week, type: 'regular',
+      homeRosterId: slot.home, awayRosterId: slot.away, isMedianMatchup: false,
+    }))
+    if (games.length) await tx.redraftMatchup.createMany({ data: games })
 
     await tx.league.update({
       where: { id: leagueId },

@@ -96,7 +96,7 @@ export async function claimPlaceholderRoster(args: {
   // any platformUserId that doesn't exist in AppUser is a placeholder.
   const allRosters = await tx.roster.findMany({
     where: { leagueId },
-    select: { id: true, platformUserId: true, playerData: true },
+    select: { id: true, platformUserId: true, managerUserId: true, playerData: true },
   })
   if (allRosters.length === 0) return { claimed: false }
 
@@ -108,7 +108,7 @@ export async function claimPlaceholderRoster(args: {
     select: { id: true },
   })
   const realUserIds = new Set(realUsers.map((u) => u.id))
-  const placeholders = allRosters.filter((r) => !realUserIds.has(r.platformUserId))
+  const placeholders = allRosters.filter((r) => !r.managerUserId && !realUserIds.has(r.platformUserId))
   if (placeholders.length === 0) return { claimed: false }
 
   // 1. Direct source_manager_id match — strongest signal.

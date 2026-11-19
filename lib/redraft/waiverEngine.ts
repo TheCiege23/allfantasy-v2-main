@@ -1,3 +1,4 @@
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
@@ -113,9 +114,8 @@ async function moveApprovedRosterToBack(seasonId: string, rosterId: string) {
 class WaiverDropInactiveError extends Error {}
 
 async function runWaiverSettlement(callback: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> {
-  const transaction = (prisma as unknown as { $transaction?: (fn: (tx: Prisma.TransactionClient) => Promise<void>) => Promise<void> }).$transaction
-  if (typeof transaction === 'function') {
-    await transaction(callback)
+  if (typeof prisma.$transaction === 'function') {
+    await prisma.$transaction(callback)
     return
   }
   await callback(prisma as unknown as Prisma.TransactionClient)
@@ -404,9 +404,9 @@ async function processWaiverWindowLocked(
     try {
       const owners = await prisma.redraftRoster.findMany({
         where: { id: { in: [...new Set(claims.map((c) => c.rosterId))] } },
-        select: { id: true, ownerId: true },
+        select: { id: true, ownerId: true, managerUserId: true },
       })
-      const ownerOf = new Map(owners.map((o) => [o.id, o.ownerId]))
+      const ownerOf = new Map(owners.map((o) => [o.id, seasonRosterManagerId(o)]))
       sendWaiverResultNotices(
         leagueId,
         waiverResultNotices(

@@ -156,7 +156,7 @@ export async function bootstrapLeagueFromNormalizedImport(
   const [storedRosters, storedTeams] = await Promise.all([
     prisma.roster.findMany({
       where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true, waiverPriority: true },
+      select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true, waiverPriority: true },
     }),
     prisma.leagueTeam.findMany({
       where: { leagueId },
@@ -379,6 +379,8 @@ export async function bootstrapLeagueFromNormalizedImport(
 
     const plan = planByTeam.get(r.source_team_id)
     const existingRoster = plan?.rosterId ? { id: plan.rosterId } : null
+    // A shared Fantrax manager has one provider identity and several distinct roster keys.
+    const managerUserId = provider === 'fantrax' ? resolvedClaim ?? claimByTeam.get(r.source_team_id) ?? null : undefined
     const ownerKey = plan?.ownerKey ?? importedRosterOwnerKey({ provider, teamId: r.source_team_id })
 
     /*
@@ -404,6 +406,7 @@ export async function bootstrapLeagueFromNormalizedImport(
       if (
         skipUnchangedRosters &&
         stored &&
+        (managerUserId === undefined || (stored.managerUserId ?? null) === managerUserId) &&
         importedRosterUnchanged(
           {
             // A rekey above already moved this row's key to `ownerKey`; the in-memory read predates it.
@@ -429,6 +432,7 @@ export async function bootstrapLeagueFromNormalizedImport(
         where: { id: existingRoster.id },
         data: {
           platformUserId: ownerKey,
+          ...(managerUserId !== undefined ? { managerUserId } : {}),
           playerData: playerData as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
@@ -439,6 +443,7 @@ export async function bootstrapLeagueFromNormalizedImport(
         data: {
           leagueId,
           platformUserId: ownerKey,
+          ...(managerUserId !== undefined ? { managerUserId } : {}),
           playerData: playerData as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
