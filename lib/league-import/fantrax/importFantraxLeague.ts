@@ -10,6 +10,7 @@
  */
 
 import 'server-only'
+import { getCachedFantraxPlayerIds } from './fantraxPlayerDirectoryCache'
 import { preserveSnapshotNames } from './preserveSnapshotNames'
 import { withFantraxDisplayNames } from './fantraxPlayerName'
 
@@ -31,7 +32,6 @@ import { fantraxImportSeason, isFantraxSplitSeasonSport, usesFantraxPeriodCalend
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
-  getFantraxPlayerIds,
   getFantraxStandings,
   getFantraxTeamRosters,
   resolveRosters,
@@ -169,7 +169,9 @@ export async function importFantraxLeague(args: {
   if (refreshTarget?.sport?.toLowerCase() === 'soccer' && !soccer) {
     return { ok: false, error: 'The source no longer confirms this is a Fantrax Soccer league', kind: 'unavailable' }
   }
-  const directoryFor = (sport: FantraxSport) => soccer ? Promise.resolve(null) : getFantraxPlayerIds(sport)
+  /* Shared between imports for a short while: the directories are the same for every league, and
+     downloading all six on every import was most of this function's traffic. */
+  const directoryFor = (sport: FantraxSport) => soccer ? Promise.resolve(null) : getCachedFantraxPlayerIds(sport)
   // The live endpoint can roll into another season. Never overwrite an archive
   // or stamp its old roster as freshly fetched when that happens.
   // NBA/NHL seasons are keyed by the year they begin, so compare in that key;
