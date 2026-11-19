@@ -188,7 +188,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     })
     const canonical = Array<string | null>(available.length).fill(null)
     await Promise.all([...groups].map(async ([column, group]) => {
-      const keys = await resolveRosterIdsToKeys(prisma, String(league.sport), column, [...group.keys()])
+      const keys = await resolveRosterIdsToKeys(prisma, String(league.sport), column, [...group.keys()]).catch(() => new Map<string, string>())
       for (const [id, key] of keys) for (const i of group.get(id) ?? []) canonical[i] = key
     }))
     priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })

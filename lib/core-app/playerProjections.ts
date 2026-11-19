@@ -185,7 +185,7 @@ export async function lookupProjections(
   const when = at ?? (await latestProjectionWeek())
   if (!when) return new Map()
 
-  if (idp?.scoringSettings && !isKnownNonNflSport(sport)) {
+  if (idp?.scoringSettings && String(sport ?? '').trim().toUpperCase() === 'NFL') {
     const pool = await loadAfNflWeek(when)
     return new Map(ids.flatMap((id) => pool.has(id) ? [[id, pool.get(id)!] as const] : []))
   }

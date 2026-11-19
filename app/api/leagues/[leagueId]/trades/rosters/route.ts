@@ -17,7 +17,7 @@ import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
 import { pickPreviewKey, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
-import type { StockDirection } from '@/lib/trade-intel/playerStock'
+import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
 import { gradeRebuildPackages, loadRebuildPlan } from '@/lib/trade-intel/rebuildPlanLoader'
@@ -736,7 +736,9 @@ export async function GET(
   historyRead.catch(() => undefined)
 
   const rosterIds = [...new Set(result.flatMap((r) => r.players.map((p) => p.id)).filter(Boolean))]
-  const [metrics, loadedMarketRows] = await Promise.all([
+  const stockIds = league?.sport === 'NFL' && platform === 'sleeper' ? rosterIds.filter(id => resolvedForLeague.has(id)) : []
+  const [stock, metrics, loadedMarketRows] = await Promise.all([
+    stockIds.length ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(() => new Map()) : new Map(),
     rosterIds.length ? loadLeaguePlayerMetrics({ leagueId, rosterIds, limit: rosterIds.length }).catch(() => null) : null,
     league?.sport === 'NFL' ? (largeLeagueRookiePicks
       ? readFantasyCalcValuesFromDb(chartSettings, { allowStale: false }).then(row => row.players)
@@ -801,6 +803,11 @@ export async function GET(
   const sport = String(league?.sport ?? 'NFL')
   for (const roster of result) {
     for (const player of roster.players) {
+      const trend = stock.get(player.id)
+      if (trend) {
+        player.stock = trend.direction
+        player.stockDelta = trend.trend30d
+      }
       const row = metricByRosterId.get(player.id)
       const quote = resolvedForLeague.has(player.id) ? metrics?.rosterTradeQuotes?.[player.id] : undefined
       player.value = row?.dynastyTradeValue ?? row?.tradeValue ?? quote?.value ?? null

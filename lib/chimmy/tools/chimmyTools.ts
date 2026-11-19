@@ -1347,23 +1347,31 @@ export async function executeChimmyTool(
        * player and the concept — it is the same number for every user — so requiring a selected
        * league would refuse a question we can answer perfectly well.
        */
+      case 'explain_value':
       case 'get_player_value': {
-        const asked = typeof args.player === 'string' ? args.player : ''
-        if (ctx.leagueId) {
-          if (!asked.trim()) return 'Ask which player the manager means.'
-          const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
-          const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
-          if (metrics && metrics.rows.length > 1) return 'Multiple players in this league sport match. Ask for their position or team.'
-          const row = metrics?.rows[0]
-          const value = row?.dynastyTradeValue ?? row?.tradeValue
-          if (value == null || !row) return 'AF has no verified trade value for that player in this league.'
-          return `${row.playerName} has an AF trade value of ${value.toFixed(2)} ${row.tradeValueUnit} in this league.${row.completedTradeSample ? ' Completed trade sample: ' + row.completedTradeSample + '.' : ''}`
+        const asked = typeof args.player === 'string' ? args.player.trim() : ''
+        const sport = typeof args.sport === 'string' ? args.sport.trim().toUpperCase() : null
+        if (!ctx.leagueId) return name === 'explain_value'
+          ? await buildExplainValueContext({ playerName: asked, sport })
+          : await buildPlayerValueContext({ playerName: asked, leagueId: null })
+        if (!asked) return 'Ask which player the manager means.'
+        const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
+        const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
+        if (metrics && sport && metrics.sport !== (sport === 'NCAABB' ? 'NCAAB' : sport)) return 'The requested sport differs from the connected league.'
+        if (metrics && metrics.rows.length > 1) return 'Multiple players in this league sport match. Ask for their position or team.'
+        const row = metrics?.rows[0]
+        const value = row?.dynastyTradeValue ?? row?.tradeValue
+        if (value == null || !row) return 'AF has no verified trade value for that player in this league.'
+        const quote = `${row.playerName} has an AF trade value of ${value.toFixed(2)} ${row.tradeValueUnit} in this league.`
+        if (row.completedTradeSample) return quote + ' Completed trade sample: ' + row.completedTradeSample + '.'
+        if (name === 'explain_value') {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const detail = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked }).catch(() => null)
+          if (detail) return quote + '\n' + detail
         }
-        return await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId ?? null })
+        return quote
       }
 
-      /* No league gate: the standard projection remains useful without one. When a verified
-       * scope exists, the builder also computes a league-scored number from component stats. */
       case 'get_player_projection': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
@@ -1376,18 +1384,6 @@ export async function executeChimmyTool(
           ? Math.floor(args.week)
           : null
         return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId })
-      }
-
-      case 'explain_value': {
-        const asked = typeof args.player === 'string' ? args.player : ''
-        const sport = typeof args.sport === 'string' ? args.sport : null
-        if (ctx.leagueId) {
-          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
-          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
-          if (board != null) return board
-          return await buildPlayerProjectionContext({ leagueId: ctx.leagueId, playerName: asked, sport })
-        }
-        return await buildExplainValueContext({ playerName: asked, sport })
       }
 
       /*
