@@ -83,6 +83,22 @@ describe('draft archive authorization and attempt boundaries', () => {
     expect(result?.picks[0]).toMatchObject({ actor: '100561289762', actorName: 'GuapCiege', teamName: 'Maye Day', originalTeamName: 'Recorded Sleeper name' })
     expect(result?.picks[1]).toMatchObject({ actorName: null, teamName: null })
   })
+  it('names the team of a pick imported with no metadata from the team id it carries', async () => {
+    // Staging 2026-11-19: a Fantrax draft's 1,224 picks had managerId and no metadata, and Receiving team was blank.
+    db.catalog.mockResolvedValue({ choices: [{ key: 'legacy:NFL:2026', source: 'legacy', sourceId: 'legacy:NFL:2026', format: 'unknown', status: 'unknown', sport: 'NFL', season: 2026 }] })
+    db.raw.mockResolvedValue([
+      { draftId: 'f1', pickNumber: 1, round: 1, playerId: 'p1', managerId: 'team-a', metadata: null },
+      { draftId: 'f2', pickNumber: 2, round: 1, playerId: 'p2', managerId: 'gone', metadata: null },
+      // A pick that has metadata keeps the recorded roster; its managerId is not used to name a team.
+      { draftId: 'f3', pickNumber: 3, round: 1, playerId: 'p3', managerId: 'team-a', metadata: { provider: 'sleeper' } },
+    ])
+    db.teams.mockResolvedValue([{ externalId: 'team-a', platformUserId: null, ownerName: 'Ada', teamName: 'Harbor Owls' }])
+    const result = await draftArchiveDetail('l', 'viewer', 'legacy:NFL:2026')
+    expect(db.teams).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'l' } }))
+    expect(result?.picks[0]).toMatchObject({ rosterId: 'team-a', teamName: 'Harbor Owls' })
+    expect(result?.picks[1]).toMatchObject({ rosterId: 'gone', teamName: null })
+    expect(result?.picks[2]).toMatchObject({ rosterId: null, teamName: null })
+  })
   it('names the teams in stored results the same way, keeping a placeholder only where nobody is known', async () => {
     // Live /core 2026-11-06: Results to date listed "Team 8", "Team 5"… because ingestion stores 'Team ' + rosterId.
     db.catalog.mockResolvedValue({ choices: [{ key: 'imported:139', source: 'imported', sourceId: '139', format: 'snake', sport: 'NFL', season: 2026 }] })
