@@ -55,10 +55,30 @@ const copyLeagueMessages = defineMessages({
 
 const field = 'min-h-[40px] w-full rounded-lg border border-white/10 bg-[#0a1220] px-3 text-[13px] text-white disabled:opacity-60'
 
-function Crest({ src }: { src: string | null }) {
+/**
+ * This panel is dark in every theme (white text, `#0a1220` fields), so it draws ESPN's dark-background crest:
+ * the default one loses navy and black crests (Yankees, Maple Leafs, Raiders) against it. If the dark file
+ * ever fails to load, the default crest is tried before the crest is hidden.
+ */
+function Crest({ team }: { team: { logo: string | null; logoDark: string | null } | null }) {
+  const src = team?.logoDark ?? team?.logo ?? null
   if (!src) return <span aria-hidden className="h-8 w-8 shrink-0 rounded-full bg-white/10" />
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className="h-8 w-8 shrink-0 object-contain" onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+  const fallback = team?.logoDark && team.logo ? team.logo : null
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      key={src}
+      src={src}
+      alt=""
+      data-testid="copy-league-crest"
+      className="h-8 w-8 shrink-0 object-contain"
+      onError={(e) => {
+        const img = e.currentTarget
+        if (fallback && img.src !== fallback) img.src = fallback
+        else img.style.visibility = 'hidden'
+      }}
+    />
+  )
 }
 
 export function CopyLeaguePanel({ leagueId, mode }: { leagueId: string; mode: 'mine' | 'commissioner' }) {
@@ -113,7 +133,7 @@ export function CopyLeaguePanel({ leagueId, mode }: { leagueId: string; mode: 'm
         <h3 className="m-0 text-[15px] font-bold text-white">{c.mineTitle}</h3>
         <p className="m-0 text-[13px] leading-relaxed text-white/60">{c.mineSub(view.sport)}</p>
         <div className="flex items-center gap-3">
-          <Crest src={real?.logo ?? null} />
+          <Crest team={real} />
           <select
             aria-label={c.choose}
             className={field}
@@ -174,7 +194,7 @@ export function CopyLeaguePanel({ leagueId, mode }: { leagueId: string; mode: 'm
               const real = view.catalog.find((x) => x.code === t.code) ?? null
               return (
                 <div key={t.leagueTeamId} className="flex items-center gap-3" data-testid="copy-league-row">
-                  <Crest src={real?.logo ?? null} />
+                  <Crest team={real} />
                   <span className="w-[38%] min-w-0 truncate text-[13px] font-semibold text-white">{t.ownerName ?? t.teamName}</span>
                   <select
                     aria-label={c.assignLabel(t.ownerName ?? t.teamName)}

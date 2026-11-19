@@ -87,7 +87,7 @@ describe('the real teams', () => {
     const mlb = copyLeagueTeams('MLB')
     expect([nba.length, nhl.length, mlb.length]).toEqual([30, 32, 30])
     expect(nba[0]!.name).toBe('Atlanta Hawks')
-    expect(nhl.find((t) => t.code === 'UTAH')).toEqual({ code: 'UTAH', name: 'Utah Mammoth', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png' })
+    expect(nhl.find((t) => t.code === 'UTAH')).toEqual({ code: 'UTAH', name: 'Utah Mammoth', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png', logoDark: 'https://a.espncdn.com/i/teamlogos/nhl/500-dark/utah.png' })
     expect(mlb.find((t) => t.code === 'ATH')).toMatchObject({ name: 'Athletics' })
     expect(mlb.find((t) => t.code === 'CHW')).toMatchObject({ name: 'Chicago White Sox', logo: 'https://a.espncdn.com/i/teamlogos/mlb/500/chw.png' })
     for (const list of [nba, nhl, mlb]) {
@@ -321,7 +321,14 @@ describe('the panel', () => {
     render(<CopyLeaguePanel leagueId="L1" mode="commissioner" />)
     expect((await screen.findByTestId('copy-league-commissioner')).textContent).toContain('takes a real NBA team')
     const crest = screen.getAllByTestId('copy-league-row')[1]!.querySelector('img')!
+    // The panel is dark in every theme, so it draws ESPN's dark-background crest.
+    expect(crest.getAttribute('src')).toBe('https://a.espncdn.com/i/teamlogos/nba/500-dark/gs.png')
+    // If that file fails, the default crest is tried; if that fails too, the crest is hidden.
+    fireEvent.error(crest)
     expect(crest.getAttribute('src')).toBe('https://a.espncdn.com/i/teamlogos/nba/500/gs.png')
+    expect(crest.style.visibility).toBe('')
+    fireEvent.error(crest)
+    expect(crest.style.visibility).toBe('hidden')
   })
 
   it('a manager who is not a commissioner gets no commissioner panel', async () => {

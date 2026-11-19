@@ -23,7 +23,9 @@ const NFL_LOGO_KEY: Record<string, string> = {
   HOU: 'hou', IND: 'ind', JAX: 'jax', KC: 'kc', LAC: 'lac', LAR: 'lar',
   LV: 'lv', MIA: 'mia', MIN: 'min', NE: 'ne', NO: 'no', NYG: 'nyg',
   NYJ: 'nyj', PHI: 'phi', PIT: 'pit', SEA: 'sea', SF: 'sf', TB: 'tb',
-  TEN: 'ten', WAS: 'was',
+  TEN: 'ten',
+  // ESPN's code for Washington is wsh (contracts/espn/fixtures/teams.NFL.json, 2026-11-19); was.png also loads.
+  WAS: 'wsh',
 }
 
 /**

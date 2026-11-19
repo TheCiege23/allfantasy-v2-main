@@ -20,6 +20,8 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `R-07` | `teams?limit=1000` returns every club: NBA **30**, NHL **32**, MLB **30**, all `isActive`, none `isAllStar` | `fixtures/teams.{NBA,NHL,MLB}.json`, committed untrimmed; counts in `ENDPOINTS.yaml` `teams.measured_2026_11_19` |
 | `R-08` | The list is current: NHL has **Utah Mammoth** (`UTAH`) and no Arizona; MLB has **Athletics** (`ATH`, no city) and no Oakland | Same fixtures. `lib/sport-teams/SportTeamMetadataRegistry.ts` still lists NHL `ARI` and MLB `OAK` — it is NOT the place to read current teams from |
 | `R-09` | Each team's default 500px crest is `teamlogos/<sport>/500/<abbreviation lower-case>.png`; the White Sox are `CHW`/`chw.png` (Rolling Insights and the registry say `CWS`) | `logos[]` with `rel` `default`, for all 92 teams. Crests from this CDN were already in use for every sport's team logo; no new image-rights question (compare `E-05`, which is about player headshots) |
+| `R-10` | NFL `teams?limit=1000` returns all **32** clubs; Washington is `WSH`/`wsh.png`, and `lib/sport-teams/SportTeamMetadataRegistry.ts` built `was.png`. Both files load from the CDN (checked 2026-11-19), so nothing was broken; the key is now `wsh` to match the capture | `fixtures/teams.NFL.json`, committed untrimmed; `__tests__/league/copy-league-team-tables.test.ts` checks every NFL crest the app builds against it |
+| `R-11` | Every team in the four captures has a dark-background crest, `rel` `["full","dark"]`, at the default crest's path with `/500/` → `/500-dark/` | `fixtures/teams.{NFL,NBA,NHL,MLB}.json`; `darkCrestUrl` in `lib/league/copyLeague.ts` |
 
 ## Measured against our data, 2026-10-01 (read-only, no provider calls)
 
