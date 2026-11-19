@@ -426,6 +426,24 @@ export async function getPlayerDataForSurface(
         },
       })
       const rowById = new Map(rows.map((row) => [row.id, row]))
+      /*
+       * 🛑 A ROSTERED PLAYER THE STATS STORE DOES NOT HOLD WAS DROPPED HERE, and My team then drew
+       * "Unknown player" in his slot. The season's own roster row knows who he is (the Matchup tab
+       * reads its name from there), so a player missing from `sports_players` falls back to that row:
+       * his name, position and team, with no stats or projection rather than no player.
+       */
+      const missingIds = ids.filter((id) => !rowById.has(id))
+      const seasonRows = missingIds.length
+        ? await prisma.redraftRosterPlayer
+            .findMany({
+              where: { playerId: { in: missingIds }, droppedAt: null, roster: { leagueId: input.leagueId } },
+              select: { playerId: true, playerName: true, position: true, team: true, injuryStatus: true },
+              orderBy: { addedAt: 'desc' },
+            })
+            .catch(() => [])
+        : []
+      const seasonRowById = new Map<string, (typeof seasonRows)[number]>()
+      for (const r of seasonRows) if (!seasonRowById.has(r.playerId) && r.playerName?.trim()) seasonRowById.set(r.playerId, r)
       const mediaById = await batchLoadCanonicalPlayerMedia(
         sportKey,
         rows.map((row) => ({
@@ -443,7 +461,32 @@ export async function getPlayerDataForSurface(
       const out: UnifiedPlayerProductView[] = []
       for (const id of ids) {
         const row = rowById.get(id)
-        if (!row || sportDbKey(row.sport) !== sportKey) continue
+        if (!row) {
+          const known = seasonRowById.get(id)
+          if (!known) continue
+          out.push(
+            normalizePoolRowToUnified(
+              {
+                player_id: id,
+                sport_type: league.sport as SportType,
+                team_id: null,
+                team_abbreviation: known.team,
+                team: known.team,
+                full_name: known.playerName,
+                position: known.position,
+                status: null,
+                injury_status: known.injuryStatus,
+                external_source_id: null,
+                secondary_positions: [],
+                metadata: {},
+              },
+              league.sport,
+              { augment: { soccerLeague: input.soccerLeague ?? undefined } },
+            ),
+          )
+          continue
+        }
+        if (sportDbKey(row.sport) !== sportKey) continue
         const media = mediaById.get(row.id)
 
         const syntheticPoolRow: PoolPlayerRecord = {
