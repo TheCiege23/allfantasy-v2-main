@@ -999,6 +999,15 @@ export function LeagueShell({
       userPickedTabRef.current = true
       pendingIncomingTabRef.current = target
       setActiveTab(target)
+    } else {
+      /*
+       * ⚠ THE TAB MAY NOT EXIST *YET*. Settings and Commissioner tools join the tab list when the viewer's role
+       * resolves, a render or two after mount. Without this hold the mirror effect below wrote the default tab over
+       * `?view=` first, so the deep link was gone by the time its tab arrived, and the league opened on its home
+       * (owner, 2026-11-19: "it resets to home"). Holding it keeps the URL; this effect re-runs on `tabDefs` and applies
+       * it then. A click (handleUserTabChange) clears the hold.
+       */
+      pendingIncomingTabRef.current = target
     }
   }, [searchParams, tabDefs, league.sport, shouldUseMatchupPrimary, nflRedraftCore, nativeWorkspace])
 

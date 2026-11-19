@@ -37,6 +37,12 @@ export type DraftWarRoomInput = {
   aiAdpByKey?: Record<string, number>
   mode?: 'needs' | 'bpa'
   /**
+   * The room's one pick, already decided on the server (`sharedDraftPickForUser`, lib/shared-services/draft/
+   * pickDecision.ts). When given it replaces the engine run on `availablePlayers`, so the War Room cannot name a
+   * different player from the draft card. Absent, the engine runs on the posted pool as before.
+   */
+  precomputed?: RecommendationResult | null
+  /**
    * Pre-assembled grounded draft context from DraftAdvisorContextService.
    * When present, enriches the LLM prompt with injury flags, bye weeks,
    * positional scarcity ratings, and roster needs derived from DB data.
@@ -286,7 +292,7 @@ export async function runDraftWarRoomRecommendation(input: DraftWarRoomInput): P
     }
   }
 
-  const det = computeDraftRecommendation({
+  const det = input.precomputed ?? computeDraftRecommendation({
     available,
     teamRoster: input.userRoster,
     rosterSlots: input.rosterSlots ?? [],

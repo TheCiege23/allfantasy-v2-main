@@ -206,6 +206,8 @@ import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
 import { chimmyTrackRecordFor, renderTrackRecordPromptLine } from '@/lib/chimmy-outcomes/trackRecord'
+import { ledgerRecordFor } from '@/lib/chimmy-outcomes/ledgerRecord'
+import { renderEngineRecordPromptLine } from '@/lib/chimmy-outcomes/engineRecord'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import {
@@ -3288,6 +3290,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       styleLine: [
         personalizationDirectives,
         renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
+        /*
+         * AllFantasy's own graded calls — the bench check, the waiver panel's #1 pickup, the trade letters
+         * (re-score build item 7): so a trade grade or a pickup can be given with how that kind of call has
+         * actually held up, and "do your grades work?" is answered from the ledger, not invented. Same
+         * memoised read as the line above.
+         */
+        renderEngineRecordPromptLine(ledgerRecordFor((await readAdviceLearningSnapshot())?.ledger, userId ?? null)),
         savedStrategyPrompt,
         /* Fun mode reaches the path that answers first too, not only the fallback prompt. */
         isFunModeTone(tone) ? `RESPONSE STYLE — FUN MODE:\n${FUN_MODE_DIRECTIVE}` : null,

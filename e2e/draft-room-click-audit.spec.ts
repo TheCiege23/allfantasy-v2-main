@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clearPoolFilters } from './helpers/poolFilters'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
 import { computeUpcomingOwnedPicks } from '@/lib/live-draft-engine/draftPickTradeInventory'
@@ -1545,7 +1546,7 @@ test.describe('@draft-room click audit', () => {
 
     await desktop.getByTestId('draft-player-search-input').fill('Atlas')
     await desktop.getByTestId('draft-position-filter').getByRole('radio', { name: /RB/i }).click()
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clearPoolFilters(desktop)
 
     const atlasRow = desktop.getByRole('row', { name: /Atlas Runner/i }).first()
     await expect(atlasRow).toBeVisible({ timeout: 20_000 })
@@ -1892,11 +1893,11 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
 
-    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')
-    await expect(intelligenceDetails).toBeVisible()
-    await expect(intelligenceDetails).not.toHaveAttribute('open', '')
-    await intelligenceDetails.locator('summary').click()
-    const intelPanel = intelligenceDetails.getByTestId('draft-intel-queue-panel')
+    // Draft intelligence lives in the Chimmy tab since 2026-11-19 (it was a fold inside Queue).
+    await page.getByTestId('draft-right-dock-tab-chimmy').click()
+    const intelligence = page.getByTestId('draft-right-dock-panel-chimmy').getByTestId('draft-chimmy-suggestions')
+    await expect(intelligence).toBeVisible()
+    const intelPanel = intelligence.getByTestId('draft-intel-queue-panel')
     await expect(intelPanel).toBeVisible()
     const intelHeadline = page.locator('[data-testid="draft-intel-headline"]:visible').first()
     if (!(await intelHeadline.isVisible({ timeout: 1_000 }).catch(() => false))) {

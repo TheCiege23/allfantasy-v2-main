@@ -54,7 +54,8 @@ async function defaultDeps(): Promise<PickDecisionDeps> {
     ])
   return {
     snapshot: buildSessionSnapshot as PickDecisionDeps['snapshot'],
-    context: buildDraftDecisionContext,
+    // The decision plans for the roster's own next turn when it is off the clock (planForOwnPick.ts).
+    context: (input) => buildDraftDecisionContext({ ...input, planForOwnTurn: true }),
     recommend: computeDraftRecommendation,
     validateRosterFit: validateRosterFitForDraftPick as PickDecisionDeps['validateRosterFit'],
   }
@@ -88,7 +89,12 @@ export async function decideDraftPickForRoster(
   const { runDraftPickDecision } = await import('@/lib/decision-os/draft')
   const { decision } = await runDraftPickDecision(
     {
-      worldInput: { snapshot, rosterId: args.rosterId },
+      worldInput: {
+        snapshot,
+        rosterId: args.rosterId,
+        picksUntilTurn: context.plannedFor?.picksAway ?? null,
+        plannedOverall: context.plannedFor?.overall ?? null,
+      },
       userId: args.userId,
       leagueId: args.leagueId,
       sport: context.sport,
@@ -104,4 +110,62 @@ export async function decideDraftPickForRoster(
     },
   )
   return { ok: true, decision, engineResult, context, forOverall: snapshot.currentPick?.overall ?? null }
+}
+
+/**
+ * ONE ENGINE IN THE DRAFT ROOM (re-score build item 8, 2026-11-19).
+ *
+ * 🛑 THE ROOM SHOWED THREE ANSWERS TO "WHO DO I TAKE". The Decision OS card ranked the server's pool with this
+ * draft's context (scoring window, byes, runs, teams ahead, projections, the live pick rules). The copilot
+ * (`/api/draft/recommend`) and the War Room (`/api/ai/draft/recommend`) ran the same engine on the pool the
+ * BROWSER sent, without that context and without the rules — so the three could name three players. Both now
+ * take this result when they can build it, so the room has one answer, and their prose explains that answer.
+ *
+ * The result is the engine's own, made consistent with the decision: when the decision skips its top choice
+ * (an `illegal` verdict — already taken, or no roster spot — other than "the draft is over"), the player the card
+ * names after "consider" leads, exactly as the card says.
+ *
+ * Null when there is no decision to share (no draft, no roster for this user, an auction, or the context could
+ * not be read): the caller then keeps its own computation, so nothing that worked before stops working.
+ */
+export function engineResultForDecision(outcome: Extract<PickDecisionResult, { ok: true }>): RecommendationResult | null {
+  const result = outcome.engineResult
+  if (!result?.recommendation) return result
+  const skipped = outcome.decision.rule_verdicts.some((v) => v.verdict === 'illegal' && v.rule !== 'draft.legality.complete')
+  if (!skipped) return result
+  const [next, ...rest] = result.alternatives
+  if (!next) return { ...result, recommendation: null, alternatives: [] }
+  return {
+    ...result,
+    // The engine's figures belong to the player it ranked first; the one promoted carries none of its own.
+    recommendation: { player: next.player, reason: next.reason, confidence: next.confidence, needScore: 0, adpEdge: 0, adpIsReal: false },
+    alternatives: rest,
+    reachWarning: null,
+    valueWarning: null,
+  }
+}
+
+/**
+ * The room's one pick for this user in this league, or null (see `engineResultForDecision`). Never throws: a
+ * caller that cannot get it keeps its own answer.
+ */
+export async function sharedDraftPickForUser(
+  args: { leagueId: string; userId: string },
+  deps: Partial<PickDecisionDeps> & { rosterIdFor?: (leagueId: string, userId: string) => Promise<string | null> } = {},
+): Promise<{ result: RecommendationResult; plannedFor: DraftDecisionContext['plannedFor'] } | null> {
+  try {
+    const rosterIdFor =
+      deps.rosterIdFor ?? (await import('@/lib/live-draft-engine/auth')).getCurrentUserRosterIdForLeague
+    const rosterId = await rosterIdFor(args.leagueId, args.userId)
+    if (!rosterId) return null
+    const d: PickDecisionDeps = { ...(await defaultDeps()), ...deps }
+    const snapshot = await d.snapshot(args.leagueId).catch(() => null)
+    if (!snapshot || snapshot.draftType === 'auction') return null
+    const outcome = await decideDraftPickForRoster({ leagueId: args.leagueId, userId: args.userId, rosterId, snapshot }, d)
+    if (!outcome.ok) return null
+    const result = engineResultForDecision(outcome)
+    return result ? { result, plannedFor: outcome.context.plannedFor ?? null } : null
+  } catch {
+    return null
+  }
 }

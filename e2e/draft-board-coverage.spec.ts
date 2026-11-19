@@ -42,11 +42,12 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
   expect((await search.boundingBox())!.width).toBeGreaterThan(120)
   expect((await sort.boundingBox())!.width).toBeGreaterThan(120)
   const tabs = dock.getByRole('tablist')
-  expect(await tabs.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true)
+  // Four tabs since 2026-11-19 (Queue, My team, Chimmy, Chat), so the row may now fit without
+  // scrolling; the last tab must still be reachable and in view either way.
   await tabs.getByRole('tab', { name: /Queue/ }).focus()
   await page.keyboard.press('End')
-  await expect(tabs.getByRole('tab', { name: 'Activity', exact: true })).toBeFocused()
-  await expect(tabs.getByRole('tab', { name: 'Activity', exact: true })).toBeInViewport()
+  await expect(tabs.getByRole('tab', { name: 'Chat', exact: true })).toBeFocused()
+  await expect(tabs.getByRole('tab', { name: 'Chat', exact: true })).toBeInViewport()
   await page.keyboard.press('Home')
   await expect(search).toBeVisible()
 
@@ -58,7 +59,7 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
     const tabsAt = await bar.evaluate(el => [...el.querySelectorAll('button')].map(b => ({
       label: b.textContent, overflow: b.scrollWidth - b.clientWidth, height: b.getBoundingClientRect().height,
     })))
-    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Intel', 'Chat', 'AF Legacy', 'Commish Edit'])
+    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Chimmy', 'Chat', 'Commish Edit'])
     for (const t of tabsAt) {
       expect(t.overflow, `${width}px ${t.label}`).toBeLessThanOrEqual(0)
       expect(t.height, `${width}px ${t.label}`).toBeLessThan(40)

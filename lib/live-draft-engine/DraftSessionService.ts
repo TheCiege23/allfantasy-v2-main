@@ -1,4 +1,5 @@
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
+import { listAutoDraftRosterIds } from './instantAutopick'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
@@ -729,6 +730,10 @@ export async function buildSessionSnapshot(
     viewerAutopick: viewerUserId
       ? await getViewerAutopickPreference(session.id, viewerUserId)
       : null,
+    autoDraftRosterIds:
+      session.status === 'completed'
+        ? []
+        : await listAutoDraftRosterIds({ leagueId, draftSessionId: session.id }).catch(() => []),
     currentUserRosterId: viewerUserId
       ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId).catch(() => null)) ?? undefined
       : undefined,

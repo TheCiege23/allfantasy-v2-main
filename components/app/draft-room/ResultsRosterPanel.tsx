@@ -18,7 +18,9 @@
  */
 
 import { useMemo, useState, useEffect } from 'react'
-import { ChevronDown, Bot, User } from 'lucide-react'
+import { ChevronDown, Bot, User, AlertTriangle } from 'lucide-react'
+import { detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
+import { PlayerAvatar } from './PlayerAvatar'
 import {
   buildOrderedRosterSlots,
   assignPicksToSlots,
@@ -42,6 +44,11 @@ export interface ResultsRosterPanelPick {
   team?: string | null
   overall: number
   isDevy?: boolean
+  /** Bye week; null when the schedule has no answer (shown as a dash, never guessed). */
+  byeWeek?: number | null
+  /** Where it was drafted, e.g. "3.06". */
+  pickLabel?: string | null
+  imageUrl?: string | null
 }
 
 interface ResultsRosterPanelProps {
@@ -104,6 +111,14 @@ export function ResultsRosterPanel({
 
   const starterPicks = slotAssignments.filter((s) => s.slot.kind === 'starter' || s.slot.kind === 'custom')
   const benchPicks = slotAssignments.filter((s) => s.slot.kind === 'bench')
+  /** 3+ STARTERS sharing a bye is the one bye problem worth a warning while drafting. */
+  const byeStacks = useMemo(
+    () =>
+      detectByeWeekClusters(
+        starterPicks.flatMap((e) => (e.pick ? [{ position: e.pick.position, byeWeek: e.pick.byeWeek ?? null }] : [])),
+      ),
+    [starterPicks],
+  )
 
   return (
     <section
@@ -184,6 +199,15 @@ export function ResultsRosterPanel({
 
       {/* Body — ordered slots. */}
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {byeStacks.length ? (
+          <p
+            className="mx-3 mt-2 flex items-center gap-1.5 rounded-md border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100"
+            data-testid={`${testIdBase}-bye-stack`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {byeStacks[0]!.count} starters are off in week {byeStacks[0]!.byeWeek}
+          </p>
+        ) : null}
         <SlotGroup heading="STARTERS" entries={starterPicks} testIdBase={`${testIdBase}-starters`} />
         {benchPicks.length ? (
           <SlotGroup heading="BENCH" entries={benchPicks} testIdBase={`${testIdBase}-bench`} />
@@ -220,17 +244,35 @@ function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
             data-slot-position={entry.slot.position}
             className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5 text-[11px] last:border-b-0"
           >
-            <span className="w-12 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-white/55">
+            <span className="w-9 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-white/55">
               {entry.slot.label}
             </span>
             {entry.pick ? (
-              <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                <span className="truncate text-[12px] text-white/95">
-                  {entry.pick.playerName}
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <PlayerAvatar
+                  headshotUrl={entry.pick.imageUrl ?? null}
+                  teamAbbr={entry.pick.team ?? null}
+                  position={entry.pick.position}
+                  displayName={entry.pick.playerName}
+                  size={24}
+                  testIdBase={`${testIdBase}-avatar-${idx}`}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-semibold text-white/95">{entry.pick.playerName}</span>
+                  <span className="block truncate text-[11px] text-white/50">
+                    {entry.pick.position}
+                    {entry.pick.team ? ` · ${entry.pick.team}` : ''}
+                  </span>
                 </span>
-                <span className="shrink-0 text-[11px] text-white/45">
-                  {entry.pick.position}
-                  {entry.pick.team ? ` · ${entry.pick.team}` : ''}
+                <span className="shrink-0 text-right text-[11px] leading-tight tabular-nums">
+                  <span className="block text-white/70" data-testid={`${testIdBase}-bye-${idx}`}>
+                    {entry.pick.byeWeek != null ? `BYE ${entry.pick.byeWeek}` : 'BYE —'}
+                  </span>
+                  {entry.pick.pickLabel ? (
+                    <span className="block text-white/45" data-testid={`${testIdBase}-pick-${idx}`}>
+                      {entry.pick.pickLabel}
+                    </span>
+                  ) : null}
                 </span>
               </span>
             ) : (

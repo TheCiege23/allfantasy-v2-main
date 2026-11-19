@@ -7,7 +7,7 @@ import { getSurvivorDefaultContract } from '@/lib/league-concepts/survivorDefaul
 import { getLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { resolveCreatedSeasonWeeks } from '@/lib/redraft/createdSeasonLength'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
-import { buildNativeLeagueNavigation, nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { buildNativeLeagueNavigation, nativeLeaguePhase, nativeNavLeafIds } from '@/lib/league/nativeLeagueNavigation'
 import { getAllowedLeagueTypesForSport, getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
 
 describe('NBA Survivor creation pilot and multi-sport season capabilities', () => {
@@ -151,11 +151,13 @@ describe('NBA Survivor creation pilot and multi-sport season capabilities', () =
 
 describe('native workspace navigation', () => {
   const tabs = ['native_home', 'home', 'draft', 'roster', 'matchups', 'players', 'waivers', 'trades', 'standings', 'league_chat', 'survivor', 'survivor_tribal', 'commissioner', 'settings'].map(id => ({ id, label: id }))
-  it('retains functional tools, gives home one entry, and hides commissioner controls from members', () => {
-    const ids = buildNativeLeagueNavigation(tabs, false).flatMap(g => g.items.map(i => i.id))
+  it('retains functional tools, gives home one entry, and keeps commissioner tools from members', () => {
+    const ids = nativeNavLeafIds(buildNativeLeagueNavigation(tabs, false))
     expect(ids).toContain('native_home'); expect(ids).toContain('draft'); expect(ids).toContain('survivor_tribal')
-    expect(ids).not.toContain('commissioner'); expect(ids).not.toContain('home'); expect(ids).not.toContain('settings')
-    expect(buildNativeLeagueNavigation(tabs, true).flatMap(g => g.items.map(i => i.id))).toContain('commissioner')
+    expect(ids).not.toContain('commissioner'); expect(ids).not.toContain('home')
+    // A member reaches the read-only League settings page, as Sleeper's Settings tab does for everyone.
+    expect(ids).toContain('settings')
+    expect(nativeNavLeafIds(buildNativeLeagueNavigation(tabs, true))).toContain('commissioner')
   })
   it.each([['pre_draft', 'Setup'], ['drafting', 'Draft'], ['in_season', 'Regular season'], ['playoffs', 'Playoffs'], ['completed', 'Offseason']])('uses actual lifecycle %s for %s', (state, label) => {
     expect(nativeLeaguePhase({ lifecycleState: state, status: 'setup' })).toBe(label)

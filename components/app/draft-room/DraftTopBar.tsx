@@ -297,7 +297,8 @@ export function DraftTopBar({
   rookieAuctionNote = null,
   onOpenChimmy,
   picksUntilUser = null,
-  showAutoPickPill = true,
+  // Off by default since 2026-11-19: league auto-pick is a rule, set in Draft settings (the gear).
+  showAutoPickPill = false,
   controlsSlot = null,
   extraMenuItems = [],
   idleClockLabel = null,
@@ -524,7 +525,12 @@ export function DraftTopBar({
      */
     const showLiveTimer =
       timerStatus === 'running' || timerStatus === 'paused' || timerStatus === 'expired'
-    const isPausedCommissioner = draftStatus === 'paused' && isCommissioner && Boolean(onResume)
+    /*
+     * 2026-11-19: the clock no longer doubles as a Resume button. Paused, a commissioner saw TWO
+     * resume controls side by side (this pill and the Resume pill on the right). The clock now only
+     * reads "Paused" in amber; Resume lives in one place.
+     */
+    const isPausedCommissioner = false
 
     if (showLiveTimer || isPausedCommissioner) {
       const handlePillClick = isPausedCommissioner ? onResume : undefined
@@ -544,12 +550,8 @@ export function DraftTopBar({
             </span>
           ) : null}
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
-          {isPausedCommissioner ? (
-            <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
-              {t('draftRoom.topBar.resumeBadge')}
-            </span>
-          ) : draftStatus === 'paused' ? (
-            <span className="rounded border border-white/15 bg-white/[0.08] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
+          {draftStatus === 'paused' ? (
+            <span className="rounded border border-amber-300/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-100">
               {t('draftRoom.topBar.timerPaused')}
             </span>
           ) : null}
@@ -568,7 +570,7 @@ export function DraftTopBar({
             : dangerLowTimer
               ? 'animate-pulse border-amber-400/45 bg-gradient-to-br from-amber-500/25 to-amber-600/15 text-amber-50'
               : draftStatus === 'paused'
-                ? 'border-emerald-400/45 bg-gradient-to-br from-emerald-500/25 to-emerald-600/15 text-emerald-50 hover:brightness-110'
+                ? 'border-amber-400/45 bg-gradient-to-br from-amber-500/20 to-amber-600/10 text-amber-50'
                 : 'border-cyan-400/40 bg-gradient-to-br from-cyan-500/22 to-violet-600/15 text-cyan-50'
       } ${isCriticalOnClock ? 'animate-[shake_0.5s_ease-in-out_infinite]' : ''} ${
         handlePillClick
@@ -710,7 +712,7 @@ export function DraftTopBar({
                 width={28}
                 height={28}
                 aria-hidden
-                className="h-7 w-7 shrink-0 rounded-lg border border-white/15 bg-gradient-to-br from-white/[0.08] to-white/[0.02] object-cover shadow-[0_4px_20px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
+                className="h-7 w-7 shrink-0 rounded-lg border border-white/25 bg-white/[0.12] object-cover shadow-[0_4px_20px_rgba(0,0,0,0.35)] ring-1 ring-white/20"
                 data-testid="draft-topbar-league-logo"
                 unoptimized
                 onError={(e) => {
@@ -718,7 +720,9 @@ export function DraftTopBar({
                 }}
               />
             ) : (
-              <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={28} height={30} className="h-8 w-7 shrink-0 object-contain" data-testid="draft-topbar-brand-logo" />
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white/[0.16] to-white/[0.05] ring-1 ring-white/25 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
+                <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={22} height={24} className="h-6 w-[22px] object-contain drop-shadow-[0_0_6px_rgba(255,255,255,0.25)]" data-testid="draft-topbar-brand-logo" />
+              </span>
             )}
 
             <div className="min-w-0">
@@ -1023,6 +1027,7 @@ export function DraftTopBar({
               onClick={draftStatus === 'paused' ? onResume : onPause}
               disabled={commissionerLoading || !commissionerPauseControlsEnabled}
               data-testid={draftStatus === 'paused' ? 'draft-topbar-resume-pill' : 'draft-topbar-pause-pill'}
+              aria-label={draftStatus === 'paused' ? t('draftRoom.topBar.resume') : t('draftRoom.topBar.pause')}
               className={`inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition duration-150 ${
                 draftStatus === 'paused'
                   ? 'border-emerald-400/40 bg-emerald-500/14 text-emerald-100 hover:bg-emerald-500/20'
@@ -1031,7 +1036,8 @@ export function DraftTopBar({
               title={draftStatus === 'paused' ? t('draftRoom.topBarHint.resumeTheDraft') : t('draftRoom.topBarHint.pauseTheDraft')}
             >
               {draftStatus === 'paused' ? <Sparkles className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-              {draftStatus === 'paused' ? t('draftRoom.topBar.resume') : t('draftRoom.topBar.pause')}
+              {/* Icon-only on a phone: four buttons left the league name a few letters wide. */}
+              <span className="max-sm:sr-only">{draftStatus === 'paused' ? t('draftRoom.topBar.resume') : t('draftRoom.topBar.pause')}</span>
             </button>
           ) : null}
           {showAutoPickPill ? (
@@ -1057,15 +1063,19 @@ export function DraftTopBar({
           </button>
           ) : null}
 
-          {onOpenChimmy ? (
+          {onOpenDraftRoomSettings ? (
+            /* Draft settings for everyone: commissioners and co-commissioners edit, everyone else reads,
+               and after the draft nobody edits (DraftRoomSettingsModal enforces both). This replaced
+               "Ask Chimmy" (Chimmy is a tab in the side dock). */
             <button
               type="button"
-              onClick={onOpenChimmy}
-              data-testid="draft-topbar-ask-chimmy"
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 text-[12px] font-bold text-cyan-200 transition duration-150 hover:bg-cyan-500/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
+              onClick={onOpenDraftRoomSettings}
+              data-testid="draft-topbar-settings"
+              aria-label={isCommissioner ? t('draftRoom.topBarMenu.roomPreferences') : t('draftRoom.topBar.viewDraftSettings')}
+              title={isCommissioner ? t('draftRoom.topBarMenu.roomPreferences') : t('draftRoom.topBar.viewDraftSettings')}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/12 bg-[#7180a8]/20 text-white/85 transition duration-150 hover:bg-[#7b89af]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
             >
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              <span className="max-sm:sr-only">{headerCopy.askChimmy}</span>
+              <Settings2 className="h-4 w-4" aria-hidden />
             </button>
           ) : null}
 
@@ -1209,25 +1219,7 @@ export function DraftTopBar({
                   </button>
                 ) : null}
 
-                {onOpenDraftRoomSettings ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenDraftRoomSettings()
-                      setMenuOpen(false)
-                    }}
-                    data-testid="draft-topbar-league-draft-settings"
-                    className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8"
-                  >
-                    <Settings2 className="mt-0.5 h-4 w-4 text-[#dbe1ff]" />
-                      <span>
-                        <span className="block text-sm font-semibold text-white">
-                        {isCommissioner ? t('draftRoom.topBarMenu.roomPreferences') : t('draftRoom.topBar.viewDraftSettings')}
-                      </span>
-                      <span className="block text-xs text-white/55">{t('draftRoom.topBarMenu.roomPreferencesDesc')}</span>
-                      </span>
-                  </button>
-                ) : leagueDraftSettingsHref ? (
+                {onOpenDraftRoomSettings ? null : leagueDraftSettingsHref ? (
                   <Link
                     href={leagueDraftSettingsHref}
                     onClick={() => setMenuOpen(false)}

@@ -252,7 +252,7 @@ describe('Draft OS recommendation in the draft context', () => {
 
   it("gives Chimmy Draft OS's pick for the viewer's own roster, from the room's engine", async () => {
     const out = await buildDraftContext('lg1', 'app-user-1')
-    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1' })
+    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1', planForOwnTurn: true })
     expect(mocks.computeDraftRecommendation).toHaveBeenCalledWith({ marker: 'engine-input' })
     expect(out).toContain('DRAFT DECISION for THIS USER')
     expect(out).toContain('the same decision their draft room')
@@ -426,7 +426,7 @@ describe("the viewer's side of a live draft", () => {
     expect(out).toContain('THIS USER drafts at slot 2; their next pick is 2.03 (3 picks away).')
     expect(mocks.managersAhead).toHaveBeenCalledWith({ leagueId: 'lg1', userId: 'app-user-1', viewerSlot: 2 })
     // Draft OS still takes the AF roster id.
-    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'af-roster-me' })
+    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'af-roster-me', planForOwnTurn: true })
   })
 
   it('lists the picks filed under their Sleeper user id, and what they still have no starter at', async () => {
