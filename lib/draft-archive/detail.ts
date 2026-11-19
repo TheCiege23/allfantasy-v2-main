@@ -166,7 +166,10 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         const overall = number(native ? r.overall : r.pickNumber) ?? 0, round = number(r.round) ?? 0;
         const slot = choice.format === 'auction' ? null : number(native ? r.slot : meta.originalDraftSlot);
         const original = string(native ? r.originalRosterId : sourceSlotMap[String(slot)]) ?? (native ? string(archive.originalRosterId) : null);
-        const bare = !native && r.metadata == null;
+        // "Bare": the provider's team id in managerId is all that says who picked. True for a pick with no metadata, and
+        // for one whose metadata carries no selection roster (a Fantrax pick stores only the player's name there). A
+        // Sleeper pick with metadata is never bare: its roster comes from the recorded draft or not at all.
+        const bare = !native && string(meta.selectionRosterId) == null && (r.metadata == null || string(meta.provider) !== 'sleeper');
         const roster = string(native ? r.rosterId : meta.selectionRosterId) ?? (bare ? string(r.managerId) : null);
         const id = string(r.playerId), resolved = id ? names.get(id) : null;
         const name = string(native ? r.playerName : player.name);

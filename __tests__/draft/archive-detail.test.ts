@@ -91,6 +91,8 @@ describe('draft archive authorization and attempt boundaries', () => {
       { draftId: 'f2', pickNumber: 2, round: 1, playerId: 'p2', managerId: 'gone', metadata: null },
       // A pick that has metadata keeps the recorded roster; its managerId is not used to name a team.
       { draftId: 'f3', pickNumber: 3, round: 1, playerId: 'p3', managerId: 'team-a', metadata: { provider: 'sleeper' } },
+      // A Fantrax pick stores the player's name and no roster: the team still comes from managerId, the name from the pick.
+      { draftId: 'f4', pickNumber: 4, round: 1, playerId: '05rlf', managerId: 'team-a', metadata: { provider: 'fantrax', playerSnapshot: { name: 'Rookie Back', position: 'RB', team: 'LV' } } },
     ])
     db.teams.mockResolvedValue([{ externalId: 'team-a', platformUserId: null, ownerName: 'Ada', teamName: 'Harbor Owls' }])
     const result = await draftArchiveDetail('l', 'viewer', 'legacy:NFL:2026')
@@ -98,6 +100,7 @@ describe('draft archive authorization and attempt boundaries', () => {
     expect(result?.picks[0]).toMatchObject({ rosterId: 'team-a', teamName: 'Harbor Owls' })
     expect(result?.picks[1]).toMatchObject({ rosterId: 'gone', teamName: null })
     expect(result?.picks[2]).toMatchObject({ rosterId: null, teamName: null })
+    expect(result?.picks[3]).toMatchObject({ rosterId: 'team-a', teamName: 'Harbor Owls', playerName: 'Rookie Back', position: 'RB', club: 'LV' })
   })
   it('names the teams in stored results the same way, keeping a placeholder only where nobody is known', async () => {
     // Live /core 2026-11-06: Results to date listed "Team 8", "Team 5"… because ingestion stores 'Team ' + rosterId.
