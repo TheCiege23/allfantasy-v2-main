@@ -1470,11 +1470,11 @@ async function loadPlayerFacts(
    * `sleeperId` is NFL-only and covers 87.2% of the table — so it produces an
    * explicit "we can't price this one", never a zero.
    */
-  const projectionWeek = row.sport === 'NFL' && row.sleeperId ? await latestProjectionWeek() : null
+  const projectionWeek = row.sport === 'NFL' && row.sleeperId ? await latestProjectionWeek('NFL') : null
   const projKey = row.sport === 'NFL' ? row.sleeperId ?? '' : ''
 
   const projRow = projectionWeek
-    ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
+    ? (await lookupProjections([projKey], projectionWeek, null, 'NFL')).get(projKey)
     : undefined
 
   const projection: PlayerDetail['projection'] = projRow
@@ -1543,7 +1543,7 @@ async function loadPlayerFacts(
    * per player per minute with the rest of these facts; a failed read costs the AF figure only.
    */
   const afRow = projectionWeek && row.sleeperId
-    ? (await lookupAfEngineProjections([projKey], projectionWeek).catch(
+    ? (await lookupAfEngineProjections([projKey], projectionWeek, 'NFL').catch(
         (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
       )).get(projKey)
     : undefined

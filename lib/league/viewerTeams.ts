@@ -16,6 +16,7 @@
  *
  * `chooseActingTeam` is the pure rule; `resolveActingRoster` reads the manager's teams and applies it.
  */
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
 import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -26,6 +27,31 @@ export type HeldTeam = { rosterId: string; redraftRosterId: string | null }
 export type ActingTeam =
   | { ok: true; rosterId: string; redraftRosterId: string | null; heldCount: number; viaCoOwner: boolean }
   | { ok: false; code: 'NO_TEAM' | 'TEAM_REQUIRED' | 'NOT_YOUR_TEAM'; status: number; message: string; rosterIds: string[] }
+
+/** Native franchises use their roster ID. Imported franchises keep their provider's team ID. */
+export async function leagueTeamsForRosters<T extends { externalId: string }>(
+  leagueId: string, rosterIds: readonly string[], teams: readonly T[],
+): Promise<Map<string, T>> {
+  const byExternalId = new Map(teams.map(team => [team.externalId, team]))
+  const mapped = new Map<string, T>()
+  const missing: string[] = []
+  for (const id of rosterIds) {
+    const team = byExternalId.get(id)
+    if (team) mapped.set(id, team)
+    else missing.push(id)
+  }
+  if (missing.length) {
+    const imported = await prisma.roster.findMany({
+      where: { leagueId, id: { in: missing } }, select: { id: true, playerData: true },
+    })
+    for (const roster of imported) {
+      const sourceId = rosterSourceTeamId(roster.playerData)
+      const team = sourceId ? byExternalId.get(sourceId) : undefined
+      if (team) mapped.set(roster.id, team)
+    }
+  }
+  return mapped
+}
 
 /** The header and the query/body field a request names its team with. */
 export const ACTING_TEAM_HEADER = 'x-af-roster-id'

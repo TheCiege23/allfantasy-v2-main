@@ -46,7 +46,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/core-app/byeWeeks', () => ({ getByeWeeks: vi.fn(async () => null) }))
 
-import { lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
+import { lookupAfEngineProjections, lookupProjections, positionRanks } from '@/lib/core-app/playerProjections'
 import { loadRailProjections } from '@/lib/core-app/railMatchups'
 
 const AT = { season: '2026', week: 3 }
@@ -75,6 +75,15 @@ describe('lookupProjections / lookupAfEngineProjections — scoped to the league
     expect((await lookupAfEngineProjections([SHARED_ID], AT, 'NBA')).size).toBe(0)
   })
 
+  it('ranks one current NFL observation per player', async () => {
+    h.rows.push({ playerId: SHARED_ID, sport: 'NBA', ...AT, source: 'sleeper', projectedPoints: 999, stats: { position: 'RB' } })
+    const ranks = await positionRanks([SHARED_ID], AT)
+    expect(ranks.get(SHARED_ID)).toMatchObject({ rank: 1, outOf: 1, projectedPoints: 18 })
+    expect(h.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      distinct: ['playerId'], orderBy: [{ playerId: 'asc' }, { fetchedAt: 'desc' }, { id: 'asc' }],
+    }))
+  })
+
   it('control: an NFL lookup, or one with no sport, still finds the row', async () => {
     expect((await lookupProjections([SHARED_ID], AT, null, 'NFL')).get(SHARED_ID)?.projectedPoints).toBe(18)
     expect((await lookupProjections([SHARED_ID], AT)).get(SHARED_ID)?.projectedPoints).toBe(18)
@@ -82,16 +91,16 @@ describe('lookupProjections / lookupAfEngineProjections — scoped to the league
     expect((await lookupAfEngineProjections([SHARED_ID], AT)).get(SHARED_ID)?.projectedPoints).toBe(20)
   })
 
-  it('an NFL or sport-less lookup sends exactly the query it always did — no sport key', async () => {
+  it('scopes an explicitly NFL lookup and preserves lookup without a supplied sport', async () => {
     await lookupProjections([SHARED_ID], AT, null, 'NFL')
     await lookupProjections([SHARED_ID], AT)
     await lookupAfEngineProjections([SHARED_ID], AT, 'NFL')
     await lookupAfEngineProjections([SHARED_ID], AT)
     const wheres = h.findMany.mock.calls.map(([args]) => args.where)
     expect(wheres).toEqual([
+      { sport: 'NFL', playerId: { in: [SHARED_ID] }, season: '2026', week: 3, source: { not: 'allfantasy' } },
       { playerId: { in: [SHARED_ID] }, season: '2026', week: 3, source: { not: 'allfantasy' } },
-      { playerId: { in: [SHARED_ID] }, season: '2026', week: 3, source: { not: 'allfantasy' } },
-      { playerId: { in: [SHARED_ID] }, season: '2026', week: 3, source: 'allfantasy' },
+      { sport: 'NFL', playerId: { in: [SHARED_ID] }, season: '2026', week: 3, source: 'allfantasy' },
       { playerId: { in: [SHARED_ID] }, season: '2026', week: 3, source: 'allfantasy' },
     ])
   })

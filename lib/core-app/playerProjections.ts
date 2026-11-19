@@ -98,16 +98,8 @@ function toProjection(row: {
  * and finding nothing would render "no projections" on a screen whose real problem
  * is that it asked for the wrong week.
  */
-export async function latestProjectionWeek(): Promise<{ season: string; week: number } | null> {
-  /*
-   * ⚠ NO SPORT PARAMETER, AND THAT IS THE CORRECTED DESIGN. A first cut gave this a
-   * `sport` and returned a college week for NCAAF. There is no college week to
-   * return: college baseline `AFProjectionSnapshot` rows have `week = null`, because
-   * the writer gates week-scoped rows on Sleeper's season state, which is the NFL's.
-   * A sport-aware version here could only have invented a number or returned null and
-   * switched college projections off entirely. `lookupProjections` resolves the
-   * college season itself and ignores the week — see lib/core-app/ncaafProjections.ts.
-   */
+export async function latestProjectionWeek(sport?: 'NFL'): Promise<{ season: string; week: number } | null> {
+  // Weekly NFL player cards read the NFL feed. College baselines have no week and resolve separately.
   /*
    * 🛑 THE WEEK THE FEED IS BEING REFRESHED FOR, NOT THE HIGHEST WEEK ON FILE. Those differ the
    * moment a week is written early, and it was — every week of 2026 until the importer was fixed:
@@ -123,7 +115,7 @@ export async function latestProjectionWeek(): Promise<{ season: string; week: nu
   const row = await prisma.fantasyProjection.findFirst({
     // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
     // provider feed — they must not decide, or serve as, "the week the feed holds".
-    where: { source: { not: 'allfantasy' } },
+    where: { source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
     orderBy: [{ fetchedAt: 'desc' }, { season: 'desc' }, { week: 'desc' }],
     select: { season: true, week: true },
   })
@@ -160,12 +152,18 @@ export interface IdpEnrichment {
  * sets it: the importer as 'NFL', the AF mirror as the run's sport), so a known non-NFL sport reads
  * only its own rows — today none, which renders "no projection", the true statement.
  *
- * ⚠ NFL AND AN UNKNOWN SPORT ADD NO FILTER, so every NFL caller's query is byte-identical to before.
- * Same rule as `isKnownNonNflSport` in rosterIdSpace.ts: an unthreaded caller keeps its old answer.
+ * Scope both NFL and non-NFL IDs when the caller knows the sport. Older callers can omit it.
  */
 export function projectionSportScope(sport: string | null | undefined): { sport?: string } {
-  return isKnownNonNflSport(sport) ? { sport: String(sport).trim().toUpperCase() } : {}
+  const value = sport?.trim().toUpperCase()
+  return value ? { sport: value } : {}
 }
+
+// A player's displayed points and rank use the same provider observation.
+const latestProviderRows = {
+  distinct: ['playerId'],
+  orderBy: [{ playerId: 'asc' }, { fetchedAt: 'desc' }, { id: 'asc' }],
+} satisfies Pick<import('@prisma/client').Prisma.FantasyProjectionFindManyArgs, 'distinct' | 'orderBy'>
 
 /** Projections for a set of players, keyed by player id. */
 export async function lookupProjections(
@@ -195,6 +193,7 @@ export async function lookupProjections(
 
   const rows = await prisma.fantasyProjection.findMany({
     where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
+    ...latestProviderRows,
     select: { playerId: true, projectedPoints: true, stats: true, source: true },
   })
   const out = new Map(rows.map((r) => [r.playerId, toProjection(r)]))
@@ -413,11 +412,14 @@ export async function positionRanks(
   playerIds: readonly string[],
   at?: { season: string; week: number } | null
 ): Promise<Map<string, PositionRank>> {
-  const when = at ?? (await latestProjectionWeek())
+  const when = at ?? (await latestProjectionWeek('NFL'))
   if (!when) return new Map()
 
+  // Player Finder's weekly position rank uses NFL projections. Providers may both publish a
+  // projection for the same player and week. Each athlete gets one place in the denominator.
   const all = await prisma.fantasyProjection.findMany({
-    where: { season: when.season, week: when.week, source: { not: 'allfantasy' } },
+    where: { sport: 'NFL', season: when.season, week: when.week, source: { not: 'allfantasy' } },
+    ...latestProviderRows,
     select: { playerId: true, projectedPoints: true, stats: true },
   })
 

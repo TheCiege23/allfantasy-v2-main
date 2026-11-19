@@ -11,7 +11,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import {
-  ACTIVE_TEAMS_COOKIE, activeTeamsCookieAfterSwitch, listHeldTeams, requestedRosterIdFrom, resolveViewingRoster,
+  ACTIVE_TEAMS_COOKIE, activeTeamsCookieAfterSwitch, leagueTeamsForRosters, listHeldTeams, requestedRosterIdFrom, resolveViewingRoster,
 } from '@/lib/league/viewerTeams'
 
 export const dynamic = 'force-dynamic'
@@ -29,11 +29,11 @@ async function teamsFor(leagueId: string, userId: string) {
   const held = await listHeldTeams(leagueId, userId)
   if (held.length === 0) return []
   const names = await prisma.leagueTeam.findMany({
-    where: { leagueId, externalId: { in: held.map((team) => team.rosterId) } },
+    where: { leagueId, OR: [{ claimedByUserId: userId }, { externalId: { in: held.map(team => team.rosterId) } }] },
     select: { externalId: true, teamName: true },
   })
-  const nameOf = new Map(names.map((team) => [team.externalId, team.teamName]))
-  return held.map((team, index) => ({ rosterId: team.rosterId, teamName: nameOf.get(team.rosterId)?.trim() || `Team ${index + 1}` }))
+  const franchises = await leagueTeamsForRosters(leagueId, held.map(team => team.rosterId), names)
+  return held.map((team, index) => ({ rosterId: team.rosterId, teamName: franchises.get(team.rosterId)?.teamName?.trim() || `Team ${index + 1}` }))
 }
 
 export async function GET(req: NextRequest, ctx: Ctx) {

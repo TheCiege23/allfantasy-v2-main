@@ -181,7 +181,7 @@ test('Fantrax manager claims two franchises and keeps both when the commissioner
         playerData: { source_team_id: externalId, players: ids, starters: ids },
       } })
       await prisma.leagueTeam.update({ where: { leagueId_externalId: { leagueId: sourceId, externalId: rosterId } }, data: {
-        externalId, platformUserId: i === 1 || i === 2 ? providerUser : externalId,
+        externalId, teamName: 'Fixture franchise ' + i, platformUserId: i === 1 || i === 2 ? providerUser : externalId,
         claimedByUserId: i === 0 ? commissioner : null, isCommissioner: i === 0, isOrphan: i === 3,
       } })
     }
@@ -196,6 +196,10 @@ test('Fantrax manager claims two franchises and keeps both when the commissioner
     }
     expect(await prisma.leagueManagerClaim.count({ where: { leagueId: sourceId, afUserId: manager } })).toBe(2)
     expect((await prisma.leagueInvite.findUniqueOrThrow({ where: { id: invite.id } })).useCount).toBe(invite.useCount + 2)
+
+    const sourceTeams = await page.request.get('/api/leagues/' + sourceId + '/my-teams')
+    expect((await sourceTeams.json()).teams.map((team: { teamName: string }) => team.teamName).sort())
+      .toEqual(['Fixture franchise 1', 'Fixture franchise 2'])
 
     await signInAs(page, { id: commissioner })
     const converted = await post('/api/leagues', { ...body, leagueName: 'Fantrax converted fixture', sourceLeagueId: sourceId })
@@ -220,6 +224,12 @@ test('Fantrax manager claims two franchises and keeps both when the commissioner
     expect((await page.request.get(waiverUrl)).status()).toBe(403)
     await signInAs(page, { id: manager })
     expect((await page.request.get(waiverUrl)).status()).toBe(200)
+    const held = await prisma.leagueTeam.findMany({ where: { leagueId: target, claimedByUserId: manager }, orderBy: { externalId: 'asc' } })
+    for (const franchise of held) {
+      expect((await post('/api/leagues/' + target + '/my-teams', { rosterId: franchise.externalId })).status()).toBe(200)
+      await page.goto('/league/' + target, { waitUntil: 'domcontentloaded', timeout: 240_000 })
+      await expect(page.getByRole('heading', { name: franchise.teamName!, exact: true }).first()).toBeVisible({ timeout: 90_000 })
+    }
   } finally {
     await prisma.leagueManagerClaim.deleteMany({ where: { leagueId: { in: leagueIds } } })
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } })

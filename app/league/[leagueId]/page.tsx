@@ -1,3 +1,4 @@
+import { leagueTeamsForRosters, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { LeagueDisplayPreferences } from '@/components/league/LeagueDisplayPreferences'
 import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
@@ -294,8 +295,21 @@ export default async function LeaguePage(
         }
 
       const isOwner = league.userId === userId
+      const claimedTeams = league.teams.filter(team => team.claimedByUserId === userId)
+      let userTeam = claimedTeams.at(0) ?? null
+      if (claimedTeams.length > 1) {
+        const active = await resolveViewingRoster(leagueId, userId)
+        if (active) {
+          const teams = await leagueTeamsForRosters(leagueId, [active.rosterId], claimedTeams)
+          userTeam = teams.get(active.rosterId) ?? userTeam
+        }
+      } else if (!userTeam) {
         const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-        const userTeam = league.teams.find((t) => t.claimedByUserId === userId) ?? (coOwnerRosterId ? league.teams.find((t) => t.externalId === coOwnerRosterId) : null) ?? null
+        if (coOwnerRosterId) {
+          const teams = await leagueTeamsForRosters(leagueId, [coOwnerRosterId], league.teams)
+          userTeam = teams.get(coOwnerRosterId) ?? null
+        }
+      }
 
       if (!isOwner && !userTeam) {
               // Not a member — show explicit join/request state instead of opaque redirect.
