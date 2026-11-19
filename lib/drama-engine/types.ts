@@ -28,7 +28,6 @@ export interface DramaDetectionSignal {
   upsetMagnitude?: number
   playoffSwing?: number
   recencyWeight?: number
-  managerBehaviorHeat?: number
   leagueGraphHeat?: number
 }
 

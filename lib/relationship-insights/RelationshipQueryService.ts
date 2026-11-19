@@ -1,10 +1,9 @@
 import { buildLeagueRelationshipProfile } from '@/lib/league-intelligence-graph'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
-import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { buildBehaviorDramaContext } from './BehaviorDramaBridge'
 import { syncRivalryEdgesIntoGraph } from './GraphRivalryBridge'
-import { toPublicBehaviorDramaContext, toPublicProfileCoverage } from './publicView'
+import { toPublicBehaviorDramaContext } from './publicView'
 import { normalizeOptionalSportForRelationship } from './SportRelationshipResolver'
 import { resolveUnifiedStorylines } from './UnifiedStorylineResolver'
 import type { UnifiedRelationshipInsights } from './types'
@@ -30,7 +29,7 @@ export async function getUnifiedRelationshipInsights(
     }).catch(() => null)
   }
 
-  const [relationshipProfile, rivalries, profiles, drama, storylines] = await Promise.all([
+  const [relationshipProfile, rivalries, drama, storylines] = await Promise.all([
     buildLeagueRelationshipProfile({
       leagueId: input.leagueId,
       season: input.season ?? null,
@@ -48,11 +47,6 @@ export async function getUnifiedRelationshipInsights(
       sport: sport ?? undefined,
       season: input.season ?? undefined,
       limit: Math.max(20, input.limit ?? 40),
-    }),
-    listProfilesByLeague(input.leagueId, {
-      sport: sport ?? undefined,
-      season: input.season ?? undefined,
-      limit: 200,
     }),
     listDramaEvents(input.leagueId, {
       sport: sport ?? undefined,
@@ -90,8 +84,6 @@ export async function getUnifiedRelationshipInsights(
     season: input.season ?? null,
     relationshipProfile,
     rivalries,
-    // Served to the client and to LLM context: coverage and facts only (publicView.ts).
-    profiles: toPublicProfileCoverage(profiles),
     drama,
     behaviorDramaContext: toPublicBehaviorDramaContext(behaviorDramaContext),
     storylines,

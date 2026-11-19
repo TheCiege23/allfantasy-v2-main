@@ -28,7 +28,6 @@ type InsightsPayload = {
     centralManagers: unknown[]
   }
   rivalries: Array<{ id: string }>
-  profiles: Array<{ id: string }>
   drama: Array<{ id: string }>
   storylines: StorylineRow[]
 }
@@ -94,7 +93,6 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
           rebuildGraph: true,
           runRivalry: true,
           runDrama: true,
-          runProfiles: false,
           syncGraphRivalryEdges: true,
         }),
       })
@@ -208,14 +206,10 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
 
       {!loading && payload && (
         <>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
               <p className="text-[11px] text-white/50">Rivalries</p>
               <p className="text-sm text-white/90">{payload.rivalries.length}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="text-[11px] text-white/50">Behavior profiles</p>
-              <p className="text-sm text-white/90">{payload.profiles.length}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
               <p className="text-[11px] text-white/50">Drama events</p>
