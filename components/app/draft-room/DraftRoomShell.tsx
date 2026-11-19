@@ -380,7 +380,7 @@ export function DraftRoomShell({
             */
             <div
               className={cn(
-                'relative flex h-5 shrink-0 items-center border-b border-white/[0.06] bg-[#081022]',
+                'relative flex h-6 shrink-0 items-center border-b border-white/[0.06] bg-[#081022]',
                 boardHidden ? 'justify-end pr-3' : 'justify-center',
               )}
               data-testid="draft-dock-size-bar"
@@ -398,7 +398,7 @@ export function DraftRoomShell({
                 aria-haspopup="true"
                 data-testid="draft-dock-view-menu"
                 title="Change how much of the screen the board and the player panel get"
-                className="inline-flex h-[18px] items-center gap-1 rounded-full border border-white/15 bg-[#0a1228] px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+                className="inline-flex h-5 items-center gap-1 rounded-full border border-white/15 bg-[#0a1228] px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
               >
                 <span className="h-[3px] w-5 rounded-full bg-white/30" aria-hidden />
                 {boardHidden ? 'Players only' : dockSize === 'min' ? 'Board only' : dockSize === 'tall' ? 'More players' : 'Split'}
