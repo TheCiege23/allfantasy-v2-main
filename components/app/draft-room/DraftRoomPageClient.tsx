@@ -1,5 +1,6 @@
 'use client'
 
+import { queueEntryFromPlayer } from '@/lib/draft-queue-engine/queueEntryFromPlayer'
 import { ActiveTeamSwitcher } from '@/components/league/ActiveTeamSwitcher'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
@@ -3033,11 +3034,8 @@ export function DraftRoomPageClient({
       ) {
         return
       }
-      const entry: QueueEntry = {
-        playerName: player.name,
-        position: player.position,
-        team: player.team ?? null,
-      }
+      // With his id: autopick drafts from this row, and a pick with no id scores zero all season.
+      const entry: QueueEntry = queueEntryFromPlayer(player)
       const next = trimDraftQueue([...queue, entry], draftQueueSizeLimit)
       sendProductAnalyticsBeacon(DRAFT_ROOM.QUEUE_ADD, {
         leagueId,
