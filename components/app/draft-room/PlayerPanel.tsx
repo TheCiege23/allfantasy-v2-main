@@ -4,7 +4,7 @@ import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
-import { Check, Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
+import { Check, Search, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage, useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
@@ -909,7 +909,7 @@ function PlayerPanelInner({
               data-testid="draft-player-search-input"
             />
           </div>
-          <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100 md:hidden"
+          <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100"
             data-testid="draft-mobile-filters-toggle" aria-expanded={filtersOpen} aria-controls={`draft-player-more-filters ${filterRegionId}`}
             aria-label={`Filters, ${filtered.length} players`}
             onClick={() => setFiltersOpen(open => !open)}>
@@ -1073,7 +1073,7 @@ function PlayerPanelInner({
           </div>
         )}
 
-        <div data-testid="draft-player-more-filter-rows" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}><div data-testid="draft-extra-player-filters">
+        <div data-testid="draft-player-more-filter-rows" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden'}><div data-testid="draft-extra-player-filters">
         <div
           className="flex flex-wrap items-center gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 sm:px-3"
         >
@@ -1145,15 +1145,7 @@ function PlayerPanelInner({
               Chimmy overlays
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setShowRosterView((v) => !v)}
-            data-testid="draft-toggle-roster-view"
-            className="ml-auto min-h-[30px] flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/10 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition"
-          >
-            <User className="h-3.5 w-3.5" />
-            {showRosterView ? 'Pool' : 'My roster'}
-          </button>
+          {/* "My roster" was removed here (2026-11-19): the My team tab is the one roster view. */}
         </div>
         <div
           className="flex flex-wrap items-center justify-between gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 text-[11px] text-white/60"

@@ -19,6 +19,7 @@ import { readLivePlaylist, type DraftPlaylist } from '@/lib/draft-room/draftPlay
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
 import { useCommissionerActions } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
+import { queueNameKey } from '@/components/app/draft-room/QueuePanel'
 import { DraftBoard } from '@/components/app/draft-room/DraftBoard'
 import { DraftTeamStrip, type DraftTeamStripTeamMeta } from '@/components/app/draft-room/DraftTeamStrip'
 import { PickTradeHistoryModal } from '@/components/app/draft-room/PickTradeHistoryModal'
@@ -42,7 +43,6 @@ import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
 import { DraftCenterDockTabBar, type CenterDockTab } from '@/components/app/draft-room/DraftCenterDockTabBar'
 import { CHIMMY_PICK_DELAY_MS } from '@/lib/commissioner-ai-draft-manager/chimmyPickTiming'
-import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
   ResultsRosterPanel,
   type ResultsRosterPanelTeam,
@@ -3246,6 +3246,9 @@ export function DraftRoomPageClient({
       position: p.position,
       team: p.team ?? null,
       overall: p.overall,
+      byeWeek: p.byeWeek ?? null,
+      pickLabel: p.pickLabel ?? null,
+      imageUrl: p.playerImageUrl ?? null,
     }))
   }, [session?.picks])
 
@@ -4110,51 +4113,21 @@ export function DraftRoomPageClient({
     () => {
       const queuePlayerMetaById = players.reduce<Record<string, { headshotUrl?: string | null; teamLogoUrl?: string | null; adp?: number | null; rank?: number | null }>>((acc, player, idx) => {
         const pid = String(player.playerId ?? player.display?.playerId ?? player.id ?? '').trim()
-        if (!pid) return acc
-        acc[pid] = {
+        const meta = {
           headshotUrl: player.display?.assets?.headshotUrl ?? player.display?.assets?.headshotFallbackUrl ?? null,
           teamLogoUrl: player.display?.assets?.teamLogoUrl ?? player.display?.assets?.teamLogoFallbackUrl ?? null,
           adp: player.adp ?? null,
           rank: Number.isFinite(player.aiAdp ?? NaN) ? (player.aiAdp ?? null) : idx + 1,
         }
+        if (pid) acc[pid] = meta
+        // Also by name + position: a queue entry often carries another id (or none), and then the
+        // queue showed initials where the pool had a photo (reported 2026-11-19).
+        const nameKey = queueNameKey(player.name, player.position)
+        if (nameKey && !acc[nameKey]) acc[nameKey] = meta
         return acc
       }, {})
 
       return <div className={`space-y-1.5 p-1 ${presentationVariant === 'redraft_snake' ? 'rounded-lg border border-white/[0.06] bg-[linear-gradient(180deg,rgba(13,20,40,0.95),rgba(8,14,28,0.95))] p-1.5' : ''}`}>
-        <details className="rounded-xl border border-white/10 bg-[#0a1425]" data-testid="draft-queue-intelligence">
-          <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-cyan-100">Draft intelligence</summary>
-        {hasDraftHelperData ? (
-          <button
-            type="button"
-            onClick={() => floatingHelperState.setVisible(true)}
-            data-testid="draft-helper-docked-trigger"
-            className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-[#151b2e] px-2.5 py-1.5 text-left text-xs text-white hover:bg-[#1d2236]"
-          >
-            <span>
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b91a7]">Draft intelligence</span>
-              <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and Chimmy context</span>
-            </span>
-            {draftHelperBadgeCount > 0 ? (
-              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#14172a]">
-                {draftHelperBadgeCount}
-              </span>
-            ) : null}
-          </button>
-        ) : null}
-        <DraftIntelQueuePanel
-          loading={draftIntelLoading}
-          headline={draftIntel?.headline ?? null}
-          picksUntilUser={ribbonPicksUntilUser}
-          onClock={session?.status === 'in_progress' && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock)}
-          queue={draftIntelQueue}
-          canDraft={Boolean(canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock))}
-          onDraftTopChoice={
-            canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock) ? handleDraftIntelPick : undefined
-          }
-          presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
-          onAddIntelSuggestion={presentationVariant === 'redraft_snake' ? handleAddIntelQueueSuggestion : undefined}
-        />
-        </details>
         <QueuePanel
           queue={queueFiltered}
           playerMetaById={queuePlayerMetaById}
@@ -4668,6 +4641,46 @@ export function DraftRoomPageClient({
    * Decision OS sits on top of the assistant: the `manager.draft.pick` decision — the same engine's
    * top choice, checked against the live pick rules — refetched as the board moves.
    */
+  /**
+   * Chimmy's read on the draft, in ONE place (2026-11-19). These pieces were spread over the
+   * Intel tab, a "Draft intelligence" fold inside Queue, the Chimmy tab and the AF Legacy tab.
+   */
+  const draftIntelSuggestionsNode = (
+    <div className="space-y-1.5" data-testid="draft-chimmy-suggestions">
+
+        {hasDraftHelperData ? (
+          <button
+            type="button"
+            onClick={() => floatingHelperState.setVisible(true)}
+            data-testid="draft-helper-docked-trigger"
+            className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-[#151b2e] px-2.5 py-1.5 text-left text-xs text-white hover:bg-[#1d2236]"
+          >
+            <span>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b91a7]">Draft intelligence</span>
+              <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and Chimmy context</span>
+            </span>
+            {draftHelperBadgeCount > 0 ? (
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#14172a]">
+                {draftHelperBadgeCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
+        <DraftIntelQueuePanel
+          loading={draftIntelLoading}
+          headline={draftIntel?.headline ?? null}
+          picksUntilUser={ribbonPicksUntilUser}
+          onClock={session?.status === 'in_progress' && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock)}
+          queue={draftIntelQueue}
+          canDraft={Boolean(canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock))}
+          onDraftTopChoice={
+            canDraft && (draftIntel?.status === 'on_clock' || isCurrentUserOnClock) ? handleDraftIntelPick : undefined
+          }
+          presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+          onAddIntelSuggestion={presentationVariant === 'redraft_snake' ? handleAddIntelQueueSuggestion : undefined}
+        />
+    </div>
+  )
   const helperPanelNode = (
     <>
     <DraftDecisionOsCard
@@ -4717,6 +4730,22 @@ export function DraftRoomPageClient({
       userOnTheClock={isCurrentUserOnClock}
     />
     </>
+  )
+  const chimmyTabNode = (
+    <div className="space-y-2" data-testid="draft-chimmy-merged">
+      {session.draftType !== 'auction' ? (
+        <section data-testid="draft-chimmy-next-pick">{intelPanelNode}</section>
+      ) : null}
+      {draftIntelSuggestionsNode}
+      {helperPanelNode}
+      {/* The former AF Legacy tab: needs, roster strip and Chimmy's notes on your team. */}
+      <details className="rounded-xl border border-white/10 bg-[#0a1425]" data-testid="draft-chimmy-board-read">
+        <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-cyan-100">Board read</summary>
+        <div className="px-1 pb-1">
+          <DraftTeamPanel {...draftTeamPanelProps} />
+        </div>
+      </details>
+    </div>
   )
   const keeperPanel = showKeeperPanel ? (
     <KeeperPanel
@@ -4925,23 +4954,7 @@ export function DraftRoomPageClient({
               data-testid="draft-right-dock"
             >
               <DraftRightDockTabs
-                /*
-                 * 8b's "Draft activity" card. DraftPickActivityStrip was fully built and exported
-                 * from the barrel, but nothing ever mounted it — the live room had no activity
-                 * feed at all. It needs only picks + slotOrder, both of which already drive the
-                 * board, so this is a wire-up rather than a new feature.
-                 */
-                activityBody={
-                  <div className="flex h-full min-h-0 flex-col overflow-auto">
-                    <DraftPickActivityStrip
-                      picks={session?.picks ?? []}
-                      slotOrder={session?.slotOrder ?? []}
-                      presentationVariant={presentationVariant}
-                    />
-                  </div>
-                }
                 queueBody={<div className="flex h-full min-h-0 flex-col overflow-auto bg-[linear-gradient(180deg,rgba(7,14,28,0.65),rgba(6,12,24,0.88))] px-1 py-1">{queueStackNode}</div>}
-                intelBody={session.draftType !== 'auction' ? intelPanelNode : null}
                 rosterBody={
                   <ResultsRosterPanel
                     teams={resultsRosterTeams}
@@ -4952,14 +4965,9 @@ export function DraftRoomPageClient({
                     idpEnabled={Boolean(idpRosterSummary)}
                   />
                 }
-                warRoomBody={
-                  <div className="h-full min-h-0 overflow-auto bg-[linear-gradient(180deg,rgba(22,12,48,0.55),rgba(6,12,24,0.9))] px-1 py-1">
-                    <DraftTeamPanel {...draftTeamPanelProps} />
-                  </div>
-                }
                 chimmyBody={
                   <div className="h-full min-h-0 overflow-auto px-1 py-1" data-testid="draft-right-dock-chimmy-body">
-                    {helperPanelNode}
+                    {chimmyTabNode}
                   </div>
                 }
                 teamsBody={auctionPanelProps ? <AuctionTeamsPanel {...auctionPanelProps} /> : undefined}
@@ -4988,165 +4996,14 @@ export function DraftRoomPageClient({
                     <div className="h-full overflow-auto px-1.5 py-1">{queueStackNode}</div>
                   ) : null}
 
-                  {centerDockTab === 'intel' ? (
-                    <div className="h-full overflow-hidden" data-testid="draft-bottom-intel-panel">{intelPanelNode}</div>
-                  ) : null}
-
                   {centerDockTab === 'chat' ? (
                     <div className="h-full overflow-hidden">{chatPanelNode}</div>
                   ) : null}
 
                   {centerDockTab === 'ai' ? (
-                    <div
-                      className={`h-full overflow-auto p-3 text-xs text-white/75 ${
-                        presentationVariant === 'redraft_snake'
-                          ? 'bg-[linear-gradient(180deg,rgba(76,29,149,0.12),transparent)]'
-                          : ''
-                      }`}
-                      data-testid="draft-bottom-ai-panel"
-                    >
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200/90">AF Legacy</p>
-                      {entitlements.loading ? (
-                        <div className="mt-2 rounded-lg border border-white/12 bg-black/25 p-3">
-                          <p className="text-white/55">Checking access…</p>
-                        </div>
-                      ) : !hasAiAccess ? (
-                        <div
-                          className="mt-2 rounded-lg border border-amber-400/25 bg-amber-500/10 p-3"
-                          data-testid="draft-bottom-ai-locked"
-                        >
-                          <p className="text-sm font-semibold text-amber-100">Recommendations locked</p>
-                          <p className="mt-1 text-[11px] text-white/65">
-                            Subscribe (Pro, Commissioner, Supreme, or Legacy) for unlimited picks — or top up tokens to pay per-use.
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <a
-                              href="/pricing"
-                              className="inline-flex items-center rounded border border-amber-300/45 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-100 hover:bg-amber-500/30"
-                              data-testid="draft-bottom-ai-upgrade-cta"
-                            >
-                              Upgrade
-                            </a>
-                            <a
-                              href="/tokens"
-                              className="inline-flex items-center rounded border border-cyan-300/45 bg-cyan-500/15 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/25"
-                              data-testid="draft-bottom-ai-tokens-cta"
-                            >
-                              Buy tokens
-                            </a>
-                          </div>
-                        </div>
-                      ) : recommendationResult?.recommendation ? (
-                        /*
-                         * 8b's Chimmy card, built from data the room ALREADY had.
-                         *
-                         * The engine returns confidence alongside the player and the reason, and
-                         * this panel was dropping it — the one number that tells a manager how
-                         * hard to lean on the suggestion. It is the same RecommendationEngine
-                         * score Draft HQ shows, so 8a and 8b cannot disagree (8b build rule 2).
-                         *
-                         * ≥80 reads good, below reads borderline — the handoff's own thresholds.
-                         *
-                         * Copy says Chimmy, never "AI" (8b build rule 6). Scoped to this panel on
-                         * purpose: __tests__/no-ai-customer-copy.test.ts guards app/dashboard only
-                         * and its header calls widening that scan "a surface-by-surface decision,
-                         * not an auto-apply". Renaming the whole draft client is that decision,
-                         * and it is not this change.
-                         */
-                        <div className="mt-2 space-y-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-white">
-                              {recommendationResult.recommendation.player.name}
-                              <span className="ml-1 text-cyan-100/80">
-                                {recommendationResult.recommendation.player.position}
-                                {recommendationResult.recommendation.player.team ? ` - ${recommendationResult.recommendation.player.team}` : ''}
-                              </span>
-                            </p>
-                            {Number.isFinite(recommendationResult.recommendation.confidence) ? (
-                              <span
-                                data-testid="draft-bottom-chimmy-confidence"
-                                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold tabular-nums ${
-                                  recommendationResult.recommendation.confidence >= 80
-                                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-                                    : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
-                                }`}
-                                title="How strongly this league's scoring and your roster holes support the pick"
-                              >
-                                CONF {Math.round(recommendationResult.recommendation.confidence)}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-[11px] text-white/70">{recommendationResult.recommendation.reason}</p>
-                          {/*
-                            WAIT-OR-TAKE, FROM A SIGNAL THE ROOM WAS ALREADY FETCHING AND BINNING.
-                            /api/draft/live-brain runs a deterministic pass every cycle and returns
-                            `waitOrTakeNow` alongside a blended combined-ADP view. The client kept
-                            the whole envelope only to light a "Live Brain live" badge -- the one
-                            question a manager actually has on the clock ("can I wait on him?") was
-                            computed, sent over the wire, and dropped.
-
-                            Shown ONLY when the brain's top pick is the same player this card is
-                            recommending. The two run different passes and can disagree; attaching
-                            one player's wait signal to another player's name would be worse than
-                            showing nothing.
-                          */}
-                          {liveBrainEnvelope?.pickRecommendation &&
-                          liveBrainEnvelope.pickRecommendation.playerName.toLowerCase() ===
-                            recommendationResult.recommendation.player.name.toLowerCase() ? (
-                            <p
-                              data-testid="draft-bottom-chimmy-wait-or-take"
-                              className={`text-[11px] font-semibold ${
-                                liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'take_now'
-                                  ? 'text-emerald-300'
-                                  : liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'safe_to_wait'
-                                    ? 'text-white/60'
-                                    : 'text-rose-300'
-                              }`}
-                            >
-                              {liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'take_now'
-                                ? 'Take him now — he is unlikely to last.'
-                                : liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'safe_to_wait'
-                                  ? 'Safe to wait — he should still be here next turn.'
-                                  : 'He will not return — this is your turn or never.'}
-                            </p>
-                          ) : null}
-                          {/* 8b requires the disclosure: the product analyses, the manager picks. */}
-                          <p className="text-[11px] text-white/45">
-                            You make the pick — AllFantasy never drafts for you.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={openChimmy}
-                            className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
-                            data-testid="draft-bottom-ai-open-helper"
-                          >
-                            Ask Chimmy
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-2 rounded-lg border border-white/12 bg-black/25 p-3">
-                          <p className="text-white/65">
-                            No recommendation yet. Chimmy updates when the draft context changes.
-                          </p>
-                        </div>
-                      )}
-                      {dockChimmyOpen && hasAiAccess ? (
-                        <div className="mt-3 border-t border-white/10 pt-3" data-testid="draft-bottom-ai-chimmy">
-                          <div className="mb-2 flex items-center justify-between">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200/90">Chimmy</p>
-                            <button
-                              type="button"
-                              onClick={() => setDockChimmyOpen(false)}
-                              className="text-[11px] text-white/50 hover:text-white/80"
-                              data-testid="draft-bottom-ai-chimmy-close"
-                            >
-                              Hide
-                            </button>
-                          </div>
-                          {helperPanelNode}
-                        </div>
-                      ) : null}
-                    </div>
+                    /* Tablet "Chimmy" tab = the same merged Chimmy as the desktop dock and the phone (2026-11-19).
+                       It was "AF Legacy": a recommendation card, with Intel in a tab of its own. */
+                    <div className="h-full overflow-auto p-2" data-testid="draft-bottom-ai-panel">{chimmyTabNode}</div>
                   ) : null}
 
                   {centerDockTab === 'commish' && isCommissioner ? (
@@ -5586,7 +5443,7 @@ export function DraftRoomPageClient({
       // non-premium desktop layout) shows the recap, report card and share instead.
       playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
-      helperPanel={helperPanelNode}
+      helperPanel={chimmyTabNode}
       intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
       chatPanel={chatPanelNode}
       rosterPanel={rosterPanel}

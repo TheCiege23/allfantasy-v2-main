@@ -58,7 +58,7 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
     const tabsAt = await bar.evaluate(el => [...el.querySelectorAll('button')].map(b => ({
       label: b.textContent, overflow: b.scrollWidth - b.clientWidth, height: b.getBoundingClientRect().height,
     })))
-    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Intel', 'Chat', 'AF Legacy', 'Commish Edit'])
+    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Chimmy', 'Chat', 'Commish Edit'])
     for (const t of tabsAt) {
       expect(t.overflow, `${width}px ${t.label}`).toBeLessThanOrEqual(0)
       expect(t.height, `${width}px ${t.label}`).toBeLessThan(40)
