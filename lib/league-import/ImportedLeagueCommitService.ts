@@ -226,9 +226,9 @@ export function buildTier0LeagueColumnPatch(
 export async function persistTradedPicks(
   leagueId: string,
   picks: NormalizedTradedPick[],
-): Promise<{ written: number; skipped: number }> {
+): Promise<{ written: number; skipped: number; leftAlone: number }> {
   if (!Array.isArray(picks) || picks.length === 0) {
-    return { written: 0, skipped: 0 }
+    return { written: 0, skipped: 0, leftAlone: 0 }
   }
   let skipped = 0
   const deduplicated = new Map<string, { pick: NormalizedTradedPick; inputCount: number }>()
@@ -253,16 +253,31 @@ export async function persistTradedPicks(
   }
 
   const rows = [...deduplicated.values()]
+  const keyOf = (season: number, round: number, original: string) => `${season}\u0000${round}\u0000${original}`
   const writeBatch = async (
     batch: typeof rows,
-  ): Promise<{ written: number; skipped: number }> => {
-    if (batch.length === 0) return { written: 0, skipped: 0 }
+  ): Promise<{ written: number; skipped: number; leftAlone: number }> => {
+    if (batch.length === 0) return { written: 0, skipped: 0, leftAlone: 0 }
     try {
       const values = batch.map(({ pick }) => Prisma.sql`(
         ${randomUUID()}, ${leagueId}, ${pick.season}, ${pick.round},
         ${pick.original_roster_id}, ${pick.current_owner_roster_id}, ${pick.traded !== false}, NOW(), NOW()
       )`)
-      await prisma.$executeRaw`
+      /*
+       * 🛑 A PROVIDER NEVER OVERRULES WHAT HAPPENED IN THE APP. An existing row is updated only
+       * when BOTH hold:
+       *   - no AllFantasy trade moved it (`sourceTradeId` is null). An in-app trade, or a pick
+       *     term that rolled a protected pick over, stamps the trade's id; the provider knows
+       *     nothing about either, and a sync would silently hand the pick back.
+       *   - it is still active. A pick used in a draft or forfeited is settled history.
+       * The same two conditions `clearReturnedTradedPicks` below has always applied to its delete.
+       * A new row (no conflict) is always inserted.
+       *
+       * ⚠ `RETURNING` IS HOW THE COUNT STAYS TRUE. A row the conflict clause declines is not an
+       * error and is not returned, so counting the batch would report it as written. Only the
+       * keys that come back were stored; the rest are `leftAlone`.
+       */
+      const stored = await prisma.$queryRaw<Array<{ pickSeason: number; round: number; originalRosterId: string }>>`
         INSERT INTO "future_draft_picks" (
           "id", "leagueId", "pickSeason", "round", "originalRosterId",
           "currentOwnerId", "traded", "createdAt", "updatedAt"
@@ -273,17 +288,31 @@ export async function persistTradedPicks(
           "currentOwnerId" = EXCLUDED."currentOwnerId",
           "traded" = EXCLUDED."traded",
           "updatedAt" = NOW()
+        WHERE "future_draft_picks"."sourceTradeId" IS NULL
+          AND "future_draft_picks"."status" = 'active'
+        RETURNING "pickSeason", "round", "originalRosterId"
       `
-      return {
-        written: batch.reduce((sum, row) => sum + row.inputCount, 0),
-        skipped: 0,
+      const storedKeys = new Set(
+        (Array.isArray(stored) ? stored : []).map((row) =>
+          keyOf(Number(row.pickSeason), Number(row.round), String(row.originalRosterId)),
+        ),
+      )
+      let written = 0
+      let leftAlone = 0
+      for (const row of batch) {
+        if (storedKeys.has(keyOf(row.pick.season, row.pick.round, row.pick.original_roster_id))) {
+          written += row.inputCount
+        } else {
+          leftAlone += row.inputCount
+        }
       }
+      return { written, skipped: 0, leftAlone }
     } catch {
       // Keep the old partial-success contract: isolate a bad record instead of
       // discarding the whole provider response. Healthy imports take one call;
       // only a failed batch pays the recursive split cost.
       if (batch.length === 1) {
-        return { written: 0, skipped: batch[0].inputCount }
+        return { written: 0, skipped: batch[0].inputCount, leftAlone: 0 }
       }
       const midpoint = Math.ceil(batch.length / 2)
       const left = await writeBatch(batch.slice(0, midpoint))
@@ -291,18 +320,21 @@ export async function persistTradedPicks(
       return {
         written: left.written + right.written,
         skipped: left.skipped + right.skipped,
+        leftAlone: left.leftAlone + right.leftAlone,
       }
     }
   }
 
   const FUTURE_PICK_BATCH_SIZE = 250
   let written = 0
+  let leftAlone = 0
   for (let offset = 0; offset < rows.length; offset += FUTURE_PICK_BATCH_SIZE) {
     const result = await writeBatch(rows.slice(offset, offset + FUTURE_PICK_BATCH_SIZE))
     written += result.written
     skipped += result.skipped
+    leftAlone += result.leftAlone
   }
-  return { written, skipped }
+  return { written, skipped, leftAlone }
 }
 
 /**

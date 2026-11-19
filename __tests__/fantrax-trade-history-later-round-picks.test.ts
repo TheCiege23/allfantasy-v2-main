@@ -11,9 +11,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   snapshot: null as Record<string, unknown> | null,
   traded: [] as Array<{ leagueId: string; picks: unknown[] }>,
-  /** Stored pick rows the upload must not touch (moved by an in-app trade, used, forfeited). */
-  settled: [] as Array<{ pickSeason: number; round: number; originalRosterId: string }>,
-  settledQueries: [] as unknown[],
 }))
 
 vi.mock('server-only', () => ({}))
@@ -30,12 +27,6 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(async () => [{ fantraxId: 'fx-qb1', canonicalName: 'Quarterback One', currentTeam: 'PHI', position: 'QB' }]),
     },
     fantraxLeague: { findFirst: vi.fn(async () => m.snapshot) },
-    futureDraftPick: {
-      findMany: vi.fn(async (query: unknown) => {
-        m.settledQueries.push(query)
-        return m.settled
-      }),
-    },
   },
 }))
 vi.mock('@/lib/dynasty-import/normalize-historical', () => ({
@@ -44,7 +35,7 @@ vi.mock('@/lib/dynasty-import/normalize-historical', () => ({
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   persistTradedPicks: vi.fn(async (leagueId: string, picks: unknown[]) => {
     m.traded.push({ leagueId, picks })
-    return { written: picks.length, skipped: 0 }
+    return { written: picks.length, skipped: 0, leftAlone: 0 }
   }),
 }))
 
@@ -109,8 +100,6 @@ const CSV = [
 describe('the upload places later-round picks', () => {
   beforeEach(() => {
     m.traded = []
-    m.settled = []
-    m.settledQueries = []
     /* Fantrax publishes rounds 1-4 for 2027 through 2029. */
     m.snapshot = {
       transactions: {
@@ -159,7 +148,7 @@ describe('the upload places later-round picks', () => {
   it('🛑 a pick the database refused is reported as not saved, never as placed', async () => {
     const { persistTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
     // What the real save returns when a row fails: it does not throw, it counts the row as skipped.
-    vi.mocked(persistTradedPicks).mockResolvedValueOnce({ written: 0, skipped: 1 })
+    vi.mocked(persistTradedPicks).mockResolvedValueOnce({ written: 0, skipped: 1, leftAlone: 0 })
     const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: CSV })
     expect(res.ok).toBe(true)
     if (!res.ok) return
@@ -167,47 +156,15 @@ describe('the upload places later-round picks', () => {
     expect(res.laterRoundPicks).toEqual({ traded: 0, returned: 0, notSaved: 1, leftAlone: 0 })
   })
 
-  it('🛑 a pick an in-app trade moved, or one already used, is left exactly as it is', async () => {
-    // The stored 2029 round 5 pick of team 202 was moved by an AllFantasy trade (or used in a draft).
-    m.settled = [{ pickSeason: 2029, round: 5, originalRosterId: '202' }]
+  it('🛑 a pick the save left alone (moved in the app, or used) is reported as left alone', async () => {
+    const { persistTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
+    // What the save returns for a pick an AllFantasy trade moved: not written, not an error.
+    vi.mocked(persistTradedPicks).mockResolvedValueOnce({ written: 0, skipped: 0, leftAlone: 1 })
     const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: CSV })
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.imported).toBe(1)
     expect(res.laterRoundPicks).toEqual({ traded: 0, returned: 0, notSaved: 0, leftAlone: 1 })
-    expect(m.traded).toEqual([])
-    // It asked the table for exactly those two kinds of row, in this league.
-    expect(m.settledQueries).toEqual([
-      {
-        where: {
-          leagueId: 'af-league',
-          pickSeason: { in: [2029] },
-          OR: [{ sourceTradeId: { not: null } }, { status: { not: 'active' } }],
-        },
-        select: { pickSeason: true, round: true, originalRosterId: true },
-      },
-    ])
-  })
-
-  it('🛑 the same holds for a pick the export says came home', async () => {
-    m.settled = [{ pickSeason: 2029, round: 5, originalRosterId: '202' }]
-    const BACK = [
-      '"Player","Team","Position","From","To","# Obj","Date (EST)","Week"',
-      '"2029 Draft Pick, Round 5 (Mesa Comets)","","","Harbor Owls","Mesa Comets","0","Tue Nov 17, 2026, 5:23PM","11"',
-      '"Quarterback One","PHI","QB","Mesa Comets","Harbor Owls","0","Tue Nov 17, 2026, 5:23PM","11"',
-      '"2029 Draft Pick, Round 5 (Mesa Comets)","","","Mesa Comets","Harbor Owls","0","Mon Nov 16, 2026, 4:26PM","11"',
-      '"Quarterback One","PHI","QB","Harbor Owls","Mesa Comets","0","Mon Nov 16, 2026, 4:26PM","11"',
-    ].join('\n')
-    const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: BACK })
-    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 0, returned: 0, notSaved: 0, leftAlone: 1 })
-    expect(m.traded).toEqual([])
-  })
-
-  it('a settled pick in the league does not stop a different pick being placed', async () => {
-    m.settled = [{ pickSeason: 2029, round: 6, originalRosterId: '202' }]
-    const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: CSV })
-    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 1, returned: 0, notSaved: 0, leftAlone: 0 })
-    expect(m.traded).toHaveLength(1)
   })
 
   it('a failure placing picks does not fail the upload', async () => {
