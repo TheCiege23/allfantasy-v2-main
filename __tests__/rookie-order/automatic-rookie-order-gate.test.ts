@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({ isLeagueEntitledToLiveRookieOrder: vi.fn(async () => true) }))
+vi.mock('@/lib/rookie-order/liveRookieOrderService', async (orig) => ({ ...(await orig<typeof import('@/lib/rookie-order/liveRookieOrderService')>()), isLeagueEntitledToLiveRookieOrder: vi.fn(async () => true) }))
 vi.mock('@/lib/prisma', () => ({ prisma: { dynastyLeagueConfig: { findUnique: vi.fn(async () => ({ rookiePickOrderMethod: 'max_pf' })) } } }))
 
 import { automaticRookieOrderFromSettings, automaticRookieOrderMethod, automaticRookieOrderSwitch } from '@/lib/rookie-order/automaticRookieOrder'
@@ -70,10 +70,32 @@ describe('the rules popup', () => {
 })
 
 describe('the standings "draft order if the season ended today" preview', () => {
-  it('is drawn only for the lottery or an automatic order the league saved (it cannot tell a dynasty league from a redraft one)', async () => {
+  const dynasty = { id: 'L', platform: 'manual', leagueType: 'dynasty', isDynasty: true }
+  it('a saved order is drawn for any league', async () => {
     const { readDraftOrderRule } = await import('@/lib/core-app/standingsDraftOrder')
-    expect(await readDraftOrderRule({ id: 'L', settings: {} })).toBeNull()
     expect(await readDraftOrderRule({ id: 'L', settings: ON_PF })).toEqual({ kind: 'lowest_points' })
     expect(await readDraftOrderRule({ id: 'L', settings: ON_WORST })).toEqual({ kind: 'reverse_standings' })
+  })
+  it('a native dynasty league that saved nothing is drawn worst record first, the order its rookie draft uses', async () => {
+    const { readDraftOrderRule } = await import('@/lib/core-app/standingsDraftOrder')
+    expect(await readDraftOrderRule({ ...dynasty, settings: {} })).toEqual({ kind: 'reverse_standings' })
+    expect(await readDraftOrderRule({ ...dynasty, settings: LIVE_ONLY })).toEqual({ kind: 'reverse_standings' })
+  })
+  it('🛑 nothing is invented for a redraft or imported league, or one whose kind is unknown', async () => {
+    const { readDraftOrderRule } = await import('@/lib/core-app/standingsDraftOrder')
+    expect(await readDraftOrderRule({ id: 'L', settings: {} })).toBeNull()
+    expect(await readDraftOrderRule({ id: 'L', platform: 'manual', leagueType: 'redraft', isDynasty: false, settings: {} })).toBeNull()
+    expect(await readDraftOrderRule({ ...dynasty, platform: 'sleeper', settings: {} })).toBeNull()
+  })
+  it('nor for a dynasty league that switched it off, uses the live order, a lottery, or its commissioner’s order', async () => {
+    const { readDraftOrderRule } = await import('@/lib/core-app/standingsDraftOrder')
+    const { prisma } = await import('@/lib/prisma')
+    const find = prisma.dynastyLeagueConfig.findUnique as unknown as ReturnType<typeof vi.fn>
+    expect(await readDraftOrderRule({ ...dynasty, settings: OFF })).toBeNull()
+    expect(await readDraftOrderRule({ ...dynasty, settings: { rookie_draft_order: { live: { enabled: true } } } })).toBeNull()
+    find.mockResolvedValueOnce({ rookiePickOrderMethod: 'commissioner' })
+    expect(await readDraftOrderRule({ ...dynasty, settings: {} })).toBeNull()
+    find.mockResolvedValueOnce({ rookiePickOrderMethod: 'weighted_lottery' })
+    expect(await readDraftOrderRule({ ...dynasty, settings: {} })).toBeNull()
   })
 })

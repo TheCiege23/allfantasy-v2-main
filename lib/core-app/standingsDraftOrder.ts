@@ -3,6 +3,11 @@ import 'server-only'
 import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { buildEligibleTeamsWithOdds, selectEligibleTeams, type StandingsRow } from '@/lib/draft-lottery/standingsForLottery'
 import type { WeightedLotteryConfig } from '@/lib/draft-lottery/types'
+import { prisma } from '@/lib/prisma'
+import { isNativeFuturePickLeague } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { automaticRookieOrderFromSettings, automaticRookieOrderSwitch } from '@/lib/rookie-order/automaticRookieOrder'
+import { readLiveRookieOrderSettings } from '@/lib/rookie-order/liveRookieOrderService'
+import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { formatRecord, type StandingsBoard } from './standingsModel'
 
 /**
@@ -16,10 +21,12 @@ import { formatRecord, type StandingsBoard } from './standingsModel'
  *   1. `settings.draft_order_mode === 'weighted_lottery'` — the lottery's own config and odds;
  *   2. `settings.rookie_draft_order.enabled` — worst record first, or fewest points first.
  *
- * Anything else is null and the section is not drawn. This reader is handed every kind of league and
- * cannot tell a dynasty league from a redraft or imported one, so the free default (a dynasty league that
- * saved nothing is seated worst record first, lib/rookie-order/automaticRookieOrder.ts) is NOT previewed
- * here: only an order the league saved is.
+ *   3. a native dynasty-family league that saved nothing — worst record first, the free default the
+ *      rookie draft is seated by (lib/rookie-order/automaticRookieOrder.ts).
+ *
+ * Anything else is null and the section is not drawn: a redraft or imported league, a league that
+ * switched the automatic order off or left the order to its commissioner, and a league on the live
+ * rookie order or a dynasty weighted lottery (those orders are not this table's reverse).
  *
  * ⚠ THE LOTTERY ODDS ARE THE LOTTERY'S OWN ARITHMETIC (`buildEligibleTeamsWithOdds`), fed this table's
  * order instead of `LeagueTeam`'s stored rank — so the preview and a real run weigh the same way. A
@@ -59,7 +66,13 @@ export type DraftOrderPreview = {
 }
 
 /** Read the league's rule. Null when it does not draft from its standings. */
-export async function readDraftOrderRule(league: { id: string; settings: unknown }): Promise<DraftOrderRule | null> {
+export async function readDraftOrderRule(league: {
+  id: string
+  settings: unknown
+  platform?: string | null
+  leagueType?: string | null
+  isDynasty?: boolean | null
+}): Promise<DraftOrderRule | null> {
   const settings = (league.settings ?? {}) as Record<string, unknown>
   const lottery = readDraftOrderModeAndLotteryConfig(settings)
   if (lottery.draftOrderMode === 'weighted_lottery') return { kind: 'lottery', config: lottery.lotteryConfig }
@@ -69,7 +82,15 @@ export async function readDraftOrderRule(league: { id: string; settings: unknown
     return rookie.mode === 'reverse_max_pf' ? { kind: 'lowest_points' } : { kind: 'reverse_standings' }
   }
 
-  return null
+  // The free default: a native dynasty-family league that saved nothing drafts worst record first.
+  if (automaticRookieOrderSwitch(settings) !== 'unset' || !isNativeFuturePickLeague(league)) return null
+  if (readLiveRookieOrderSettings(settings).enabled) return null
+  const dynasty = await prisma.dynastyLeagueConfig
+    .findUnique({ where: { leagueId: league.id }, select: { rookiePickOrderMethod: true } })
+    .catch(() => null)
+  const method = dynasty?.rookiePickOrderMethod ?? null
+  if (isWeightedRookieLottery(method)) return null
+  return automaticRookieOrderFromSettings(settings, method) === 'reverse_standings' ? { kind: 'reverse_standings' } : null
 }
 
 /**
