@@ -1892,11 +1892,11 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
 
-    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')
-    await expect(intelligenceDetails).toBeVisible()
-    await expect(intelligenceDetails).not.toHaveAttribute('open', '')
-    await intelligenceDetails.locator('summary').click()
-    const intelPanel = intelligenceDetails.getByTestId('draft-intel-queue-panel')
+    // Draft intelligence lives in the Chimmy tab since 2026-11-19 (it was a fold inside Queue).
+    await page.getByTestId('draft-right-dock-tab-chimmy').click()
+    const intelligence = page.getByTestId('draft-right-dock-panel-chimmy').getByTestId('draft-chimmy-suggestions')
+    await expect(intelligence).toBeVisible()
+    const intelPanel = intelligence.getByTestId('draft-intel-queue-panel')
     await expect(intelPanel).toBeVisible()
     const intelHeadline = page.locator('[data-testid="draft-intel-headline"]:visible').first()
     if (!(await intelHeadline.isVisible({ timeout: 1_000 }).catch(() => false))) {

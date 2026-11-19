@@ -68,7 +68,9 @@ export function buildOrderedRosterSlots(input: RosterSlotOrderInput): RosterSlot
       out.push({
         position,
         occurrence: i,
-        label: count > 1 ? `${position}${i}` : position,
+        // Plain slot names (2026-11-19): "WR", never "WR1 / WR2". The number told a manager
+        // nothing, and a draft roster reads like the lineup screen this way.
+        label: position,
         kind,
       })
     }
@@ -91,7 +93,7 @@ export function buildOrderedRosterSlots(input: RosterSlotOrderInput): RosterSlot
     out.push({
       position: 'BN',
       occurrence: i,
-      label: benchCount > 1 ? `BN${i}` : 'BN',
+      label: 'BN',
       kind: 'bench',
     })
   }

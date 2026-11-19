@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
+import type { Locator } from '@playwright/test'
+
+/** Clear filters sits behind the pool's Filters button on every width since 2026-11-19. */
+async function clearPoolFilters(scope: Locator) {
+  const toggle = scope.getByTestId('draft-mobile-filters-toggle')
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await clickHydrated(toggle)
+  await clickHydrated(scope.getByTestId('draft-clear-filters'))
+}
 import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -396,7 +404,7 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop).toContainText('Campus Ace')
     await expect(desktop).toContainText('Ohio State')
 
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Veteran Pro')
     await expect(desktop).toContainText('Veteran Pro')
@@ -420,14 +428,14 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(page.getByText(/college-only \(C2C\)/i)).toBeVisible()
 
     // Draft two college picks to move into pro round.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Campus Ace')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('Campus Ace')
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('C')
 
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Future Route')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
@@ -435,21 +443,21 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop).toContainText(/Pro round \(C2C\)/i)
 
     // Pro round rejects college pick.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Pipeline Runner')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
     await expect(page.getByText(/pro-only \(C2C\)/i)).toBeVisible()
 
     // Pro pick accepted and board shows mixed pool marker.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Immediate Impact')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
     await expect(desktop.getByTestId('draft-board-cell-3')).toContainText('Immediate Impact')
     await expect(desktop.getByTestId('draft-board-cell-3')).toContainText('P')
 
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('All')
     await expect(desktop.getByTestId('draft-pool-filter')).toBeVisible()
   })

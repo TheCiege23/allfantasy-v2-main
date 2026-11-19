@@ -9,6 +9,13 @@ import { PlayerAvatar } from './PlayerAvatar'
 import type { DraftAiOverlaySignal } from './PlayerPanel'
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 
+/** Name + position key for looking a queued player up in the pool when ids disagree. */
+export function queueNameKey(name: string | null | undefined, position: string | null | undefined): string | null {
+  const n = String(name ?? '').toLowerCase().replace(/\b(jr|sr|ii|iii|iv)\b\.?/g, '').replace(/[^a-z0-9]/g, '')
+  const p = String(position ?? '').toUpperCase().trim()
+  return n ? `name:${n}|${p}` : null
+}
+
 type QueueSortMode = 'queue' | 'name' | 'adp' | 'rank'
 
 type QueuePanelProps = {
@@ -98,7 +105,8 @@ export function QueuePanel({
 
   const resolveMeta = (entry: QueueEntry) => {
     const fromMap =
-      entry.playerId && playerMetaById ? playerMetaById[entry.playerId] : undefined
+      (entry.playerId && playerMetaById ? playerMetaById[entry.playerId] : undefined) ??
+      (playerMetaById ? playerMetaById[queueNameKey(entry.playerName, entry.position) ?? ''] : undefined)
     const fromEntry = entry as QueueEntry & {
       headshotUrl?: string | null
       teamLogoUrl?: string | null

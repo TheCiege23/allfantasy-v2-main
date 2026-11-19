@@ -19,7 +19,6 @@ export type CenterDockTab = 'queue' | 'intel' | 'chat' | 'ai' | 'commish'
 export function DraftCenterDockTabBar({
   active,
   onSelect,
-  showIntel,
   showCommish,
   redraftSnake,
   playersTab,
@@ -38,10 +37,11 @@ export function DraftCenterDockTabBar({
   testIdBase?: string
 }) {
   const tabs: Array<{ id: CenterDockTab; label: string }> = [
+    // 2026-11-19: Intel and AF Legacy are one "Chimmy" tab, as in the desktop dock. `showIntel` is
+    // kept for callers but no longer adds a tab.
     { id: 'queue', label: 'Queue' },
-    ...(showIntel ? [{ id: 'intel' as const, label: 'Intel' }] : []),
+    { id: 'ai', label: 'Chimmy' },
     { id: 'chat', label: 'Chat' },
-    { id: 'ai', label: 'AF Legacy' },
     ...(showCommish ? [{ id: 'commish' as const, label: 'Commish Edit' }] : []),
   ]
   const activeClass = (id: CenterDockTab) =>
