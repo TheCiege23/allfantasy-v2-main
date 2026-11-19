@@ -7,6 +7,8 @@ import type { AdjustmentWeekView } from '@/lib/score-adjustments/scoreAdjustment
 const url = (leagueId: string) => `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/operations`
 
 type Draft = { matchupId: string; rosterId: string; name: string; points: string; reason: string }
+/** Marking one game final by hand: the game and the reason being typed. */
+type FinalDraft = { matchupId: string; label: string; reason: string }
 
 /**
  * Commissioner score adjustments (docs/AF_COMMISSIONER_SETTINGS_SPEC.md §2.1, Free): add or take back
@@ -18,6 +20,7 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
   const [week, setWeek] = useState<number | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [finalDraft, setFinalDraft] = useState<FinalDraft | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -55,7 +58,7 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) {
-        setError(data.error || 'Could not save the adjustment.')
+        setError(data.error || 'Could not save the change.')
         return false
       }
       setOk(success)
@@ -72,7 +75,10 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
   if (loadError) return <p className="lsh-error" role="alert">{loadError}</p>
   if (!view) return <p className="lsh-help" role="status">Loading matchups…</p>
 
-  if (view.scoringMode !== 'points') {
+  // Adjustments are points only. A head-to-head category league still has games to mark final; a
+  // rotisserie league has no games at all.
+  const pointsLeague = view.scoringMode === 'points'
+  if (!pointsLeague && view.scoringMode !== 'h2h_category') {
     return <p className="lsh-help">Score adjustments are for points leagues. In a category league the score is categories won.</p>
   }
 
@@ -90,9 +96,15 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
         <select id="score-adj-week" value={week ?? ''} onChange={(e) => { setDraft(null); setOk(null); setError(null); void load(Number(e.target.value)) }}>
           {view.weeks.map((w) => <option key={w} value={w}>Week {w}</option>)}
         </select>
-        <p className="lsh-help">
-          Add or take away points for a stat-correction dispute, a penalty or a ruling. Standings use the adjusted score, and a later stat sync keeps it. Every change, with its reason, goes to the league audit log.
-        </p>
+        {pointsLeague ? (
+          <p className="lsh-help">
+            Add or take away points for a stat-correction dispute, a penalty or a ruling. Standings use the adjusted score, and a later stat sync keeps it. Every change, with its reason, goes to the league audit log.
+          </p>
+        ) : (
+          <p className="lsh-help">
+            Score adjustments are for points leagues. In a category league the score is categories won. You can still mark a game final here.
+          </p>
+        )}
       </div>
 
       {view.matchups.length === 0 && <p className="lsh-help">No head-to-head matchups this week.</p>}
@@ -103,16 +115,32 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
               <div key={t.rosterId} className="flex items-center justify-between gap-3 py-1">
                 <span className="min-w-0 truncate text-[14px]">{t.name}</span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-[14px] font-semibold tabular-nums">{t.score.toFixed(2)}</span>
+                  <span className="text-[14px] font-semibold tabular-nums">{pointsLeague ? t.score.toFixed(2) : String(t.score)}</span>
                   {t.adjustment !== 0 && <span className="text-[12px] tabular-nums" aria-label={`includes ${formatAdjustment(t.adjustment)} adjustment`}>({formatAdjustment(t.adjustment)})</span>}
-                  <button type="button" className="lsh-secondary" disabled={busy}
-                    onClick={() => { setOk(null); setError(null); setDraft({ matchupId: m.matchupId, rosterId: t.rosterId, name: t.name, points: '', reason: '' }) }}>
-                    Adjust
-                  </button>
+                  {pointsLeague && (
+                    <button type="button" className="lsh-secondary" disabled={busy}
+                      onClick={() => { setOk(null); setError(null); setDraft({ matchupId: m.matchupId, rosterId: t.rosterId, name: t.name, points: '', reason: '' }) }}>
+                      Adjust
+                    </button>
+                  )}
                 </span>
               </div>
             ))}
-            {m.status !== 'final' && <p className="lsh-help">In progress: the adjustment stays on top as the score updates.</p>}
+            {pointsLeague && m.status !== 'final' && <p className="lsh-help">In progress: the adjustment stays on top as the score updates.</p>}
+            {m.manualFinal && <p className="lsh-help" data-testid="score-adj-manual-final">Marked final by the commissioner: {m.manualFinal.reason}</p>}
+            <div className="flex justify-end pt-1">
+              {m.manualFinal ? (
+                <button type="button" className="lsh-secondary" disabled={busy} data-testid="score-adj-reopen"
+                  onClick={() => void post({ action: 'matchup_reopen', matchupId: m.matchupId }, 'Reopened. The next score update scores this game again.')}>
+                  Reopen game
+                </button>
+              ) : m.status !== 'final' ? (
+                <button type="button" className="lsh-secondary" disabled={busy} data-testid="score-adj-mark-final"
+                  onClick={() => { setOk(null); setError(null); setDraft(null); setFinalDraft({ matchupId: m.matchupId, label: m.teams.map((t) => t.name).join(' vs '), reason: '' }) }}>
+                  Mark final
+                </button>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>
@@ -135,6 +163,29 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
               {busy ? 'Saving…' : 'Save adjustment'}
             </button>
             <button type="button" className="lsh-secondary" disabled={busy} onClick={() => setDraft(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {finalDraft && (
+        <div className="lsh-field-card" data-testid="score-final-form">
+          <p className="lsh-field-label">Mark final: {finalDraft.label}</p>
+          <p className="lsh-help">
+            The game closes at the score shown now and counts in the standings. Later stat updates will not change it. To change the score afterwards, {pointsLeague ? 'add an adjustment or reopen the game' : 'reopen the game'}.
+          </p>
+          <label className="lsh-help" htmlFor="score-final-reason">Reason (shows in the audit log)</label>
+          <input id="score-final-reason" type="text" maxLength={REASON_MAX} value={finalDraft.reason}
+            onChange={(e) => setFinalDraft({ ...finalDraft, reason: e.target.value })} />
+          <div className="flex gap-2 pt-2">
+            <button type="button" className="lsh-primary"
+              disabled={busy || finalDraft.reason.trim().length < REASON_MIN || finalDraft.reason.trim().length > REASON_MAX}
+              onClick={async () => {
+                const done = await post({ action: 'matchup_finalize', matchupId: finalDraft.matchupId, reason: finalDraft.reason.trim() }, `Marked final: ${finalDraft.label}.`)
+                if (done) setFinalDraft(null)
+              }}>
+              {busy ? 'Saving…' : 'Mark final'}
+            </button>
+            <button type="button" className="lsh-secondary" disabled={busy} onClick={() => setFinalDraft(null)}>Cancel</button>
           </div>
         </div>
       )}

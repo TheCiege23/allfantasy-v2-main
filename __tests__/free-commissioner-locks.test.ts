@@ -29,6 +29,7 @@ const {
   prismaMock: {
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     userProfile: { findFirst: vi.fn() },
+    dynastyLeagueConfig: { findUnique: vi.fn(async () => null) },
     leagueSettings: { upsert: vi.fn() },
     redraftSeason: { findFirst: vi.fn() },
     redraftPlayoffRound: { findFirst: vi.fn() },
@@ -126,7 +127,7 @@ describe('playoff bracket size is free', () => {
   })
 })
 
-describe('rookie draft order: the preview and the mode are free, automatic ordering is AF Commissioner', () => {
+describe('rookie draft order: worst record first is free, automating lowest max PF is AF Commissioner', () => {
   function putRequest(body: unknown) {
     return new Request('http://localhost/api/commissioner/leagues/league-1/rookie-draft-order', {
       method: 'PUT',
@@ -146,15 +147,16 @@ describe('rookie draft order: the preview and the mode are free, automatic order
     })
   })
 
-  it('🛑 with no plan, turning auto-ordering on is refused and nothing is saved', async () => {
+  it('🛑 with no plan, turning lowest max PF on is refused and nothing is saved; worst record first is saved', async () => {
     const { PUT } = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
     const res = await PUT(putRequest({ mode: 'reverse_max_pf', enabled: true }) as never, params)
     expect(res.status).toBe(402)
     expect(await res.json()).toMatchObject({ errorCode: 'AF_COMMISSIONER_REQUIRED', upgradePath: '/upgrade?plan=commissioner' })
     expect(ownerEntitledMock).toHaveBeenCalledWith(FREE_COMMISSIONER)
     expect(saveRookieConfigMock).not.toHaveBeenCalled()
-    // `enabled` defaults to on, so a body without it is a switch-on too.
-    expect((await PUT(putRequest({ mode: 'worst_to_first' }) as never, params)).status).toBe(402)
+    // Worst record first is free: `enabled` defaults to on, and the save goes through.
+    expect((await PUT(putRequest({ mode: 'worst_to_first' }) as never, params)).status).toBe(200)
+    expect(saveRookieConfigMock).toHaveBeenCalledWith('league-1', { mode: 'worst_to_first', enabled: true, userId: FREE_COMMISSIONER })
   })
 
   it('with no plan, switching it off or saving a mode with it off is free', async () => {
@@ -177,7 +179,7 @@ describe('rookie draft order: the preview and the mode are free, automatic order
     const get = () => GET(new Request('http://localhost/api/commissioner/leagues/league-1/rookie-draft-order') as never, { params: Promise.resolve({ leagueId: 'league-1' }) })
     let res = await get()
     expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ isCommissioner: true, canAutomate: false })
+    expect(await res.json()).toMatchObject({ isCommissioner: true, canAutomate: false, enabled: true })
     ownerEntitledMock.mockResolvedValue(true)
     res = await get()
     expect(await res.json()).toMatchObject({ canAutomate: true })

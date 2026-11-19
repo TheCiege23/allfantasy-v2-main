@@ -243,7 +243,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
 
       {loading ? (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-[12px] text-white/50">
-          Getting your NFL redraft season ready...
+          Getting your season ready...
         </div>
       ) : error ? (
         <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 p-4 text-[12px] text-rose-100">

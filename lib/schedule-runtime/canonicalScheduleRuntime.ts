@@ -1,3 +1,4 @@
+import { createWeeklyPointsAgainst } from '@/lib/redraft/weeklyPointsAgainst'
 import { extraMatchupForRoster, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
 // Pure, import-free: the same league-median rule `updateStandings` applies (see the standings below).
 import { computeWeeklyMedianResults, medianEligibleRows } from '@/lib/redraft/medianGame'
@@ -763,6 +764,8 @@ export function buildCanonicalScheduleStandings(input: {
     outcomesByRosterId.set(team.rosterId, [])
   }
 
+  const pointsForCounted = new Set<string>()
+  const weeklyPointsAgainst = createWeeklyPointsAgainst()
   const byWeek = [...input.matchups].sort((a, b) => a.week - b.week || a.slot - b.slot)
   for (const matchup of byWeek) {
     if (matchup.bye) {
@@ -776,10 +779,19 @@ export function buildCanonicalScheduleStandings(input: {
 
     const homeScore = matchup.homeScore ?? 0
     const awayScore = matchup.awayScore ?? 0
-    home.pointsFor = round1(home.pointsFor + homeScore)
-    home.pointsAgainst = round1(home.pointsAgainst + awayScore)
-    away.pointsFor = round1(away.pointsFor + awayScore)
-    away.pointsAgainst = round1(away.pointsAgainst + homeScore)
+    // Points For counts a team's weekly score once, however many games it plays that week
+    // (lib/redraft/standingsEngine.ts has the reason); Points Against is each week's average
+    // opponent score, added after the loop.
+    if (!pointsForCounted.has(`${matchup.homeRosterId}:${matchup.week}`)) {
+      pointsForCounted.add(`${matchup.homeRosterId}:${matchup.week}`)
+      home.pointsFor = round1(home.pointsFor + homeScore)
+    }
+    if (!pointsForCounted.has(`${matchup.awayRosterId}:${matchup.week}`)) {
+      pointsForCounted.add(`${matchup.awayRosterId}:${matchup.week}`)
+      away.pointsFor = round1(away.pointsFor + awayScore)
+    }
+    weeklyPointsAgainst.add(matchup.homeRosterId, matchup.week, awayScore)
+    weeklyPointsAgainst.add(matchup.awayRosterId, matchup.week, homeScore)
 
     const divisionGame = Boolean(home.divisionId && home.divisionId === away.divisionId)
     const week = matchup.week
@@ -832,6 +844,12 @@ export function buildCanonicalScheduleStandings(input: {
     status: row.status ?? null,
     lineupSnapshots: row.lineupSnapshots,
   }))
+
+  // Points Against: each week's average opponent score (see the loop above).
+  for (const [id, against] of weeklyPointsAgainst.totals()) {
+    const row = standingsByRosterId.get(id)
+    if (row) row.pointsAgainst = round1(row.pointsAgainst + against)
+  }
 
   // The extra matchup an odd-team league plays instead of the bye: counted for the leftover team, and
   // for the chosen team too under "both count"; PF/PA move for the leftover team alone.

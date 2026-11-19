@@ -1,3 +1,4 @@
+import { createWeeklyPointsAgainst } from '@/lib/redraft/weeklyPointsAgainst'
 import { isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import { prisma } from '@/lib/prisma'
 import { assignFantraxTeamIds, normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
@@ -139,13 +140,20 @@ export async function loadFantraxNativePresentation(season: PresentationSeason, 
 /** Standard head-to-head standings from finalized source results, never persisted as native actuals. */
 export function projectFantraxStandings(rosters: any[], matchups: ReturnType<typeof projectFantraxHistory>['matchups']) {
   const totals = new Map(rosters.map(r => [r.id, { ...r, wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0, playoffSeed: null }]))
+  const pointsForCounted = new Set<string>()
+  const weeklyPointsAgainst = createWeeklyPointsAgainst()
   for (const m of matchups) {
     if (m.status !== 'final' || m.type === 'playoff' || m.homeScore == null || m.awayScore == null) continue
     for (const [id, points, against] of [[m.homeRosterId,m.homeScore,m.awayScore],[m.awayRosterId,m.awayScore,m.homeScore]] as Array<[string,number,number]>) {
       const t = totals.get(id); if (!t) continue
-      t.pointsFor += points; t.pointsAgainst += against
+      // A team's period score counts once in Points For, however many games it plays that period
+      // (a Fantrax league can play 3 or 5): the same score is its score in each of them.
+      if (!pointsForCounted.has(`${id}:${m.week}`)) { pointsForCounted.add(`${id}:${m.week}`); t.pointsFor += points }
+      // Points Against is each period's average opponent score (lib/redraft/weeklyPointsAgainst.ts).
+      weeklyPointsAgainst.add(id, m.week, against)
       if (points > against) t.wins++; else if (points < against) t.losses++; else t.ties++
     }
   }
+  for (const [id, against] of weeklyPointsAgainst.totals()) { const t = totals.get(id); if (t) t.pointsAgainst = against }
   return [...totals.values()].sort((a,b) => b.wins-a.wins || a.losses-b.losses || b.pointsFor-a.pointsFor)
 }

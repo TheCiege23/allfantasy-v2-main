@@ -21,6 +21,7 @@ import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRoste
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { ownerHasAfCommissionerPlan } from '@/lib/stat-corrections/applyStatCorrections'
+import { readTaxiAutoPlaceRookies, TAXI_AUTO_PLACE_ROOKIES_KEY } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
@@ -82,6 +83,8 @@ export type TaxiRulesView = {
   isCommissioner: boolean
   /** Max seasons on the taxi squad (./taxiMaxYears.ts), 2 by default; null is no limit. Any commissioner sets it. */
   maxYears: number | null
+  /** Drafted rookies go onto the taxi squad when the rookie draft finishes; on by default. Any commissioner sets it. */
+  autoPlaceRookies: boolean
   phase: TaxiSeasonPhase
   week: number
 }
@@ -111,6 +114,7 @@ export async function readTaxiRulesView(
     canEdit: viewer.isCommissioner && viewerEntitled,
     isCommissioner: viewer.isCommissioner,
     maxYears: readTaxiMaxYears(league.settings),
+    autoPlaceRookies: readTaxiAutoPlaceRookies(league.settings),
     phase: taxiSeasonPhase(season, week),
     week,
   }
@@ -242,6 +246,8 @@ export type TaxiRulesSaveBody = {
   postseasonMoves?: unknown
   /** Seasons on the taxi squad, 1–5, or null for no limit. Any commissioner, on any plan. */
   maxYears?: unknown
+  /** Put drafted rookies on the taxi squad when the rookie draft finishes. Any commissioner, on any plan. */
+  autoPlaceRookies?: unknown
 }
 
 const PLAN_FIELDS = ['enforced', 'lockAfterWeek', 'promotionDeadlineWeek', 'lockBehavior', 'inSeasonMoves', 'postseasonMoves'] as const
@@ -281,7 +287,7 @@ export async function saveTaxiRules(
   if (body.lockBehavior !== undefined && !['once_promoted_no_return', 'free_move'].includes(String(body.lockBehavior))) {
     return { ok: false, status: 400, error: 'Unknown promotion rule.' }
   }
-  for (const k of ['enforced', 'inSeasonMoves', 'postseasonMoves'] as const) {
+  for (const k of ['enforced', 'inSeasonMoves', 'postseasonMoves', 'autoPlaceRookies'] as const) {
     if (body[k] !== undefined && typeof body[k] !== 'boolean') return { ok: false, status: 400, error: `${k} must be true or false.` }
   }
 
@@ -311,6 +317,9 @@ export async function saveTaxiRules(
   if (body.maxYears !== undefined) {
     const choice = body.maxYears as number | null
     if (choice !== readTaxiMaxYears(league.settings)) merge[TAXI_MAX_YEARS_KEY] = storedTaxiMaxYears(choice)
+  }
+  if (typeof body.autoPlaceRookies === 'boolean' && body.autoPlaceRookies !== readTaxiAutoPlaceRookies(league.settings)) {
+    merge[TAXI_AUTO_PLACE_ROOKIES_KEY] = body.autoPlaceRookies
   }
   if (Object.keys(merge).length) {
     // Through the settings patch, so the settings lock and audit apply.

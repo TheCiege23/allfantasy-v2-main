@@ -56,7 +56,7 @@ const RULE_TEXT: Record<PickRuleKind, string> = {
 export async function readScenarios(leagueId: string, userId: string): Promise<ScenarioExplainer | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, platformLeagueId: true, settings: true, sport: true, leagueType: true },
+    select: { id: true, name: true, platform: true, platformLeagueId: true, settings: true, sport: true, leagueType: true, isDynasty: true },
   })
   if (!league) return null
   if (await isGuillotineLeague(leagueId)) return { kind: 'guillotine', chop: await readChop(leagueId, userId) }
@@ -64,7 +64,7 @@ export async function readScenarios(leagueId: string, userId: string): Promise<S
 }
 
 async function readFirstPick(
-  league: { id: string; name: string | null; platform: string | null; platformLeagueId: string | null; settings: unknown; sport: unknown; leagueType: string | null },
+  league: { id: string; name: string | null; platform: string | null; platformLeagueId: string | null; settings: unknown; sport: unknown; leagueType: string | null; isDynasty?: boolean | null },
   userId: string,
 ): Promise<FirstPickExplainer> {
   const rule = await readDraftOrderRule(league)
