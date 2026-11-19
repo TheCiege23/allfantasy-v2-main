@@ -1,4 +1,5 @@
 import 'server-only'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -41,7 +42,7 @@ export type DraftAfProjection = {
   /** Games `ros` covers. */
   rosWeeks: number | null
   /** The week `af` describes. */
-  week: number
+  week: number | null
 }
 
 export type DraftAfProjections = {
@@ -53,6 +54,7 @@ export type DraftAfProjections = {
 const NONE: DraftAfProjections = { byPlayerId: new Map(), week: null }
 
 export async function loadDraftAfProjections(args: {
+  leagueId?: string
   platform: string | null | undefined
   playerIds: readonly (string | null | undefined)[]
   /** The league's `settings` blob; the scoring is extracted here. */
@@ -63,6 +65,18 @@ export async function loadDraftAfProjections(args: {
    */
   sport?: string | null
 }): Promise<DraftAfProjections> {
+  if (args.leagueId) {
+    const rosterIds = args.playerIds.filter((id): id is string => Boolean(id))
+    if (!rosterIds.length) return NONE
+    const board = await loadLeaguePlayerMetrics({ leagueId: args.leagueId, rosterIds, limit: rosterIds.length, includeTradeValues: false }).catch(() => null)
+    if (!board || board.unit !== 'fantasy points') return NONE
+    const byPlayerId = new Map<string, DraftAfProjection>()
+    for (const row of board.rows) {
+      if (row.rosterPlayerId) byPlayerId.set(row.rosterPlayerId, { af: row.weekly, ros: row.restOfSeason,
+        rosWeeks: row.remainingGames ?? null, week: board.week })
+    }
+    return { byPlayerId, week: board.week }
+  }
   if (rosterIdSpaceOf(args.platform, args.sport) !== 'sleeper') return NONE
   const ids = [...new Set(args.playerIds.filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id)))]
   if (ids.length === 0) return NONE
