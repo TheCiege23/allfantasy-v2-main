@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { seasonRosterManagerId } from '@/lib/league/rosterManager'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import {
@@ -177,6 +178,7 @@ function fallbackRulesForSeason(season: PlayoffSeasonForRuntime): NflRedraftPlay
 function toTeamInput(row: {
   id: string
   ownerId: string
+  managerUserId?: string | null
   ownerName: string
   teamName: string | null
   wins: number
@@ -190,7 +192,7 @@ function toTeamInput(row: {
   return {
     rosterId: row.id,
     displayName: row.teamName ?? row.ownerName,
-    ownerId: row.ownerId,
+    ownerId: seasonRosterManagerId(row),
     ownerName: row.ownerName,
     wins: row.wins,
     losses: row.losses,

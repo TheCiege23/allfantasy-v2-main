@@ -1,6 +1,7 @@
 {
   "revision": "076d65c132aa19da31b2567453307bb8906333b6",
   "feature": "scoped-player-pools",
-  "layoutRevision": 2
+  "layoutRevision": 2,
+  "championRevision": 1
 }
 

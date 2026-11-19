@@ -61,6 +61,17 @@ describe('playoff resolver feeds regular-season results to the head-to-head tieb
     if (resolved.ok) expect(resolved.state.seeds.map((row) => row.rosterId)).toEqual(['h2h-winner', 'more-points'])
   })
 
+  it('credits the manager of a second franchise while keeping each playoff team distinct', async () => {
+    const shared = season.rosters.map((r,i) => i < 2 ? { ...r, managerUserId:'manager', ownerId:i ? 'mgr:manager:'+r.id : 'manager' } : r)
+    const resolved = await resolveNflRedraftPlayoffRuntime(
+      {preloadedSeason:{...season,rosters:shared} as never},
+      {loadRules:async()=>rulesWith('standard_standings') as never,loadRegularSeasonMatchups:h2hGames},
+    )
+    expect(resolved.ok).toBe(true)
+    if (resolved.ok) expect(resolved.state.teams.filter(t=>t.ownerId==='manager').map(t=>t.rosterId).sort())
+      .toEqual(['h2h-winner','more-points'])
+  })
+
   it('keeps a points-only league on points', async () => {
     const resolved = await resolveNflRedraftPlayoffRuntime(
       { preloadedSeason: { ...season, rosters: [roster('winner', 14, 0, 1000), ...season.rosters] } as never },
