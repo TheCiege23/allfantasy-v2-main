@@ -154,6 +154,28 @@ describe('NativeMatchupScreen on the league’s own season', () => {
     expect([...document.querySelectorAll('.nls-pts')].map((e) => e.textContent)).toEqual(['—', '—'])
   })
 
+  it('a starter not yet playing shows his opponent, kickoff, opponent rank, forecast and projection', async () => {
+    const wx = { indoors: false, symbol: '☔', conditionLabel: 'Rain', temperatureF: 46.6, windSpeedMph: 11, precipChancePct: 70 }
+    const upcoming = { ...slot('Starter One', 0), gameStatus: 'upcoming', gameLabel: 'Scheduled', opponent: 'NYG', afProjectedPoints: 20.02, headshotUrl: 'https://example.test/h.jpg',
+      outlook: { homeAway: 'away', kickoffTimeIso: '2026-11-22T18:00:00.000Z', opponentRank: { rank: 28, of: 32, position: 'PG', allowedPerGame: 20.1, games: 10 }, teamLogoUrl: null, byeWeek: 7, weather: wx } }
+    stubFetch({
+      '/matchup-center': () => payload(7, {}, { matchupStatus: 'upcoming', left: side('rA', 'Aces', 0, [upcoming]), right: side('rB', 'Bears', 0, [slot('Starter Two', 12)]) }),
+      '/scoring/matchups': () => ({ season: 2026, week: 7, matchups: [], games: [] }),
+    })
+    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    const chip = await screen.findByTestId('matchup-opponent-rank-Starter One')
+    expect(chip.textContent).toContain('vs PG 28th')
+    expect(chip.getAttribute('data-tone')).toBe('easy')
+    expect(screen.getByTestId('matchup-weather-Starter One').textContent).toContain('☔ 47°')
+    expect(screen.getByTestId('matchup-proj-Starter One').textContent).toBe('20.0')
+    const row = chip.closest('li')!
+    expect(row.textContent).toContain('@ NYG')
+    // His points are a dash until he plays; the projection is not his score.
+    expect(row.querySelector('.nls-pts[data-side=left]')?.firstChild?.textContent).toBe('—')
+    // The finished starter beside him has no chips and no projection under his score.
+    expect(screen.queryByTestId('matchup-proj-Starter Two')).toBeNull()
+  })
+
   it('a commissioner with no team still sees the week’s games', async () => {
     stubFetch({
       '/matchup-center': () => ({ httpError: 'You have not claimed a team in this league yet, so there is no matchup to show.' }),

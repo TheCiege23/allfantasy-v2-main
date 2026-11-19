@@ -177,7 +177,18 @@ export function rosterResponse(sport: HarnessSport) {
 const sumPts = (ps: Player[]) => Math.round(ps.reduce((s, p) => s + p.points, 0) * 10) / 10
 const sumProj = (ps: Player[]) => Math.round(ps.reduce((s, p) => s + p.projected, 0) * 10) / 10
 function slot(p: Player) {
-  return { playerId: p.id, name: p.name, position: p.position, team: p.team, opponent: p.opponent, headshotUrl: null, currentPoints: p.points, projectedPoints: p.projected, hasRealProjection: true, injuryStatus: p.injury, newsBlurb: null, weatherSummary: null, gameStatus: p.status, gameLabel: p.label, aiInsight: null }
+  return { playerId: p.id, name: p.name, position: p.position, team: p.team, opponent: p.opponent, headshotUrl: null, currentPoints: p.points, projectedPoints: p.projected, hasRealProjection: true, injuryStatus: p.injury, newsBlurb: null, weatherSummary: null, gameStatus: p.status, gameLabel: p.label, aiInsight: null,
+    // NFL: what server/services/nativeMatchupCenter.ts stamps from lib/redraft/nflRosterOutlook.ts.
+    ...(p.id.startsWith('nfl-') && !p.off
+      ? {
+          afProjectedPoints: p.projected,
+          outlook: {
+            homeAway: p.name.length % 2 ? 'home' : 'away', kickoffTimeIso: '2026-11-22T18:00:00.000Z', teamLogoUrl: teamLogoUrl('NFL', p.team), byeWeek: 5 + (p.team.length + p.name.length) % 9,
+            opponentRank: p.opponent ? { rank: 1 + ((p.name.length * 7 + p.position.length * 5) % 32), of: 32, position: p.position, allowedPerGame: 17.4, games: 10 } : null,
+            weather: p.name.length % 3 ? { indoors: false, symbol: '☀', conditionLabel: 'Clear', temperatureF: 54, windSpeedMph: 6, precipChancePct: 5 } : null,
+          },
+        }
+      : {}) }
 }
 
 /** `/api/leagues/[id]/matchup-center`. Slot `position` is the SLOT label (what the screen pills). */
