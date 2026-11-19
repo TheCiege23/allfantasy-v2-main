@@ -58,6 +58,8 @@ type DraftBoardProps = {
   sport?: string
   currentUserRosterId?: string | null
   aiManagedRosterIds?: string[]
+  /** Teams picking by themselves right now (auto-pick on, or Chimmy-run). Marked AUTO in the header. */
+  autoDraftRosterIds?: string[]
   orderSourceLabel?: string | null
   /** Open pick-trade modal from a cell with rounds / receiver prefilled (logged-in user must have a roster). */
   onCellTrade?: (ctx: {
@@ -193,6 +195,7 @@ function DraftBoardInner({
   sport,
   currentUserRosterId = null,
   aiManagedRosterIds = [],
+  autoDraftRosterIds = [],
   orderSourceLabel,
   onCellTrade,
   onOpenTradeHistory,
@@ -525,20 +528,24 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
               data-testid="draft-board-legend"
             >
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-[2px] border border-[color:var(--af-league-accent,#67e8f9)] bg-[#0d1020] shadow-[0_0_6px_var(--af-league-accent,#22d3ee)]" aria-hidden data-testid="draft-board-legend-on-clock" />
+              {/* Each swatch is a miniature of the real cell: same tile, same ring. The old legend
+                  showed filled dots for states the board draws as outlines, and "your picks" used a
+                  cyan ring next to a cyan on-the-clock ring, which is why it read as wrong. */}
+              {/* gap-x-4: the offset rings need room. */}
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-3.5 rounded-[3px] bg-[#0d1020] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]" aria-hidden data-testid="draft-board-legend-on-clock" />
                 on the clock
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-[2px] bg-emerald-400" aria-hidden />
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-3 w-3.5 rounded-[3px] bg-[#3a4160] ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#0b1428]" aria-hidden data-testid="draft-board-legend-just-picked" />
                 just picked
               </span>
               {currentUserRosterId ? (
-                <span className="inline-flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-[2px] bg-cyan-400" aria-hidden />
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-3 w-3.5 rounded-[3px] bg-[#3a4160] ring-2 ring-white ring-offset-2 ring-offset-[#0b1428]" aria-hidden data-testid="draft-board-legend-your-picks" />
                   your picks
                 </span>
               ) : null}
@@ -616,25 +623,19 @@ function DraftBoardInner({
               <button
                 type="button"
                 data-testid="draft-board-toggle-view-mode"
-                onClick={() => setViewMode((prev) => (prev === 'all' ? 'single' : 'all'))}
+                onClick={() => {
+                  // Focusing lands on the round being picked. That is what the old separate
+                  // "Current" button did, so the two are one control now.
+                  if (viewMode === 'all' && currentOverallPick != null) {
+                    const round = Math.ceil(currentOverallPick / teamCount)
+                    setSelectedRound(Math.min(rounds, Math.max(1, round)))
+                  }
+                  setViewMode((prev) => (prev === 'all' ? 'single' : 'all'))
+                }}
                 className="rounded-lg border border-cyan-400/40 bg-cyan-500/12 px-2.5 py-1 text-[11px] font-medium text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.1)] transition duration-150 hover:bg-cyan-500/22 active:scale-95"
               >
                 {viewMode === 'all' ? 'Focus round' : 'All rounds'}
               </button>
-              {currentOverallPick != null ? (
-                <button
-                  type="button"
-                  data-testid="draft-board-jump-current"
-                  onClick={() => {
-                    const round = Math.ceil(currentOverallPick / teamCount)
-                    setSelectedRound(Math.min(rounds, Math.max(1, round)))
-                    setViewMode('single')
-                  }}
-                  className="rounded-lg border border-emerald-400/40 bg-emerald-500/12 px-2 py-1 text-[11px] font-medium text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.12)] transition duration-150 hover:bg-emerald-500/22"
-                >
-                  Current
-                </button>
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -784,14 +785,14 @@ function DraftBoardInner({
                   title={[headerName, entry.tribe ? `${entry.tribe.name} tribe` : null, meta?.aiArchetypeLabel ?? null].filter(Boolean).join(' · ')}
                   className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
-                  } ${isUser ? 'bg-cyan-400/[0.08]' : ''}`}
+                  } ${isUser ? 'bg-white/[0.07]' : ''}`}
                 >
                   <span
                     className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
                       currentOwnerSlot === entry.slot
                         ? 'border-cyan-300/75 bg-cyan-500/20 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.40)]'
                         : isUser
-                          ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-50'
+                          ? 'border-white/80 bg-white/10 text-white'
                           : 'border-white/15 bg-white/[0.05] text-white/85'
                     }`}
                   >
@@ -808,7 +809,7 @@ function DraftBoardInner({
                     ) : (
                       managerInitials(headerName)
                     )}
-                    {meta?.isOrphan ? (
+                    {meta?.isOrphan && !autoDraftRosterIds.includes(entry.rosterId) ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#0b1428] bg-amber-400"
                         title="Orphan roster"
@@ -821,7 +822,7 @@ function DraftBoardInner({
                   </span>
                   <span
                     className={`w-full truncate text-center text-[11px] leading-none ${
-                      isUser ? 'font-bold text-cyan-200' : 'font-medium text-white/72'
+                      isUser ? 'font-bold text-white' : 'font-medium text-white/72'
                     }`}
                   >
                     {headerName}
@@ -833,6 +834,15 @@ function DraftBoardInner({
                       aria-hidden
                       data-testid={`draft-board-team-header-tribe-bar-${entry.slot}`}
                     />
+                  ) : null}
+                  {autoDraftRosterIds.includes(entry.rosterId) ? (
+                    <span
+                      className="absolute left-0.5 top-0 rounded-[3px] bg-emerald-500/90 px-1 text-[8px] font-extrabold leading-[11px] tracking-[0.06em] text-[#04130b]"
+                      title="Drafting automatically"
+                      data-testid={`draft-board-team-header-auto-${entry.slot}`}
+                    >
+                      AUTO
+                    </span>
                   ) : null}
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />

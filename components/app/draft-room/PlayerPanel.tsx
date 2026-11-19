@@ -893,7 +893,7 @@ function PlayerPanelInner({
       >
         <div data-testid="draft-player-toolbar" className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
           <div
-            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 ${SKIN_CONTROL} ${
+            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 md:max-w-[280px] ${SKIN_CONTROL} ${
               rs ? 'min-w-[150px]' : ''
             }`}
           >

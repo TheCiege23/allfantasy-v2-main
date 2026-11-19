@@ -657,9 +657,14 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
 
   const leftAtPickLabel = leftAtPick?.label ?? null
   const leftAtOverall = leftAtPick?.overall ?? null
+  // AF ADP shows once any player in the pool has one; a column of dashes is hidden.
+  const hasAfAdp = useMemo(
+    () => filtered.some((p) => p.afAdp != null && Number.isFinite(Number(p.afAdp))),
+    [filtered],
+  )
   const layout = useMemo(
-    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel }),
-    [draftSport, statColumnOptions, leftAtPickLabel],
+    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel, hideAfAdp: !hasAfAdp }),
+    [draftSport, statColumnOptions, leftAtPickLabel, hasAfAdp],
   )
 
   const statByKey = useMemo(() => new Map(layout.statDefs.map((d) => [d.key, d])), [layout.statDefs])

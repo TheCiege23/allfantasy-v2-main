@@ -27,9 +27,10 @@ describe('draft room ↔ Chimmy wiring', () => {
   it('routes every Ask Chimmy button through openChimmy, not the bare mobile tab', () => {
     expect(src).not.toMatch(/setMobileTab\('helper'\)\}/)
     expect(src.match(/onAiSuggestionClick=\{openChimmy\}/g)?.length).toBe(1)
-    // Room v2: the phone clock bar's "AI helper" chip is gone; the header's Ask Chimmy took its place.
+    // Room v2: the phone clock bar's "AI helper" chip is gone. 2026-11-19: the header's Ask Chimmy
+    // became the draft settings gear; Chimmy is reached from its tab in the dock / phone tray.
     expect(src.match(/\sonClick=\{openChimmy\}/g)?.length).toBe(1)
-    expect(src.match(/onOpenChimmy=\{openChimmy\}/g)?.length).toBe(1)
+    expect(src.match(/onOpenChimmy=\{openChimmy\}/g)).toBeNull()
   })
 
   it('opens only the Chimmy surface on screen, not every one (both layouts are always mounted)', () => {

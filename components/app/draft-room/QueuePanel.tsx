@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ListOrdered, GripVertical, X, Zap, UserMinus, Play, ChevronDown } from 'lucide-react'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
@@ -34,6 +34,12 @@ type QueuePanelProps = {
   onAiReorderEnabledChange?: (value: boolean) => void
   autoPickFromQueue: boolean
   onAutoPickFromQueueChange: (value: boolean) => void
+  /**
+   * The ONE auto-pick control (the server-side "Auto-pick me"). When given, it replaces this panel's
+   * own "Auto-pick from queue" checkboxes: two auto-pick switches that meant slightly different
+   * things was a reported bug, and the server one also works with the tab closed.
+   */
+  autopickSlot?: ReactNode
   awayMode: boolean
   onAwayModeChange: (value: boolean) => void
   /** Next available player in queue (for auto-pick) */
@@ -70,6 +76,7 @@ export function QueuePanel({
   onAiReorderEnabledChange,
   autoPickFromQueue,
   onAutoPickFromQueueChange,
+  autopickSlot,
   awayMode,
   onAwayModeChange,
   nextQueuedAvailable,
@@ -174,6 +181,7 @@ export function QueuePanel({
           <ListOrdered className="h-3.5 w-3.5 text-[#8b91a7]" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
         </div>
+        {autopickSlot ? null : (
         <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
           <input
             type="checkbox"
@@ -193,7 +201,9 @@ export function QueuePanel({
           />
           Auto-pick
         </label>
+        )}
       </div>
+      {autopickSlot ? <div data-testid="draft-queue-autopick-slot">{autopickSlot}</div> : null}
       {/* Size for the dock's width: search and sort share a row, with positions below. */}
       <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1">
         <input
@@ -298,6 +308,7 @@ export function QueuePanel({
                 </button>
               </>
             )}
+            {autopickSlot ? null : (
             <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
               <input
                 type="checkbox"
@@ -317,6 +328,7 @@ export function QueuePanel({
               />
               Auto-pick from queue
             </label>
+            )}
             <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
               <input
                 type="checkbox"
@@ -383,6 +395,7 @@ export function QueuePanel({
               </button>
             </>
           )}
+          {autopickSlot ? null : (
           <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
             <input
               type="checkbox"
@@ -402,6 +415,7 @@ export function QueuePanel({
             />
             Auto-pick from queue
           </label>
+          )}
           <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
             <input
               type="checkbox"

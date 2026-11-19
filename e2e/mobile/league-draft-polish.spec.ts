@@ -58,8 +58,9 @@ test('draft tools, player search and options work on narrow and short screens', 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.getByTestId('draft-mobile-tab-board').tap()
   await expect(page.getByTestId('draft-mobile-content')).toHaveAttribute('data-active-tab', 'board')
-  // Paused commissioners have a separate Resume action; the timer must fit beside the team.
-  const timer = page.getByTestId('draft-topbar-resume-draft')
+  // Paused commissioners resume from the one Resume pill; the clock only reads Paused (2026-11-19),
+  // and it must still fit beside the team.
+  const timer = page.getByTestId('draft-topbar-clock')
   expect(await timer.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
   await page.getByTestId('draft-mobile-tab-players').tap()
   await testInfo.attach('draft-mobile', { body: await page.screenshot(), contentType: 'image/png' })

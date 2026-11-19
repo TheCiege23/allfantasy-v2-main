@@ -14,7 +14,7 @@ import KeeperPanel from '@/components/app/draft-room/KeeperPanel'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
-import DraftRoomMusicBar from './DraftRoomMusicBar'
+import DraftRoomMusicBar, { MUSIC_ROW_ANCHOR_ID } from './DraftRoomMusicBar'
 import { readLivePlaylist, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
 import { useCommissionerActions } from '@/hooks/useCommissionerActions'
@@ -1009,7 +1009,9 @@ export function DraftRoomPageClient({
   const commissionerOfflinePick = Boolean(draftUISettings?.executionMode === 'offline' && isCommissioner)
   const draftRoomMode = resolveDraftRoomMode({
     executionMode: draftUISettings?.executionMode ?? null,
-    viewerAutopickEnabled: session?.viewerAutopick?.enabled ?? false,
+    // The full-width "Auto-pick is on" banner is gone from the live room (2026-11-19): the seat's
+    // AUTO badge and the checked switch in the Queue tab say the same thing without a row of board.
+    viewerAutopickEnabled: false,
   })
   const isCurrentUserOnClock = Boolean(
     currentUserRosterId &&
@@ -2427,7 +2429,17 @@ export function DraftRoomPageClient({
   }, [draftUISettings?.autoPickEnabled, handleSettingsPatch])
 
   const handleAutopickMeUpdate = useCallback((updated: ViewerAutopickData) => {
-    setSession((prev) => prev ? { ...prev, viewerAutopick: updated } : prev)
+    // Show the AUTO badge on this manager's column at once, not a poll later.
+    setSession((prev) => {
+      if (!prev) return prev
+      const rid = (prev as DraftSessionSnapshot & { currentUserRosterId?: string }).currentUserRosterId
+      const ids = new Set(prev.autoDraftRosterIds ?? [])
+      if (rid) {
+        if (updated.enabled) ids.add(rid)
+        else ids.delete(rid)
+      }
+      return { ...prev, viewerAutopick: updated, autoDraftRosterIds: [...ids] }
+    })
   }, [])
 
   const handleSaveCommissionerAiDraft = useCallback(
@@ -4160,6 +4172,15 @@ export function DraftRoomPageClient({
           awayMode={awayMode}
           onAwayModeChange={setAwayMode}
           autoPickEnabled={autoPickEnabled}
+          autopickSlot={
+            session?.viewerAutopick && leagueId ? (
+              <AutopickMeToggle
+                viewerAutopick={session.viewerAutopick}
+                leagueId={leagueId}
+                onUpdate={handleAutopickMeUpdate}
+              />
+            ) : undefined
+          }
           nextQueuedAvailable={nextQueuedAvailable}
           aiReorderExplanation={aiReorderExplanation}
           aiReorderExecutionMode={aiReorderExecutionMode}
@@ -5375,15 +5396,14 @@ export function DraftRoomPageClient({
             dynastySkin={isDynasty}
             dynastyDraftKindLabel={dynastyDraftKindLabel}
             rookieAuctionNote={rookieAuctionNote}
-            onOpenChimmy={openChimmy}
             picksUntilUser={ribbonPicksUntilUser}
+            controlsSlot={
+              leagueId ? <DraftRoomMusicBar compact leagueId={leagueId} draftStatus={session.status} livePlaylist={livePlaylist} /> : null
+            }
           />
-          <AutopickMeToggle
-            viewerAutopick={session.viewerAutopick}
-            leagueId={leagueId}
-            onUpdate={handleAutopickMeUpdate}
-          />
-          {leagueId ? <DraftRoomMusicBar leagueId={leagueId} draftStatus={session.status} livePlaylist={livePlaylist} /> : null}
+          {/* Space & duplicates (2026-11-19): "Auto-pick me" moved into the Queue tab, and music is a
+              button in the top bar. The playing YouTube player (200x200 minimum) is portalled here. */}
+          <div id={MUSIC_ROW_ANCHOR_ID} />
         </>
       }
       managerStrip={null}
@@ -5482,6 +5502,7 @@ export function DraftRoomPageClient({
                   sport={effectiveDraftSport}
                   currentUserRosterId={currentUserRosterId ?? null}
                   aiManagedRosterIds={aiManagedRosterIds}
+                  autoDraftRosterIds={session.autoDraftRosterIds ?? []}
                   orderSourceLabel={boardOrderSourceLabel}
                   presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
                   onCellTrade={currentUserRosterId ? openPickTradeFromBoard : undefined}

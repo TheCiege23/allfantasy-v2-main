@@ -105,7 +105,8 @@ describe('the accent in the room', () => {
     const cell = src('components/app/draft-room/DraftBoardCell.tsx')
     expect(cell).toContain('ring-[color:var(--af-league-accent,#67e8f9)]')
     expect(cell).toContain('text-[color:var(--af-league-accent,#67e8f9)]')
-    expect(src('components/app/draft-room/DraftBoard.tsx')).toContain('border-[color:var(--af-league-accent,#67e8f9)]')
+    // The legend swatch is a miniature of the tile, so it uses the same ring (2026-11-19).
+    expect(src('components/app/draft-room/DraftBoard.tsx')).toContain('ring-2 ring-[color:var(--af-league-accent,#67e8f9)]')
     const css = src('app/globals.css')
     const pulse = css.slice(css.indexOf('@keyframes draft-current-pick-pulse'), css.indexOf('@keyframes draft-recent-pick-flash'))
     expect(pulse).toContain('var(--af-league-accent, #22d3ee)')
