@@ -30,6 +30,8 @@ type LeaguePlayerMetricRate = {
 
 export type LeaguePlayerMetric = LeaguePlayerMetricRate & {
   rosterPlayerId?: string
+  daily?: number | null
+  positionCount?: number
   rank: number
   positionRank: number
   weekGames: number | null
@@ -190,6 +192,7 @@ async function loadRecordedTeams(sport: string, season: number, playerIds: strin
 export async function loadLeaguePlayerMetrics(args: {
   leagueId: string
   week?: number | null
+  day?: string | null
   position?: string | null
   playerName?: string | null
   searchName?: string
@@ -239,18 +242,20 @@ export async function loadLeaguePlayerMetrics(args: {
   const wantedName = args.playerName ? normalizePlayerName(args.playerName) : null
   const searchName = args.searchName ? normalizePlayerName(args.searchName) : null
   const wantedPosition = args.position?.trim().toUpperCase()
+  const positionCounts = new Map<string, number>()
+  for (const row of rates) positionCounts.set(row.position, (positionCounts.get(row.position) ?? 0) + 1)
   const selected = rankLeaguePlayerRates(rates).filter((row) =>
     (!args.rosterIds || rosterKeys.has(row.playerId)) && (!wantedIds || wantedIds.has(row.playerId)) &&
     (wantedName == null || normalizePlayerName(row.playerName) === wantedName) &&
     (!searchName || normalizePlayerName(row.playerName).includes(searchName)) &&
     (!wantedPosition || wantedPosition === 'ALL' || row.position === wantedPosition),
-  ).slice(0, Math.max(1, Math.min(args.rosterIds?.length ?? 200, args.limit ?? 100)))
+  ).slice(0, Math.max(1, Math.min(args.rosterIds?.length ?? args.playerIds?.length ?? 200, args.limit ?? 100)))
   if (!selected.length) return { leagueId, sport, season, week, unit, rows: [] }
 
   const playerIds = selected.map((row) => row.playerId)
   const [identity, schedule, recordedTeams] = await Promise.all([
     loadIdentityForKeys(prisma, sport, playerIds),
-    loadProjectionSchedule({ sport, season, week, now }).catch(() => new Map<string, TeamProjectionSchedule>()),
+    loadProjectionSchedule({ sport, season, week, now, day: args.day }).catch(() => new Map<string, TeamProjectionSchedule>()),
     loadRecordedTeams(sport, season, playerIds).catch(() => new Map<string, string>()),
   ])
   const [nflValues, collegeBase, specialists] = await Promise.all([
@@ -317,6 +322,8 @@ export async function loadLeaguePlayerMetrics(args: {
     return {
       ...row,
       ...totals,
+      positionCount: positionCounts.get(row.position),
+      ...(args.day ? { daily: projectedTotal(row.perGame, team ? schedule.get(team)?.dayGames ?? null : null) } : {}),
       ...(args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId) } : args.searchName ? {
         rosterPlayerId: idColumn ? leagueIdOf(linked, sport === 'NFL' && idColumn === 'rollingInsightsId' ? 'sleeperId' : idColumn) ?? undefined : undefined,
       } : {}),

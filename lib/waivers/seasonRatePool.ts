@@ -73,9 +73,10 @@ export function starterIdsOf(playerData: unknown): Set<string> {
 }
 
 /** The `PlayerIdentityMap` columns a league's roster ids can be written in. */
-export type LeagueIdColumn = 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId' | 'sleeperNbaId'
+export type LeagueIdColumn = 'cfbdId' | 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId' | 'sleeperNbaId'
 
 const LEAGUE_ID_COLUMNS: readonly LeagueIdColumn[] = [
+  'cfbdId',
   'rollingInsightsId',
   'espnId',
   'fantraxId',

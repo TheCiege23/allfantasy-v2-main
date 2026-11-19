@@ -28,13 +28,15 @@ export function standardLeagueSeasonGames(sport: string): number | null {
 
 export interface TeamProjectionSchedule {
   weekGames: number | null
+  dayGames?: number | null
   seasonGames: number | null
   remainingGames: number | null
 }
 
 export function projectionTeamKey(sport: string, team: string | null): string | null {
   if (!team?.trim()) return null
-  if (sport === 'NCAAB' || sport === 'NCAAF') {
+  if (sport === 'NCAAF') return normalizeTeamToken(team) || null
+  if (sport === 'NCAAB') {
     const [name] = collegeLogoNameCandidates(team)
     return normalizeTeamToken(looseTeamKey(name)) || null
   }
@@ -58,6 +60,7 @@ export function buildProjectionSchedule(args: {
   sport: string
   season: number
   week: number | null
+  day?: string | null
   now: Date
   fixtures: readonly Fixture[]
   teamKey?: (team: string) => string | null
@@ -106,19 +109,23 @@ export function buildProjectionSchedule(args: {
     (largest, games) => games.length > largest.length ? games : largest,
     [],
   )
-  const counts = new Map<string, { season: number; remaining: number; week: number }>()
+  const counts = new Map<string, { season: number; remaining: number; week: number; day: number; first: number; last: number }>()
+  const emptyCount = () => ({ season: 0, remaining: 0, week: 0, day: 0, first: Infinity, last: -Infinity })
   for (const game of seasonGames) {
     for (const team of [game.home, game.away]) {
-      const count = counts.get(team) ?? { season: 0, remaining: 0, week: 0 }
+      const count = counts.get(team) ?? emptyCount()
       count.season++
+      count.first = Math.min(count.first, game.start.getTime())
+      count.last = Math.max(count.last, game.start.getTime())
       if (game.start >= now) count.remaining++
       counts.set(team, count)
     }
   }
   for (const game of weekGames) {
     for (const team of [game.home, game.away]) {
-      const count = counts.get(team) ?? { season: 0, remaining: 0, week: 0 }
+      const count = counts.get(team) ?? emptyCount()
       count.week++
+      if (args.day && easternCalendarDay(game.start)?.toISOString().slice(0, 10) === args.day) count.day++
       counts.set(team, count)
     }
   }
@@ -129,9 +136,12 @@ export function buildProjectionSchedule(args: {
     // For college schedules the available figure is a scheduled-games estimate.
     // For fixed-length sports, withhold a season total when coverage is short.
     const seasonCoverage = count.season >= (SEASON_LENGTH[sport] ?? 1)
+    const collegeBasketballOffWeek = sport === 'NCAAB' && count.week === 0 && count.season >= 30 && weekGames.length > 0 &&
+      window != null && count.first < window.start.getTime() && count.last >= window.end.getTime()
     const cfbdBye = hasCfbdWeek && count.week === 0
     result.set(team, {
-      weekGames: count.week > 0 ? count.week : cfbdBye || (weekGames.length > 0 && seasonCoverage && sport === 'NFL') ? 0 : null,
+      weekGames: count.week > 0 ? count.week : cfbdBye || collegeBasketballOffWeek || (weekGames.length > 0 && seasonCoverage && sport === 'NFL') ? 0 : null,
+      ...(args.day ? { dayGames: count.week > 0 || collegeBasketballOffWeek ? count.day : null } : {}),
       seasonGames: seasonCoverage ? count.season : null,
       remainingGames: seasonCoverage ? count.remaining : null,
     })
@@ -143,6 +153,7 @@ export async function loadProjectionSchedule(args: {
   sport: string
   season: number
   week: number | null
+  day?: string | null
   now: Date
 }): Promise<Map<string, TeamProjectionSchedule>> {
   const { sport, season, now } = args
@@ -166,6 +177,33 @@ export async function loadProjectionSchedule(args: {
       : Promise.resolve(null),
     daily ? ensureDailySportSeasonStart(sport, season, { db: prisma, now }) : Promise.resolve(null),
   ] as const)
+  if (sport === 'NCAAF') {
+    const official = fixtures.filter(g => g.source === 'cfbd' && g.seasonType?.toLowerCase() === 'regular')
+    if (official.length && (args.week == null || official.some(g => g.week === args.week))) {
+      // Take CFBD's school names literally. Illinois and Illinois College both play
+      // football; removing "College" before counting fixtures adds their seasons together.
+      const result = buildProjectionSchedule({ ...args, fixtures: official, teamKey: normalizeTeamToken })
+      const schoolKeys = new Set(result.keys())
+      const candidates = new Map<string, Set<string>>()
+      for (const team of teamRows) {
+        const officialName = college ? resolveCollegeTeam(team.name, college)?.school : null
+        const names = [officialName, team.name, ...collegeLogoNameCandidates(team.name), looseTeamKey(team.name)]
+        const key = names.flatMap(n => n ? [normalizeTeamToken(n)] : []).find(k => schoolKeys.has(k))
+        if (!key) continue
+        for (const alias of [team.name, team.shortName]) {
+          if (!alias) continue
+          const name = normalizeTeamToken(alias)
+          const keys = candidates.get(name) ?? new Set<string>()
+          keys.add(key)
+          candidates.set(name, keys)
+        }
+      }
+      for (const [name, keys] of candidates) {
+        if (keys.size === 1 && !schoolKeys.has(name)) result.set(name, result.get([...keys][0]!)!)
+      }
+      return result
+    }
+  }
   const aliases = new Map<string, string | null>()
   const names = new Set<string>()
   for (const row of teamRows) {
@@ -173,12 +211,12 @@ export async function loadProjectionSchedule(args: {
     const name = projectionTeamKey(sport, row.name)
     if (!code || !name) continue
     names.add(name)
-    const target = sport === 'SOCCER' || sport === 'NCAAB' ? name : code
+    const target = sport === 'SOCCER' || sport === 'NCAAB' || sport === 'NCAAF' ? name : code
     for (const alias of [code, name]) {
       aliases.set(alias, aliases.has(alias) && aliases.get(alias) !== target ? null : target)
     }
   }
-  if (sport === 'SOCCER' || sport === 'NCAAB') for (const name of names) aliases.set(name, name)
+  if (sport === 'SOCCER' || sport === 'NCAAB' || sport === 'NCAAF') for (const name of names) aliases.set(name, name)
   const teamKey = (team: string) => {
     const key = projectionTeamKey(sport, team)
     const school = college ? resolveCollegeTeam(team, college) : null

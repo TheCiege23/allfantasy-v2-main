@@ -29,7 +29,7 @@
  * Pure (no I/O).
  */
 import { nflPositionGroups, nflTeamCode, fantraxNflNameKey } from '@/lib/player-identity/nflFantraxIdentityPlan'
-import { proTeamCode } from '@/lib/player-identity/proFantraxIdentityPlan'
+import { proTeamCode, proRolesAgree } from '@/lib/player-identity/proFantraxIdentityPlan'
 import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizePlayerName } from '@/lib/team-abbrev'
@@ -104,7 +104,16 @@ function playerIndex(rows: readonly FantraxIdentityRow[], sport: SupportedSport)
     if (sport !== 'NFL') {
       const teamKey = (team: string | null) => sport === 'NCAAB' || sport === 'NCAAF'
         ? cfbdScheduleTeamKeys(team).exact : proTeamCode(sport, team) ?? normalizePlayerName(team ?? '')
-      if (proTeam) candidates = candidates.filter((row) => teamKey(row.currentTeam) === teamKey(proTeam))
+      if (proTeam) {
+        const expected = teamKey(proTeam)
+        candidates = candidates.filter((row) => expected && teamKey(row.currentTeam) === expected)
+      }
+      if (sport === 'NCAAF') {
+        const roles = nflPositionGroups(position)
+        if (roles.size) candidates = candidates.filter(row => [...nflPositionGroups(row.position)].some(role => roles.has(role)))
+      } else {
+        candidates = candidates.filter(row => proRolesAgree(sport === 'NCAAB' ? 'NBA' : sport, position, row.position))
+      }
       const unique = new Set(candidates.map((row) => row.fantraxId))
       return unique.size === 1 ? [...unique][0]! : { problem: label + ' has no unique verified Fantrax identity in this sport.' }
     }

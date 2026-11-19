@@ -256,15 +256,6 @@ function slotGameStatus(game: NativeWeekGame | null, hasPoints: boolean): Matchu
 }
 
 /** The flat per-position estimate the tab has always used where no real projection exists. */
-function positionProjectionFallback(position: string): number {
-  const p = position.toUpperCase()
-  if (p === 'QB') return 17
-  if (p === 'RB') return 12
-  if (p === 'WR' || p === 'TE') return 10
-  if (p === 'K') return 8
-  if (p === 'DST' || p === 'DEF') return 9
-  return 10
-}
 
 export type NativeMatchupCenterPayload = MatchupCenterPayload & { native: NativeMatchupExtras }
 
@@ -339,6 +330,7 @@ export async function buildNativeMatchupCenterPayload(params: {
     mediaMap = null
   }
   const afByPlayer = await loadMatchupAfProjections({
+    leagueId: league.id,
     playerIds: [...myStarters, ...oppStarters].map((p) => p.playerId),
     season: season.season,
     week,
@@ -367,9 +359,8 @@ export async function buildNativeMatchupCenterPayload(params: {
       opponent: o?.opponent ?? null,
       headshotUrl: mediaMap?.get(row.playerId)?.media.headshotUrl ?? o?.headshotUrl ?? null,
       currentPoints: pts,
-      // No provider projection is stored for a native lineup: the flat estimate, marked as one.
-      projectedPoints: Math.max(pts, positionProjectionFallback(row.position)),
-      hasRealProjection: false,
+      projectedPoints: afByPlayer.get(row.playerId) ?? pts,
+      hasRealProjection: afByPlayer.has(row.playerId),
       afProjectedPoints: afByPlayer.get(row.playerId) ?? null,
       injuryStatus: injuryOf.get(`${rosterId}|${row.playerId}`) ?? null,
       newsBlurb: null,

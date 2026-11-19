@@ -1,3 +1,4 @@
+import { leagueRosterForecasts } from '@/lib/af-projections/leagueRosterForecasts'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -298,6 +299,10 @@ export async function GET(req: NextRequest) {
         console.warn('[league/roster] nfl outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
       }
     }
+
+    const selectedDay = searchParams?.get('day')
+    unifiedRoster = await leagueRosterForecasts(unifiedRoster, { ...league, id: leagueId, sport: leagueSport,
+      season: league.season ?? null }, unifiedRoster.map(p => p.id), { day: isDayKey(selectedDay) ? selectedDay : null })
 
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the

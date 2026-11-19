@@ -43,7 +43,7 @@ describe('AF league projection schedule', () => {
     const fixtures = [match('Arsenal', 'Manchester City'), match('Barcelona', 'Real Madrid'), match('Juventus', 'Roma'),
       match('Barcelona', 'Sevilla', 3), match('Juventus', 'Milan', 2, 'postponed')]
     const schedule = buildProjectionSchedule({ sport: 'SOCCER', season: 2026, week: 12, now: start, fixtures })
-    for (const [club, total] of [['ARS', 6], ['BAR', 12], ['JUV', 6]] as const) {
+    for (const [club, total] of [['ARS', 6], ['Barcelona', 12], ['Juventus', 6]] as const) {
       expect(totalsForLeaguePlayer(6, schedule.get(projectionTeamKey('SOCCER', club)!)).weekly).toBe(total)
     }
   })

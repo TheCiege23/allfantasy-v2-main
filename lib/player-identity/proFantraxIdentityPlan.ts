@@ -128,6 +128,11 @@ const TEAM_ALIASES = Object.fromEntries(
 function nameKey(value: string) { const parts = value.split(','); return compact(parts.length === 2 ? `${parts[1]} ${parts[0]}` : value) }
 
 /** The canonical team code for a sport, or undefined when the label is not a team we recognise. */
+export function proRolesAgree(sport: ProFantraxSport, slot: string | null, position: string | null): boolean {
+  const requested = RULES[sport].roles(slot)
+  return !requested.length || RULES[sport].roles(position).some(role => requested.includes(role))
+}
+
 export function proTeamCode(sport: ProFantraxSport, label: string | null | undefined): string | undefined {
   return TEAM_ALIASES[sport].get(compact(label ?? ''))
 }
