@@ -116,6 +116,13 @@ function unified(sport: HarnessSport, p: Player, bench: boolean) {
       ? {
           teamLogoUrl: teamLogoUrl('NFL', p.team),
           periodKickoffIso: p.off ? null : '2026-11-22T18:00:00.000Z',
+          teamByeWeek: 5 + (p.team.length + p.name.length) % 9,
+          periodWeather: p.off ? null : [
+            { indoors: true, symbol: '⌂', conditionLabel: 'Indoors', temperatureF: null, windSpeedMph: null, precipChancePct: null },
+            { indoors: false, symbol: '☀', conditionLabel: 'Clear', temperatureF: 54, windSpeedMph: 6, precipChancePct: 5 },
+            { indoors: false, symbol: '☔', conditionLabel: 'Rain', temperatureF: 47, windSpeedMph: 11, precipChancePct: 70 },
+            null,
+          ][p.name.length % 4],
           opponentRank: p.off || !p.opponent ? null : { rank: 1 + ((p.name.length * 7 + p.position.length * 5) % 32), of: 32, position: p.position, allowedPerGame: 17.4, games: 10 },
         }
       : {}),

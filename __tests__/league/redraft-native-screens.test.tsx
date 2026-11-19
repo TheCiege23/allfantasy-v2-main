@@ -281,6 +281,20 @@ describe('My team — position chips and bye / off-day badges', () => {
     render(<NativeLineupScreen league={redraft('NFL')} userTeam={team} onSelectTab={() => {}} />)
     expect(await screen.findByTestId('lineup-bye-b')).toBeTruthy()
     expect(screen.queryByTestId('lineup-bye-a')).toBeNull()
+    // The bye badge stands alone in the bye week: the "Bye 9" tag would say it twice.
+    expect(screen.queryByTestId('lineup-bye-week-b')).toBeNull()
+  })
+
+  it('a club’s bye week and the game’s forecast are drawn on the row', async () => {
+    const wx = { indoors: false, symbol: '☔', conditionLabel: 'Rain', temperatureF: 46.6, windSpeedMph: 11, precipChancePct: 70 }
+    stubFetch({ '/api/league/roster': lineupRoster([wire('a', 'QB', { teamByeWeek: 7, periodOpponent: 'NYG', periodWeather: wx }), wire('b', 'RB', { periodWeather: { ...wx, indoors: true, symbol: '⌂' } }), wire('c', 'WR')], false), '/claims': { claims: [] }, '/state': { state: {} }, '/settings': {} })
+    render(<NativeLineupScreen league={redraft('NFL')} userTeam={team} onSelectTab={() => {}} />)
+    expect((await screen.findByTestId('lineup-bye-week-a')).textContent).toBe('Bye 7')
+    expect(screen.getByTestId('lineup-weather-a').textContent).toContain('☔ 47°')
+    expect(screen.getByTestId('lineup-weather-a').textContent).toContain('70% chance of rain or snow')
+    expect(screen.getByTestId('lineup-weather-b').textContent).toContain('Dome')
+    expect(screen.queryByTestId('lineup-bye-week-c')).toBeNull()
+    expect(screen.queryByTestId('lineup-weather-c')).toBeNull()
   })
 
   it('another format: no badges, no sport tones, bench keeps the BN pill', async () => {

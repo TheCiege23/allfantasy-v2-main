@@ -6,7 +6,8 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
 import { buildHeadshotUrl } from '@/lib/player-media-urls'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { rankDefensesVsPosition, type AllowedRow, type NflPlayerOutlook, type OpponentRank } from './nflRosterOutlookModel'
+import { getGameWeather } from '@/lib/core-app/gameWeather'
+import { byeWeeksFromSchedule, rankDefensesVsPosition, type AllowedRow, type NflPlayerOutlook, type OpponentRank, type RosterGameWeather, type SeasonFixture } from './nflRosterOutlookModel'
 
 /**
  * The week's outlook for the NFL players on a roster, read from what is already stored. No provider
@@ -27,6 +28,7 @@ export type NflRosterOutlookArgs = {
 }
 
 const RANKS_TTL_MS = 30 * 60_000
+const OFF_SEASON_TYPES = ['pre', 'preseason', 'post', 'postseason']
 const ranksCache = new Map<string, { at: number; ranks: Map<string, OpponentRank> }>()
 
 /** Every defense's rank against every position, from the season's games before `week`. Cached 30 min. */
@@ -53,8 +55,32 @@ export async function loadDefenseVsPositionRanks(db: Pick<Db, '$queryRaw'>, seas
   return ranks
 }
 
+const byeCache = new Map<number, { at: number; byes: Map<string, number> }>()
+
+/** Each club's bye week this season, from the stored regular-season schedule. Cached 30 min. */
+export async function loadNflByeWeeks(db: Pick<Db, 'sportsGame'>, season: number, now = Date.now()): Promise<Map<string, number>> {
+  const hit = byeCache.get(season)
+  if (hit && now - hit.at < RANKS_TTL_MS) return hit.byes
+  const rows = await db.sportsGame.findMany({
+    where: { sport: 'NFL', season, week: { gte: 1, lte: 18 }, OR: [{ seasonType: null }, { seasonType: { notIn: OFF_SEASON_TYPES } }] },
+    select: { homeTeam: true, awayTeam: true, week: true },
+  })
+  const fixtures: SeasonFixture[] = []
+  for (const r of rows) {
+    const home = normalizeTeamAbbrev(r.homeTeam)
+    const away = normalizeTeamAbbrev(r.awayTeam)
+    if (r.week == null || !home || !away || !getTeamInfo(home) || !getTeamInfo(away)) continue
+    fixtures.push({ week: r.week, home, away })
+  }
+  const byes = byeWeeksFromSchedule(fixtures)
+  // An empty answer is not kept: the schedule may simply not be stored yet.
+  if (byes.size > 0) byeCache.set(season, { at: now, byes })
+  return byes
+}
+
 export function clearNflRosterOutlookCache(): void {
   ranksCache.clear()
+  byeCache.clear()
 }
 
 export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): Promise<Map<string, NflPlayerOutlook>> {
@@ -88,19 +114,28 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
   })
 
   const teams = new Set(facts.map((f) => f.team).filter((t): t is string => Boolean(t)))
-  const [games, projections, ranks] = await Promise.all([
+  const [games, projections, ranks, byes] = await Promise.all([
     db.sportsGame
       .findMany({
-        where: { sport: 'NFL', season, week, OR: [{ seasonType: null }, { seasonType: { notIn: ['pre', 'preseason', 'post', 'postseason'] } }] },
+        where: { sport: 'NFL', season, week, OR: [{ seasonType: null }, { seasonType: { notIn: OFF_SEASON_TYPES } }] },
         select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
       })
       .catch(() => []),
     loadMatchupAfProjections({ playerIds: ids, season, week, sport, platform: args.league.platform, leagueSettings: args.league.settings }),
     loadDefenseVsPositionRanks(db, season, week).catch(() => new Map<string, OpponentRank>()),
+    loadNflByeWeeks(db, season).catch(() => new Map<string, number>()),
   ])
   const nextGame = buildNextGameMap(games, teams)
   // "Bye" is said only of a week whose schedule is stored; an empty week says nothing.
   const weekHasGames = games.some((g) => g.startTime)
+
+  // Forecasts come from the weather cache only (a roofed stadium needs none); no provider is called.
+  const hosts = new Map<string, { hostTeam: string | null; kickoff: Date | null }>()
+  for (const f of facts) {
+    const g = f.team ? nextGame.get(f.team) : undefined
+    if (g) hosts.set(f.id, { hostTeam: g.home ? f.team : g.opponent, kickoff: g.at })
+  }
+  const weather: Map<string, RosterGameWeather> = await getGameWeather({ sport: 'NFL', games: hosts }).catch(() => new Map())
 
   for (const f of facts) {
     const game = f.team ? nextGame.get(f.team) : undefined
@@ -114,6 +149,8 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
       headshotUrl: buildHeadshotUrl(f.id, 'nfl'),
       teamLogoUrl: teamLogoUrl('NFL', f.team),
       opponentLogoUrl: game ? teamLogoUrl('NFL', game.opponent) : null,
+      byeWeek: f.team ? byes.get(f.team) ?? null : null,
+      weather: weather.get(f.id) ?? null,
     })
   }
   return out

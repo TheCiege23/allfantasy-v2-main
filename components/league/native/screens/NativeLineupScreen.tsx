@@ -255,6 +255,34 @@ function OpponentRankChip({ p }: { p: DisplayPlayerRecord | undefined }) {
   )
 }
 
+/** The forecast at the player's game: a glyph and the temperature, with the detail in words for a screen reader. */
+function WeatherChip({ p }: { p: DisplayPlayerRecord | undefined }) {
+  const w = p?.gameWeather
+  if (!p || !w) return null
+  const temp = w.temperatureF != null && Number.isFinite(w.temperatureF) ? `${Math.round(w.temperatureF)}°` : null
+  const detail = w.indoors
+    ? 'Indoors: weather is not a factor.'
+    : [
+        w.conditionLabel,
+        temp ? `${temp}F` : null,
+        w.windSpeedMph != null ? `wind ${Math.round(w.windSpeedMph)} mph` : null,
+        w.precipChancePct != null ? `${Math.round(w.precipChancePct)}% chance of rain or snow` : null,
+      ].filter(Boolean).join(', ') || 'Forecast'
+  return (
+    <small className="nls-wx" title={detail} data-indoors={w.indoors || undefined} data-testid={`lineup-weather-${p.id}`}>
+      <span aria-hidden>{w.symbol}{w.indoors ? ' Dome' : temp ? ` ${temp}` : ''}</span>
+      <span className="nls-sr">{detail}</span>
+    </small>
+  )
+}
+
+/** "Bye 7": the club's bye week, left off in the bye week itself (the game line already says so). */
+function ByeTag({ p, onBye }: { p: DisplayPlayerRecord | undefined; onBye: boolean }) {
+  // In the bye week itself the row already carries the "Bye" badge and the game line says "Bye week".
+  if (!p || p.byeWeek == null || onBye || String(p.opponent ?? '').toUpperCase() === 'BYE') return null
+  return <small className="nls-bye" data-testid={`lineup-bye-week-${p.id}`}>Bye {p.byeWeek}</small>
+}
+
 function untilLabel(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000))
   const h = Math.floor(m / 60)
@@ -785,7 +813,13 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               </strong>
               {/* On the second line, so a long name truncating on a phone never hides them. */}
               <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLineNode(p, showMedia) || (id ? '—' : 'Open slot')}</small>
-              {isPicked ? null : <OpponentRankChip p={p} />}
+              {isPicked ? null : (
+                <span className="nls-pl-meta">
+                  <OpponentRankChip p={p} />
+                  <WeatherChip p={p} />
+                  <ByeTag p={p} onBye={isOnBye(p, data?.leagueWeek)} />
+                </span>
+              )}
             </span>
           </span>
         </PlayerCell>
