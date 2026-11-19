@@ -29,6 +29,9 @@ import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenConte
  */
 type View = 'mine' | 'league'
 
+/** How many games the scoreboard shows beside "My matchup" before offering the full list. */
+const SCOREBOARD_GLANCE_GAMES = 8
+
 function sideLine(rec: MatchupCenterPayload['left']['record'], remaining: number) {
   return (
     <>
@@ -217,13 +220,21 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
       <span>{pts == null ? '—' : categories ? String(Math.round(pts)) : fmt1(pts)}</span>
     </div>
   )
-  const scoreboard = (
+  /*
+   * The week's games. Beside "My matchup" the list is a glance, not the whole league: a 36-team league
+   * that plays five games a week has 90 games, which pushed the page to nine screens (seen on a real
+   * league, 2026-11-19). It shows the first few, the viewer's own first, and a way to the full list.
+   */
+  const boardCard = (limit: number | null) => {
+    const shown = games && limit != null && games.length > limit ? games.slice(0, limit) : games
+    return (
     <Card label={`League scoreboard · Wk ${week}`}>
-      {games ? (
+      {games && shown ? (
         games.length ? (
           // One line per game, from the league's own schedule and bracket.
+          <>
           <ul className="nls-board" data-testid="native-scoreboard">
-            {games.map((g) => {
+            {shown.map((g) => {
               const hp = g.home.totalPoints
               const ap = g.away?.totalPoints ?? null
               return (
@@ -235,6 +246,13 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               )
             })}
           </ul>
+          {shown.length < games.length ? (
+            <div className="nls-card-foot">
+              <span className="nls-muted nls-mono">{shown.length} of {games.length} games</span>
+              <button type="button" className="nls-btn" data-testid="native-scoreboard-all" onClick={() => setView('league')}>See all {games.length} games</button>
+            </div>
+          ) : null}
+          </>
         ) : (
           <p className="nls-muted">No games are scheduled for week {week}.</p>
         )
@@ -255,7 +273,10 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
         <p className="nls-muted">Scores appear here once week {week} is scored.</p>
       )}
     </Card>
-  )
+    )
+  }
+  const scoreboard = boardCard(null)
+  const scoreboardGlance = boardCard(SCOREBOARD_GLANCE_GAMES)
 
   // A league that plays more than one game a week: the viewer's other games, each one a tap away.
   const otherGames = native && native.gameCount > 1 ? (
@@ -383,7 +404,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               <button type="button" className="nls-btn" data-variant="primary" data-block="true" onClick={() => onSelectTab('roster')}>Review lineup</button>
             </Card>
             {otherGames}
-            {view === 'mine' ? scoreboard : null}
+            {view === 'mine' ? scoreboardGlance : null}
           </aside>
         </div>
       ) : null}
