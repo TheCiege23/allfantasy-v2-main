@@ -143,6 +143,8 @@ const ES: Record<string, string> = {
   '1 pick': '1 selección',
   'Correction:': 'Corrección:',
   'No draft sessions on file.': 'No hay drafts registrados.',
+  'Imported draft': 'Draft importado',
+  'Open in the draft archive': 'Abrir en el archivo de drafts',
   'Draft history unavailable.': 'El historial de drafts no está disponible.',
 
   // ── Rules and access ──────────────────────────────────────────────────
