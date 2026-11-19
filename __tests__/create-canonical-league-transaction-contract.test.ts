@@ -14,6 +14,7 @@ function buildTx() {
     league: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'league-1' }),
+      update: vi.fn().mockResolvedValue({ id: 'league-1' }),
     },
     leagueSettings: {
       create: vi.fn().mockResolvedValue({ id: 'ls-1' }),
@@ -502,6 +503,23 @@ describe('dynasty regular-season fallback is sport-aware', () => {
     expect(upsert.update.regularSeasonWeeks).toBe(weeks)
     // The stored length and the league's playoff start describe ONE season: playoffs follow it.
     if (sport !== 'NFL') expect(tx.league.create.mock.calls[0]?.[0].data.playoffStartWeek).toBe(weeks + 1)
+  })
+
+  // The taxi squad size has two stores; lineup validation and the rookie taxi placement read the column.
+  it.each([
+    ['NBA', {}, 4],
+    ['NFL', { taxiSlots: 6 }, 6],
+    ['NHL', { taxiSlots: 6 }, 0], // no prospect pool: 0 whatever the request carried
+  ])('%s dynasty writes the taxi squad size to the league column as well as the config', async (sport, conceptSetup, slots) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(
+      tx as any,
+      'app-user-1',
+      buildBody({ concept: 'dynasty', sport, scoringPreset: undefined, conceptSetup }),
+      buildEngine({ leagueFormatId: 'dynasty' }),
+    )
+    expect(tx.dynastyLeagueConfig.upsert.mock.calls[0]?.[0].create.taxiSlots).toBe(slots)
+    expect(tx.league.update).toHaveBeenCalledWith({ where: { id: 'league-1' }, data: { taxiSlots: slots } })
   })
 
   it('[control] a commissioner-chosen length still wins', async () => {
