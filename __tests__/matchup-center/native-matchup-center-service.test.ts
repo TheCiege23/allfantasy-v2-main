@@ -135,6 +135,17 @@ describe('the viewer’s matchup, from the league’s own season', () => {
   })
 })
 
+describe('a game the sync has touched but nobody has scored in', () => {
+  it('🛑 reads as not started, like the games beside it, and is not asked of the scoring engine', async () => {
+    db.matchups[2] = { ...db.matchups[2], status: 'active' }
+    const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
+    expect(p.matchupStatus).toBe('upcoming')
+    expect(engine.scoreRosterForWeek).not.toHaveBeenCalled()
+    const board = await loadNativeScoreboard({ league: LEAGUE, viewerUserId: 'me' })
+    expect(board?.games.map((g) => [g.status, g.home.totalPoints])).toEqual([['upcoming', null], ['upcoming', null]])
+  })
+})
+
 describe('a league that plays more than one game a week', () => {
   beforeEach(() => {
     db.matchups.push({ id: 'm5', seasonId: 'S', week: 2, homeRosterId: 'rA', awayRosterId: 'rD', homeScore: 0, awayScore: 0, status: 'scheduled', isMedianMatchup: false })

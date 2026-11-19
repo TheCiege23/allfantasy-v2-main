@@ -12,6 +12,7 @@ import {
   nativeMatchupWeek,
   pickNativeSeason,
   pickViewerRosterId,
+  regularGameStatus,
   type NativeWeekGame,
 } from '@/lib/matchup-center/nativeMatchupModel'
 
@@ -33,6 +34,20 @@ describe('nativeGameStatus', () => {
     expect(nativeGameStatus('in_progress')).toBe('live')
     expect(nativeGameStatus('scheduled')).toBe('upcoming')
     expect(nativeGameStatus(null)).toBe('upcoming')
+  })
+})
+
+describe('regularGameStatus', () => {
+  it('🛑 a points game the sync has touched but nobody has scored in has not started', () => {
+    expect(regularGameStatus({ status: 'active', homeScore: 0, awayScore: 0, pointsLeague: true })).toBe('upcoming')
+  })
+  it('one point on either side and it is live', () => {
+    expect(regularGameStatus({ status: 'active', homeScore: 0.5, awayScore: 0, pointsLeague: true })).toBe('live')
+    expect(regularGameStatus({ status: 'active', homeScore: 0, awayScore: -1, pointsLeague: true })).toBe('live')
+  })
+  it('a final 0 - 0 stays final, and a category league keeps its own status', () => {
+    expect(regularGameStatus({ status: 'final', homeScore: 0, awayScore: 0, pointsLeague: true })).toBe('final')
+    expect(regularGameStatus({ status: 'active', homeScore: 0, awayScore: 0, pointsLeague: false })).toBe('live')
   })
 })
 

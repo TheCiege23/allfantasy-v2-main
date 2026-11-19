@@ -38,6 +38,7 @@ import {
   nativeMatchupWeek,
   pickNativeSeason,
   pickViewerRosterId,
+  regularGameStatus,
   type NativeBoardGame,
   type NativeMatchupExtras,
   type NativeStarter,
@@ -97,6 +98,7 @@ export async function loadNativeMatchupSeason(league: LeagueRow, askedYear?: num
 
 /** Every game of one week: the regular-season schedule, plus any playoff round played that week. */
 export async function loadNativeWeekGames(league: LeagueRow, season: SeasonRow, week: number): Promise<NativeWeekGame[]> {
+  const pointsLeague = weekScoringMode(league.settings, season.season, week) === 'points'
   const [regular, rounds] = await Promise.all([
     prisma.redraftMatchup.findMany({
       where: { seasonId: season.id, week, isMedianMatchup: false },
@@ -128,7 +130,7 @@ export async function loadNativeWeekGames(league: LeagueRow, season: SeasonRow, 
     awayRosterId: m.awayRosterId,
     homeScore: m.homeScore,
     awayScore: m.awayScore,
-    status: nativeGameStatus(m.status),
+    status: regularGameStatus({ status: m.status, homeScore: m.homeScore, awayScore: m.awayScore, pointsLeague }),
   }))
 
   if (rounds.length) {

@@ -23,6 +23,21 @@ export function nativeGameStatus(status: string | null | undefined): NativeGameS
   return 'upcoming'
 }
 
+/**
+ * A regular-season game's state for the screen.
+ *
+ * ⚠ THE SCORE SYNC MARKS A GAME `active` THE FIRST TIME IT TOUCHES IT, not when a player takes the
+ * field: a lineup save or a routine re-score is enough. So early in a week one game read LIVE at
+ * 0.0 - 0.0 beside five that read as not started (seen on the real page, 2026-11-19). In a points
+ * league a game with no points on either side has not started as far as anyone watching can tell.
+ * A category league is left alone: 0 - 0 there can be a week of tied categories.
+ */
+export function regularGameStatus(args: { status: string | null | undefined; homeScore: number; awayScore: number; pointsLeague: boolean }): NativeGameStatus {
+  const status = nativeGameStatus(args.status)
+  if (status === 'live' && args.pointsLeague && args.homeScore === 0 && args.awayScore === 0) return 'upcoming'
+  return status
+}
+
 type SeasonLike = { season: number; currentWeek: number }
 
 /**
