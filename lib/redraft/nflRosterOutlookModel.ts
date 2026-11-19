@@ -24,6 +24,12 @@ export type OpponentRank = {
 
 export type NflPlayerOutlook = {
   projectedPoints: number | null
+  /**
+   * Whose number `projectedPoints` is. The AF engine writes none for a team defense, so a defense
+   * carries the provider's (Sleeper's, in its own standard scoring) and every screen labels it.
+   * Absent means the AF engine's.
+   */
+  projectionSource?: 'allfantasy' | 'sleeper' | null
   /** Folded club code, `'BYE'` when the club has no game in a week that has games, or null when unknown. */
   opponent: string | null
   homeAway: 'home' | 'away' | null
@@ -157,6 +163,9 @@ export type NflOutlookWireFields = {
 }
 
 export const AF_WEEK_PROJECTION_SOURCE = 'allfantasy'
+/** A team defense's projection: Sleeper's own number, in Sleeper's standard scoring, not this league's. */
+export const SLEEPER_PROJECTION_SOURCE = 'sleeper'
+export const SLEEPER_PROJECTION_TITLE = "Sleeper's projection in its standard scoring. AllFantasy does not project team defenses."
 
 /**
  * Lay the outlook over the roster rows. A value the row already carries is kept: the outlook fills
@@ -172,7 +181,7 @@ export function applyNflRosterOutlook<T extends { id: string } & NflOutlookWireF
     const fillProjection = row.projectedPoints == null && o.projectedPoints != null
     return {
       ...row,
-      ...(fillProjection ? { projectedPoints: o.projectedPoints, projectionsSource: AF_WEEK_PROJECTION_SOURCE } : {}),
+      ...(fillProjection ? { projectedPoints: o.projectedPoints, projectionsSource: o.projectionSource === 'sleeper' ? SLEEPER_PROJECTION_SOURCE : AF_WEEK_PROJECTION_SOURCE } : {}),
       headshotUrl: row.headshotUrl ?? o.headshotUrl,
       imageUrl: row.imageUrl ?? row.headshotUrl ?? o.headshotUrl,
       teamLogoUrl: row.teamLogoUrl ?? o.teamLogoUrl,

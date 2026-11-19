@@ -39,6 +39,7 @@ import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
+import { SLEEPER_PROJECTION_SOURCE, SLEEPER_PROJECTION_TITLE } from '@/lib/redraft/nflRosterOutlookModel'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
 import {
@@ -767,7 +768,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         </PlayerCell>
         <span className="nls-proj" data-has={p?.projectedPoints != null || undefined}>
           {fmt1(p?.projectedPoints ?? null)}
-          {showMedia && p?.projectedPoints != null ? <small>proj</small> : null}
+          {p?.projectedPoints != null && p.projectionsSource === SLEEPER_PROJECTION_SOURCE ? (
+            <small data-testid={`lineup-proj-source-${p.id}`} title={SLEEPER_PROJECTION_TITLE}>Sleeper</small>
+          ) : showMedia && p?.projectedPoints != null ? <small>proj</small> : null}
         </span>
         <span className="nls-lrow-action">
           {editable ? (

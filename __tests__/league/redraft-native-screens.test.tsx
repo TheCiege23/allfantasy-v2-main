@@ -285,6 +285,15 @@ describe('My team — position chips and bye / off-day badges', () => {
     expect(screen.queryByTestId('lineup-bye-week-b')).toBeNull()
   })
 
+  it('a team defense’s projection is labelled Sleeper; an AF projection is not', async () => {
+    stubFetch({ '/api/league/roster': lineupRoster([wire('a', 'QB', { projectedPoints: 20, projectionsSource: 'allfantasy' }), wire('b', 'DEF', { projectedPoints: 6.4, projectionsSource: 'sleeper' }), wire('c', 'WR')], false), '/claims': { claims: [] }, '/state': { state: {} }, '/settings': {} })
+    render(<NativeLineupScreen league={redraft('NFL')} userTeam={team} onSelectTab={() => {}} />)
+    const label = await screen.findByTestId('lineup-proj-source-b')
+    expect(label.textContent).toBe('Sleeper')
+    expect(label.getAttribute('title')).toContain('AllFantasy does not project team defenses')
+    expect(screen.queryByTestId('lineup-proj-source-a')).toBeNull()
+  })
+
   it('a club’s bye week and the game’s forecast are drawn on the row', async () => {
     const wx = { indoors: false, symbol: '☔', conditionLabel: 'Rain', temperatureF: 46.6, windSpeedMph: 11, precipChancePct: 70 }
     stubFetch({ '/api/league/roster': lineupRoster([wire('a', 'QB', { teamByeWeek: 7, periodOpponent: 'NYG', periodWeather: wx }), wire('b', 'RB', { periodWeather: { ...wx, indoors: true, symbol: '⌂' } }), wire('c', 'WR')], false), '/claims': { claims: [] }, '/state': { state: {} }, '/settings': {} })

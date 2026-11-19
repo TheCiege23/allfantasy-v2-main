@@ -176,6 +176,23 @@ describe('NativeMatchupScreen on the league’s own season', () => {
     expect(screen.queryByTestId('matchup-proj-Starter Two')).toBeNull()
   })
 
+  it('a team defense shows Sleeper’s projection, named, where the AF engine has none', async () => {
+    const o = { homeAway: 'home', kickoffTimeIso: null, opponentRank: null, teamLogoUrl: null, byeWeek: null, weather: null }
+    const def = { ...slot('Cardinals', 0), position: 'DEF', gameStatus: 'upcoming', afProjectedPoints: null, outlook: { ...o, providerProjection: { points: 6.4, source: 'sleeper' } } }
+    const qb = { ...slot('Passer', 0), gameStatus: 'upcoming', afProjectedPoints: 20.02, outlook: { ...o, providerProjection: null } }
+    stubFetch({
+      '/matchup-center': () => payload(7, {}, { matchupStatus: 'upcoming', left: side('rA', 'Aces', 0, [def]), right: side('rB', 'Bears', 0, [qb]) }),
+      '/scoring/matchups': () => ({ season: 2026, week: 7, matchups: [], games: [] }),
+    })
+    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    const d = await screen.findByTestId('matchup-proj-Cardinals')
+    expect(d.textContent).toBe('6.4 Sleeper')
+    expect(d.getAttribute('data-source')).toBe('sleeper')
+    const q = screen.getByTestId('matchup-proj-Passer')
+    expect(q.textContent).toBe('20.0')
+    expect(q.getAttribute('data-source')).toBe('allfantasy')
+  })
+
   it('a commissioner with no team still sees the week’s games', async () => {
     stubFetch({
       '/matchup-center': () => ({ httpError: 'You have not claimed a team in this league yet, so there is no matchup to show.' }),
