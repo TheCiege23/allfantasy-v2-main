@@ -25,7 +25,9 @@ type DraftDockSize = 'min' | 'half' | 'tall'
 
 const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
   min: 'min-h-0 max-h-[unset] flex-1',
-  half: 'max-h-[min(50vh,600px)]',
+  // Board gets the larger share by default (2026-11-19): it was capped at 50vh and the tray
+  // under it took most of the screen.
+  half: 'max-h-[min(58vh,760px)]',
   tall: 'max-h-[min(28vh,320px)]',
 }
 
@@ -140,9 +142,22 @@ export function DraftRoomShell({
   bottomBar,
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
-  const [dockSize, setDockSize] = useState<DraftDockSize>(playerSpacePriority ? 'tall' : 'half')
+  // Split by default everywhere (2026-11-19). Snake rooms used to open on 'tall', which left the
+  // board a ~270px strip at 1440x960 (reported: the tray took most of the screen). A saved
+  // choice still wins; `playerSpacePriority` only marks the surface now.
+  const [dockSize, setDockSize] = useState<DraftDockSize>('half')
   const bottomDockExpanded = dockSize !== 'min'
   const [boardHidden, setBoardHidden] = useState(false)
+  const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const viewMenuRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!viewMenuOpen) return
+    const onDown = (e: PointerEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) setViewMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [viewMenuOpen])
   const boardSize = boardHidden ? 'hidden' : dockSize === 'tall' ? 'compact' : 'balanced'
   // iOS's keyboard changes the visual viewport independently of layout viewport units.
   // Keep the bottom navigation above it, without blocking pinch zoom.
@@ -365,7 +380,7 @@ export function DraftRoomShell({
             */
             <div
               className={cn(
-                'flex shrink-0 items-center border-b border-white/[0.06] bg-[#081022] py-1',
+                'relative flex h-5 shrink-0 items-center border-b border-white/[0.06] bg-[#081022]',
                 boardHidden ? 'justify-end pr-3' : 'justify-center',
               )}
               data-testid="draft-dock-size-bar"
@@ -373,11 +388,29 @@ export function DraftRoomShell({
             >
               {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
                   own divider bar; floating across the edge, the panel below clipped it. */}
+              {/* One small "View" menu on a 20px divider (2026-11-19). The four buttons used to sit
+                  on their own 38px bar, which came straight out of the board. */}
+              <div className="relative" ref={viewMenuRef}>
+              <button
+                type="button"
+                onClick={() => setViewMenuOpen((v) => !v)}
+                aria-expanded={viewMenuOpen}
+                aria-haspopup="true"
+                data-testid="draft-dock-view-menu"
+                title="Change how much of the screen the board and the player panel get"
+                className="inline-flex h-[18px] items-center gap-1 rounded-full border border-white/15 bg-[#0a1228] px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+              >
+                <span className="h-[3px] w-5 rounded-full bg-white/30" aria-hidden />
+                {boardHidden ? 'Players only' : dockSize === 'min' ? 'Board only' : dockSize === 'tall' ? 'More players' : 'Split'}
+                <ChevronDown className={cn('h-3 w-3 transition-transform', viewMenuOpen && 'rotate-180')} aria-hidden />
+              </button>
+              {viewMenuOpen ? (
               <div
                 role="group"
                 aria-label="Player panel size"
-                className="inline-flex items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]"
+                className="absolute left-1/2 top-6 z-[70] inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
                 data-testid="draft-dock-size-control"
+                onClick={() => setViewMenuOpen(false)}
               >
                 <button
                   type="button"
@@ -439,6 +472,8 @@ export function DraftRoomShell({
                 >
                   Hide board
                 </button>
+              </div>
+              ) : null}
               </div>
             </div>
           ) : null}
