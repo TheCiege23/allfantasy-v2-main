@@ -127,7 +127,7 @@ import {
   localizeLeagueTabs,
   type TabDef,
 } from './LeagueTabs'
-import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague, leagueWeekIsOnSeasonRow } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { DraftTab } from './tabs/DraftTab'
 import { TeamTab } from './tabs/TeamTab'
 import { LeagueTab } from './tabs/LeagueTab'
@@ -489,9 +489,21 @@ export function LeagueShell({
   // instead of week 1, and so League Home can tell a genuinely pre-draft
   // league (no `RedraftSeason` row yet — `syncCompletedDraftToRedraftSeason`
   // only creates one after the draft finalizes) apart from an in-season one.
+  // Every league that plays on AllFantasy keeps its week there too, in any sport or format
+  // (`leagueWeekIsOnSeasonRow`): without it an NBA or dynasty league's home read "Week —".
+  const weekOnSeasonRow = leagueWeekIsOnSeasonRow({
+    sport: league.sport,
+    leagueType: league.leagueType,
+    isDynasty: league.isDynasty,
+    leagueVariant: league.leagueVariant,
+    bestBallMode: league.bestBallMode,
+    guillotineMode: league.guillotineMode,
+    keeperPhaseActive: league.keeperPhaseActive,
+    platform: league.platform,
+  })
   const [redraftSeason, setRedraftSeason] = useState<RedraftSeasonClient | null>(null)
   useEffect(() => {
-    if (!nflRedraftCore) {
+    if (!weekOnSeasonRow) {
       setRedraftSeason(null)
       return
     }
@@ -507,7 +519,7 @@ export function LeagueShell({
     return () => {
       cancelled = true
     }
-  }, [nflRedraftCore, league.id])
+  }, [weekOnSeasonRow, league.id])
   const redraftCurrentWeek = redraftSeason?.currentWeek ?? null
   const hasActiveRedraftSeason = redraftSeason != null
   // The redraft header's season track (NativeLeagueWorkspace → RedraftSeasonTrack). Only the league's
