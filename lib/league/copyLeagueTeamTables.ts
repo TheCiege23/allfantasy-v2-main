@@ -12,9 +12,9 @@
  * Codes are ESPN's, because they are also the crest file names. They are stored in
  * `League.settings.copy_league.teams`, so do not change a code once leagues use it.
  */
-import type { CopyLeagueTeam } from './copyLeague'
+import type { CopyLeagueTableTeam } from './copyLeague'
 
-export const COPY_LEAGUE_NBA_TEAMS: readonly CopyLeagueTeam[] = [
+export const COPY_LEAGUE_NBA_TEAMS: readonly CopyLeagueTableTeam[] = [
   { code: 'ATL', name: 'Atlanta Hawks', logo: 'https://a.espncdn.com/i/teamlogos/nba/500/atl.png' },
   { code: 'BOS', name: 'Boston Celtics', logo: 'https://a.espncdn.com/i/teamlogos/nba/500/bos.png' },
   { code: 'BKN', name: 'Brooklyn Nets', logo: 'https://a.espncdn.com/i/teamlogos/nba/500/bkn.png' },
@@ -47,7 +47,7 @@ export const COPY_LEAGUE_NBA_TEAMS: readonly CopyLeagueTeam[] = [
   { code: 'WSH', name: 'Washington Wizards', logo: 'https://a.espncdn.com/i/teamlogos/nba/500/wsh.png' },
 ]
 
-export const COPY_LEAGUE_NHL_TEAMS: readonly CopyLeagueTeam[] = [
+export const COPY_LEAGUE_NHL_TEAMS: readonly CopyLeagueTableTeam[] = [
   { code: 'ANA', name: 'Anaheim Ducks', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png' },
   { code: 'BOS', name: 'Boston Bruins', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/bos.png' },
   { code: 'BUF', name: 'Buffalo Sabres', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png' },
@@ -82,7 +82,7 @@ export const COPY_LEAGUE_NHL_TEAMS: readonly CopyLeagueTeam[] = [
   { code: 'WPG', name: 'Winnipeg Jets', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/wpg.png' },
 ]
 
-export const COPY_LEAGUE_MLB_TEAMS: readonly CopyLeagueTeam[] = [
+export const COPY_LEAGUE_MLB_TEAMS: readonly CopyLeagueTableTeam[] = [
   { code: 'ARI', name: 'Arizona Diamondbacks', logo: 'https://a.espncdn.com/i/teamlogos/mlb/500/ari.png' },
   { code: 'ATH', name: 'Athletics', logo: 'https://a.espncdn.com/i/teamlogos/mlb/500/ath.png' },
   { code: 'ATL', name: 'Atlanta Braves', logo: 'https://a.espncdn.com/i/teamlogos/mlb/500/atl.png' },
