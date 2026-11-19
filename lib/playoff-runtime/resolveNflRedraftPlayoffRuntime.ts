@@ -17,6 +17,7 @@ import {
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
+import { decidedTitleWinnerRosterId } from './titleWinner'
 import { loadSeasonRosterDivisions, type SeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { divisionRecords } from '@/lib/league/divisions/leagueDivisions'
 
@@ -641,6 +642,49 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
   }
 }
 
+/**
+ * Put the title winner on record the moment the title game is decided.
+ *
+ * 🛑 THE CHAMPION WAS ONLY RECORDED WHEN THE SEASON WAS FINALIZED. Finalizing also archives the season
+ * and opens the offseason, and it runs on a later pass (or when a commissioner asks for it), so a league
+ * whose final had a winner had no champion on record in between, and none at all if finalizing was held.
+ *
+ * This writes only the championship row. The season's status, the bracket's final standings and the
+ * crowned event stay with the finalizer, which upserts the same row and fills in the playoff record.
+ * Best-effort: the round has already been saved, and a failed write here must not undo or fail it.
+ */
+export async function recordTitleWinnerOnceDecided(input: {
+  state: Pick<NflRedraftPlayoffRuntimeState, 'leagueId' | 'season' | 'teams'>
+  winnerRosterId: string | null
+  actorUserId?: string | null
+}): Promise<boolean> {
+  const rosterId = input.winnerRosterId
+  if (!rosterId) return false
+  const team = input.state.teams.find((t) => t.rosterId === rosterId)
+  const data = {
+    championUserId: team?.ownerId ?? rosterId,
+    teamName: team?.displayName ?? null,
+    pointsFor: team?.pointsFor ?? null,
+    recordedBy: input.actorUserId || 'system',
+  }
+  try {
+    await prisma.leagueChampionship.upsert({
+      where: { leagueId_season: { leagueId: input.state.leagueId, season: input.state.season } },
+      create: { leagueId: input.state.leagueId, season: input.state.season, ...data },
+      // A playoff record the finalizer already wrote is left as it is.
+      update: data,
+    })
+    return true
+  } catch (error) {
+    console.error('[playoffs] title winner not recorded', {
+      leagueId: input.state.leagueId,
+      season: input.state.season,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 export async function advanceNflRedraftPlayoffRuntimeRound(input: {
   seasonId: string
   week?: number | null
@@ -683,6 +727,12 @@ export async function advanceNflRedraftPlayoffRuntimeRound(input: {
   })
 
   await recordLeagueEvents(result.events)
+  // The round just saved may have been the final: its winner goes on record now, not at season close.
+  await recordTitleWinnerOnceDecided({
+    state: result.state,
+    winnerRosterId: decidedTitleWinnerRosterId(result.state.bracket),
+    actorUserId: input.actorUserId,
+  })
   return result
 }
 
@@ -798,6 +848,13 @@ export async function overrideNflRedraftPlayoffMatchup(input: {
       metadata: { ...matchup.metadata, commissionerOverride: true, overrideReason: input.reason ?? null },
     },
   })
+  // Naming the winner of the title game decides the champion: on record now (a later change of mind
+  // overwrites it). Any other game leaves the record alone.
+  const titleRound = bracket.rounds[bracket.rounds.length - 1]
+  const isTitleGame = Boolean(titleRound?.matchups.some((m) => m.matchupId === input.matchupId && !m.nextMatchupId)) && matchup.status !== 'bye'
+  if (isTitleGame && titleRound && titleRound.matchups.filter((m) => !m.nextMatchupId && m.status !== 'bye').length === 1) {
+    await recordTitleWinnerOnceDecided({ state: resolved.state, winnerRosterId: input.winnerRosterId, actorUserId: input.actorUserId })
+  }
   const event = buildPlayoffRuntimeEvent({
     leagueId: resolved.state.leagueId,
     type: 'commissioner.playoff_override',
