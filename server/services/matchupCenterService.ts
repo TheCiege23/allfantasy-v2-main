@@ -16,6 +16,7 @@ import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggre
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
 import { buildNativeMatchupCenterPayload } from './nativeMatchupCenter'
+import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
 
@@ -80,15 +81,16 @@ function slotAiInsight(pts: number, proj: number, injury: string | null, hasReal
   return null
 }
 
-function weekFromSettings(settings: unknown): number {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
+/** The week the league's settings state, or null when they state none (never a guessed 1). */
+function weekFromSettings(settings: unknown): number | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
   const w = (settings as Record<string, unknown>).currentWeek ?? (settings as Record<string, unknown>).current_week
   if (typeof w === 'number' && Number.isFinite(w)) return Math.max(1, Math.floor(w))
   if (typeof w === 'string') {
     const n = parseInt(w, 10)
-    return Number.isFinite(n) ? Math.max(1, n) : 1
+    return Number.isFinite(n) ? Math.max(1, n) : null
   }
-  return 1
+  return null
 }
 
 function recordWinPct(w: number, l: number, t: number): number {
@@ -137,6 +139,7 @@ export async function buildMatchupCenterPayload(params: {
       leagueVariant: true,
       userId: true,
       platform: true,
+      platformLeagueId: true,
       playoffWeeksPerRound: true,
     },
   })
@@ -170,7 +173,17 @@ export async function buildMatchupCenterPayload(params: {
   if (native) return native
 
   const season = params.season ?? league.season
-  const week = params.week ?? weekFromSettings(league.settings)
+  /*
+   * 🛑 "NO WEEK GIVEN" WAS WEEK 1 (2026-11-19). An imported Fantrax league states no current week in its settings, so
+   * this tab opened on week 1 in week 11 while My Team showed week 11. The week the league is actually in is the one
+   * every core screen uses (`resolveCurrentWeekForLeague`: the earliest unplayed week of its schedule); 1 is the last
+   * resort, for a league with no schedule on file at all.
+   */
+  const week =
+    params.week ??
+    weekFromSettings(league.settings) ??
+    (league.platformLeagueId ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week : null) ??
+    1
 
   /*
    * ⚠ `Roster.platformUserId` IS THE PLATFORM'S ID, NOT OURS, ON AN IMPORTED
