@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
+import { leagueSwitchHref } from '@/lib/league/leagueSwitchHref'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
@@ -1482,7 +1483,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
     const league = props.leagues.find(row => row.id === leagueId)
-    if (league) router.prefetch(leagueEntryHref(league))
+    if (league) router.prefetch(leagueSwitchHref(league, { coreScreen: navActive }))
   }
   /*
    * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
@@ -2197,7 +2198,8 @@ function AfCoreShell(incoming: AfCoreShellProps) {
              * league itself from the list. The row stays a single link — see `railTapTarget`.
              * A native league's matchup lives inside its own workspace, so it keeps one destination.
              */
-            const leagueHref = leagueEntryHref(l)
+            // Switching league keeps the screen (lib/league/leagueSwitchHref.ts): Trades opens the other league's Trades.
+            const leagueHref = leagueSwitchHref(l, { coreScreen: navActive })
             const matchupHref = !isNativePlatform(l.platform) && m && !m.unpaired && !m.guillotine
               ? `/core/matchup?league=${encodeURIComponent(l.id)}`
               : null

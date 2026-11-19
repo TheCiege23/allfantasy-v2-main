@@ -4315,7 +4315,7 @@ export function DraftRoomPageClient({
           <p className="mt-2 text-sm text-white/50">
             Only league members and commissioners can open the live draft. Ask the commissioner for an invite or join the league first.
           </p>
-          <Link href={`/league/${leagueId}`} className="mt-4 inline-block text-cyan-400 hover:underline">
+          <Link href={`/league/${leagueId}?view=draft`} className="mt-4 inline-block text-cyan-400 hover:underline">
             Back to league
           </Link>
           <Link href="/core" className="mt-2 block text-sm text-white/40 hover:text-white/60">
@@ -4348,7 +4348,7 @@ export function DraftRoomPageClient({
         <p className="mt-2 text-sm text-white/50">
           Commissioner can create and start a draft from league settings or the draft tab.
         </p>
-        <Link href={`/league/${leagueId}`} className="mt-4 inline-block text-cyan-400 hover:underline">
+        <Link href={`/league/${leagueId}?view=draft`} className="mt-4 inline-block text-cyan-400 hover:underline">
           Back to league
         </Link>
       </div>
@@ -5338,7 +5338,8 @@ export function DraftRoomPageClient({
             useQueueLoading={autopickExpiredLoading}
             onResync={handleResync}
             resyncLoading={resyncLoading}
-            backHref={`/league/${leagueId}`}
+            // Back lands on Draft, where the room was opened from, not on League home.
+            backHref={`/league/${leagueId}?view=draft`}
             onOpenDraftRoomSettings={() => setDraftRoomSettingsOpen(true)}
             onlineCount={onlineCount > 0 ? onlineCount : undefined}
             draftRoomPresentation={presentationVariant}
