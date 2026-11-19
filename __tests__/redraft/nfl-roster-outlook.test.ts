@@ -7,10 +7,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ projections: new Map<string, number>(), weather: new Map<string, unknown>(), weatherArgs: null as unknown }))
+const h = vi.hoisted(() => ({ provider: new Map<string, unknown>(), providerIds: [] as string[][], projections: new Map<string, number>(), weather: new Map<string, unknown>(), weatherArgs: null as unknown }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 vi.mock('@/lib/core-app/gameWeather', () => ({ getGameWeather: vi.fn(async (args: unknown) => { h.weatherArgs = args; return h.weather }) }))
+vi.mock('@/lib/core-app/playerProjections', () => ({ lookupProjections: vi.fn(async (ids: string[]) => { h.providerIds.push(ids); return h.provider }) }))
 vi.mock('@/lib/matchup-center/afProjections', () => ({ loadMatchupAfProjections: vi.fn(async () => h.projections) }))
 
 import { applyNflRosterOutlook, byeWeeksFromSchedule, matchupTone, rankDefensesVsPosition, type AllowedRow, type SeasonFixture } from '@/lib/redraft/nflRosterOutlookModel'
@@ -237,5 +238,61 @@ describe('loadNflRosterOutlook — bye week and weather', () => {
     // CHI is the away side of BUF–CAR… pairing order: slate pairs (CAR, CHI), so CAR hosts.
     const games = (h.weatherArgs as { games: Map<string, { hostTeam: string; kickoff: Date }> }).games
     expect(games.get('11560')).toEqual({ hostTeam: 'CAR', kickoff: new Date('2026-11-22T18:00:00Z') })
+  })
+})
+
+/* ── Team defenses: Sleeper's projection, labelled ────────────────────────────────────────────── */
+
+describe('a team defense carries Sleeper’s projection, named as Sleeper’s', () => {
+  const game = [{ homeTeam: 'ARI', awayTeam: 'SEA', week: 11, startTime: new Date('2026-11-22T21:25:00Z'), seasonType: 'regular', venue: null }]
+  const db = () => ({
+    redraftSeason: { findFirst: vi.fn(async () => ({ currentWeek: 11 })) },
+    sportsGame: { findMany: vi.fn(async () => game) },
+    sportsPlayerRecord: { findMany: vi.fn(async () => []) },
+    $queryRaw: vi.fn(async () => []),
+  })
+  const league = { id: 'L', sport: 'NFL', season: 2026, platform: 'manual', settings: {} }
+  const players = [{ id: 'ARI', team: 'ARI', position: 'DEF' }, { id: '11560', team: 'SEA', position: 'QB' }, { id: '777', team: 'SEA', position: 'RB' }]
+
+  beforeEach(() => {
+    clearNflRosterOutlookCache()
+    h.weather = new Map()
+    h.projections = new Map([['11560', 20.02]])
+    h.provider = new Map([['ARI', { playerId: 'ARI', projectedPoints: 6.4, source: 'sleeper' }], ['777', { playerId: '777', projectedPoints: 11, source: 'sleeper' }]])
+    h.providerIds = []
+  })
+
+  it('🛑 the defense gets Sleeper’s number and its source; the AF number keeps its own', async () => {
+    const out = await loadNflRosterOutlook(db() as never, { league, players })
+    expect(out.get('ARI')).toMatchObject({ projectedPoints: 6.4, projectionSource: 'sleeper' })
+    expect(out.get('11560')).toMatchObject({ projectedPoints: 20.02, projectionSource: 'allfantasy' })
+  })
+
+  it('[control] only defenses are asked about: a skill player with no AF number stays blank', async () => {
+    const out = await loadNflRosterOutlook(db() as never, { league, players })
+    expect(h.providerIds).toEqual([['ARI']])
+    expect(out.get('777')).toMatchObject({ projectedPoints: null, projectionSource: null })
+  })
+
+  it('[control] a defense the AF engine does project keeps the AF number', async () => {
+    h.projections = new Map([['ARI', 7.5]])
+    const out = await loadNflRosterOutlook(db() as never, { league, players })
+    expect(out.get('ARI')).toMatchObject({ projectedPoints: 7.5, projectionSource: 'allfantasy' })
+    expect(h.providerIds).toEqual([])
+  })
+
+  it('[control] a number from any other provider is not passed off as Sleeper’s', async () => {
+    h.provider = new Map([['ARI', { playerId: 'ARI', projectedPoints: 9, source: 'rolling_insights' }]])
+    const out = await loadNflRosterOutlook(db() as never, { league, players })
+    expect(out.get('ARI')).toMatchObject({ projectedPoints: null, projectionSource: null })
+  })
+
+  it('the roster row is stamped with the source the screen labels from', () => {
+    const base = { opponent: null, homeAway: null, kickoffTimeIso: null, opponentRank: null, headshotUrl: null, teamLogoUrl: null, opponentLogoUrl: null, byeWeek: null, weather: null }
+    const rows = applyNflRosterOutlook(
+      [{ id: 'ARI', projectedPoints: null }, { id: '11560', projectedPoints: null }],
+      new Map([['ARI', { ...base, projectedPoints: 6.4, projectionSource: 'sleeper' as const }], ['11560', { ...base, projectedPoints: 20.02, projectionSource: 'allfantasy' as const }]]),
+    )
+    expect(rows.map((r) => [r.projectedPoints, r.projectionsSource])).toEqual([[6.4, 'sleeper'], [20.02, 'allfantasy']])
   })
 })

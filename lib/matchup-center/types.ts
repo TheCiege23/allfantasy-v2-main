@@ -40,6 +40,8 @@ export type MatchupSlotOutlook = {
   opponentRank: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
   teamLogoUrl: string | null
   byeWeek: number | null
+  /** A team defense only: Sleeper's projection in its standard scoring, shown labelled where the AF engine has none. Never summed into a side's AF total. */
+  providerProjection?: { points: number; source: 'sleeper' } | null
   weather: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
 }
 

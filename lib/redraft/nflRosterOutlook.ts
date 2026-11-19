@@ -4,6 +4,7 @@ import { buildNextGameMap } from '@/lib/core-app/nextGameMap'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
+import { lookupProjections } from '@/lib/core-app/playerProjections'
 import { buildHeadshotUrl } from '@/lib/player-media-urls'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getGameWeather } from '@/lib/core-app/gameWeather'
@@ -125,6 +126,16 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
     loadDefenseVsPositionRanks(db, season, week).catch(() => new Map<string, OpponentRank>()),
     loadNflByeWeeks(db, season).catch(() => new Map<string, number>()),
   ])
+  /*
+   * 🛑 A TEAM DEFENSE HAD NO PROJECTION AT ALL. The AF engine writes none for DEF (production,
+   * 2026-11-19: 8 of 8 drafted defenses blank in a 120-pick league, with Sleeper's number stored for
+   * each). The owner's decision: show Sleeper's, labelled as Sleeper's. It is carried with its source
+   * and only where the AF engine has nothing; no skill player ever gets a provider number this way.
+   */
+  const defenseIds = facts.filter((f) => f.position === 'DEF' && !projections.has(f.id)).map((f) => f.id)
+  const defenseProjections = defenseIds.length
+    ? await lookupProjections(defenseIds, { season: String(season), week }, null, sport).catch((): Awaited<ReturnType<typeof lookupProjections>> => new Map())
+    : new Map()
   const nextGame = buildNextGameMap(games, teams)
   // "Bye" is said only of a week whose schedule is stored; an empty week says nothing.
   const weekHasGames = games.some((g) => g.startTime)
@@ -139,9 +150,13 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
 
   for (const f of facts) {
     const game = f.team ? nextGame.get(f.team) : undefined
-    const projected = projections.get(f.id)
+    const af = projections.get(f.id)
+    const provider = af == null && f.position === 'DEF' ? defenseProjections.get(f.id) : undefined
+    const sleeper = provider && String(provider.source ?? '').toLowerCase() === 'sleeper' && Number.isFinite(provider.projectedPoints) ? provider.projectedPoints : null
+    const projected = af ?? sleeper
     out.set(f.id, {
       projectedPoints: projected != null && Number.isFinite(projected) ? Math.round(projected * 100) / 100 : null,
+      projectionSource: af != null && Number.isFinite(af) ? 'allfantasy' : sleeper != null ? 'sleeper' : null,
       opponent: game ? game.opponent : f.team && weekHasGames ? 'BYE' : null,
       homeAway: game ? (game.home ? 'home' : 'away') : null,
       kickoffTimeIso: game ? game.at.toISOString() : null,

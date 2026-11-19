@@ -1,5 +1,6 @@
 'use client'
 
+import { SLEEPER_PROJECTION_TITLE } from '@/lib/redraft/nflRosterOutlookModel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -89,11 +90,18 @@ function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'ri
 function SlotPoints({ p, other, side, show }: { p: MatchupPlayerSlot | null; other: MatchupPlayerSlot | null; side: 'left' | 'right'; show: boolean }) {
   const mine = p?.currentPoints ?? 0
   const theirs = other?.currentPoints ?? 0
-  const proj = p && show && p.gameStatus !== 'final' && p.afProjectedPoints != null && Number.isFinite(p.afProjectedPoints) ? p.afProjectedPoints : null
+  const af = p?.afProjectedPoints != null && Number.isFinite(p.afProjectedPoints) ? p.afProjectedPoints : null
+  // A team defense: the AF engine projects none, so Sleeper's number is drawn and named as Sleeper's.
+  const sleeper = af == null ? p?.outlook?.providerProjection ?? null : null
+  const proj = p && show && p.gameStatus !== 'final' ? af ?? sleeper?.points ?? null : null
   return (
     <span className="nls-pts" data-side={side} data-pts={rowPointTone(mine, theirs, p?.gameStatus === 'final')}>
       {p && show ? (p.gameStatus === 'upcoming' && proj != null ? '—' : mine.toFixed(1)) : '—'}
-      {proj != null ? <small data-testid={`matchup-proj-${p!.playerId}`} title="AF projection in this league's scoring">{proj.toFixed(1)}</small> : null}
+      {proj != null ? (
+        <small data-testid={`matchup-proj-${p!.playerId}`} data-source={sleeper ? 'sleeper' : 'allfantasy'} title={sleeper ? SLEEPER_PROJECTION_TITLE : "AF projection in this league's scoring"}>
+          {proj.toFixed(1)}{sleeper ? <span className="nls-proj-src"> Sleeper</span> : null}
+        </small>
+      ) : null}
     </span>
   )
 }

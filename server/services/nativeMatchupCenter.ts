@@ -378,7 +378,7 @@ export async function buildNativeMatchupCenterPayload(params: {
       gameLabel: status === 'final' ? 'Final' : row.points != null && pts !== 0 ? 'Scoring' : 'Scheduled',
       aiInsight: null,
       outlook: o
-        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, weather: o.weather }
+        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, weather: o.weather, providerProjection: o.projectionSource === 'sleeper' && o.projectedPoints != null ? { points: o.projectedPoints, source: 'sleeper' } : null }
         : null,
     })
   }
