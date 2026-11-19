@@ -104,6 +104,9 @@ export type UnifiedPlayerWireDto = {
   periodKickoffIso?: string | null
   opponentRank?: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
   opponentLogoUrl?: string | null
+  /** NFL: the club's bye week, and the cached forecast at this week's game. */
+  teamByeWeek?: number | null
+  periodWeather?: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
 }
 
 export type { ProviderFallbackDiagnostics }

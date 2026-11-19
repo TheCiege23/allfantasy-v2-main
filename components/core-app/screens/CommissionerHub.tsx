@@ -46,6 +46,7 @@ import {
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { FantraxTradeHistoryUpload } from '@/components/core-app/commissioner/FantraxTradeHistoryUpload'
+import { WaiverBudgetControl } from '@/components/core-app/commissioner/WaiverBudgetControl'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
@@ -400,6 +401,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-muted">{data.history.tradeAvailable ? t('No trade records on file.') : t('Trade history unavailable.')}</p>
         )}
         <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
+        {/* The budget a budget move in a trade is priced against — set here only where the platform's import records none. */}
+        {league.waiverBudget?.settableHere ? <WaiverBudgetControl leagueId={league.id} initial={league.waiverBudget.value} /> : null}
         {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
         {league.platform.toLowerCase() === 'fantrax' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
         <h3>{t('Draft archive')}</h3>
@@ -429,9 +432,20 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
               </ol>
             </details>
           ))
-        ) : (
+        ) : data.history.importedDrafts?.length ? null : (
           <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
         )}
+        {/* An imported draft is shown pick by pick in the Draft HQ archive; here it is one line that opens it. */}
+        {data.history.importedDrafts?.length ? (
+          <ul className="af-ch-areas">
+            {data.history.importedDrafts.map((draft) => (
+              <li key={draft.key}>
+                <strong>{draft.season ?? t('Season unknown')} · {t('Imported draft')}</strong>
+                <p><Link href={draft.href}>{t('Open in the draft archive')}</Link></p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <p className="af-ch-muted">{t(data.history.draftNote)}</p>
         {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
         {data.history.lotteries?.length ? (

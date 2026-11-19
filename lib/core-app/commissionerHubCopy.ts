@@ -28,8 +28,20 @@ const ES: Record<string, string> = {
   'Fantrax trade history': 'Historial de intercambios de Fantrax',
   'Fantrax does not send completed trades to AllFantasy. Download the trade history from Fantrax (Transaction History, Trade) as a CSV and upload it here. Uploading the same file again does not add anything twice.':
     'Fantrax no envía los intercambios completados a AllFantasy. Descarga el historial de intercambios desde Fantrax (Transaction History, Trade) como CSV y súbelo aquí. Subir el mismo archivo otra vez no agrega nada dos veces.',
-  'A trade that moved budget is graded only once this league’s waiver budget is set in league settings.':
-    'Un intercambio que movió presupuesto se califica solo cuando el presupuesto de reclamos de la liga está configurado en los ajustes de la liga.',
+  'A trade that moved budget is graded only once this league’s waiver budget is set above.':
+    'Un intercambio que movió presupuesto se califica solo cuando el presupuesto de reclamos de la liga está configurado arriba.',
+  // ── Waiver budget of an imported league (components/core-app/commissioner/WaiverBudgetControl.tsx) ──
+  'Waiver budget': 'Presupuesto de reclamos',
+  'Your platform does not send AllFantasy the waiver budget. Enter the budget each team starts the season with, so trades that moved budget can be graded.':
+    'Tu plataforma no envía a AllFantasy el presupuesto de reclamos. Escribe el presupuesto con el que cada equipo empieza la temporada, para que se puedan calificar los intercambios que movieron presupuesto.',
+  'Not set: a trade that moved budget shows as not graded.': 'Sin configurar: un intercambio que movió presupuesto aparece sin calificar.',
+  'Budget per team': 'Presupuesto por equipo',
+  'Saving…': 'Guardando…',
+  'Save budget': 'Guardar presupuesto',
+  'The budget was not saved. Nothing was changed.': 'El presupuesto no se guardó. No se cambió nada.',
+  'Enter the budget as a whole number of at least 1.': 'Escribe el presupuesto como un número entero de al menos 1.',
+  'This league’s waiver budget comes from its platform or its own waiver settings, not from here.':
+    'El presupuesto de reclamos de esta liga viene de su plataforma o de sus propios ajustes de reclamos, no de aquí.',
   'Uploading…': 'Subiendo…',
   'Upload trade history CSV': 'Subir el CSV del historial de intercambios',
   'The upload did not go through. Nothing was changed.': 'La subida no se completó. No se cambió nada.',
@@ -131,6 +143,8 @@ const ES: Record<string, string> = {
   '1 pick': '1 selección',
   'Correction:': 'Corrección:',
   'No draft sessions on file.': 'No hay drafts registrados.',
+  'Imported draft': 'Draft importado',
+  'Open in the draft archive': 'Abrir en el archivo de drafts',
   'Draft history unavailable.': 'El historial de drafts no está disponible.',
 
   // ── Rules and access ──────────────────────────────────────────────────
@@ -371,6 +385,7 @@ const es = (s: string) => hubCopy(s, 'es')
 const PATTERNS: Pattern[] = [
   // Fantrax trade history upload: counts, and the reasons a trade was not added (names kept as written).
   [/^(\d+) trades added\.$/, (n) => `Se agregaron ${n} intercambios.`],
+  [/^Set to ([\d,]+)\.$/, (n) => `Configurado en ${n}.`],
   [/^(\d+) trades were not added:$/, (n) => `No se agregaron ${n} intercambios:`],
   [/^(\d+) lines of the file could not be read\.$/, (n) => `No se pudieron leer ${n} líneas del archivo.`],
   [/^(.+) could not be matched to a player with a Fantrax id\.$/, (who) => `No se pudo emparejar a ${who} con un jugador con id de Fantrax.`],

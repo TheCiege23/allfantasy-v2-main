@@ -4,9 +4,9 @@
  * contracts/espn/scripts/probe.sh: contracts/espn/fixtures/teams.{NBA,NHL,MLB}.json. Each row is a team's
  * `abbreviation`, `displayName` and default 500px logo, as ESPN sends them.
  *
- * Why not lib/sport-teams/SportTeamMetadataRegistry.ts: its lists are abbreviations only and out of date
- * (NHL still has ARI and no Utah; MLB has OAK and builds the White Sox crest as `cws`, which ESPN does not
- * serve: it is `chw`). The test __tests__/league/copy-league-team-tables.test.ts reads the captures and fails
+ * lib/sport-teams/SportTeamMetadataRegistry.ts reads its NBA, MLB and NHL names from here (since 2026-11-19; before
+ * that its lists were codes only and out of date: NHL ARI, MLB OAK, a White Sox crest built as `cws.png`). It keeps
+ * the codes providers send where they differ from ESPN's (CWS, not CHW). The test __tests__/league/copy-league-team-tables.test.ts reads the captures and fails
  * if this file and them disagree, so a recapture that adds, renames or moves a team shows up there.
  *
  * Codes are ESPN's, because they are also the crest file names. They are stored in

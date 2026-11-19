@@ -145,7 +145,7 @@ endpoints:
       dark_logo: "logos[] entry whose rel is ['full','dark'] (not the scoreboard one): the default crest's path with /500/ -> /500-dark/, for all 124 teams in the four captures. Used where the surface is always dark (components/league-settings/CopyLeaguePanel.tsx)."
       codes_worth_knowing:
         - "NHL Utah is UTAH (Utah Mammoth); there is no ARI. NBA Utah is also UTAH (Utah Jazz)."
-        - "MLB White Sox are CHW and their crest is chw.png. Rolling Insights spells them CWS, and lib/sport-teams/SportTeamMetadataRegistry.ts builds cws.png."
+        - "MLB White Sox are CHW and their crest is chw.png. Rolling Insights spells them CWS; lib/sport-teams/SportTeamMetadataRegistry.ts keeps CWS as the code and, since 2026-11-19, builds chw.png."
         - "MLB Athletics are ATH, displayName 'Athletics' with no city; Arizona is ARI (Rolling Insights: AZ)."
         - "NBA uses ESPN's short codes: GS, NY, NO, SA, UTAH, WSH."
       cross_check: "Every MLB displayName equals the 30 names in contracts/rolling-insights/fixtures/schedule-season.MLB.json."

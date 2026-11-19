@@ -29,6 +29,7 @@ import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbabilit
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
+import { loadNflRosterOutlook } from '@/lib/redraft/nflRosterOutlook'
 import {
   buildNativeBoard,
   buildNativeStarters,
@@ -346,16 +347,25 @@ export async function buildNativeMatchupCenterPayload(params: {
     leagueSettings: league.settings,
   })
 
+  // NFL: opponent, kickoff, opponent rank against the position, crest, bye week and forecast, for the
+  // week on screen. Empty for other sports; a failure leaves the rows as they were.
+  const outlook = await loadNflRosterOutlook(prisma, {
+    league: { id: league.id, sport: String(league.sport), season: season.season, platform: league.platform ?? null, settings: league.settings },
+    players: [...myStarters, ...oppStarters].map((p) => ({ id: p.playerId, team: p.team ?? null, position: p.position ?? null })),
+    week,
+  }).catch((): Awaited<ReturnType<typeof loadNflRosterOutlook>> => new Map())
+
   const toSlot = (rosterId: string, row: NativeStarter): MatchupPlayerSlot => {
     const pts = row.points ?? 0
     const status = slotGameStatus(game, row.points != null)
+    const o = outlook.get(row.playerId)
     return sanitizeStarterRow({
       playerId: row.playerId,
       name: row.name,
       position: row.position,
       team: row.team,
-      opponent: null,
-      headshotUrl: mediaMap?.get(row.playerId)?.media.headshotUrl ?? null,
+      opponent: o?.opponent ?? null,
+      headshotUrl: mediaMap?.get(row.playerId)?.media.headshotUrl ?? o?.headshotUrl ?? null,
       currentPoints: pts,
       // No provider projection is stored for a native lineup: the flat estimate, marked as one.
       projectedPoints: Math.max(pts, positionProjectionFallback(row.position)),
@@ -367,6 +377,9 @@ export async function buildNativeMatchupCenterPayload(params: {
       gameStatus: status,
       gameLabel: status === 'final' ? 'Final' : row.points != null && pts !== 0 ? 'Scoring' : 'Scheduled',
       aiInsight: null,
+      outlook: o
+        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, weather: o.weather }
+        : null,
     })
   }
 
