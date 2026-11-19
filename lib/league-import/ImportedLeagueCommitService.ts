@@ -8,7 +8,7 @@ import { importSleeperSurvivalById } from '@/lib/league-import/sleeper/importSur
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
-import { leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
+import { isDynastyForWrite, leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
 import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -1184,7 +1184,8 @@ export async function persistImportedLeagueFromNormalization(
     platformLeagueId,
     leagueSize: normalized.league.leagueSize,
     scoring: normalized.league.scoring ?? undefined,
-    isDynasty: normalized.league.isDynasty,
+    // A person's confirmed dynasty type keeps the flag on; see `isDynastyForWrite`.
+    isDynasty: isDynastyForWrite({ providerIsDynasty: normalized.league.isDynasty, existingSettings: existing?.settings }),
     sport: resolvedSport,
     season: seasonYear,
     // Phase OS-C5: previously omitted entirely — `League.status` has no DB default, so every
