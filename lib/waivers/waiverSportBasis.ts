@@ -16,8 +16,7 @@
  *           `AFProjectionSnapshot`, season baseline rows, PER GAME, keyed by `PlayerIdentityMap.id`,
  *           scored by the engine under its DEFAULT category rules (af-projections/categoryScoring:
  *           DraftKings conventions). Written by cron/compute-projections for every sport.
- *   SOCCER  nothing. The stats vendor serves no soccer player season stats, so the engine has no
- *           rules and no lines for it (categoryScoring.ts says so), and nothing else projects it.
+ *   SOCCER  the league value board, built from stored club match statistics.
  *
  * ── 🛑 WHY THE CATEGORY SPORTS ARE NOT RE-SCORED UNDER THE LEAGUE'S RULES ──────────────────────
  * The engine stores its per-game component rates in the provider's vocabulary (`total_rebounds`,
@@ -85,14 +84,7 @@ export function waiverSportPlan(raw: string | null | undefined): WaiverSportPlan
   if (sport === 'NFL') return { sport, kind: 'weekly', basis: 'weekly_projection' }
   if (sport === 'NCAAF') return { sport, kind: 'per_game', basis: 'season_per_game_league' }
   if (AF_DEFAULT_SCORED.has(sport)) return { sport, kind: 'per_game', basis: 'season_per_game_af_default' }
-  if (sport === 'SOCCER') {
-    return {
-      sport,
-      kind: 'none',
-      reason:
-        'No projection exists for soccer players: our stats provider serves no soccer player season stats, so the projection engine has nothing to project from and this wire cannot be priced.',
-    }
-  }
+  if (sport === 'SOCCER') return { sport, kind: 'per_game', basis: 'league_value_board' }
   return {
     sport,
     kind: 'none',

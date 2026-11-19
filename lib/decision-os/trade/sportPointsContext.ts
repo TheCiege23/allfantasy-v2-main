@@ -156,6 +156,11 @@ async function seasonGamesLeft(sport: PointsGradedSport, season: number, now: Da
   if (sport !== 'MLB') return counted == null ? null : { season, games: counted.games, scheduleKnown: true }
   if (counted == null) return { season, games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false }
   if (counted.teams * 2 >= MLB_CLUBS) return { season, games: counted.games, scheduleKnown: true }
+  // A partial calendar before March can be spring training or a placeholder.
+  // It cannot establish that this regular season has finished.
+  if (now.getTime() < Date.UTC(season, 2, 1)) {
+    return { season, games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false }
+  }
   const next = await gamesRemaining(sport, season + 1, now)
   return next != null && next.teams * 2 >= MLB_CLUBS
     ? { season: season + 1, games: next.games, scheduleKnown: true }

@@ -246,6 +246,12 @@ export default function PlayerCardSheet({
   const c = playerCardCopy(language)
   const reason = (text: string) => playerCardReasonText(text, language)
   const ago = (iso: string | null) => cardAgo(iso, language)
+  const afProjection = data?.afLeagueProjection
+  const projectionInSpanish = language === 'es'
+  const projectionUnit = projectionInSpanish
+    ? afProjection?.unit === 'category score' ? 'puntos de categoría' : 'puntos de fantasía'
+    : afProjection?.unit
+  const projectionNumber = (points: number) => points.toLocaleString(getAppIntlLocale(), { maximumFractionDigits: 2 })
   const [insightOpen, setInsightOpen] = useState(false)
   /* The ☆'s optimistic value; null means "defer to the payload". Declared here,
      beside its sibling, because the reset effect below closes over it. */
@@ -716,6 +722,24 @@ export default function PlayerCardSheet({
           {/* stat tiles ────────────────────────────────────────── */}
           {data ? (
             <div className="af-pc-tiles">
+              {afProjection ? (
+                  <>
+                    <Tile label={projectionInSpanish ? 'Ranking AF en la liga' : 'AF league rank'} value={`#${afProjection.rank}`} tone="plain"
+                      sub={`#${afProjection.positionRank} ${data.player.position ?? ''} · ${projectionNumber(afProjection.perGame)} ${projectionUnit} ${projectionInSpanish ? 'por partido' : 'per game'}`} />
+                    {afProjection.weekly != null ? (
+                      <Tile label={projectionInSpanish ? `AF semana ${afProjection.week}` : `AF week ${afProjection.week}`} value={projectionNumber(afProjection.weekly)} tone="plain" sub={projectionUnit} />
+                    ) : null}
+                    {afProjection.fullSeason != null ? (
+                      <Tile label={projectionInSpanish ? 'Temporada completa AF' : 'AF full season'} value={projectionNumber(afProjection.fullSeason)} tone="plain"
+                        sub={afProjection.fullSeasonBasis === 'standard_season'
+                          ? `${projectionUnit} · ${projectionInSpanish ? 'duración estándar' : 'standard season length'}`
+                          : projectionUnit} />
+                    ) : null}
+                    {afProjection.restOfSeason != null ? (
+                      <Tile label={projectionInSpanish ? 'Resto de temporada AF' : 'AF rest of season'} value={projectionNumber(afProjection.restOfSeason)} tone="plain" sub={projectionUnit} />
+                    ) : null}
+                  </>
+              ) : null}
               {league ? (
                 <>
                   {league.boardValue?.available ? (

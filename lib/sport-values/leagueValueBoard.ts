@@ -25,7 +25,7 @@ import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trad
  * or innings, which `boardSample` reports in those units. NHL joined the same day: a goalie counts for
  * his share of team games (`nhlTeamGame.ts`), a skater for every game, and the sample is games.
  */
-export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB', 'NHL'])
+export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB', 'NHL', 'NCAAB', 'SOCCER'])
 
 export function isBoardValueSport(sport: string | null | undefined): sport is PointsGradedSport {
   return BOARD_VALUE_SPORTS.has(String(sport ?? '').trim().toUpperCase() as PointsGradedSport)

@@ -43,12 +43,12 @@ describe('get_available_players outside the NFL', () => {
     expect(out).toMatch(/1 other unrostered players have no projection/)
   })
 
-  it('never ranks soccer — there is no projection base', async () => {
+  it('withholds soccer rankings when the stored projection board is empty', async () => {
     const d = deps([pool('s1', 'Bukayo Saka', 'MID')], index('SOCCER', []))
     const out = await buildOtherSportAvailableContext({ leagueName: 'EPL', sport: 'SOCCER', leagueId: 'L1', rostered: new Set(['x']) }, d)
-    expect(out).toMatch(/no SOCCER projections to rank them by/)
+    expect(out).toMatch(/no AllFantasy SOCCER projections are stored right now/)
     expect(out).not.toMatch(/Saka/)
-    expect(d.baseline).not.toHaveBeenCalled()
+    expect(d.baseline).toHaveBeenCalledWith('SOCCER')
   })
 
   it('names nobody when rosters have not synced', async () => {
@@ -100,11 +100,13 @@ describe('optimize_my_lineup outside the NFL (baseline)', () => {
     expect(out).toMatch(/WEIRD/)
   })
 
-  it('refuses soccer by name', async () => {
-    expect(supportsBaselineLineup('SOCCER')).toBe(false)
-    const out = await buildBaselineLineupContext({ leagueId: 'L1', userId: 'u1' }, deps(world('SOCCER', ['GK'], [])))
+  it('supports soccer and withholds a lineup when the board is empty', async () => {
+    expect(supportsBaselineLineup('SOCCER')).toBe(true)
+    const soccer = deps(world('SOCCER', ['GK'], []))
+    soccer.baseline.mockResolvedValue(index('SOCCER', []))
+    const out = await buildBaselineLineupContext({ leagueId: 'L1', userId: 'u1' }, soccer)
     expect(out).toMatch(/NOT COMPUTED/)
-    expect(out).toMatch(/no SOCCER projections/)
+    expect(out).toMatch(/No AllFantasy SOCCER projections/)
   })
 
   it.each(['NBA', 'NHL', 'MLB', 'NCAAB', 'NCAAF'])('supports %s', (sport) => expect(supportsBaselineLineup(sport)).toBe(true))

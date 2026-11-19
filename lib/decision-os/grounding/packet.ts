@@ -4,6 +4,8 @@ import { createImportOsLoaders } from '../import-os'
 import { createValueOsLoaders } from '../value-os'
 import { createProjectionOsLoaders } from '../projection-os'
 import { createLeagueOsLoaders } from '../league-os'
+import { loadLeaguePlayerMetrics, type LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { authorizeLeagueRead } from '../leagueReadAuthorization'
 import { ChimmyContextEngine } from '@/lib/chimmy-context/ChimmyContextEngine'
 import {
   resolveCommissionerGroundingOutcome,
@@ -177,6 +179,7 @@ export interface DecisionOsGroundingPacket {
   marketValues: GroundedSlice<ValueLookup[]>
   devyValues: GroundedSlice<ValueLookup[]>
   projections: GroundedSlice<ProjectionFact[]>
+  leaguePlayerMetrics?: GroundedSlice<LeaguePlayerMetrics>
 
   /** The eight graded context slices (4.3). Absent when no league is in scope. */
   contextFacts: ContextFacts | null
@@ -949,6 +952,15 @@ export async function buildDecisionOsGroundingPacket(
       )
     : Promise.resolve(null)
 
+  const pLeaguePlayerMetrics = want.projections && !projectionKill && leagueId && args.userId
+    ? kick('leaguePlayerMetrics', (async () => {
+        const access = await authorizeLeagueRead(leagueId, args.userId)
+        if (!access.authorized) return null
+        const data = await loadLeaguePlayerMetrics({ leagueId, week: args.week, limit: 12 })
+        return data?.sport === args.sport.toUpperCase() && data.season === args.season ? data : null
+      })().catch(() => null))
+    : null
+
   /*
    * The league's rulebook and the feed's week for the roster projections, read now so only the pricing waits for
    * the roster (`rosterLeagueProjections.ts`). A non-NFL league answers without a query.
@@ -1592,6 +1604,10 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   if (pRosterProjections) rosterProjections = await pRosterProjections
+  const leagueMetrics = await pLeaguePlayerMetrics
+  const leaguePlayerMetrics = leagueMetrics?.rows.length
+    ? present(leagueMetrics, { servedFrom: 'store', conclusive: verdictFor('lineupDecision') })
+    : undefined
 
   /*
    * A slice whose read ran out of budget says so, instead of a reason that sends someone looking at the wrong
@@ -1637,6 +1653,9 @@ export async function buildDecisionOsGroundingPacket(
     ['marketValues', marketValues as GroundedSlice<unknown>],
     ['devyValues', devyValues as GroundedSlice<unknown>],
     ['projections', projections as GroundedSlice<unknown>],
+    ...(leaguePlayerMetrics
+      ? [['leaguePlayerMetrics', leaguePlayerMetrics] as [string, GroundedSlice<unknown>]]
+      : []),
     ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
   ]
 
@@ -1649,6 +1668,7 @@ export async function buildDecisionOsGroundingPacket(
     marketValues,
     devyValues,
     projections,
+    ...(leaguePlayerMetrics ? { leaguePlayerMetrics } : {}),
     contextFacts,
     contextLookups,
     commissionerIntelligence,

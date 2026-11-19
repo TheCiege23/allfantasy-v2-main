@@ -1217,6 +1217,22 @@ export async function executeChimmyTool(
 
       case 'get_available_players': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { loadWaiverBoard } = await import('@/lib/waivers/waiverBoard')
+        const board = await loadWaiverBoard({
+          prisma, leagueId: ctx.leagueId, userId: ctx.userId, limit: 15,
+        }).catch(() => null)
+        if (board?.state === 'ok' && board.candidates.length > 0) {
+          const rows = board.candidates.map((player, index) => [
+            `${index + 1}. ${player.name}${player.position ? ` (${player.position})` : ''}`,
+            `${player.projectedPoints.toFixed(2)} projected`,
+            `+${player.gain.toFixed(2)} to the best eligible lineup`,
+          ].join(' · '))
+          return [
+            'The league’s Worth Adding board ranks these pickups by projected lineup gain.',
+            ...rows,
+            ...board.notes,
+          ].join('\n')
+        }
         return buildAvailablePlayersContext(ctx.leagueId, ctx.userId)
       }
 
@@ -1331,14 +1347,20 @@ export async function executeChimmyTool(
       case 'get_player_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
         /*
-         * An NBA league in scope (2026-11-16): the league's own value board — the same pricing the trade
-         * grade uses (lib/chimmy/sportBoardValue.ts). Null for any other sport, which keeps the NFL
-         * market values below.
+         * The active league’s value board takes precedence when its sport uses one.
          */
         if (ctx.leagueId) {
           const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
           const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
           if (board != null) return board
+          if (asked.trim()) {
+            const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
+            const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
+            const row = metrics?.rows.length === 1 ? metrics.rows[0] : null
+            if (metrics?.sport === 'NCAAF' && row?.tradeValue != null) {
+              return `${row.playerName} has an AF trade value of ${row.tradeValue.toFixed(2)} ${row.tradeValueUnit} in this league’s format.`
+            }
+          }
         }
         // The player card's number, on this league's chart when one is in scope (`playerMarketValue.ts`).
         return await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId ?? null })

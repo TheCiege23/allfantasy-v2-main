@@ -522,6 +522,16 @@ describe('loadSportPointsBase', () => {
       }
     }
 
+    it('keeps a future season when only a thin preseason schedule is posted', async () => {
+      mlbBoard({ season: 2027 })
+      schedule(['Club 0', 'Club 1'], 1, 'pre', 2027)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      expect(out).toMatchObject({
+        ok: true,
+        ctx: { window: { season: 2027, gamesRemaining: 162, scheduleKnown: false } },
+      })
+    })
+
     it('reads the newest run, not the highest season on file', async () => {
       flickeredBoard()
       schedule(CLUBS, 20, null, 2026)

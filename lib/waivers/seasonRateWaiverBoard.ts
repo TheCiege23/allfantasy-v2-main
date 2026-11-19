@@ -83,6 +83,10 @@ export async function loadSeasonRateWaiverBoard(args: {
 
   /* The league's own value board, for a sport valued on one. Not a board sport: nothing is read. */
   const valueBoard = await (args.valueBoard ?? loadLeagueValueBoard)(league.id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
+  if (args.plan.basis === 'league_value_board' && valueBoard.kind !== 'ok') {
+    const reason = valueBoard.kind === 'unavailable' ? valueBoard.reason : noSeasonProjectionsReason(sport)
+    return empty('no_projections', args.plan, [reason])
+  }
   const onBoard = valueBoard.kind === 'ok' ? valueBoard : null
   const basis: Extract<WaiverSportPlan, { kind: 'per_game' }>['basis'] = onBoard ? 'league_value_board' : args.plan.basis
   const plan: WaiverSportPlan = { sport, kind: 'per_game', basis }

@@ -3,6 +3,7 @@ import 'server-only'
 import { findAfProjectionsByName } from '@/lib/af-projections/readAfProjections'
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { isSupportedSport } from '@/lib/sport-scope'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
@@ -25,8 +26,6 @@ import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
  * The stored AF baseline is shared. When the verified conversation context carries a league,
  * this tool also re-scores the provider component line under that league's imported rules.
  */
-
-const SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAABB', 'SOCCER'])
 
 /**
  * ⚠ THE REFUSAL FORBIDS THE PARAPHRASE, exactly as `playerValueTool` does. The failure it guards
@@ -59,9 +58,34 @@ export async function buildPlayerProjectionContext(args: {
     return 'No player name was given, so nothing was looked up. Ask the user which player they mean.'
   }
 
-  const sport = (args.sport ?? 'NFL').trim().toUpperCase()
-  if (!SPORTS.has(sport)) {
+  const sportParam = (args.sport ?? 'NFL').trim().toUpperCase()
+  const sport = sportParam === 'NCAABB' ? 'NCAAB' : sportParam
+  if (!isSupportedSport(sport)) {
     return `"${sport}" is not a sport AllFantasy projects. Say so; do not give a number for it.`
+  }
+
+  if (args.leagueId) {
+    const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
+    const metrics = await loadLeaguePlayerMetrics({
+      leagueId: args.leagueId,
+      week: args.week,
+      playerName: asked,
+      limit: 10,
+    }).catch(() => null)
+    if (metrics?.rows.length && (args.sport == null || metrics.sport === sport)) {
+      const lines = metrics.rows.map((row) => [
+        `${row.playerName} (${row.position}, ${metrics.sport} ${metrics.season})`,
+        `AF league rank #${row.rank} overall, #${row.positionRank} at ${row.position}, ranked by projected ${metrics.unit} per game`,
+        `${row.perGame.toFixed(2)} ${metrics.unit} per game`,
+        row.weekly == null ? 'Weekly estimate unavailable' : `Week ${metrics.week}: ${row.weekly.toFixed(2)} ${metrics.unit} over ${row.weekGames} scheduled team games`,
+        row.fullSeason == null ? 'Full-season estimate unavailable' : `${row.fullSeason.toFixed(2)} ${metrics.unit} over the full season using ${row.fullSeasonBasis === 'standard_season' ? 'the standard season length' : 'stored fixtures'}`,
+        row.restOfSeason == null ? 'Rest-of-season estimate unavailable' : `Rest-of-season estimate: ${row.restOfSeason.toFixed(2)} ${metrics.unit}`,
+        row.tradeValue == null ? null : `AF trade value of ${row.tradeValue.toFixed(2)} ${row.tradeValueUnit}`,
+        row.dynastyTradeValue == null ? null : `AF dynasty trade value of ${row.dynastyTradeValue.toFixed(2)} ${row.tradeValueUnit}`,
+      ].filter(Boolean).join(' · '))
+      if (metrics.rows.length > 1) lines.push('Several players match this name. Ask which player the user meant.')
+      return lines.join('\n')
+    }
   }
 
   const { rows, season } = await findAfProjectionsByName({
