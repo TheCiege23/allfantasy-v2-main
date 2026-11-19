@@ -473,7 +473,7 @@ export function storylineGenerated(opts: {
   return {
     type: 'storyline_generated',
     title: `New Storyline: ${opts.title}`,
-    body: 'A new AI-generated league storyline is ready.',
+    body: 'A new Chimmy-generated league storyline is ready.',
     leagueId: opts.leagueId,
     actionHref: `/league/${opts.leagueId}?tab=league`,
     actionLabel: 'Read Story',

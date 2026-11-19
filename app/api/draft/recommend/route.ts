@@ -63,7 +63,7 @@ async function paidToolPost(req: NextRequest) {
       tokenRuleCode: 'ai_draft_pick_explanation',
       tokenSourceType: 'draft_prep_ai_explanation',
       tokenSourceId: `${typeof body.leagueId === 'string' ? body.leagueId : 'draft'}:${Date.now()}`,
-      tokenDescription: 'Draft prep AI explanation fallback',
+      tokenDescription: 'Draft prep Chimmy explanation fallback',
       tokenMetadata: {
         leagueId: typeof body.leagueId === 'string' ? body.leagueId : null,
         round,

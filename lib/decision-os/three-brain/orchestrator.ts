@@ -278,7 +278,7 @@ function deterministicOnlyResult(
   return {
     schemaVersion: THREE_BRAIN_SCHEMA_VERSION,
     decisionType: packet.decisionType,
-    shortAnswer: 'AI analysis unavailable — relying on the deterministic Decision OS evidence only.',
+    shortAnswer: 'Chimmy analysis unavailable — relying on the deterministic Decision OS evidence only.',
     whatDataSays: '',
     whatItMeans: '',
     recommendedAction: undefined,

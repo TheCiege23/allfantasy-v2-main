@@ -17,6 +17,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { appMusicCopy, appMusicLang } from '@/lib/i18n/app-music-copy'
 import {
   musicBus,
+  placeYouTube,
   type AppleMsg,
   type AppleNow,
   type AppleStatus,
@@ -39,6 +40,8 @@ import {
  * What this renders, and nothing else:
  *   - YouTube, while the chat's Music tab is open: the one iframe, positioned
  *     over the tab's "screen" so it reads as playing inside the chat.
+ *   - YouTube, where a page reports its own slot (musicBus.setSlot — the draft room's music row):
+ *     laid over that slot, so it sits in the page instead of over the board.
  *   - YouTube, once the chat is minimized or closed: a 200×200 box in the corner.
  *     ⚠ NEVER HIDDEN. YouTube's embed rules forbid hiding a playing player or
  *     using it as background audio — the user chose "small box (allowed)" when
@@ -83,6 +86,8 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
 
   /** Where the chat tab's screen is — null whenever the Music tab is not showing. */
   const screen = useSyncExternalStore(musicBus.subscribe, musicBus.getScreen, musicBus.getServerScreen)
+  /** A page's own place for the player (the draft room's music row) — null almost everywhere. */
+  const slot = useSyncExternalStore(musicBus.subscribe, musicBus.getSlot, musicBus.getServerSlot)
 
   /**
    * "Change" only makes sense where there is a chat bubble to open. ⚠ Re-checked when the chat
@@ -310,25 +315,36 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     return () => musicBus.setActions(null)
   }, [visible, playYouTube, stopAll, startApple, connectApple, disconnectApple, search, playApple, appleToggle])
 
+  /**
+   * Tells the page the corner box is up, so the page can make room for it instead of
+   * sliding cards under it (af-app-music.css, `data-af-music-box`). Only the corner:
+   * in the chat or in a page's own slot the player covers nothing of the page.
+   */
+  const inCorner = visible && !!yt && placeYouTube(screen, slot).where === 'corner'
+  useEffect(() => {
+    if (!inCorner) return
+    const root = document.documentElement
+    root.setAttribute('data-af-music-box', '')
+    return () => root.removeAttribute('data-af-music-box')
+  }, [inCorner])
+
   if (!visible || !yt) return null
 
-  const inChat = screen != null
+  const place = placeYouTube(screen, slot)
+  const rect = place.rect
 
   return (
     <div
       className="af-amd-yt"
       role="region"
       aria-label={appMusicCopy(lang, 'playerRegion')}
-      data-in-chat={inChat ? 'true' : undefined}
-      style={
-        inChat
-          ? { left: screen.left, top: screen.top, width: screen.width, height: screen.height }
-          : undefined
-      }
+      data-in-chat={place.where === 'chat' ? 'true' : undefined}
+      data-in-slot={place.where === 'slot' ? 'true' : undefined}
+      style={rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : undefined}
     >
-      {/* In the chat, the Music tab draws its own title and Stop. Kept as a
-          null slot so the iframe below never changes position and never reloads. */}
-      {inChat ? null : (
+      {/* In the chat, the Music tab draws its own title and Stop; in a page's slot, that page's row does.
+          Kept as a null slot so the iframe below never changes position and never reloads. */}
+      {rect ? null : (
         <div className="af-amd-yt-head">
           <span className="af-amd-yt-title">{yt.label}</span>
           {hasChat ? (

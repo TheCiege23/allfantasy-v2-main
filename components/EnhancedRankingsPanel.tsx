@@ -229,7 +229,7 @@ function PlanCard({ plan, goal }: { plan: PlanItem[]; goal: string }) {
         <span className="text-lg">&#x1F5FA;</span>
         <div>
           <h4 className="text-sm font-bold text-white">Your 3-5 Year Roadmap</h4>
-          <p className="text-[11px] text-white/40">AI-generated plan constrained by your roster data ({goal})</p>
+          <p className="text-[11px] text-white/40">Chimmy-generated plan constrained by your roster data ({goal})</p>
         </div>
       </div>
       <div className="space-y-3">

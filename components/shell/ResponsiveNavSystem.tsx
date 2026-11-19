@@ -341,7 +341,7 @@ export function ResponsiveNavSystem({
           ) : null}
           {!hideChimmyFabOnDraftSurface && !/^\/league\/[^/]+\/?$/i.test(pathname) ? (
           <ChimmyFloatingActionButton
-            label={isAdmin ? "Open Admin AI" : isCommissionerInLeague ? "Open Commissioner Chimmy" : "Open Chimmy"}
+            label={isAdmin ? "Open Admin Chimmy" : isCommissionerInLeague ? "Open Commissioner Chimmy" : "Open Chimmy"}
             hasNotification={hasUnreadAiAlerts}
             onClick={openChimmy}
             positionClass="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 lg:bottom-6 lg:right-6"

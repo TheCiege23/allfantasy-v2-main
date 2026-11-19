@@ -506,7 +506,7 @@ export default function NewBracketLeaguePage() {
               {sport === "NCAAF" ? "CFP Commissioner Options" : `AF Commissioner Options ${isAfCommissioner ? "" : "(Locked Preview)"}`}
             </summary>
             {sport !== "NCAAF" ? <p className="mt-2 text-xs mode-muted">
-              Premium controls are prepared for pool setup. AI tools flag issues for commissioner review only; they do not accuse, punish, remove, or ban users.
+              Premium controls are prepared for pool setup. Chimmy tools flag issues for commissioner review only; they do not accuse, punish, remove, or ban users.
             </p> : null}
             {sport === "NCAAF" ? (
               <div className="mt-3 grid gap-2 text-xs mode-muted">
@@ -524,12 +524,12 @@ export default function NewBracketLeaguePage() {
                 "Spread prediction",
                 "Over/Under prediction",
                 "Custom scoring values",
-                "AI Anti-Collusion Monitor",
+                "Chimmy Anti-Collusion Monitor",
                 "Duplicate Entry Detection",
-                "AI Pool Health Report",
-                "AI Scoring Explainer",
-                "AI Dispute Assistant",
-                "AI Bracket Integrity Check",
+                "Chimmy Pool Health Report",
+                "Chimmy Scoring Explainer",
+                "Chimmy Dispute Assistant",
+                "Chimmy Bracket Integrity Check",
                 "Auto-remind incomplete brackets",
                 "Auto-lock entries at deadline",
                 "Auto-recalculate after provider sync",

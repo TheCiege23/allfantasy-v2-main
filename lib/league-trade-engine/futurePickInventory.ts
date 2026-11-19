@@ -6,7 +6,8 @@
  * `playerData.draftPicks` holds DRAFTED PLAYERS, and imported leagues keep their picks in
  * `future_draft_picks` — 3,382 rows across 115 leagues that nothing on the trade screen read.
  *
- * ⚠ THAT TABLE HOLDS ONLY PICKS THAT HAVE BEEN TRADED. Every writer is `persistTradedPicks`, fed by
+ * ⚠ FOR SLEEPER AND MFL THAT TABLE HOLDS ONLY PICKS THAT HAVE BEEN TRADED (Fantrax stores every pick,
+ * own ones flagged `traded: false`; see `importedFuturePicks.ts`). Every writer is `persistTradedPicks`, fed by
  * Sleeper's `/traded_picks` (and MFL's list filtered to moved picks): all 3,373 Sleeper rows carry
  * `traded: true`. A team's own untraded 2027 1st — the pick a manager most often wants to offer — is
  * not a row anywhere. So the inventory is REBUILT: every team owns its own pick in every round of

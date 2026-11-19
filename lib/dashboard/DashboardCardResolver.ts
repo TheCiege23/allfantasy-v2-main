@@ -20,7 +20,7 @@ const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
     href: "/brackets",
     product: "bracket",
     description: "Pools and bracket entries.",
-    highlight: "AI highlight: undervalued upset spots.",
+    highlight: "Chimmy highlight: undervalued upset spots.",
   },
   {
     id: "webapp",
@@ -28,7 +28,7 @@ const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
     href: "/dashboard",
     product: "webapp",
     description: "League management, roster, waivers, trades, and draft.",
-    highlight: "AI highlight: waiver adds with immediate lineup impact.",
+    highlight: "Chimmy highlight: waiver adds with immediate lineup impact.",
   },
   {
     id: "legacy",
@@ -36,7 +36,7 @@ const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
     href: "/af-legacy",
     product: "legacy",
     description: "Team scan, draft war room, trade center.",
-    highlight: "AI highlight: trade market and draft strategy.",
+    highlight: "Chimmy highlight: trade market and draft strategy.",
   },
 ]
 

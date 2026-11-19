@@ -59,10 +59,11 @@ describe('PUT division-settings', () => {
     expect(h.update).not.toHaveBeenCalled()
   })
 
-  it('refuses more divisions than the league can fill, and counts outside 2–4', async () => {
+  it('refuses more divisions than the league can fill, and counts outside 2–32', async () => {
     h.findUnique.mockResolvedValue(league(5))
     expect((await put({ count: 3, names: ['A', 'B', 'C'] })).json.code).toBe('TOO_FEW_TEAMS')
-    expect((await put({ count: 8 })).json.code).toBe('COUNT_NOT_ALLOWED')
+    expect((await put({ count: 33 })).json.code).toBe('COUNT_NOT_ALLOWED')
+    expect((await put({ count: 1 })).json.code).toBe('COUNT_NOT_ALLOWED')
     expect((await put({ count: 2, playoffRule: 'byes' })).json.code).toBe('BAD_PLAYOFF_RULE')
     expect(h.update).not.toHaveBeenCalled()
   })

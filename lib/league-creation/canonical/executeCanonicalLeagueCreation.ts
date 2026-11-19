@@ -37,7 +37,7 @@ function prismaErrorDetail(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-export type ExecuteCanonicalLeagueCreationResult =
+type ExecuteCanonicalLeagueCreationResult =
   | { ok: true; response: CreateLeagueSuccessResponse }
   | { ok: false; status: number; response: CreateLeagueErrorResponse }
 
@@ -142,7 +142,14 @@ export async function executeCanonicalLeagueCreation(args: {
         }
         return { ...created, universeId: undefined, children: [] }
       },
-      { maxWait: 20000, timeout: leagueCount > 1 ? 90000 : args.sourceLeagueId ? 60000 : 25000 }
+      // A big league writes two rows per team in this transaction (and a carryover several more), so
+      // the budget grows with the team count: 250 teams get about two more minutes.
+      {
+        maxWait: 20000,
+        timeout:
+          (leagueCount > 1 ? 90000 : args.sourceLeagueId ? 60000 : 25000) +
+          Math.max(0, Number(body.teamCount) - 32) * (args.sourceLeagueId ? 1500 : 500),
+      }
     )
     createdLeagueId = result.leagueId
     homepageUrl = result.homepageUrl

@@ -91,13 +91,23 @@ prospect counted against the roster limit). Still synthetic only — the committ
 
 ## F-05 — Future draft picks (dynasty)
 
-`getDraftPicks.futureDraftPicks` was EMPTY in the only league measured (see `fantraxApi.ts`), so its
-element shape — and whether it reflects traded ownership (original vs current team) — is unverified.
-`lib/league-trade-engine/importedFuturePicks.ts` therefore stays Sleeper/MFL only; a Fantrax league
-shows no future picks rather than listing every pick with its original team.
+**RESOLVED 2026-11-18.** Captured from three public dynasty leagues (34-team NFL, 36-team NBA,
+36-team MLB), with the owner's consent. Every `futureDraftPicks` row is exactly
+`{ year, round, originalOwnerTeamId, currentOwnerTeamId }`: one row per team per round per year for
+ten years, traded or not. A traded pick is a row whose two team ids differ (9 of 1,360 in the NFL
+league, 2 of 1,080 in the NBA league, 0 of 1,800 in the MLB league). There is no pick-in-round.
+A redraft league answers with `currentDraftPicks` only (no `futureDraftPicks` key).
 
-**Needed:** `getDraftPicks` from a public dynasty league in which at least one future pick has been
-traded.
+Committed capture: `tests/fixtures/fantrax/nfl-dynasty-future-picks-public.json` (team ids replaced
+with placeholders, trimmed to the first two seasons; pinned by `__tests__/fantrax-future-picks.test.ts`).
+
+The import stores the whole inventory on the snapshot (`fantraxFuturePicks` in
+`FantraxLeague.transactions`), the adapter carries it as `traded_picks` with a `traded` flag, and
+`lib/league-trade-engine/importedFuturePicks.ts` reads a Fantrax league's picks from those rows
+without inferring a round count.
+
+Still unknown: whether a pick's row disappears or stays once its draft is under way (the captured
+leagues' current drafts were either complete or not started).
 
 ## F-06 — No dynasty / keeper flag in `getLeagueInfo`
 

@@ -204,8 +204,8 @@ export function normalizeToUnifiedResponse(input: NormalizerInput): UnifiedAIRes
 
   const fallbackExplanation = allProvidersFailed
     ? usedDeterministicFallback
-      ? 'AI providers are temporarily unavailable. Showing deterministic (data-only) guidance while preserving tool output.'
-      : 'AI providers are temporarily unavailable and no deterministic fallback is available yet. Please retry.'
+      ? 'Chimmy providers are temporarily unavailable. Showing deterministic (data-only) guidance while preserving tool output.'
+      : 'Chimmy providers are temporarily unavailable and no deterministic fallback is available yet. Please retry.'
     : undefined
 
   const reliability = buildReliabilityMetadata({

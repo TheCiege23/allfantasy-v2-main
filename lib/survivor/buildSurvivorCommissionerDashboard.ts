@@ -22,6 +22,20 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { getPendingTribeRedraw } from './survivorTribeRedrawDecision'
 import { SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION } from './survivorCommissionerAlerts'
 import { buildSurvivorCommissionerTodo, type SurvivorCommissionerTodo } from './survivorCommissionerTodo'
+import { CHALLENGE_BUILDER_TYPE, challengeSettlementSource, readChallengeBuilderConfig } from './survivorChallengeBuilderModel'
+import { listSurvivorRewards } from './survivorRewardEngine'
+
+/** Builder challenges locked and set to be settled by hand: the season runner leaves these to the commissioner. */
+export async function countManualChallengesAwaitingResult(leagueId: string): Promise<number> {
+  const rows = await prisma.survivorChallenge.findMany({
+    where: { leagueId, challengeType: CHALLENGE_BUILDER_TYPE, status: 'locked' },
+    select: { configJson: true },
+  })
+  return rows.filter((row) => {
+    const config = readChallengeBuilderConfig(row.configJson)
+    return config != null && challengeSettlementSource(config) === 'manual'
+  }).length
+}
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -149,6 +163,8 @@ export async function buildSurvivorCommissionerDashboard(
     nbaAdpRows,
     tribeRedraw,
     sentAlerts,
+    manualChallengesAwaitingResult,
+    rewardsAwaitingChoice,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -176,6 +192,9 @@ export async function buildSurvivorCommissionerDashboard(
       where: { leagueId, action: SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION, OR: [{ relatedEntityId: { startsWith: 'scores_overdue:' } }, { relatedEntityId: { startsWith: 'jury_overdue:' } }] },
       orderBy: { createdAt: 'desc' }, take: 20, select: { relatedEntityId: true },
     }),
+    // Waiting on people, so the to-do list can say so. Best-effort: a failed count never hides the dashboard.
+    countManualChallengesAwaitingResult(leagueId).catch(() => 0),
+    listSurvivorRewards(leagueId).then((rows) => rows.filter((r) => r.status === 'awaiting_choice').length).catch(() => 0),
   ])
 
   const activeCast = tribeRows.length
@@ -242,6 +261,8 @@ export async function buildSurvivorCommissionerDashboard(
     scoresPending: !gs?.weekScoringFinalAt,
     sentAlertKeys: sentAlerts.map(row => row.relatedEntityId).filter((key): key is string => Boolean(key)),
     tribeRedrawPending: Boolean(tribeRedraw),
+    manualChallengesAwaitingResult,
+    rewardsAwaitingChoice,
   })
   return {
     ok: true,

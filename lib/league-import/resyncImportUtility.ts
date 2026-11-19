@@ -16,7 +16,7 @@ import { OUTSIDER_RESYNC_ERROR, resolveLeagueCopyTarget } from '@/lib/league-imp
  * pre-run authorization / not-found / invalid-connection failure with its HTTP status; null = a
  * league whose platform the collector cannot refresh at all.
  */
-export type SleeperResyncRefresh =
+type SleeperResyncRefresh =
   | { kind: 'sync'; status: string; advancedFreshness: boolean; executed: boolean }
   | { kind: 'auth'; httpStatus: 400 | 403 | 404; error: string }
   | null

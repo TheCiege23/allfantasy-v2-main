@@ -117,7 +117,7 @@ export class AIAccessResolver {
     let message = 'Upgrade or purchase tokens to chat with Chimmy.'
     if (hasSubscription) {
       reason = 'subscription_active'
-      message = 'Premium AI active.'
+      message = 'Premium Chimmy active.'
     } else if (trial.inTrial) {
       /*
        * ⚠ `reason` STAYS 'in_trial' — it is a true statement about account age, and
@@ -137,7 +137,7 @@ export class AIAccessResolver {
       message = `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy questions a day. Upgrade or buy tokens for more.`
     } else if (tokenBalance > 0) {
       reason = 'tokens_available'
-      message = `${tokenBalance} AI token${tokenBalance === 1 ? '' : 's'} available.`
+      message = `${tokenBalance} Chimmy token${tokenBalance === 1 ? '' : 's'} available.`
     }
 
     return {

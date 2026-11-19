@@ -25,6 +25,10 @@ const NAMES: GrowthEventNames = {
   trialStarted: MONETIZATION.TRIAL_STARTED,
   checkoutStarted: MONETIZATION.CHECKOUT_STARTED,
   paid: MONETIZATION.PAID_CONVERSION_CONFIRMED,
+  offerViewed: MONETIZATION.OFFER_VIEWED,
+  offerClicked: MONETIZATION.OFFER_CLICKED,
+  tokenCheckout: MONETIZATION.TOKEN_CHECKOUT_STARTED,
+  tokenPaid: MONETIZATION.TOKEN_PURCHASE_CONFIRMED,
 }
 
 /** Rows read for the user stages. A window that hits it says so rather than undercounting quietly. */

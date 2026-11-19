@@ -20,6 +20,8 @@ import { keeperPlayerKeys } from '@/lib/keeper/keeperPlayerKey'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
+import { useStickyBoardHeader } from './useStickyBoardHeader'
+import { seatDisplayName } from '@/lib/draft-room/seatLabel'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -78,6 +80,8 @@ type DraftBoardProps = {
   canCommissionerEditPicks?: boolean
   /** Click handler for the commissioner edit affordance on a cell. */
   onCommissionerEditPick?: (overall: number) => void
+  /** Tap a filled tile to open that player's card. */
+  onOpenPlayer?: (overall: number) => void
   /** Live draft pool rows by player id — enriches tiles only; does not change stored picks */
   poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
   /** overall → (overall − market ADP), only for picks worth a steal/reach badge. See lib/draft-room/draftPulse. */
@@ -195,6 +199,7 @@ function DraftBoardInner({
   onViewCellTradeHistory,
   canCommissionerEditPicks = false,
   onCommissionerEditPick,
+  onOpenPlayer,
   presentationVariant = 'default',
   poolPlayerById,
   adpDeltaByOverall,
@@ -210,6 +215,11 @@ function DraftBoardInner({
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
   const boardRef = useRef<HTMLElement | null>(null)
+  const teamGridRef = useRef<HTMLDivElement | null>(null)
+  const teamHeaderRef = useRef<HTMLDivElement | null>(null)
+  // Manager names stay visible while scrolling down the rounds — see useStickyBoardHeader for why
+  // `position: sticky` cannot do this here.
+  useStickyBoardHeader(teamGridRef, teamHeaderRef, draftType !== 'auction')
   const lastFollowedOverallRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -727,6 +737,7 @@ function DraftBoardInner({
                             ? () => onCommissionerEditPick(pick.overall)
                             : undefined
                         }
+                        onOpenPlayer={onOpenPlayer ? () => onOpenPlayer(pick.overall) : undefined}
                       />
                     )
                   })}
@@ -744,9 +755,10 @@ function DraftBoardInner({
             to 84px (names truncate; the header cell's `title` keeps the full name). md+ leaves it
             unset, so BOARD_COLUMN resolves to its plain `minmax(84px, 1fr)`.
           */}
-          <div className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
+          <div ref={teamGridRef} className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
-              className={`sticky top-0 z-10 grid gap-[4px] border-b pb-0.5 backdrop-blur-md ${
+              ref={teamHeaderRef}
+              className={`relative z-10 grid will-change-transform gap-[4px] border-b pb-0.5 backdrop-blur-md ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
@@ -764,7 +776,7 @@ function DraftBoardInner({
               {orderedSlots.map((entry) => {
                 const meta = teamMetaByRoster?.[entry.rosterId] ?? null
                 const isUser = Boolean(currentUserRosterId) && entry.rosterId === currentUserRosterId
-                const headerName = meta?.teamName?.trim() || entry.displayName
+                const headerName = seatDisplayName(meta?.teamName, entry.displayName)
                 return (
                 <div
                   key={entry.rosterId}
@@ -957,6 +969,7 @@ function DraftBoardInner({
                                 ? () => onCommissionerEditPick(pick.overall)
                                 : undefined
                             }
+                            onOpenPlayer={onOpenPlayer ? () => onOpenPlayer(pick.overall) : undefined}
                           />
                         </div>
                       )

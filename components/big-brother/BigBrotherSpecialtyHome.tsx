@@ -66,13 +66,34 @@ function Avatar({ id, name, url, size = 44, className = '' }: { id: string; name
   )
 }
 
+/**
+ * How a tied eviction vote is settled, in the league's own setting.
+ *
+ * ⚠ THIS USED TO SAY "THE HOH ONLY VOTES TO BREAK A TIE" FOR EVERY LEAGUE. The default is
+ * `season_points` (BigBrotherLeagueConfig): the tied nominee with fewer season points goes home and
+ * the HOH never votes. Only `hoh_vote` leagues give the HOH a tie-breaking vote.
+ */
+export function bbTieBreakRule(mode: string | null | undefined): string {
+  if (mode === 'hoh_vote') return 'The HOH only votes to break a tie.'
+  if (mode === 'random') return 'A tie is broken at random.'
+  if (mode === 'commissioner') return 'The commissioner breaks a tie.'
+  return 'A tie sends home the nominee with fewer season points.'
+}
+
+/** The HOH's own card. At the final three the HOH casts the only eviction vote (BigBrotherVoteEngine). */
+export function bbHohWeekBody(mode: string | null | undefined, remaining: number | null | undefined): string {
+  if (remaining === 3) return 'You name two nominees, then cast the only eviction vote.'
+  if (mode === 'hoh_vote') return 'You name two nominees. You only vote to break a tie.'
+  return 'You name two nominees. You don’t vote at the eviction.'
+}
+
 function yourWeek(s: BigBrotherSpecialtySummary): { title: string; body: string } {
   const st = s.myStatus
   const ballot = s.ballot
   if (!st) return { title: 'You’re watching this house', body: 'You don’t have a houseguest in this league.' }
   if (st === 'ELIMINATED') return { title: 'You’ve been evicted', body: 'Your team no longer plays this season.' }
   if (st === 'JURY') return { title: 'You’re on the jury', body: 'You vote for the winner in the finale.' }
-  if (st === 'HOH') return { title: 'You’re Head of Household', body: 'You name two nominees. You only vote to break a tie.' }
+  if (st === 'HOH') return { title: 'You’re Head of Household', body: bbHohWeekBody(s.config.evictionTieBreakMode, s.remainingCount) }
   if (st === 'NOMINATED') return { title: 'You’re on the block', body: 'Win the Veto or hope the house keeps you.' }
   if (st === 'VETO_WINNER') return { title: 'You hold the Veto', body: 'You can save one nominee at the Veto meeting.' }
   if (ballot?.canVote) return { title: 'You’re safe and you vote this week', body: 'Your eviction ballot is private until the season ends.' }
@@ -119,7 +140,7 @@ export function BigBrotherSpecialtyHome({
     'Top fantasy score among eligible houseguests wins HOH.',
     'The HOH nominates two houseguests.',
     'Top score among the Veto players wins the Veto and can save a nominee.',
-    'The house votes to evict. The HOH only votes to break a tie.',
+    `The house votes to evict. ${bbTieBreakRule(summary.config.evictionTieBreakMode)}`,
     `Evicted managers lose their team and their players go to waivers. Pending trades are cancelled. The jury starts ${juryWords}.`,
   ]
 

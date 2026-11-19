@@ -496,7 +496,7 @@ export async function getTradesBoard(
           status: 'pending',
           OR: [
             { proposedByUserId: userId },
-            { receiverRoster: { platformUserId: userId } },
+            { receiverRoster: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } },
           ],
         },
         select: {

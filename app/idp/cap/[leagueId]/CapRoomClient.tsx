@@ -203,7 +203,7 @@ export function CapRoomClient({ leagueId }: { leagueId: string }) {
             ) : null}
 
             {!hasSub ? (
-              <p className="text-[11px] text-white/40">AI cap recommendations come with AF Commissioner.</p>
+              <p className="text-[11px] text-white/40">Chimmy cap recommendations come with AF Commissioner.</p>
             ) : null}
           </>
         ) : !err ? (

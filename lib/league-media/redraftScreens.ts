@@ -10,6 +10,7 @@
  * bracket, a FAAB meter needs both the budget and the balance.
  */
 import type { RedraftSportTheme } from './redraftIdentity'
+import { decidedTitleWinnerRosterId } from '@/lib/playoff-runtime/titleWinner'
 
 /* ── Position chips ─────────────────────────────────────────────────────────────────────────────── */
 
@@ -198,12 +199,22 @@ type PlayoffRaceStatus = 'champion' | 'clinched' | 'eliminated'
  * line right now — neither is a mathematical result, so nothing is shown before generation.
  */
 export function playoffRaceStatus(
-  runtime: { bracket?: { generated?: boolean; championRosterId?: string | null } | null; seeds?: ReadonlyArray<{ rosterId: string }> | null } | null | undefined,
+  runtime: {
+    bracket?: {
+      generated?: boolean
+      championRosterId?: string | null
+      rounds?: ReadonlyArray<{ matchups: ReadonlyArray<{ winnerRosterId: string | null; nextMatchupId?: string | null; status?: string | null }> }> | null
+    } | null
+    seeds?: ReadonlyArray<{ rosterId: string }> | null
+  } | null | undefined,
   rosterId: string,
 ): PlayoffRaceStatus | null {
   const b = runtime?.bracket
   if (!b?.generated) return null
-  if (b.championRosterId && b.championRosterId === rosterId) return 'champion'
+  // `championRosterId` is only set when the season is finalized. The title game is decided before that,
+  // so its winner reads "Champion" as soon as the game has one.
+  const champion = b.championRosterId || (b.rounds?.length ? decidedTitleWinnerRosterId({ rounds: b.rounds }) : null)
+  if (champion && champion === rosterId) return 'champion'
   const seeded = new Set((runtime?.seeds ?? []).map(s => s.rosterId))
   if (!seeded.size) return null
   return seeded.has(rosterId) ? 'clinched' : 'eliminated'

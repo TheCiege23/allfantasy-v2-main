@@ -1,4 +1,6 @@
 import 'server-only'
+import { isRosterManagedBy, managedRosterWhere } from '@/lib/league/rosterManager'
+import { rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
 import {teamLoadTiming} from '@/lib/observability/teamLoadTiming'
 import { automaticLineup, autoSubsSetting } from './teamWorkspace'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -31,7 +33,7 @@ import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
-import { buildNextGameMap } from './nextGameMap'
+import { buildNextGameMap, withNewestKickoffs } from './nextGameMap'
 import { collegeFixturesByPlayerTeam } from './collegeNextGame'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { displayPosition, inferSlotLabel } from './positionLabels'
@@ -694,8 +696,11 @@ async function resolvePlayers(
                * the exhibition game every time. Every starter was badged
                * PRESEASON and the lineup lock read "Locked" against a date in
                * mid-August, for a week that had not been played.
+               *
+               * Untyped rows are read too, but only to CORRECT a typed fixture's
+               * kickoff (see `withNewestKickoffs`); they are dropped before the map.
                */
-              seasonType: week.seasonType,
+              OR: [{ seasonType: week.seasonType }, { seasonType: null }],
             },
             orderBy: { startTime: 'asc' },
             take: 400,
@@ -705,6 +710,7 @@ async function resolvePlayers(
               startTime: true,
               seasonType: true,
               venue: true,
+              fetchedAt: true,
             },
           })
           .catch(() => [])
@@ -715,7 +721,13 @@ async function resolvePlayers(
    * composed player carry — see `buildNextGameMap` for what the translation
    * layer this replaced was costing.
    */
-  const nextGameFor = buildNextGameMap(weekGames, rosterTeams)
+  const nextGameFor = buildNextGameMap(
+    withNewestKickoffs(
+      weekGames.filter((g) => g.seasonType === week?.seasonType),
+      weekGames,
+    ),
+    rosterTeams,
+  )
 
   const injuryById = await injuryRead
 
@@ -1066,6 +1078,22 @@ async function zeroByeWeekPlayers(
   return byes
 }
 
+/**
+ * A further team of a manager who runs several in one native league: its roster, read by id.
+ *
+ * Such a team's roster is keyed by a key of its own (lib/league/rosterManager.ts), so the candidate
+ * join below would land on the manager's FIRST team. A native team's `externalId` is its roster id.
+ * Only asked when the viewer has switched teams, so nobody else pays for the read.
+ */
+async function ownNativeTeamRoster(leagueId: string, userId: string, platform: string | null | undefined, teamExternalId: string | null | undefined) {
+  if (!teamExternalId || !isNativePlatform(platform)) return null
+  if (!(await rememberedActiveTeamIds()).includes(teamExternalId)) return null
+  return prisma.roster.findFirst({
+    where: { ...managedRosterWhere(leagueId, userId), id: teamExternalId },
+    select: { id: true, platformUserId: true, managerUserId: true, playerData: true },
+  })
+}
+
 export async function getMyTeamData(
   leagueId: string,
   userId: string,
@@ -1249,9 +1277,16 @@ async function loadMyTeamData(
   const roster = isSleeper && !savedRosterOnly
     ? (liveRoster ? { playerData: liveRoster } : null)
     : candidates.length > 0
-      ? await timing.read('roster',()=>prisma.roster.findFirst({
+      ? await timing.read('roster',async()=>(await ownNativeTeamRoster(leagueId,userId,league.platform,myTeamRow.externalId)) ?? prisma.roster.findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
-          select: { id: true, platformUserId: true, playerData: true },
+          /*
+           * ⚠ THE NEWEST ROW, NOT WHICHEVER POSTGRES RETURNS. A re-import can leave a second roster for
+           * the same team under another owner id — ESPN `565010384` holds one keyed by the manager's
+           * ESPN id and frozen since 2026-09-17 beside the one each sync rewrites. Unordered, which one
+           * this screen showed was luck.
+           */
+          orderBy: { updatedAt: 'desc' },
+          select: { id: true, platformUserId: true, managerUserId: true, playerData: true },
         }))
       : null
 
@@ -1963,7 +1998,7 @@ async function loadMyTeamData(
     teamActivity,
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
-    nativeLineup: isNativePlatform(league.platform) && nativeIdsAligned && 'id' in roster && typeof roster.id === 'string' && 'platformUserId' in roster && roster.platformUserId===userId ? { rosterId: roster.id, week: weekFromLeagueSettingsForLineup(league.settings), starterIds, benchIds: Object.fromEntries(benchIds.flatMap(id=>{const p=resolved.get(id);return p && nativeSections.bench.some(b=>b.id===id) ? [[p.sleeperId,id]] : []})) } : null,
+    nativeLineup: isNativePlatform(league.platform) && nativeIdsAligned && 'id' in roster && typeof roster.id === 'string' && 'platformUserId' in roster && isRosterManagedBy(roster,userId) ? { rosterId: roster.id, week: weekFromLeagueSettingsForLineup(league.settings), starterIds, benchIds: Object.fromEntries(benchIds.flatMap(id=>{const p=resolved.get(id);return p && nativeSections.bench.some(b=>b.id===id) ? [[p.sleeperId,id]] : []})) } : null,
     workspaceScope: Number.isInteger(league.season) && league.season ? { rosterKey: `team:${myTeamRow.id}`, season: league.season } : null,
     autoSubs: { enabled: autoSubsSetting(league.settings) },
     lineupPeriod: lineupPeriod ?? null,

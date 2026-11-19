@@ -19,6 +19,7 @@
  * See lib/dynasty-war-room/types.ts for the contract.
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
@@ -209,7 +210,7 @@ export async function buildDynastyWarRoomContext(
   const rosterRows = (await prisma.roster
     .findMany({
       where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+      select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true },
     })
     .catch(() => [])) as RosterRow[]
 
@@ -409,7 +410,7 @@ export async function buildDynastyWarRoomContext(
       ties: team?.ties ?? 0,
       pointsFor: team?.pointsFor ?? 0,
       playoffSeed: team?.currentRank ?? null,
-      isUserTeam: r.platformUserId === userId,
+      isUserTeam: isRosterManagedBy(r, userId),
       players: (byRoster.get(r.id) ?? []).map(toPlayerFact),
       // Keyed by the roster that holds each pick now, in Roster.id space for every platform.
       picks: pickCapital.picksByRosterId.get(r.id) ?? [],

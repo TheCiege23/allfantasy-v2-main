@@ -26,7 +26,7 @@ export function getWorldCupLiveProviderChain(): WorldCupLiveProviderId[] {
   return parseChainFromEnv() ?? WORLD_CUP_LIVE_PROVIDER_DEFAULT_CHAIN
 }
 
-export function createWorldCupLiveAdapters(): Record<
+function createWorldCupLiveAdapters(): Record<
   WorldCupLiveProviderId,
   WorldCupLiveScoreAdapter
 > {

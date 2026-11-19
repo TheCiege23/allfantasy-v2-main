@@ -33,7 +33,7 @@ const NFL_TEST_VIEWS = ['mTeam', 'mSettings'] as const
 /** The MLB contract captured exactly this combination; nothing narrower is verified. */
 const MLB_TEST_VIEWS = ['mTeam', 'mRoster', 'mSettings', 'mMatchup', 'mDraftDetail'] as const
 
-export type EspnConnectionTestSuccess = {
+type EspnConnectionTestSuccess = {
   ok: true
   access: 'public' | 'private'
   sport: 'NFL' | 'MLB'
@@ -51,7 +51,7 @@ export type EspnConnectionTestSuccess = {
   needsCookiesToImport: boolean
 }
 
-export type EspnConnectionTestFailure = {
+type EspnConnectionTestFailure = {
   ok: false
   reason: 'invalid_input' | 'not_found' | 'needs_cookies' | 'cookies_rejected' | 'unavailable'
   message: string
@@ -60,7 +60,7 @@ export type EspnConnectionTestFailure = {
   usedSavedCookies?: boolean
 }
 
-export type EspnConnectionTestResult = EspnConnectionTestSuccess | EspnConnectionTestFailure
+type EspnConnectionTestResult = EspnConnectionTestSuccess | EspnConnectionTestFailure
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : ''

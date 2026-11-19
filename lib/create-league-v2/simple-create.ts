@@ -1,11 +1,9 @@
 import type { CreateLeagueV2State } from '@/lib/create-league-v2/state'
 import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { MAX_NATIVE_TEAMS, REDRAFT_TEAM_COUNTS, isNativeTeamCount } from '@/lib/league/teamCountLimits'
 
-export const UNIVERSAL_CREATE_TEAM_COUNTS: readonly number[] = Array.from(
-  { length: 31 },
-  (_, index) => index + 2,
-)
+export const UNIVERSAL_CREATE_TEAM_COUNTS: readonly number[] = REDRAFT_TEAM_COUNTS
 
 /**
  * The timezones the create wizard lists, US first, each with a name a manager recognises —
@@ -85,7 +83,7 @@ export const PREMIUM_ADVANCED_CREATE_LABELS: Record<PremiumAdvancedCreateKey, st
 }
 
 export function isUniversalTeamCount(value: number): boolean {
-  return Number.isInteger(value) && value >= 2 && value <= 32
+  return isNativeTeamCount(value)
 }
 
 export function getEnabledPremiumAdvancedSettings(
@@ -100,7 +98,7 @@ export function validateSimpleCreateState(state: CreateLeagueV2State): string[] 
   if (!state.leagueType) issues.push('Choose a league type.')
   if (!state.sport) issues.push('Choose a sport.')
   if (!state.name.trim() || state.name.trim().length < 3) issues.push('Enter a league name.')
-  if (!isUniversalTeamCount(state.teamCount)) issues.push('Team count must be from 2 through 32.')
+  if (!isUniversalTeamCount(state.teamCount)) issues.push(`Team count must be from 2 through ${MAX_NATIVE_TEAMS}.`)
   if (state.privacy !== 'public' && state.privacy !== 'private') issues.push('Choose public or private.')
   if (!state.draftType) issues.push('Choose a draft type.')
   if (state.draftScheduleLater !== true && !state.draftDate.trim()) issues.push('Choose a draft date.')

@@ -2698,7 +2698,7 @@
 .af-cm-bubble .af-cm-rich { margin-top: 6px; }
 .af-cm-bubble .af-cm-rich:first-child { margin-top: 0; }
 /* A GIF or photo on its own needs no bubble around it. */
-.af-cm-bubble:has(> .af-cm-rich:only-child) { padding: 0; background: transparent; }
+.af-cm-bubble:has(> .af-cm-rich:not(.af-cm-chimmy-text):only-child) { padding: 0; background: transparent; }
 
 /* The corner facing the speaker squares off inside a run, so a run reads as one voice. */
 .af-cm-row:not([data-mine='true']):not([data-run-start='true']) .af-cm-bubble { border-top-left-radius: 6px; }
@@ -4834,3 +4834,14 @@ html[data-mode='light'] .af-cm .af-cm-act { box-shadow: 0 1px 2px rgba(11, 16, 3
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/*
+ * Chimmy's rows in league chat, formatted (ChatMessageList → ChimmyRichText). Last in the file on purpose:
+ * `.af-cm-bubble-text` sets pre-wrap, which would double every break now that breaks are real elements, and
+ * `.af-cm-rich` above is also the flex column for GIFs and polls, which a block of text must not inherit.
+ */
+.af-cm-bubble-text.af-cm-chimmy-text { display: block; white-space: normal; margin-top: 0; }
+.af-cm-bubble-text.af-cm-chimmy-text ul, .af-cm-bubble-text.af-cm-chimmy-text ol { margin: 0 0 8px; }
+/* The base reset strips list markers; without them a list reads as stray indented lines. */
+.af-cm-bubble-text.af-cm-chimmy-text ul { list-style: disc; }
+.af-cm-bubble-text.af-cm-chimmy-text ol { list-style: decimal; }

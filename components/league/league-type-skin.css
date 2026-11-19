@@ -1,0 +1,443 @@
+/* League-type skins for /league/[id] (lib/league/leagueTypeSkin.ts decides WHICH skin).
+ *
+ * LeagueShell stamps `data-league-skin` (and `data-league-sport` for redraft) on the wrapper around
+ * the header, the hero and the page surface. Every colour on those three reads an `--lsk-*` token, so
+ * a Dynasty league is gold and a Zombie league is toxic green with no per-type branches in the TSX.
+ *
+ * The palettes are the ones /core already uses where it has one — dynasty gold from
+ * af-core-dynasty.css, survivor ember from af-survivor-theme.css, zombie from zombie-workspace.css and
+ * the redraft sport colours from redraft-identity.css — and the create-league accent tones for the
+ * rest. The league page is dark in every mode (its header was already hard-coded dark), so these are
+ * dark-ground values only.
+ *
+ * `--lsk-rgb` is the accent as bare channels, so soft fills and glows derive from one number.
+ */
+
+[data-league-skin] {
+  --lsk-bg: #06070f;
+  --lsk-surface: #0e1119;
+  --lsk-surface2: #1a1f2b;
+  --lsk-line: #232a38;
+  --lsk-text: #eef1f6;
+  --lsk-text2: #c7cdd8;
+  --lsk-muted: #9aa3b2;
+  --lsk-heading: #eef1f6;
+  --lsk-accent: #3ddc84;
+  --lsk-accent-strong: #3ddc84;
+  --lsk-accent-ink: #06070f;
+  --lsk-rgb: 61, 220, 132;
+  --lsk-soft: rgba(var(--lsk-rgb), 0.12);
+  --lsk-accent-line: rgba(var(--lsk-rgb), 0.38);
+  --lsk-glow: rgba(var(--lsk-rgb), 0.2);
+}
+
+[data-league-skin='dynasty'] {
+  --lsk-bg: #0b0f17; --lsk-surface: #121826; --lsk-surface2: #1c2333; --lsk-line: #2a3345;
+  --lsk-text: #e8ecf2; --lsk-text2: #c3cad5; --lsk-muted: #9aa4b2; --lsk-heading: #f3d79f;
+  --lsk-accent: #e8c07a; --lsk-accent-strong: #d4a24c; --lsk-accent-ink: #0b0f17; --lsk-rgb: 212, 162, 76;
+}
+[data-league-skin='redraft'][data-league-sport='nba'] { --lsk-accent: #ff9a3c; --lsk-accent-strong: #ff9a3c; --lsk-rgb: 255, 154, 60; }
+[data-league-skin='redraft'][data-league-sport='nhl'] { --lsk-accent: #7cc7ff; --lsk-accent-strong: #7cc7ff; --lsk-rgb: 124, 199, 255; }
+[data-league-skin='redraft'][data-league-sport='mlb'] { --lsk-accent: #ff5a5f; --lsk-accent-strong: #ff5a5f; --lsk-rgb: 255, 90, 95; }
+[data-league-skin='redraft'][data-league-sport='ncaaf'] { --lsk-accent: #ffcf4a; --lsk-accent-strong: #ffcf4a; --lsk-rgb: 255, 207, 74; }
+[data-league-skin='redraft'][data-league-sport='ncaab'] { --lsk-accent: #ff7ac6; --lsk-accent-strong: #ff7ac6; --lsk-rgb: 255, 122, 198; }
+[data-league-skin='redraft'][data-league-sport='soccer'] { --lsk-accent: #b5e655; --lsk-accent-strong: #b5e655; --lsk-rgb: 181, 230, 85; }
+[data-league-skin='keeper'] {
+  --lsk-bg: #0c0a06; --lsk-surface: #17130b; --lsk-surface2: #272013; --lsk-line: #3a2e18;
+  --lsk-text: #f4eee3; --lsk-text2: #d8cdb9; --lsk-muted: #b3a68f; --lsk-heading: #fcd34d;
+  --lsk-accent: #fbbf24; --lsk-accent-strong: #f59e0b; --lsk-accent-ink: #1a1205; --lsk-rgb: 245, 158, 11;
+}
+[data-league-skin='best_ball'] {
+  --lsk-bg: #050c10; --lsk-surface: #0b171d; --lsk-surface2: #163039; --lsk-line: #1e3a45;
+  --lsk-text: #e8f6fa; --lsk-text2: #c2dde4; --lsk-muted: #94b3bd; --lsk-heading: #a5f3fc;
+  --lsk-accent: #22d3ee; --lsk-accent-strong: #06b6d4; --lsk-accent-ink: #03161b; --lsk-rgb: 6, 182, 212;
+}
+[data-league-skin='guillotine'] {
+  --lsk-bg: #0e0709; --lsk-surface: #180d11; --lsk-surface2: #2c1820; --lsk-line: #42202b;
+  --lsk-text: #f8ecef; --lsk-text2: #dec5cb; --lsk-muted: #bba0a8; --lsk-heading: #fda4af;
+  --lsk-accent: #fb7185; --lsk-accent-strong: #f43f5e; --lsk-accent-ink: #1a0509; --lsk-rgb: 244, 63, 94;
+}
+[data-league-skin='survivor'] {
+  --lsk-bg: #07080d; --lsk-surface: #0f1118; --lsk-surface2: #1c1f28; --lsk-line: #2a2620;
+  --lsk-text: #f1ece4; --lsk-text2: #d6cfc3; --lsk-muted: #a8a196; --lsk-heading: #e8c98e;
+  --lsk-accent: #f0a35e; --lsk-accent-strong: #f0a35e; --lsk-accent-ink: #1a0f05; --lsk-rgb: 240, 163, 94;
+}
+[data-league-skin='devy'] {
+  --lsk-bg: #061010; --lsk-surface: #0c1a1a; --lsk-surface2: #163030; --lsk-line: #1f3d3b;
+  --lsk-text: #e6f7f4; --lsk-text2: #c0e0db; --lsk-muted: #92b5b0; --lsk-heading: #99f6e4;
+  --lsk-accent: #2dd4bf; --lsk-accent-strong: #14b8a6; --lsk-accent-ink: #04201c; --lsk-rgb: 20, 184, 166;
+}
+[data-league-skin='zombie'] {
+  --lsk-bg: #091511; --lsk-surface: #10231c; --lsk-surface2: #1b3529; --lsk-line: #31513c;
+  --lsk-text: #f0fff0; --lsk-text2: #d2e8d4; --lsk-muted: #9bbb9f; --lsk-heading: #d9f99d;
+  --lsk-accent: #a3e635; --lsk-accent-strong: #84cc16; --lsk-accent-ink: #0d1a02; --lsk-rgb: 132, 204, 22;
+}
+[data-league-skin='salary_cap'] {
+  --lsk-bg: #06100c; --lsk-surface: #0c1b15; --lsk-surface2: #163026; --lsk-line: #1f4334;
+  --lsk-text: #e7f7ef; --lsk-text2: #c1e2d2; --lsk-muted: #93b6a6; --lsk-heading: #a7f3d0;
+  --lsk-accent: #34d399; --lsk-accent-strong: #34d399; --lsk-accent-ink: #03180f; --lsk-rgb: 52, 211, 153;
+}
+[data-league-skin='pirate'] {
+  --lsk-bg: #061620; --lsk-surface: #0d2633; --lsk-surface2: #163848; --lsk-line: #1f4a5e;
+  --lsk-text: #eef4f7; --lsk-text2: #cadbe3; --lsk-muted: #9db6c2; --lsk-heading: #fde68a;
+  --lsk-accent: #f7c865; --lsk-accent-strong: #f7c865; --lsk-accent-ink: #1a1204; --lsk-rgb: 247, 200, 101;
+}
+[data-league-skin='big_brother'] {
+  --lsk-bg: #0f0712; --lsk-surface: #1a0d1f; --lsk-surface2: #2c1733; --lsk-line: #47234f;
+  --lsk-text: #f7ecf9; --lsk-text2: #dec6e3; --lsk-muted: #bca0c2; --lsk-heading: #f5d0fe;
+  --lsk-accent: #e879f9; --lsk-accent-strong: #d946ef; --lsk-accent-ink: #1c0420; --lsk-rgb: 217, 70, 239;
+}
+
+/* ── Re-point the workspace's AF Core tokens at the skin ──────────────────────
+ * league-workspace.css bridges the whole league page (header, tabs, rails, panels) onto AF Core's
+ * `--bg` / `--surface` / `--accent*` tokens. Pointing those at the skin here is what makes the
+ * ENTIRE page — rails included — wear the type's look, instead of fighting each bridged rule.
+ * Dark and AF modes only. In light mode the page keeps AF Core's light ground and the skin's own
+ * pieces fall back to it (below), so nothing dark is stranded on a light page. */
+html:not([data-mode='light']) [data-league-skin] .af-core.af-league-workspace {
+  --bg: var(--lsk-bg);
+  --rail: var(--lsk-bg);
+  --surface: var(--lsk-surface);
+  --surface2: var(--lsk-surface2);
+  --line: var(--lsk-line);
+  --line2: var(--lsk-line);
+  --text: var(--lsk-text);
+  --text2: var(--lsk-text2);
+  --muted: var(--lsk-muted);
+  --accent: var(--lsk-accent);
+  --accent-ink: var(--lsk-accent-ink);
+  --accent-soft: var(--lsk-soft);
+  --accent-line: var(--lsk-accent-line);
+}
+html[data-mode='light'] [data-league-skin] .af-core {
+  --lsk-bg: var(--bg);
+  --lsk-surface: var(--surface);
+  --lsk-surface2: var(--surface2);
+  --lsk-line: var(--line);
+  --lsk-text: var(--text);
+  --lsk-text2: var(--text2);
+  --lsk-muted: var(--muted);
+  --lsk-heading: var(--text);
+  --lsk-accent: var(--accent);
+  --lsk-accent-strong: var(--accent);
+  --lsk-accent-ink: var(--accent-ink);
+  --lsk-soft: var(--accent-soft);
+  --lsk-accent-line: var(--accent-line);
+  --lsk-glow: rgba(var(--lsk-rgb), 0.1);
+}
+
+/* ── Page surface ─────────────────────────────────────────────────────────── */
+[data-league-skin] .af-lsk-main {
+  border-inline: 1px solid var(--lsk-line);
+  background:
+    radial-gradient(70% 40% at 100% 0%, rgba(var(--lsk-rgb), 0.07), transparent 70%),
+    var(--lsk-bg);
+  color: var(--lsk-text);
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+[data-league-skin] .af-lsk-header {
+  border-bottom: 1px solid var(--lsk-line);
+  background: color-mix(in srgb, var(--lsk-bg) 94%, transparent);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.46);
+}
+.af-lsk-header-glow {
+  background: radial-gradient(ellipse 80% 60% at 50% -20%, var(--lsk-glow) 0%, transparent 70%);
+}
+.af-lsk-chip {
+  border: 1px solid var(--lsk-accent-line);
+  background: var(--lsk-soft);
+  color: var(--lsk-accent);
+}
+
+/* ── Tabs: Sleeper's shape — uppercase, letter-spaced, a short bar under the active one ── */
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--lsk-line);
+  -webkit-overflow-scrolling: touch;
+}
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tabs::-webkit-scrollbar { display: none; }
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 0 14px;
+  background: transparent;
+  border: 0;
+  color: var(--lsk-muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 0.15s ease;
+}
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tab::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  bottom: 0;
+  width: 32px;
+  height: 4px;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tab:hover { color: var(--lsk-text); }
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tab[aria-pressed='true'] { color: var(--lsk-text); background: transparent; box-shadow: none; }
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tab[aria-pressed='true']::after { background: var(--lsk-accent-strong); }
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-tab:focus-visible,
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-subtab:focus-visible {
+  outline: 2px solid var(--lsk-accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* The active group's own tabs: a quieter second row of pills. */
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-subtabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-top: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-subtabs::-webkit-scrollbar { display: none; }
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-subtab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lsk-line);
+  background: transparent;
+  color: var(--lsk-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-subtab:hover { color: var(--lsk-text); border-color: var(--lsk-accent-line); }
+[data-league-skin] [data-testid='league-command-center-tabs'] .af-lsk-subtab[aria-selected='true'] {
+  box-shadow: none;
+  background: var(--lsk-soft);
+  border-color: var(--lsk-accent-line);
+  color: var(--lsk-accent);
+}
+
+[data-league-skin] [data-testid='league-command-center-tabs'] { background: transparent; border: 0; }
+
+/* Phone shortcut to Trades, re-coloured from the old fixed pink. */
+.af-lsk-shortcut {
+  border: 1px solid var(--lsk-accent-line);
+  background: var(--lsk-soft);
+  color: var(--lsk-accent);
+}
+.af-lsk-shortcut[aria-current='page'] {
+  border-color: var(--lsk-accent-strong);
+  color: var(--lsk-text);
+}
+
+/* ── Hero: the one block only this league type has ──────────────────────── */
+.af-lsk-hero {
+  margin: 16px 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px clamp(18px, 3vw, 32px);
+  border-radius: 18px;
+  border: 1px solid var(--lsk-accent-line);
+  background:
+    radial-gradient(80% 140% at 100% 0%, var(--lsk-glow), transparent 62%),
+    var(--lsk-surface);
+  color: var(--lsk-text);
+}
+@media (min-width: 640px) { .af-lsk-hero { margin: 20px 20px 0; } }
+.af-lsk-hero-copy { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* On a phone the crest would wrap onto its own row and double the hero's height. */
+@media (max-width: 639px) { .af-lsk-hero-crest { display: none; } }
+.af-lsk-hero-kicker {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lsk-accent);
+}
+.af-lsk-hero-title {
+  margin: 0;
+  font-size: clamp(32px, 4.4vw, 52px);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--lsk-heading);
+}
+.af-lsk-hero-sub { font-size: 0.42em; font-weight: 600; letter-spacing: 0; color: var(--lsk-muted); }
+.af-lsk-hero-line { margin: 4px 0 0; max-width: 560px; font-size: 15px; line-height: 1.5; color: var(--lsk-text2); }
+.af-lsk-hero-crest { flex: none; width: 72px; height: 82px; }
+.af-lsk-hero-crest path { fill: var(--lsk-soft); stroke: var(--lsk-accent-strong); }
+.af-lsk-hero-crest text { fill: var(--lsk-accent); }
+
+/* ── One sync line in place of three stacked Sleeper bars ───────────────── */
+.af-lsk-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--lsk-line);
+  background: var(--lsk-bg);
+  color: var(--lsk-muted);
+  font-size: 13px;
+}
+@media (min-width: 640px) { .af-lsk-sync { padding: 10px 20px; } }
+.af-lsk-sync-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; }
+.af-lsk-sync a,
+.af-lsk-sync button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--lsk-text2);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.af-lsk-sync a:hover,
+.af-lsk-sync button:hover { color: var(--lsk-text); }
+.af-lsk-sync :is(a, button):focus-visible { outline: 2px solid var(--lsk-accent); outline-offset: 2px; border-radius: 4px; }
+.af-lsk-sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lsk-muted);
+}
+.af-lsk-sync-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lsk-accent-strong);
+}
+.af-lsk-sync .af-lsk-sync-primary {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  background: var(--lsk-accent-strong);
+  color: var(--lsk-accent-ink);
+  font-weight: 700;
+}
+.af-lsk-sync .af-lsk-sync-primary:hover { color: var(--lsk-accent-ink); filter: brightness(1.08); }
+.af-lsk-sync .af-lsk-sync-remove { color: #fda4af; }
+.af-lsk-sync .af-lsk-sync-remove:hover { color: #ffe4e6; }
+.af-lsk-sync-note { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.5; color: var(--lsk-muted); }
+
+/* ── AF injury tag (components/league/AfInjuryTag.tsx), shared by matchup and roster rows ── */
+.af-inj-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.af-inj-tag[data-tone='ok'] { color: #34d399; background: rgba(52, 211, 153, 0.14); }
+.af-inj-tag[data-tone='warn'] { color: #f5b342; background: rgba(245, 179, 66, 0.14); }
+.af-inj-tag[data-tone='risk'] { color: #fb923c; background: rgba(251, 146, 60, 0.14); }
+.af-inj-tag[data-tone='out'] { color: #fb7185; background: rgba(251, 113, 133, 0.14); }
+
+/* AF's own projection, wherever it sits beside a provider projection. */
+.af-proj-af { color: var(--af-blue, #3b82f6); font-weight: 700; }
+
+/* ── The rafters (components/league/LeagueRafters.tsx), on the league page's history ── */
+.af-lsk-rafters {
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px clamp(18px, 3vw, 30px);
+  border-radius: 18px;
+  border: 1px solid var(--lsk-accent-line, rgba(212, 162, 76, 0.38));
+  background:
+    radial-gradient(60% 120% at 85% 0%, var(--lsk-glow, rgba(212, 162, 76, 0.2)), transparent 65%),
+    linear-gradient(180deg, var(--lsk-surface, #121826), var(--lsk-bg, #0b0f17));
+  color: var(--lsk-text, #e8ecf2);
+}
+.af-lsk-rafters-copy { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.af-lsk-rafters-title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--lsk-heading, #f3d79f);
+}
+.af-lsk-rafters-wall { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: 100%; }
+.af-lsk-rafters-label,
+.af-lsk-rafters-titles {
+  font-size: 12px;
+  color: var(--lsk-muted, #9aa4b2);
+}
+.af-lsk-rafters-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.af-lsk-rafters-pennants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.af-lsk-pennant {
+  flex: none;
+  width: 66px;
+  height: 92px;
+  box-sizing: border-box;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+  background: linear-gradient(180deg, #26344f, #172036);
+  border-top: 3px solid var(--lsk-accent-strong, #d4a24c);
+  color: #e8ecf2;
+}
+.af-lsk-pennant[data-mine='1'] { background: var(--lsk-accent-strong, #d4a24c); color: var(--lsk-accent-ink, #0b0f17); }
+.af-lsk-pennant[data-open='1'] { background: var(--lsk-surface2, #1c2333); border-top-color: var(--lsk-line, #2a3345); color: var(--lsk-muted, #9aa4b2); }
+.af-lsk-pennant-year { font-size: 16px; font-weight: 800; }
+.af-lsk-pennant-name { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+@media (max-width: 639px) {
+  .af-lsk-rafters-wall { align-items: flex-start; }
+  .af-lsk-pennant { width: 56px; height: 80px; }
+}

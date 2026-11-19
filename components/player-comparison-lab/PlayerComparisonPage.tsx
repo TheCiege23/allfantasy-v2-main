@@ -294,11 +294,11 @@ export function PlayerComparisonPage() {
         <h1 className="text-2xl font-semibold text-white" data-testid="player-comparison-lab-heading">Player Comparison Lab</h1>
       </div>
       <p className="text-sm text-white/60">
-        Compare 2–6 players using market value, projections, consistency, and AI insights.
+        Compare 2–6 players using market value, projections, consistency, and Chimmy insights.
       </p>
 
       <InContextMonetizationCard
-        title="Player AI recommendation access"
+        title="Player Chimmy recommendation access"
         featureId="player_ai_recommendations"
         tokenRuleCodes={[
           'ai_lineup_recommendation_explanation_single',
@@ -479,7 +479,7 @@ export function PlayerComparisonPage() {
               className="h-4 w-4 rounded border-white/20 bg-black/20"
               data-testid="ai-on-compare-toggle"
             />
-            Include AI explanation on compare (optional)
+            Include Chimmy explanation on compare (optional)
           </label>
 
           {error && <p className="text-sm text-red-400">{error}</p>}

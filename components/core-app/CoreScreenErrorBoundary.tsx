@@ -3,6 +3,13 @@
 import { Component, startTransition, type ErrorInfo, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import * as Sentry from '@sentry/nextjs'
+import { isNewVersionReady, reloadOntoNewVersion } from '@/lib/core-app/deployGuard'
+import { musicBus } from '@/components/app-music/musicBus'
+
+function musicLoaded(): boolean {
+  const { yt, appleNow } = musicBus.getSnapshot()
+  return yt != null || appleNow != null
+}
 
 /**
  * Keeps a failed /core screen inside the shell.
@@ -64,6 +71,14 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
     } catch {
       // Reporting must never turn a contained failure into an uncontained one.
     }
+    /*
+     * A screen that breaks just after a deploy is most likely this tab's OLD JavaScript meeting the
+     * NEW server (the build id is pinned, so the two can run together — see next.config.js). The
+     * cure is the new build, so load it, once, instead of leaving the reader on an error panel
+     * whose "Try again" cannot fix it. Not while music is loaded: a reload would cut it off, and
+     * the panel's button is there for when they choose to.
+     */
+    void reloadOntoNewVersion({ canInterrupt: () => !musicLoaded() }).catch(() => {})
   }
 
   render() {
@@ -102,7 +117,14 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
 export default function CoreScreenErrorBoundary({ resetKey, children }: { resetKey: string; children: ReactNode }) {
   const router = useRouter()
   return (
-    <Boundary resetKey={resetKey} onRetry={() => router.refresh()}>
+    <Boundary
+      resetKey={resetKey}
+      onRetry={() => {
+        // After a deploy the failure is usually the stale build itself; a soft refresh keeps it.
+        if (isNewVersionReady()) window.location.reload()
+        else router.refresh()
+      }}
+    >
       {children}
     </Boundary>
   )

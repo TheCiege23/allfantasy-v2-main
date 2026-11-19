@@ -89,7 +89,7 @@ describe('plain-English messages', () => {
   })
 
   it('redraft explains the open range', () => {
-    expect(friendlyIssueMessage({ code: 'team_count_invalid', message: 'g' }, state({ teamCount: 40 }))).toBe('Pick between 2 and 32 teams.')
+    expect(friendlyIssueMessage({ code: 'team_count_invalid', message: 'g' }, state({ teamCount: 400 }))).toBe('Pick between 2 and 250 teams.')
   })
 
   it('league name messages depend on what is wrong', () => {

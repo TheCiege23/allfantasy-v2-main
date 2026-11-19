@@ -8,7 +8,7 @@ import { importSleeperSurvivalById } from '@/lib/league-import/sleeper/importSur
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
-import { leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
+import { isDynastyForWrite, leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
 import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -17,11 +17,13 @@ import { persistProviderTransactionFacts, type ProviderTransactionFactInput } fr
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import { hasIdpRosterSlot } from './idpRosterSlots'
+import { IMPORT_CO_COMMISSIONERS_KEY, importCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
 import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
   ImportProvider,
   NormalizedImportResult,
+  NormalizedReturnedPick,
   NormalizedTradedPick,
 } from './types'
 
@@ -83,6 +85,13 @@ export interface PersistImportedLeagueOptions {
    * team somebody already holds.
    */
   importerSourceTeamId?: string | null
+  /**
+   * True only when the commissioner gate PROVED, from the provider's own API, that the importer is
+   * the source league's commissioner (`isCommissioner === true && verification === 'api'`). Never a
+   * self-attestation. It lets a commissioner with no team of their own join a league another account
+   * already imported, as a co-commissioner, instead of creating a duplicate copy of it.
+   */
+  importerIsProvenCommissioner?: boolean
 }
 
 export interface PersistImportedLeagueResult {
@@ -217,9 +226,9 @@ export function buildTier0LeagueColumnPatch(
 export async function persistTradedPicks(
   leagueId: string,
   picks: NormalizedTradedPick[],
-): Promise<{ written: number; skipped: number }> {
+): Promise<{ written: number; skipped: number; leftAlone: number }> {
   if (!Array.isArray(picks) || picks.length === 0) {
-    return { written: 0, skipped: 0 }
+    return { written: 0, skipped: 0, leftAlone: 0 }
   }
   let skipped = 0
   const deduplicated = new Map<string, { pick: NormalizedTradedPick; inputCount: number }>()
@@ -244,16 +253,31 @@ export async function persistTradedPicks(
   }
 
   const rows = [...deduplicated.values()]
+  const keyOf = (season: number, round: number, original: string) => `${season}\u0000${round}\u0000${original}`
   const writeBatch = async (
     batch: typeof rows,
-  ): Promise<{ written: number; skipped: number }> => {
-    if (batch.length === 0) return { written: 0, skipped: 0 }
+  ): Promise<{ written: number; skipped: number; leftAlone: number }> => {
+    if (batch.length === 0) return { written: 0, skipped: 0, leftAlone: 0 }
     try {
       const values = batch.map(({ pick }) => Prisma.sql`(
         ${randomUUID()}, ${leagueId}, ${pick.season}, ${pick.round},
-        ${pick.original_roster_id}, ${pick.current_owner_roster_id}, TRUE, NOW(), NOW()
+        ${pick.original_roster_id}, ${pick.current_owner_roster_id}, ${pick.traded !== false}, NOW(), NOW()
       )`)
-      await prisma.$executeRaw`
+      /*
+       * 🛑 A PROVIDER NEVER OVERRULES WHAT HAPPENED IN THE APP. An existing row is updated only
+       * when BOTH hold:
+       *   - no AllFantasy trade moved it (`sourceTradeId` is null). An in-app trade, or a pick
+       *     term that rolled a protected pick over, stamps the trade's id; the provider knows
+       *     nothing about either, and a sync would silently hand the pick back.
+       *   - it is still active. A pick used in a draft or forfeited is settled history.
+       * The same two conditions `clearReturnedTradedPicks` below has always applied to its delete.
+       * A new row (no conflict) is always inserted.
+       *
+       * ⚠ `RETURNING` IS HOW THE COUNT STAYS TRUE. A row the conflict clause declines is not an
+       * error and is not returned, so counting the batch would report it as written. Only the
+       * keys that come back were stored; the rest are `leftAlone`.
+       */
+      const stored = await prisma.$queryRaw<Array<{ pickSeason: number; round: number; originalRosterId: string }>>`
         INSERT INTO "future_draft_picks" (
           "id", "leagueId", "pickSeason", "round", "originalRosterId",
           "currentOwnerId", "traded", "createdAt", "updatedAt"
@@ -262,19 +286,33 @@ export async function persistTradedPicks(
         ON CONFLICT ("leagueId", "pickSeason", "round", "originalRosterId")
         DO UPDATE SET
           "currentOwnerId" = EXCLUDED."currentOwnerId",
-          "traded" = TRUE,
+          "traded" = EXCLUDED."traded",
           "updatedAt" = NOW()
+        WHERE "future_draft_picks"."sourceTradeId" IS NULL
+          AND "future_draft_picks"."status" = 'active'
+        RETURNING "pickSeason", "round", "originalRosterId"
       `
-      return {
-        written: batch.reduce((sum, row) => sum + row.inputCount, 0),
-        skipped: 0,
+      const storedKeys = new Set(
+        (Array.isArray(stored) ? stored : []).map((row) =>
+          keyOf(Number(row.pickSeason), Number(row.round), String(row.originalRosterId)),
+        ),
+      )
+      let written = 0
+      let leftAlone = 0
+      for (const row of batch) {
+        if (storedKeys.has(keyOf(row.pick.season, row.pick.round, row.pick.original_roster_id))) {
+          written += row.inputCount
+        } else {
+          leftAlone += row.inputCount
+        }
       }
+      return { written, skipped: 0, leftAlone }
     } catch {
       // Keep the old partial-success contract: isolate a bad record instead of
       // discarding the whole provider response. Healthy imports take one call;
       // only a failed batch pays the recursive split cost.
       if (batch.length === 1) {
-        return { written: 0, skipped: batch[0].inputCount }
+        return { written: 0, skipped: batch[0].inputCount, leftAlone: 0 }
       }
       const midpoint = Math.ceil(batch.length / 2)
       const left = await writeBatch(batch.slice(0, midpoint))
@@ -282,18 +320,87 @@ export async function persistTradedPicks(
       return {
         written: left.written + right.written,
         skipped: left.skipped + right.skipped,
+        leftAlone: left.leftAlone + right.leftAlone,
       }
     }
   }
 
   const FUTURE_PICK_BATCH_SIZE = 250
   let written = 0
+  let leftAlone = 0
   for (let offset = 0; offset < rows.length; offset += FUTURE_PICK_BATCH_SIZE) {
     const result = await writeBatch(rows.slice(offset, offset + FUTURE_PICK_BATCH_SIZE))
     written += result.written
     skipped += result.skipped
+    leftAlone += result.leftAlone
   }
-  return { written, skipped }
+  return { written, skipped, leftAlone }
+}
+
+/**
+ * Remove stored traded-pick rows for picks the provider now reports as home.
+ *
+ * 🛑 WITHOUT THIS A TRADED-BACK PICK NEVER COMES BACK. `persistTradedPicks` only
+ * ever upserts picks that are currently away from their original team. A pick
+ * traded A -> B and later B -> A drops out of that list, so its row was left
+ * saying B holds it — permanently, with nothing red anywhere.
+ *
+ * ⚠ DELETE, NOT "SET OWNER BACK". For an imported league this table holds a row
+ * only for a pick that has moved; a team's own pick is the absence of a row
+ * (see `futurePickInventory.ts`). Removing the row restores exactly that state.
+ *
+ * ⚠ NARROW ON PURPOSE. A row is removed only when ALL of these hold:
+ *   - the provider named that exact pick (league, season, round, original team)
+ *   - it is marked traded and its holder differs from its original team
+ *   - no AllFantasy trade moved it (`sourceTradeId` is null) — a trade made in
+ *     the app is not the provider's to undo
+ *   - it is still active (not used in a draft, not forfeited)
+ * So an empty or wrong `picks` list can only ever remove nothing.
+ *
+ * Exported for testability; not part of the public import API.
+ */
+export async function clearReturnedTradedPicks(
+  leagueId: string,
+  picks: NormalizedReturnedPick[],
+): Promise<{ cleared: number; skipped: number }> {
+  if (!Array.isArray(picks) || picks.length === 0) return { cleared: 0, skipped: 0 }
+
+  let skipped = 0
+  const unique = new Map<string, NormalizedReturnedPick>()
+  for (const pick of picks) {
+    if (
+      !pick ||
+      typeof pick.season !== 'number' || !Number.isFinite(pick.season) ||
+      typeof pick.round !== 'number' || !Number.isFinite(pick.round) ||
+      typeof pick.original_roster_id !== 'string' || !pick.original_roster_id
+    ) {
+      skipped++
+      continue
+    }
+    unique.set(`${pick.season}\u0000${pick.round}\u0000${pick.original_roster_id}`, pick)
+  }
+
+  const rows = [...unique.values()]
+  const RETURNED_PICK_BATCH_SIZE = 500
+  let cleared = 0
+  for (let offset = 0; offset < rows.length; offset += RETURNED_PICK_BATCH_SIZE) {
+    const values = rows
+      .slice(offset, offset + RETURNED_PICK_BATCH_SIZE)
+      .map((pick) => Prisma.sql`(${pick.season}::int, ${pick.round}::int, ${pick.original_roster_id}::text)`)
+    cleared += await prisma.$executeRaw`
+      DELETE FROM "future_draft_picks" AS f
+      USING (VALUES ${Prisma.join(values)}) AS home("pickSeason", "round", "originalRosterId")
+      WHERE f."leagueId" = ${leagueId}
+        AND f."pickSeason" = home."pickSeason"
+        AND f."round" = home."round"
+        AND f."originalRosterId" = home."originalRosterId"
+        AND f."traded" = TRUE
+        AND f."currentOwnerId" <> f."originalRosterId"
+        AND f."sourceTradeId" IS NULL
+        AND f."status" = 'active'
+    `
+  }
+  return { cleared, skipped }
 }
 
 function resolveImportedLeagueVariant(normalized: NormalizedImportResult): string | null {
@@ -756,6 +863,8 @@ export async function claimExistingLeagueForMember(args: {
       platformLeagueId,
       season: seasonYear,
     },
+    // Oldest first: with several copies already present, always the same one, never an arbitrary pick.
+    orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, sport: true },
   })
   if (!otherLeague) return null
@@ -857,6 +966,57 @@ export async function claimExistingLeagueForMember(args: {
     league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
     historicalBackfill: null,
     existed: false,
+    joinedExisting: true,
+    incompleteSteps: [],
+  }
+}
+
+/**
+ * A provider-proven commissioner who has NO team in a league another account already imported joins
+ * that league as a co-commissioner, instead of creating a second copy of it.
+ *
+ * 🛑 THE GAP THIS CLOSES, MEASURED 2026-11-17: `claimExistingLeagueForMember` can only join someone by
+ * claiming their own team, so a commissioner who runs a league without playing in it fell through
+ * to `league.create` every time. One KBI commissioner had a team in 1 of 29 conference leagues and
+ * so made a second copy of the other 28 — each with its own rosters, draft session and chat, none of
+ * them the copy the managers were actually drafting in.
+ *
+ * Recorded in `League.settings[IMPORT_CO_COMMISSIONERS_KEY]`, which `isTournamentCoCommissioner`
+ * reads as co-commissioner — NOT the tournament key, which the tournament sync rewrites wholesale.
+ */
+export async function joinExistingLeagueAsCoCommissioner(args: {
+  userId: string
+  provider: ImportProvider
+  platformLeagueId: string
+  seasonYear: number
+}): Promise<PersistImportedLeagueResult | null> {
+  const { userId, provider, platformLeagueId, seasonYear } = args
+  const otherLeague = await (prisma as any).league.findFirst({
+    where: { userId: { not: userId }, platform: provider, platformLeagueId, season: seasonYear },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, sport: true },
+  })
+  if (!otherLeague) return null
+
+  const alreadyCo = await prisma.$transaction(async (tx) => {
+    const row = await (tx as any).league.findUnique({ where: { id: otherLeague.id }, select: { settings: true } })
+    const settings =
+      row?.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)
+        ? (row.settings as Record<string, unknown>)
+        : {}
+    const current = importCoCommissionerIds(settings)
+    if (current.includes(userId)) return true
+    await (tx as any).league.update({
+      where: { id: otherLeague.id },
+      data: { settings: { ...settings, [IMPORT_CO_COMMISSIONERS_KEY]: [...current, userId].sort() } },
+    })
+    return false
+  })
+
+  return {
+    league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
+    historicalBackfill: null,
+    existed: alreadyCo,
     joinedExisting: true,
     incompleteSteps: [],
   }
@@ -975,6 +1135,12 @@ export async function persistImportedLeagueFromNormalization(
     }
   }
 
+  // A proven commissioner with no team to claim joins the existing copy rather than making another.
+  if (!existing && options.importerIsProvenCommissioner) {
+    const joinedAsCo = await joinExistingLeagueAsCoCommissioner({ userId, provider, platformLeagueId, seasonYear })
+    if (joinedAsCo) return joinedAsCo
+  }
+
   const resolvedSport = resolveImportedLeagueSport(normalized)
   const resolvedVariant = resolveImportedLeagueVariant(normalized)
   const derivedImport = deriveImportStatsFromNormalized(normalized)
@@ -1018,7 +1184,8 @@ export async function persistImportedLeagueFromNormalization(
     platformLeagueId,
     leagueSize: normalized.league.leagueSize,
     scoring: normalized.league.scoring ?? undefined,
-    isDynasty: normalized.league.isDynasty,
+    // A person's confirmed dynasty type keeps the flag on; see `isDynastyForWrite`.
+    isDynasty: isDynastyForWrite({ providerIsDynasty: normalized.league.isDynasty, existingSettings: existing?.settings }),
     sport: resolvedSport,
     season: seasonYear,
     // Phase OS-C5: previously omitted entirely — `League.status` has no DB default, so every
@@ -1323,6 +1490,24 @@ export async function persistImportedLeagueFromNormalization(
       incompleteSteps,
       async () => {
         await persistTradedPicks(league.id, normalized.traded_picks!)
+      },
+    )
+  }
+
+  /*
+   * And the other half: picks the provider says are back with their original
+   * team. Independent of the block above on purpose — a league whose last traded
+   * pick just came home has an EMPTY traded list, which is exactly when a stale
+   * row most needs clearing.
+   */
+  if (normalized.returned_picks && normalized.returned_picks.length > 0) {
+    await runBootstrapStep(
+      'RETURNED_PICKS_FAILED',
+      'traded-back draft picks could not be cleared',
+      'warn',
+      incompleteSteps,
+      async () => {
+        await clearReturnedTradedPicks(league.id, normalized.returned_picks!)
       },
     )
   }

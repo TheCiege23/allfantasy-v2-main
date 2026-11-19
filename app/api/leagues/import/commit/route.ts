@@ -355,6 +355,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
       /* Validated above against this league's rosters; feeds ONLY the bootstrap's claim on the
          importer's own league row — never the cross-account join. */
       importerSourceTeamId: claimSourceTeamId || null,
+      /* Provider-proven only: a self-attested commissioner never joins another account's league. */
+      importerIsProvenCommissioner: gate.ok && gate.isCommissioner === true && gate.verification === 'api',
     })
 
     // Stamp the attestation on the new league so the gate is auditable.

@@ -40,4 +40,30 @@ describe('the rivalry week card', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/no rivalry history/)
     expect(screen.queryByTestId('rivalry-week-apply')).toBeNull()
   })
+
+  /*
+   * A league that plays on another platform has no schedule here to rewrite: it gets the pairings to
+   * copy, read-only, and only after the schedule read has answered.
+   */
+  it('a league with no schedule of its own gets its rival pairings to copy, and no apply', async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(200, { schedule: null }))
+      .mockResolvedValueOnce(reply(200, { ok: true, platform: 'fantrax', pairs: [{ homeRosterId: '11', awayRosterId: '33', homeName: 'Aces', awayName: 'Cy', rivalry: true, reasons: ['3 meetings'], context: null }] }))
+    render(<RivalryWeekCard leagueId="L1" />)
+    fireEvent.click(await screen.findByTestId('rivalry-week-imported-show'))
+    expect(fetchMock.mock.calls[1]![0]).toBe('/api/leagues/L1/rivalry-week')
+    expect(screen.getByTestId('rivalry-week-pairs').textContent).toContain('Aces vs Cy')
+    expect(screen.getByText('3 meetings')).toBeTruthy()
+    expect(screen.getByTestId('rivalry-week-copy')).toBeTruthy()
+    expect(screen.queryByTestId('rivalry-week-apply')).toBeNull()
+    expect(screen.queryByTestId('rivalry-week-preview')).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows nothing when that league has no pairings to give', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { schedule: null })).mockResolvedValueOnce(reply(409, { error: 'none', code: 'NO_RIVALRIES' }))
+    const { container } = render(<RivalryWeekCard leagueId="L1" />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(container.textContent).toBe('')
+  })
 })

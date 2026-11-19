@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   if (IDP_AI_OFFLINE && action !== 'ai_prefs') {
     return NextResponse.json(
       {
-        error: 'IDP AI is temporarily offline while we connect it to live defensive stats.',
+        error: 'IDP Chimmy is temporarily offline while we connect it to live defensive stats.',
         code: 'IDP_AI_OFFLINE',
       },
       { status: 503 },
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'This IDP AI action is offline: its data source is not ingested yet, and serving an invented answer would be worse than none.',
+          'This IDP Chimmy action is offline: its data source is not ingested yet, and serving an invented answer would be worse than none.',
         code: 'IDP_AI_ACTION_OFFLINE',
       },
       { status: 503 },

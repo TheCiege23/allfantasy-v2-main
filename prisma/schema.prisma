@@ -2035,6 +2035,9 @@ model LeagueTrade {
   partnerName       String?
   valueGiven        Float?
   valueReceived     Float?
+  /// Waiver budget (FAAB) this side gave / received in the trade. NULL = not read (older rows), not zero.
+  budgetGiven       Float?
+  budgetReceived    Float?
   tradeDate         DateTime?
   createdAt         DateTime           @default(now())
   analysisResult    Json?
@@ -2522,6 +2525,21 @@ model TradeBlockEntry {
   @@index([sleeperLeagueId, isActive, updatedAt(sort: Desc)], map: "idx_trade_block_league_active")
   @@index([sleeperLeagueId, rosterId], map: "idx_trade_block_roster")
   @@map("trade_block_entries")
+}
+
+/// A manager's "I want this player" mark: the AF crest on the league page's Propose grid and trade
+/// block cards. Shown to other managers only as an anonymous COUNT per player, never as who marked it.
+/// Keyed by the AllFantasy league and user and the player id the league's rosters use.
+model LeagueTradeInterest {
+  id        String   @id @default(cuid())
+  leagueId  String   @db.VarChar(64)
+  userId    String   @db.VarChar(64)
+  playerId  String   @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  @@unique([leagueId, userId, playerId], map: "uq_league_trade_interest")
+  @@index([leagueId, playerId], map: "idx_league_trade_interest_player")
+  @@map("league_trade_interests")
 }
 
 model TradeAnalysisSnapshot {
@@ -3356,13 +3374,18 @@ model WeeklyMatchup {
   /// this migration and lib/fantasy-os/sync/collector/index.ts for the full history.
   rosterId      String
   matchupId     Int?
+  /// Which of the roster's games in this week the row is: 1 for the only game in a league that plays
+  /// one a week (every row written before this column existed), 1..N in a league whose teams play
+  /// several games a week (Fantrax leagues with 3 or 5). The roster-week key alone kept one game
+  /// and dropped the rest.
+  game          Int      @default(1)
   pointsFor     Float
   pointsAgainst Float
   win           Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@unique([leagueId, seasonYear, week, rosterId])
+  @@unique([leagueId, seasonYear, week, rosterId, game])
   @@index([leagueId, seasonYear, week])
   @@index([leagueId, seasonYear, rosterId])
 }
@@ -8447,6 +8470,15 @@ model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
   platformUserId       String
+  /// The AllFantasy user who runs this team, when that is not what `platformUserId` says.
+  ///
+  /// `platformUserId` is the roster's unique key within its league (`@@unique([leagueId, platformUserId])`),
+  /// which the provider sync relies on to keep one row per team. So when a league lets one manager run
+  /// several teams (lib/league/multiTeamManagers.ts), the manager's first team keeps their user id there and
+  /// every further team keeps a key of its own and names the manager here. Null on every row written
+  /// before 2026-11-18 and on imported teams: read it together with `platformUserId`
+  /// (lib/league/viewerTeams.ts `listHeldTeams`), never alone.
+  managerUserId        String?
   /// The same team's row in `redraft_rosters`, when one is known.
   ///
   /// Exists because the guillotine engines disagree about what a team IS: the automation engine
@@ -8495,6 +8527,7 @@ model Roster {
   @@index([leagueId])
   @@index([leagueId, updatedAt])
   @@index([platformUserId])
+  @@index([leagueId, managerUserId], map: "idx_rosters_league_manager")
   @@map("rosters")
 }
 
@@ -14975,6 +15008,9 @@ model RedraftRoster {
   seasonId                 String
   leagueId                 String
   ownerId                  String
+  /// The AllFantasy user who runs this team when `ownerId` is a key of its own: a manager's second and
+  /// later teams in a league (see `Roster.managerUserId`). `ownerId` stays unique per season. Null otherwise.
+  managerUserId            String?
   ownerName                String
   teamName                 String?
   avatarUrl                String?
@@ -15026,6 +15062,7 @@ model RedraftRoster {
 
   @@unique([seasonId, ownerId])
   @@index([seasonId])
+  @@index([seasonId, managerUserId], map: "idx_redraft_rosters_season_manager")
   @@map("redraft_rosters")
 }
 

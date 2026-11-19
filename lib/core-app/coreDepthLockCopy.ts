@@ -12,8 +12,7 @@ import { coreLang } from './messages/coreLocale'
  * pricing page prints them in Spanish too ("AF Pro", "AF Commissioner"), and so does the product name
  * "Competitive Edge" (launchCopy.ts PRO_DEPTH_ES, the help topics).
  *
- * The English is the component's English BYTE FOR BYTE — including the "is"/"are" guess on the
- * subject's last letter — so English mode is unchanged (__tests__/core-depth-lock-spanish.test.tsx).
+ * English uses the subject's last letter to choose "is" or "are".
  *
  * Spanish avoids agreeing with the subject: a subject arrives already in Spanish from its caller, and
  * its gender and number are not known here, so the head is "{subject}: parte de AF Pro" rather than a
@@ -39,6 +38,10 @@ export type CoreDepthLockCopy = {
   body: string
   bodyAlt: string
   cta: (planName: string) => string
+  tradeBreakdownBenefit: string
+  tradeReviewWithTokens: string
+  fullTradeReview: string
+  tradeDraftStorageError: string
   /** "Free until Oct 15 — then AF Pro". */
   freeUntil: (startsAtIso: string, planName: string) => string
 }

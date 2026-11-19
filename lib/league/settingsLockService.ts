@@ -140,7 +140,7 @@ export async function readLockView(leagueId: string, now = new Date()): Promise<
   }
 }
 
-export type SetGroupsError = 'vote_required' | 'not_found'
+type SetGroupsError = 'vote_required' | 'not_found'
 
 /**
  * Set which groups are locked. Adding is always allowed. Removing one once the season is under way is
@@ -175,7 +175,7 @@ export async function setLockedGroups(
   return { ok: true, groups: result.after }
 }
 
-export type StartVoteError = 'not_locked' | 'already_voting' | 'bad_days' | 'poll_failed' | 'not_found'
+type StartVoteError = 'not_locked' | 'already_voting' | 'bad_days' | 'poll_failed' | 'not_found'
 
 /** Post a yes/no league-chat poll to unlock one group. */
 export async function startUnlockVote(

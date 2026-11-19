@@ -137,8 +137,15 @@ export async function loadIdpKickerValueSlice(args: IdpKickerSliceArgs): Promise
    * ROSTER SLOTS rather than scoring keys — see the header on why the scoring-block grep is wrong.
    */
   if (!hasIdp && !hasKicker) {
+    /*
+     * `not_requested`, NOT `no_producer` (re-score 2026-11-17). The chat route asks for this slice on every turn,
+     * and a `no_producer` gap is listed as missing data the prompt tells Chimmy to deduct confidence for — so
+     * four leagues in five hedged every answer over values their league does not even roster. A league with
+     * neither position could never have wanted them; that is the shape `not_requested` exists for, and it never
+     * renders.
+     */
     return absent({
-      reason: 'no_producer',
+      reason: 'not_requested',
       detail: 'This league rosters neither IDP positions nor a kicker, so neither is priced.',
       remedy: 'Nothing to fix — these values only exist for leagues that start those positions.',
     })

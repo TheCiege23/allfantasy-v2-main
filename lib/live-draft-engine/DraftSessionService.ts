@@ -2,6 +2,7 @@ import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
+import { isPlaceholderSeatName, OPEN_SEAT_LABEL } from '@/lib/draft-room/seatLabel'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
@@ -49,7 +50,13 @@ import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-c
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
-import { buildSleeperUserToRosterIdMap, remapSleeperMirrorPickRosterIds } from '@/lib/draft/sleeperMirrorRosterIds'
+import {
+  buildSleeperUserToRosterIdMap,
+  remapSleeperMirrorPickRosterIds,
+  rosterImportedName,
+  slotOrderFromMirroredPicks,
+  slotOrderHasMissingRosters,
+} from '@/lib/draft/sleeperMirrorRosterIds'
 
 /** `pickMetadata.adpAtPick` when it is a positive number (recorded at pick time since #2475). */
 function adpAtPickFromMetadata(meta: unknown): number | null {
@@ -274,12 +281,72 @@ export async function buildSlotOrderForLeague(leagueId: string): Promise<SlotOrd
   return slotOrder
 }
 
+/**
+ * 🛑 A COMPLETE ORDER CAN STILL BE A DEAD ONE. `isCompleteSlotOrder` checks shape only — N slots,
+ * N non-empty ids — so an order whose rosters were all deleted by a re-import passes it and is
+ * never repaired. Measured 2026-11-17: every mirrored KBI draft had 16 of 16 seat ids pointing at
+ * rosters that no longer exist, every header read "Unknown", and nothing on the board matched
+ * the viewer's team.
+ *
+ * Repaired from data already in Postgres, never a provider call (this runs on the snapshot path):
+ *   - a Sleeper-mirrored draft is re-seated from its own picks (`slotOrderFromMirroredPicks`), which
+ *     only answers when every slot resolves to a distinct live roster;
+ *   - a native draft is rebuilt by `buildSlotOrderForLeague`, and only before any pick is made,
+ *     because picks already on the board were attributed against the old seats.
+ * Anything it cannot resolve completely is left exactly as it was.
+ */
+async function repairSlotOrderSeatingDeletedRosters(
+  leagueId: string,
+  session: { id: string; slotOrder: unknown; teamCount: number; status: string; version: number; sleeperDraftId?: string | null },
+): Promise<void> {
+  // Cheap check first: this runs on every snapshot, and playerData is only needed when something is wrong.
+  const liveIds = await prisma.roster.findMany({ where: { leagueId }, select: { id: true } })
+  const rosterIdSet = new Set(liveIds.map((r) => r.id))
+  if (!slotOrderHasMissingRosters(session.slotOrder, rosterIdSet)) return
+
+  let next: SlotOrderEntry[] | null = null
+  if (session.sleeperDraftId) {
+    const [rosters, picks] = await Promise.all([
+      prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
+      prisma.draftPick.findMany({
+        where: { sessionId: session.id },
+        select: { slot: true, rosterId: true, source: true, displayName: true },
+      }),
+    ])
+    const nameById = new Map(rosters.map((r) => [r.id, rosterImportedName(r)]))
+    next = slotOrderFromMirroredPicks({
+      teamCount: session.teamCount,
+      picks,
+      sleeperUserToRosterId: buildSleeperUserToRosterIdMap(rosters),
+      nameForRoster: (id) => nameById.get(id) ?? null,
+    })
+  } else if (session.status === 'pre_draft') {
+    const rebuilt = await buildSlotOrderForLeague(leagueId)
+    next = isCompleteSlotOrder(rebuilt, session.teamCount) ? rebuilt : null
+  }
+  if (!next || slotOrderHasMissingRosters(next, rosterIdSet)) return
+
+  // Version-guarded: a concurrent writer (lottery, commissioner, the mirror) wins, and this simply no-ops.
+  await prisma.draftSession.updateMany({
+    where: { id: session.id, version: session.version },
+    data: { slotOrder: next as unknown as Prisma.InputJsonValue, version: { increment: 1 } },
+  })
+}
+
 async function repairDraftSessionSlotOrderIfNeeded(leagueId: string): Promise<void> {
   if (await isSeasonTournamentDraft(leagueId)) return
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return
   const teamCount = session.teamCount
-  if (isCompleteSlotOrder(session.slotOrder, teamCount)) return
+  if (isCompleteSlotOrder(session.slotOrder, teamCount)) {
+    // Never a reason for a snapshot to fail: on any error the room renders the order it has.
+    try {
+      await repairSlotOrderSeatingDeletedRosters(leagueId, session)
+    } catch (err) {
+      console.warn('[draft] slot order repair skipped', err instanceof Error ? err.message : String(err))
+    }
+    return
+  }
 
   // Weighted lottery (dynasty rookie): apply stored lottery order first — do not replace with roster-based order.
   const lotteryOrder = await resolveWeightedLotterySlotOrderForLeague(leagueId).catch(() => null)
@@ -409,8 +476,14 @@ export async function buildSessionSnapshot(
 
   // Survivor tribe badges ride on the slot entries so every room surface (strip, board, big
   // screen) can show a seat's tribe without a second fetch. Never a reason for a snapshot to fail.
-  const slotOrder = await attachSurvivorTribeBadges(leagueId, (session.slotOrder as unknown as SlotOrderEntry[]) ?? []).catch(
+  const slotOrderWithBadges = await attachSurvivorTribeBadges(leagueId, (session.slotOrder as unknown as SlotOrderEntry[]) ?? []).catch(
     () => (session.slotOrder as unknown as SlotOrderEntry[]) ?? [],
+  )
+  // An empty imported seat carries the import's "Unknown" (or no name at all). Every room surface reads
+  // these names - strip, top bar, chat, roster tab - so name the seat once, here. Display only: the
+  // stored order is untouched.
+  const slotOrder = slotOrderWithBadges.map((entry) =>
+    isPlaceholderSeatName(entry.displayName) ? { ...entry, displayName: OPEN_SEAT_LABEL } : entry,
   )
   const teamCount = session.teamCount
   const totalPicks = session.rounds * teamCount

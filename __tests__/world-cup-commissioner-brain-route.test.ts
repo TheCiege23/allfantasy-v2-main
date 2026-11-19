@@ -181,7 +181,7 @@ describe("World Cup commissioner AI recap route", () => {
     expect(json.posted).toBe(true)
     expect(emitEventMock).toHaveBeenCalledWith(expect.objectContaining({
       challengeId: "c1",
-      eventTitle: "AI pool recap",
+      eventTitle: "Chimmy pool recap",
       eventBody: lines.join("\n"),
       isAiGenerated: true,
       metadata: expect.objectContaining({

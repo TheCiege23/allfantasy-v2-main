@@ -51,7 +51,8 @@ const MATCH_RULES: LeaguePositionRules = {
   },
 }
 
-function groups(position: string | null | undefined): Set<string> {
+/** A compatible-position group set for an NFL position label; empty when nothing in it is a known position. */
+export function nflPositionGroups(position: string | null | undefined): Set<string> {
   const out = new Set<string>()
   for (const token of String(position ?? '').toUpperCase().split(/[,/\s]+/)) {
     if (!token) continue
@@ -65,7 +66,7 @@ function groups(position: string | null | undefined): Set<string> {
 }
 
 /** A canonical NFL team code, or null when the label is not a team we recognise. */
-function teamCode(label: string | null | undefined): string | null {
+export function nflTeamCode(label: string | null | undefined): string | null {
   return getTeamInfo(String(label ?? '').trim())?.canonical ?? null
 }
 
@@ -94,11 +95,11 @@ export function planNflFantraxIdentityLinks(refs: FantraxPlayerRef[], identities
     if (!fantraxId) { unmatched++; continue }
     if (linkedIds.has(fantraxId)) { resolvedById++; continue }
     if (isTeamUnit(ref)) { teamEntries++; continue }
-    const team = teamCode(ref.team)
-    const roles = groups(ref.position)
+    const team = nflTeamCode(ref.team)
+    const roles = nflPositionGroups(ref.position)
     if (!team || roles.size === 0) { unmatched++; continue }
     const candidates = (byName.get(fantraxNflNameKey(ref.name)) ?? []).filter(
-      (row) => teamCode(row.currentTeam) === team && [...groups(row.position)].some((g) => roles.has(g)),
+      (row) => nflTeamCode(row.currentTeam) === team && [...nflPositionGroups(row.position)].some((g) => roles.has(g)),
     )
     if (candidates.length === 0) { unmatched++; continue }
     if (candidates.length > 1) { ambiguous++; continue }

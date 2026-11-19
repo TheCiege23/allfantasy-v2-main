@@ -106,7 +106,7 @@ export function generateCommissionerAlerts(
       severity: 'low',
       headline: 'Commissioner vote guidance available',
       summary:
-        'AI Commissioner can draft league vote framing for disputes, trade review votes, and governance announcements.',
+        'Chimmy Commissioner can draft league vote framing for disputes, trade review votes, and governance announcements.',
     })
   }
 

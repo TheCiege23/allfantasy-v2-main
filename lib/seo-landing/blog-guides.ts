@@ -77,6 +77,30 @@ const SURVIVOR: BlogGuideLink = {
   slug: 'survivor-fantasy-league',
   title: 'How Survivor Fantasy Leagues Work: Tribes, Idols and Tribal Council',
 }
+const ZOMBIE: BlogGuideLink = {
+  slug: 'zombie-fantasy-league',
+  title: 'How Zombie Fantasy Leagues Work: Survivors, Zombies and the Whisperer',
+}
+const BIG_BROTHER: BlogGuideLink = {
+  slug: 'big-brother-fantasy-league',
+  title: 'How Big Brother Fantasy Leagues Work: HOH, Veto and Evictions',
+}
+const FAAB: BlogGuideLink = {
+  slug: 'faab-fantasy-football',
+  title: 'How FAAB Works: Fantasy Football Waiver Bidding Explained',
+}
+const START_A_LEAGUE: BlogGuideLink = {
+  slug: 'how-to-start-a-fantasy-football-league',
+  title: "How to Start a Fantasy Football League: A Commissioner's Checklist",
+}
+const NBA_STREAMING: BlogGuideLink = {
+  slug: 'fantasy-basketball-streaming',
+  title: 'Fantasy Basketball Streaming: How to Win the Waiver Wire',
+}
+const IMPORT_A_LEAGUE: BlogGuideLink = {
+  slug: 'import-fantasy-league',
+  title: 'How to Import Your Fantasy League: Sleeper, ESPN, Fantrax and More',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
@@ -91,12 +115,16 @@ export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGui
   'salary-cap': [SALARY_CAP, DYNASTY],
   idp: [IDP, DYNASTY],
   c2c: [C2C, DEVY],
+  zombie: [ZOMBIE, SURVIVOR, GUILLOTINE],
+  'big-brother': [BIG_BROTHER, SURVIVOR, ZOMBIE],
 }
 
 /** Guides for /sports/<slug>. */
 export const SPORT_GUIDES: Partial<Record<SportSlug, readonly BlogGuideLink[]>> = {
-  'fantasy-football': [DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, IDP, TRADE_DEADLINE, GUILLOTINE],
-  'fantasy-basketball': [POINTS_VS_CATEGORIES, NBA_CUP_POOL],
+  // The checklist leads: this page is where someone deciding to start a league lands. The import
+  // guide follows it for the reader who already plays somewhere else.
+  'fantasy-football': [START_A_LEAGUE, IMPORT_A_LEAGUE, DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, IDP, FAAB, TRADE_DEADLINE, GUILLOTINE],
+  'fantasy-basketball': [POINTS_VS_CATEGORIES, NBA_STREAMING, NBA_CUP_POOL],
   'fantasy-hockey': [HOCKEY],
   'fantasy-soccer': [SOCCER],
   'ncaa-football-fantasy': [DEVY, C2C, CFP_POOL],

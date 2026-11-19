@@ -57,7 +57,7 @@ type YahooApiFetchContext = {
   refreshToken: string | null
 }
 
-export type YahooLeagueLookup = {
+type YahooLeagueLookup = {
   leagueKey: string
   season: number | null
   sport: string | null
@@ -289,11 +289,11 @@ export function resolveYahooLeagueSport(args: {
 export class YahooImportUnknownSportError extends Error {}
 
 /** Yahoo's `count` per transactions page. */
-export const YAHOO_TRANSACTIONS_PAGE_SIZE = 100
+const YAHOO_TRANSACTIONS_PAGE_SIZE = 100
 /** Hard stop: 20 pages × 100 = 2,000 transactions, far beyond a normal season's log. */
 export const YAHOO_TRANSACTIONS_MAX_PAGES = 20
 
-export type YahooTransactionPagesResult = {
+type YahooTransactionPagesResult = {
   transactions: YahooImportTransaction[]
   pagesFetched: number
   /** True when the page bound was reached on a full page, so more may exist. */

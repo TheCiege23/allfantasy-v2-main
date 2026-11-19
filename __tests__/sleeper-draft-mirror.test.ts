@@ -37,6 +37,8 @@ vi.mock('@/lib/prisma', () => ({
           findUnique: (...a: unknown[]) => sessionFindUnique(...a),
         },
         draftPick: {
+          // The board before the rewrite, read to announce new picks in draft chat.
+          findMany: async () => [],
           deleteMany: (...a: unknown[]) => deleteMany(...a),
           createMany: (...a: unknown[]) => createMany(...a),
         },

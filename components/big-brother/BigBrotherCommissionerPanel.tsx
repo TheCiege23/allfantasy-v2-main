@@ -1,10 +1,11 @@
 'use client'
 
 /**
- * [NEW] Commissioner panel: week progression, automation run, audit log, overrides. PROMPT 4.
+ * Commissioner panel: week progression, automation run, audit log, overrides, and the league rules editor.
  */
 
 import { useState } from 'react'
+import { BigBrotherRulesEditor } from './BigBrotherRulesEditor'
 
 interface BigBrotherCommissionerPanelProps {
   leagueId: string
@@ -207,10 +208,8 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
         )}
       </div>
 
-      {/* This pointed to "Settings → Big Brother Settings", a tab that does not exist. */}
-      <p className="text-xs text-white/40">
-        Your league&apos;s rules (eviction tie-break, HOH challenge, finale and jury start) are the ones chosen when the league was created. Pause and resume above to hold the week.
-      </p>
+      {/* Rules used to be fixed at creation: this note sent commissioners to a tab that did not exist, then said so. */}
+      <BigBrotherRulesEditor leagueId={leagueId} />
     </div>
   )
 }

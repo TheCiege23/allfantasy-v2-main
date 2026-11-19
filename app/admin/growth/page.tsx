@@ -110,8 +110,17 @@ export default async function GrowthRevenuePage(props: { searchParams?: Promise<
             {data.growth ? (
               <Section title="What sells the plan" hint="Which surface sent people to checkout, and how many of them paid, this window. 'Not tagged yet' is a checkout from a surface that does not say where it came from.">
                 <Table
-                  head={["Where they came from", "Started checkout", "Started a trial", "Paid", "Checkout → paid"]}
-                  rows={data.growth.whatSells.map((r) => [entrySourceLabel(r.entrySource), fmt(r.checkouts), fmt(r.trials), fmt(r.paid), formatRate(rateOf(r.paid, r.checkouts))])}
+                  head={["Where they came from", "Saw offer", "Clicked", "Started checkout", "Started a trial", "Paid", "Checkout → paid"]}
+                  rows={data.growth.whatSells.map((r) => [entrySourceLabel(r.entrySource), fmt(r.viewed), fmt(r.clicked), fmt(r.checkouts), fmt(r.trials), fmt(r.paid), formatRate(rateOf(r.paid, r.checkouts))])}
+                />
+              </Section>
+            ) : null}
+
+            {data.growth ? (
+              <Section title="Token pack sales" hint="Stripe checkout sessions and confirmed payments in this window. Repeat webhook deliveries count once.">
+                <Table
+                  head={["Where they came from", "Started checkout", "Paid"]}
+                  rows={data.growth.tokenSales.map((r) => [entrySourceLabel(r.entrySource), fmt(r.checkouts), fmt(r.paid)])}
                 />
               </Section>
             ) : null}

@@ -367,9 +367,9 @@ const ENTRIES: Entry[] = [
   },
   {
     id: 'zombie', wizardType: 'zombie', title: 'Zombie', subtitle: 'Infection-style survival', poster: '/league-type-zombie.png',
-    pitch: 'One Whisperer, everyone else a Survivor. Lose to the Whisperer or a Zombie and you turn. Last Survivors standing win.',
+    pitch: 'One Whisperer, everyone else a Survivor. Lose to the Whisperer or a Zombie and you turn, and serums can bring you back.',
     rules: [
-      'One manager is secretly the Whisperer; everyone else starts as a Survivor.',
+      'One manager is the Whisperer; everyone else starts as a Survivor.',
       'A Survivor who loses to the Whisperer or a Zombie becomes a Zombie.',
       'Big wins earn serums and weapons; two serums bring a Zombie back to life.',
       'Free agency is first come, first served — no waivers.',
@@ -452,8 +452,8 @@ const ENTRIES: Entry[] = [
     rules: [
       'Each week a Head of Household (HOH) is crowned and nominates two managers.',
       'Six managers play for the Power of Veto, which can pull a nominee off the block.',
-      'The house votes to evict; the HOH only votes to break a tie.',
-      'Evicted teams stop scoring; a jury of evictees picks the winner at the finale.',
+      'The house votes to evict; a tie sends home the nominee with fewer season points.',
+      'Evicted teams stop scoring; from the 7th eviction on, evictees join the jury that picks the winner.',
     ],
     build: () => {
       // No weekly scoreboard: evicted teams stop scoring, so a full slate of week-10 matchups

@@ -198,8 +198,8 @@ export function buildAiStoryAndRankingPlaceholders(sportFilter: string | null): 
     {
       id: "ai_story_1",
       type: "ai_story_card" as const,
-      title: "AI matchup insight",
-      body: "Get AI-powered matchup analysis and start/sit advice for your league.",
+      title: "Chimmy matchup insight",
+      body: "Get Chimmy-powered matchup analysis and start/sit advice for your league.",
       href: "/chimmy",
       sport,
       leagueId: null,

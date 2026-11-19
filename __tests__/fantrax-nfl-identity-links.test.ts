@@ -30,6 +30,8 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (original) => ({
   getFantraxLeagueInfo: h.info, getFantraxTeamRosters: h.rosters,
   getFantraxStandings: h.standings, getFantraxPlayerIds: h.players,
   fetchFantraxScheduleWithScores: h.schedule, getFantraxDraftResults: h.draft,
+  // Not under test here; without this the real client would call Fantrax.
+  getFantraxDraftPicks: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'not read in this test' } })),
 }))
 import { importFantraxLeague } from '@/lib/league-import/fantrax/importFantraxLeague'
 import { planNflFantraxIdentityLinks } from '@/lib/player-identity/nflFantraxIdentityPlan'

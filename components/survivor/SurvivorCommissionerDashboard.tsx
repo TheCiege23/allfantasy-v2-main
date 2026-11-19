@@ -88,7 +88,7 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
   { id: 'settings', label: 'Settings', icon: <Settings2 className="h-4 w-4" /> },
   { id: 'chat', label: 'Communications', icon: <MessageSquare className="h-4 w-4" /> },
-  { id: 'ai', label: 'AI & Automation', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'ai', label: 'Chimmy & Automation', icon: <Sparkles className="h-4 w-4" /> },
   { id: 'premium', label: 'Premium intel', icon: <ScanEye className="h-4 w-4" /> },
   { id: 'subscription', label: 'Access · Tokens', icon: <CreditCard className="h-4 w-4" /> },
   { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
@@ -703,7 +703,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'ai' && (
-            <WarRoomPanel title="AI & automation" subtitle="@Chimmy ingests votes, timestamps picks, and posts official results.">
+            <WarRoomPanel title="Chimmy & automation" subtitle="@Chimmy ingests votes, timestamps picks, and posts official results.">
               <Link href={`${base}/chimmy`} className="text-emerald-300 hover:text-emerald-200">
                 @Chimmy command center →
               </Link>

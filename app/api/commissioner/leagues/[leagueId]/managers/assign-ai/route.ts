@@ -59,7 +59,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     },
     data: {
       externalId: roster.id,
-      ownerName: 'AI Manager',
+      ownerName: 'Chimmy Manager',
     },
   })
 

@@ -104,12 +104,85 @@ function buildSnapshotPlayers(
   })
 }
 
-function inferChampionFromFantraxStandings(
-  payload: FantraxImportPayload,
-  team: FantraxImportTeam
-): boolean {
-  if (!payload.league.isFinished) return false
-  return team.rank === 1
+/**
+ * The team that won the league, or null when it cannot be said.
+ *
+ * 🛑 RANK 1 IS THE TOP OF THE STANDINGS TABLE, NOT THE CHAMPION. This used to
+ * crown whoever held rank 1, so a top seed that lost in the semi-final was
+ * recorded as that season's winner. When the league ran playoffs and their
+ * results are on file, the champion is read from those results instead.
+ *
+ * The rule: the champion WON a matchup in the last scored playoff week and LOST
+ * none in any playoff week. A third-place game is won by a team that already lost
+ * its semi-final, so it drops out.
+ *
+ * ⚠ A CONSOLATION BRACKET CAN PRODUCE A SECOND UNBEATEN TEAM. `isPlayoff` is set
+ * per WEEK, so games between teams that missed the playoffs carry it too, and the
+ * winner of that bracket never lost a "playoff" game either. Those teams sit
+ * below every playoff qualifier in the standings, so the best-ranked candidate is
+ * the title-bracket one. If the candidates cannot be separated by rank, nobody is
+ * crowned.
+ *
+ * ⚠ RANK 1 IS STILL THE ANSWER WHEN THERE WERE NO PLAYOFFS (rotisserie, season-
+ * long points, or playoffs switched off), and the fallback when no playoff week
+ * has a score on file.
+ */
+export function resolveFantraxChampionTeamId(payload: FantraxImportPayload): string | null {
+  if (!payload.league.isFinished) return null
+
+  const lost = new Set<string>()
+  let lastScoredPlayoffWeek: number | null = null
+  let lastWeekWinners: string[] = []
+
+  for (const week of [...payload.schedule].sort((a, b) => a.week - b.week)) {
+    const winners: string[] = []
+    for (const matchup of week.matchups) {
+      if (!matchup.isPlayoff) continue
+      if (matchup.points1 == null || matchup.points2 == null) continue
+      if (matchup.points1 === matchup.points2) continue
+      const firstWon = matchup.points1 > matchup.points2
+      winners.push(firstWon ? matchup.teamId1 : matchup.teamId2)
+      lost.add(firstWon ? matchup.teamId2 : matchup.teamId1)
+    }
+    if (winners.length > 0) {
+      lastScoredPlayoffWeek = week.week
+      lastWeekWinners = winners
+    }
+  }
+
+  if (lastScoredPlayoffWeek == null) {
+    return payload.teams.find((team) => team.rank === 1)?.teamId ?? null
+  }
+
+  const candidates = lastWeekWinners.filter((teamId) => !lost.has(teamId))
+  if (candidates.length === 0) return null
+  if (candidates.length === 1) return candidates[0]!
+
+  const rankOf = (teamId: string) =>
+    payload.teams.find((team) => team.teamId === teamId)?.rank ?? null
+  const ranked = candidates
+    .map((teamId) => ({ teamId, rank: rankOf(teamId) }))
+    .filter((entry): entry is { teamId: string; rank: number } => entry.rank != null)
+    .sort((a, b) => a.rank - b.rank)
+  if (ranked.length !== candidates.length) return null
+  if (ranked[0]!.rank === ranked[1]!.rank) return null
+  return ranked[0]!.teamId
+}
+
+type FantraxScheduleMatchup = FantraxImportPayload['schedule'][number]['matchups'][number]
+
+/** The matchups that have a result on file — both scores present. */
+export function scoredFantraxMatchups(payload: FantraxImportPayload): Array<{
+  week: number
+  matchup: FantraxScheduleMatchup & { points1: number; points2: number }
+}> {
+  return payload.schedule.flatMap((week) =>
+    week.matchups.flatMap((matchup) =>
+      matchup.points1 != null && matchup.points2 != null
+        ? [{ week: week.week, matchup: { ...matchup, points1: matchup.points1, points2: matchup.points2 } }]
+        : [],
+    ),
+  )
 }
 
 function parseTransactionCreatedAt(
@@ -224,27 +297,32 @@ async function persistFantraxSeasonWarehouseFacts(args: {
     })
   })
 
-  const matchupCreates = args.payload.schedule.flatMap((week) =>
-    week.matchups.map((matchup) =>
-      prisma.matchupFact.create({
-        data: {
-          leagueId: args.leagueId,
-          sport,
-          weekOrPeriod: week.week,
-          teamA: matchup.teamId1,
-          teamB: matchup.teamId2,
-          scoreA: matchup.points1 ?? 0,
-          scoreB: matchup.points2 ?? 0,
-          winnerTeamId:
-            matchup.points1 != null && matchup.points2 != null && matchup.points1 !== matchup.points2
-              ? matchup.points1 > matchup.points2
-                ? matchup.teamId1
-                : matchup.teamId2
-              : null,
-          season,
-        },
-      })
-    )
+  /*
+   * 🛑 AN UNPLAYED MATCHUP IS NOT WRITTEN AT ALL. `scoreA`/`scoreB` are
+   * non-nullable, and this defaulted a missing score to 0 — so every week Fantrax
+   * had not scored yet landed in the warehouse as a 0-0 tie, indistinguishable
+   * from a real one. The import keeps those scores null on purpose; a fact row is
+   * a result, and a fixture with no result is not one.
+   */
+  const matchupCreates = scoredFantraxMatchups(args.payload).map(({ week, matchup }) =>
+    prisma.matchupFact.create({
+      data: {
+        leagueId: args.leagueId,
+        sport,
+        weekOrPeriod: week,
+        teamA: matchup.teamId1,
+        teamB: matchup.teamId2,
+        scoreA: matchup.points1,
+        scoreB: matchup.points2,
+        winnerTeamId:
+          matchup.points1 !== matchup.points2
+            ? matchup.points1 > matchup.points2
+              ? matchup.teamId1
+              : matchup.teamId2
+            : null,
+        season,
+      },
+    })
   )
 
   const transactionRows = args.payload.transactions.flatMap((transaction) =>
@@ -401,6 +479,7 @@ export async function syncFantraxHistoricalBackfillAfterImport(args: {
         buildFantraxSeasonMetadata(payload)
       )
 
+      const championTeamId = resolveFantraxChampionTeamId(payload)
       const finishedSeasonRows = payload.league.isFinished
         ? payload.teams.map((team) => ({
             rosterId: team.managerId || team.teamId,
@@ -408,7 +487,7 @@ export async function syncFantraxHistoricalBackfillAfterImport(args: {
             losses: team.losses,
             pointsFor: team.pointsFor,
             pointsAgainst: team.pointsAgainst ?? 0,
-            champion: inferChampionFromFantraxStandings(payload, team),
+            champion: championTeamId != null && team.teamId === championTeamId,
           }))
         : []
 

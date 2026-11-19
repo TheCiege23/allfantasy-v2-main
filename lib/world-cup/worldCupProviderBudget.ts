@@ -24,7 +24,7 @@ const ENDPOINT_COOLDOWN_MS: Record<WorldCupProviderBudgetEndpoint, number> = {
   "world_cup:gifs": 60 * 1000,
 }
 
-export class WorldCupProviderBudgetError extends Error {
+class WorldCupProviderBudgetError extends Error {
   constructor(
     public readonly provider: string,
     public readonly endpoint: WorldCupProviderBudgetEndpoint,
@@ -91,7 +91,7 @@ export async function assertWorldCupProviderCallAllowed(
   }
 }
 
-export async function recordWorldCupProviderCall(input: {
+async function recordWorldCupProviderCall(input: {
   provider: BudgetProviderName
   endpoint: WorldCupProviderBudgetEndpoint
   status: number

@@ -213,7 +213,7 @@ test.describe("@find-league click audit", () => {
     await page.getByLabel("Sort").selectOption("ranking_match")
     await page.getByPlaceholder("Min").fill("10")
     await page.getByPlaceholder("Max").fill("14")
-    await page.getByRole("checkbox", { name: /ai enabled/i }).check()
+    await page.getByRole("checkbox", { name: /chimmy enabled/i }).check()
 
     await page.getByTestId("find-league-search-input").fill("alpha")
     await page.getByTestId("find-league-search-submit").click()
@@ -261,15 +261,15 @@ test.describe("@find-league click audit", () => {
     await expect(recommendationSection).toContainText("Favorite sports: NFL, NBA")
     await expect(recommendationSection).toContainText("Past leagues: 9")
     await expect(recommendationSection).toContainText("Draft participant")
-    await expect(recommendationSection).toContainText("AI usage: high")
+    await expect(recommendationSection).toContainText("Chimmy usage: high")
     await expect(recommendationSection).toContainText("Deterministic explanation")
 
     const initialRecommendationParams = mocks.getLatestRecommendationParams()
     expect(initialRecommendationParams.get("aiExplain")).toBeNull()
 
     await page.getByTestId("recommended-leagues-ai-toggle").click()
-    await expect(page.getByTestId("recommended-leagues-ai-toggle")).toContainText("AI explanations on")
-    await expect(recommendationSection).toContainText("AI-enhanced explanation")
+    await expect(page.getByTestId("recommended-leagues-ai-toggle")).toContainText("Chimmy explanations on")
+    await expect(recommendationSection).toContainText("Chimmy-enhanced explanation")
     await expect(recommendationSection).toContainText(
       "AI sees this as your best fit given your NFL dynasty history and active draft habits."
     )

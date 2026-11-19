@@ -8,7 +8,7 @@ export const metadata: Metadata = buildMetadata(
   getSEOPageConfig("bracket-challenge") ?? {
     title: "AllFantasy NCAA Bracket Challenge – Pools, Picks & Standings",
     description:
-      "Play the AllFantasy NCAA Bracket Challenge. Create pools, invite friends, track standings, and use AI to pressure-test your picks.",
+      "Play the AllFantasy NCAA Bracket Challenge. Create pools, invite friends, track standings, and use Chimmy to pressure-test your picks.",
     canonical: `${getPublicSiteOrigin()}/bracket`,
   }
 )

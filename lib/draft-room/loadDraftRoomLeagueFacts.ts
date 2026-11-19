@@ -22,6 +22,9 @@ function positiveInt(value: unknown): number | null {
 }
 
 async function readNote(leagueId: string, concept: LeagueConceptType): Promise<LeagueNote | null> {
+  // The format's own rule, true of every league of the type: nothing to read.
+  if (concept === 'best_ball') return { kind: 'best_ball' }
+  if (concept === 'big_brother') return { kind: 'big_brother' }
   if (concept === 'guillotine' || concept === 'survivor_guillotine') {
     const config = await getGuillotineConfig(leagueId)
     const startWeek = positiveInt(config?.eliminationStartWeek)

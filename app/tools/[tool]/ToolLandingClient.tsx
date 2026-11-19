@@ -82,7 +82,7 @@ export default function ToolLandingClient({ config }: { config: ToolConfig }) {
           <section className="mt-10">
             <h2 className="text-lg font-semibold mb-3">Who it&apos;s for</h2>
             <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Fantasy players in redraft or dynasty leagues who want AI-backed analysis, faster
+              Fantasy players in redraft or dynasty leagues who want Chimmy-backed analysis, faster
               decisions, and league-context aware recommendations. Works across NFL, NBA, MLB, NHL,
               NCAA, and soccer.
             </p>

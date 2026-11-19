@@ -6,7 +6,7 @@ import { evaluateWorldCupNewParticipantJoinGate } from "./worldCupJoinGate"
 
 export type { WorldCupJoinBlockedReason, WorldCupJoinGateSnapshot } from "./worldCupJoinGate"
 
-export type WorldCupDiscoverCard = WorldCupJoinGateSnapshot & {
+type WorldCupDiscoverCard = WorldCupJoinGateSnapshot & {
   id: string
   name: string
   seasonYear: number

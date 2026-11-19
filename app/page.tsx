@@ -104,14 +104,14 @@ export async function generateMetadata(
 const HOME_WEBPAGE_SCHEMA = getWebPageSchema({
   name: 'AllFantasy.ai',
   description:
-    'Create or connect fantasy leagues, manage teams, drafts, trades and waivers, and get AI help with decisions.',
+    'Create or connect fantasy leagues, manage teams, drafts, trades and waivers, and get Chimmy help with decisions.',
   url: '/',
 })
 
 const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
   name: 'AllFantasy.ai',
   description:
-    'Fantasy sports app for creating or connecting leagues, managing teams, and getting AI help with lineup, waiver and trade decisions.',
+    'Fantasy sports app for creating or connecting leagues, managing teams, and getting Chimmy help with lineup, waiver and trade decisions.',
   url: 'https://allfantasy.ai/',
   applicationCategory: 'SportsApplication',
 })

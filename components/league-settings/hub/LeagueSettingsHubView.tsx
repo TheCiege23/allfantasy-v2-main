@@ -1,13 +1,14 @@
 'use client'
 
 /**
- * Presentational League Settings hub — four Sleeper-parity tabs (My Settings, League
- * Setup, Members, Record Book) in the AllFantasy league surface. Pure props in, callbacks
+ * Presentational League Settings hub — Sleeper-parity tabs (My Settings, League Setup, Members,
+ * Record Book) plus the Commissioner Hub (owner's page review #16, Phase C), which a commissioner of
+ * an AllFantasy league sees between Members and Record Book. Lives in the AllFantasy league surface. Pure props in, callbacks
  * out: `LeagueSettingsHub` owns every fetch and save, and the /e2e preview renders this
  * same component from fixtures, so what the preview shows is what the league page renders.
  */
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import './league-settings-hub.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { hubLocale, hubScheduleMode, hubSeasons, hubText } from '@/lib/league-settings-hub/hubI18n'
@@ -22,13 +23,16 @@ import {
   type HubRosterItem,
   type HubRow,
   type HubScoringCategory,
+  type HubAfOption,
   type HubStandingRow,
 } from '@/lib/league-settings-hub/hubModel'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import type { TaskCard } from '@/lib/core-app/commissioner/tasks'
+import type { ConnectedGroup } from '@/lib/league/connectedLeagues'
 import type { CorrectionWeek } from '@/lib/league-settings-hub/recordBookModel'
 import { sportCopy, sportDisplayName } from '@/lib/league-settings-hub/sportProfile'
 
-export type HubTabId = 'my' | 'setup' | 'members' | 'record'
+export type HubTabId = 'my' | 'setup' | 'members' | 'hub' | 'record'
 
 type HubMember = {
   id: string
@@ -85,7 +89,26 @@ export type HubViewData = {
     | undefined
   /** Per week of `season`: final vs still open, when it was rescored, and (when checked) which players changed. */
   correctionWeeks: { season: number; weeks: CorrectionWeek[] } | null | undefined
+  /**
+   * Commissioner Hub "Needs you": the same task queue as /core's Commissioner Hub
+   * (`/api/leagues/[id]/commissioner-hub`). Absent or `undefined` while loading; `null` when it
+   * could not be read.
+   */
+  commissionerTasks?: { cards: TaskCard[]; overflow: TaskCard[] } | null
+  /**
+   * AllFantasy-only rules (lib/league-settings-hub/hubModel `buildAfOptions`), shown in League Setup and
+   * again in the Commissioner Hub. Absent or `undefined` while loading.
+   */
+  afOptions?: HubAfOption[]
+  /**
+   * The Survivor islands, tournament round or Zombie universe this league belongs to
+   * (lib/league/connectedLeagues.ts); `null` when it stands alone, absent or `undefined` while loading.
+   */
+  connected?: ConnectedGroup | null
 }
+
+/** Live panels the Commissioner Hub embeds; the fetching owner supplies them, a fixture preview may not. */
+export type HubSlots = { rivalryWeek?: ReactNode; storyline?: ReactNode; copyLeague?: ReactNode }
 
 export type HubCallbacks = {
   onToggleSetting: (field: string, next: boolean) => void
@@ -100,6 +123,8 @@ export type HubCallbacks = {
   onLeaveLeague?: () => void
   onCopy: (text: string) => void
   onShare?: (url: string) => void
+  /** Schedule every connected league's draft at once (the group's own route). Resolves to an error, or null. */
+  onScheduleConnectedDrafts?: (isoDateTime: string) => Promise<string | null>
 }
 
 /**
@@ -115,8 +140,17 @@ const TABS: Array<{ id: HubTabId; label: string }> = [
   { id: 'my', label: 'My Settings' },
   { id: 'setup', label: 'League Setup' },
   { id: 'members', label: 'Members' },
+  { id: 'hub', label: 'Commissioner Hub' },
   { id: 'record', label: 'Record Book' },
 ]
+
+/**
+ * The Commissioner Hub tab: commissioners and co-commissioners of an AllFantasy league. An imported
+ * league's commissioner tools live on its host platform, and a manager has nothing to run here.
+ */
+export function showsCommissionerHub(data: Pick<HubViewData, 'canEdit' | 'importedFrom'>): boolean {
+  return data.canEdit && !data.importedFrom
+}
 
 export function LeagueSettingsHubView({
   data,
@@ -124,6 +158,7 @@ export function LeagueSettingsHubView({
   initialTab = 'setup',
   busyField = null,
   advanced,
+  slots,
 }: {
   data: HubViewData
   cb: HubCallbacks
@@ -132,8 +167,15 @@ export function LeagueSettingsHubView({
   busyField?: string | null
   /** Optional "Advanced settings" escape hatch to the full legacy editor. */
   advanced?: { label: string; onOpen: () => void }
+  /** Live panels for the Commissioner Hub tab (Rivalry Week, Storyline). */
+  slots?: HubSlots
 }) {
-  const [tab, setTab] = useState<HubTabId>(initialTab)
+  const hubAllowed = showsCommissionerHub(data)
+  const [picked, setTab] = useState<HubTabId>(initialTab)
+  // The payload arrives after the first render, so `canEdit` can flip: a hub tab asked for before it
+  // is known lands on League Setup until it is.
+  const tab: HubTabId = picked === 'hub' && !hubAllowed ? 'setup' : picked
+  const tabs = hubAllowed ? TABS : TABS.filter((tb) => tb.id !== 'hub')
   const { language } = useOptionalLanguage()
   const tr = useMemo<HubTr>(() => ({
     lang: language,
@@ -170,7 +212,7 @@ export function LeagueSettingsHubView({
 
       <div className="af-lsh-tabbar">
       <div className="af-lsh-tabs" role="tablist" aria-label={t('League settings')}>
-        {TABS.map((tb) => (
+        {tabs.map((tb) => (
           <button
             key={tb.id}
             type="button"
@@ -226,9 +268,10 @@ export function LeagueSettingsHubView({
               </div>
             </div>
           ) : null}
-          {tab === 'my' ? <MyTab data={data} cb={cb} /> : null}
+          {tab === 'my' ? <MyTab data={data} cb={cb} slots={slots} /> : null}
           {tab === 'setup' ? <SetupTab data={data} cb={cb} busyField={busyField} /> : null}
           {tab === 'members' ? <MembersTab data={data} cb={cb} /> : null}
+          {tab === 'hub' ? <CommissionerHubTab data={data} cb={cb} slots={slots} /> : null}
           {tab === 'record' ? <RecordTab data={data} /> : null}
         </div>
       </div>
@@ -262,10 +305,12 @@ function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; labe
   if (tab === 'setup') {
     const out = [{ id: 'general', label: 'General' }, { id: 'waivers', label: 'Waivers' }]
     if (data.typeRules === undefined || data.typeRules.length) out.push({ id: 'rules', label: meta.rulesTitle })
+    if (data.afOptions === undefined || data.afOptions.length) out.push({ id: 'afoptions', label: 'AllFantasy options' })
     out.push({ id: 'notes', label: 'Commish Notes' }, { id: 'roster', label: 'Roster' }, { id: 'scoring', label: 'Scoring' }, { id: 'draft', label: 'Draft' })
     return out
   }
   if (tab === 'members') return [{ id: 'commissioners', label: 'Commissioners' }, { id: 'coowners', label: 'Co-Owners' }, { id: 'managers', label: 'Managers' }, { id: 'invite', label: 'Invite' }]
+  if (tab === 'hub') return [...(data.connected ? [{ id: 'connected', label: 'Connected leagues' }] : []), ...HUB_SECTIONS.map((s) => ({ id: s.id, label: s.label }))]
   return [{ id: 'history', label: 'League History' }, { id: 'standings', label: 'All-Time Standings' }, { id: 'highs', label: 'High Scores' }, { id: 'corrections', label: 'Stat Corrections' }, { id: 'legend', label: 'League Legend' }]
 }
 
@@ -382,9 +427,308 @@ function GroupGrid({ groups, canEdit, busyField, onToggle }: { groups: HubGroup[
   )
 }
 
+/* ---------------------------------------------------- Commissioner Hub tab */
+
+/**
+ * The Commissioner Hub (owner's page review #16): it replaces the "Commissioner tools" entry. What
+ * needs the commissioner comes first; then one card per job, each opening the editor that already
+ * does it. Panel ids are League Settings sub-pages (lib/league-settings-home); `commissioner-tools:<view>`
+ * opens that sub-page on one of CommissionerControlPanel's views.
+ */
+const HUB_SECTIONS = [
+  { id: 'needs', label: 'Needs you' },
+  { id: 'season', label: 'Season controls' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'rivalry', label: 'Rivalry Week' },
+  { id: 'options', label: 'League options' },
+  { id: 'storyline', label: 'Storyline' },
+] as const
+
+type HubLink = { label: string; description: string; panel?: string; href?: string; testid: string }
+
+const SEASON_LINKS: HubLink[] = [
+  { label: 'Edit lineups and records', description: 'Set any team’s lineup, then rescore the week.', panel: 'commissioner-tools:edit-lineups', testid: 'hub-edit-lineups' },
+  { label: 'Lock a roster', description: 'Stop a team from adding, dropping or trading.', panel: 'commissioner-tools:lock-roster', testid: 'hub-lock-roster' },
+  { label: 'Member settings', description: 'Chimmy lineup and auto-switch injured starters, team by team.', panel: 'commissioner-tools:member-settings', testid: 'hub-member-settings' },
+  { label: 'Co-commissioners', description: 'Who can run the league with you.', panel: 'commissioner-tools:update-commissioners', testid: 'hub-co-commissioners' },
+  { label: 'Score adjustments', description: 'Add or take away points for a team in a week.', panel: 'score-adjustments', testid: 'hub-score-adjustments' },
+  { label: 'Dues & payouts', description: 'Track who has paid. AllFantasy never holds the money.', panel: 'dues', testid: 'hub-dues' },
+  { label: 'Settings lock', description: 'Lock the rules for the season.', panel: 'settings-lock', testid: 'hub-settings-lock' },
+]
+
+const SCHEDULE_LINKS: HubLink[] = [
+  { label: 'Edit the schedule', description: 'Randomize it up to 25 times in the league chat, set a week by hand, rebuild it, or swap two teams.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-edit-schedule' },
+  { label: 'Divisions', description: 'How many, their names, who is in each, and division rivals twice.', panel: 'divisions', testid: 'hub-divisions' },
+]
+
+const NO_PLAYOFF_KINDS: ReadonlySet<HubKind> = new Set<HubKind>(['survivor', 'big_brother', 'guillotine'])
+const ROOKIE_ORDER_KINDS: ReadonlySet<HubKind> = new Set<HubKind>(['dynasty', 'devy', 'c2c'])
+
+export function leagueOptionLinks(kind: HubKind, leagueId: string): HubLink[] {
+  const out: HubLink[] = [{ label: `${HUB_KIND_META[kind].label} rules`, description: 'The rules only this league type has.', panel: rulesEditorFor(kind), testid: 'hub-format-rules' }]
+  if (kind === 'survivor') {
+    out.push({ label: 'Idols', description: 'How many idols, their powers, and when they expire.', href: `/survivor/${encodeURIComponent(leagueId)}/settings`, testid: 'hub-survivor-idols' })
+  }
+  if (!NO_PLAYOFF_KINDS.has(kind)) {
+    out.push({ label: 'Playoffs', description: 'Playoff teams, byes, and the median game.', panel: 'playoffs', testid: 'hub-playoffs' })
+  }
+  out.push({ label: 'League Chimmy', description: 'Chimmy’s helpers for managers, and what Chimmy watches for you.', panel: 'ai', testid: 'hub-league-chimmy' })
+  out.push(
+    ROOKIE_ORDER_KINDS.has(kind)
+      ? { label: 'Draft and rookie order', description: 'Draft settings, and how next season’s rookie order is set.', panel: 'draft', testid: 'hub-draft' }
+      : { label: 'Draft', description: 'Draft type, clock, rounds and order.', panel: 'draft', testid: 'hub-draft' },
+  )
+  return out
+}
+
+/** A link the AllFantasy option rows already open (same editor) is not listed twice. */
+export function withoutAfDuplicates(links: HubLink[], options: HubAfOption[] | undefined): HubLink[] {
+  if (!options?.length) return links
+  const taken = new Set(options.flatMap((o) => [o.panel, o.href].filter(Boolean) as string[]))
+  return links.filter((l) => !taken.has((l.panel ?? l.href) as string))
+}
+
+const TASK_DOT: Record<TaskCard['severity'], string> = { bad: '#ef4444', warn: '#f59e0b', info: '#3b82f6' }
+
+/**
+ * AllFantasy options as rows: the value, what it means, and the editor that changes it. `tagged` adds
+ * "Also in Hub" (League Setup); `canOpen` hides the editor for a viewer who cannot change it.
+ */
+function AfOptionRows({ options, cb, canOpen, tagged = false }: { options: HubAfOption[]; cb: HubCallbacks; canOpen: boolean; tagged?: boolean }) {
+  const { t } = useT()
+  return (
+    <div className="af-lsh-list" data-testid="af-options">
+      {options.map((o) => (
+        <div key={o.key} className="af-lsh-row" data-af-option="" data-testid={`af-option-${o.key}`}>
+          <div className="af-lsh-row-copy" style={{ flex: '1 1 auto' }}>
+            <span>
+              {t(o.label)}
+              {tagged ? <span className="af-lsh-af-tag">{t('Also in Hub')}</span> : null}
+            </span>
+            <span>{t(o.description)}</span>
+          </div>
+          <strong className="af-lsh-af-value">{t(o.value)}</strong>
+          {!canOpen ? null : o.href ? (
+            <a className="af-lsh-btn" data-size="sm" href={o.href} data-testid={`af-option-open-${o.key}`}>{t('Open')}</a>
+          ) : o.panel ? (
+            <button type="button" className="af-lsh-btn" data-size="sm" onClick={() => cb.onOpenEditor(o.panel as string)} data-testid={`af-option-open-${o.key}`}>{t('Open')}</button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function HubLinks({ links, cb }: { links: HubLink[]; cb: HubCallbacks }) {
+  const { t } = useT()
+  return (
+    <div className="af-lsh-list">
+      {links.map((l) => (
+        <div key={l.testid} className="af-lsh-row">
+          <div className="af-lsh-row-copy">
+            <span>{t(l.label)}</span>
+            <span>{t(l.description)}</span>
+          </div>
+          {l.href ? (
+            <a className="af-lsh-btn" data-size="sm" href={l.href} data-testid={l.testid}>{t('Open')}</a>
+          ) : (
+            <button type="button" className="af-lsh-btn" data-size="sm" onClick={() => cb.onOpenEditor(l.panel as string)} data-testid={l.testid}>{t('Open')}</button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TaskRow({ card }: { card: TaskCard }) {
+  const { t } = useT()
+  return (
+    <div className="af-lsh-row" data-testid="hub-task">
+      <span className="af-lsh-dot" aria-hidden style={{ width: 10, height: 10, background: TASK_DOT[card.severity] }} />
+      <div className="af-lsh-row-copy" style={{ flex: '1 1 auto' }}>
+        <span>{card.title}</span>
+        {card.detail ? <span>{card.detail}</span> : null}
+      </div>
+      {card.action ? (
+        <a
+          className="af-lsh-btn"
+          data-size="sm"
+          href={card.action.href}
+          {...(card.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        >
+          {card.action.label || t('Open')}
+        </a>
+      ) : null}
+    </div>
+  )
+}
+
+const GROUP_KIND_TEXT: Record<ConnectedGroup['kind'], { banner: string; hub: string; ownerOnly: string }> = {
+  survivor: { banner: 'Main Island and Exile Island share one season.', hub: 'Open the Survivor commissioner page', ownerOnly: '' },
+  tournament: { banner: 'This league is one of a tournament’s leagues.', hub: 'Open the tournament hub', ownerOnly: 'Only the tournament’s commissioner can schedule every draft at once.' },
+  zombie: { banner: 'This league is one of a Zombie universe’s leagues.', hub: 'Open the universe hub', ownerOnly: 'Only the universe’s commissioner can schedule every draft at once.' },
+}
+
+const GROUP_STATUS: Record<string, string> = {
+  setup: 'Setting up', forming: 'Forming', pre_draft: 'Before the draft', drafting: 'Drafting', draft: 'Drafting',
+  in_season: 'In season', active: 'In season', playoffs: 'Playoffs', complete: 'Finished', completed: 'Finished', archived: 'Archived',
+}
+
+export function groupStatus(raw: string | null): string | null {
+  if (!raw) return null
+  return GROUP_STATUS[raw.toLowerCase()] ?? raw.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase())
+}
+
+/**
+ * Connected leagues (owner's page review #16, Phase C4): every league that shares one game with this one,
+ * where each stands, and the one decision that spans them — every draft at once — for the group's owner.
+ * Everything else about the group stays on its own hub, linked at the bottom.
+ */
+export function ConnectedLeaguesDialog({ group, cb, onClose }: { group: ConnectedGroup; cb: HubCallbacks; onClose: () => void }) {
+  const { t, lang } = useT()
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+  const [when, setWhen] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+  const text = GROUP_KIND_TEXT[group.kind]
+  useEffect(() => {
+    closeRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const fmt = (v: string | null) => {
+    if (!v) return null
+    const d = new Date(v)
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleString(lang === 'es' ? 'es' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }
+  const schedule = async () => {
+    if (!when || !cb.onScheduleConnectedDrafts) return
+    const d = new Date(when)
+    if (Number.isNaN(d.getTime())) return
+    setBusy(true)
+    setNote(null)
+    const error = await cb.onScheduleConnectedDrafts(d.toISOString())
+    setBusy(false)
+    setNote(error ? { tone: 'error', text: error } : { tone: 'ok', text: 'Every draft is set for that time.' })
+  }
+  return (
+    <div className="af-lsh-modal-backdrop" onClick={onClose} data-testid="connected-leagues-backdrop">
+      <div className="af-lsh-modal" role="dialog" aria-modal="true" aria-labelledby="af-lsh-connected-title" onClick={(e) => e.stopPropagation()} data-testid="connected-leagues-dialog">
+        <div className="af-lsh-card-head">
+          <div>
+            <h2 id="af-lsh-connected-title">{t('Connected leagues')}</h2>
+            <p>{group.name} · {t(text.banner)}</p>
+          </div>
+          <button ref={closeRef} type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose} aria-label={t('Close')}>×</button>
+        </div>
+        <div className="af-lsh-list">
+          {group.leagues.map((l, i) => {
+            const status = groupStatus(l.status)
+            const draft = fmt(l.draftAt)
+            return (
+              <div key={l.leagueId ?? `slot-${i}`} className="af-lsh-row" data-testid="connected-league">
+                <div className="af-lsh-row-copy" style={{ flex: '1 1 auto' }}>
+                  <span>
+                    {l.name}
+                    {l.current ? <span className="af-lsh-af-tag">{t('This league')}</span> : null}
+                  </span>
+                  <span>{[l.role ? t(l.role) : null, status ? t(status) : null, draft ? `${t('Draft')} ${draft}` : null].filter(Boolean).join(' · ')}</span>
+                </div>
+                {l.leagueId && !l.current ? <a className="af-lsh-btn" data-size="sm" href={`/league/${encodeURIComponent(l.leagueId)}`}>{t('Open')}</a> : null}
+              </div>
+            )
+          })}
+        </div>
+        {group.draftSchedule ? (
+          <div className="af-lsh-modal-section" data-testid="connected-schedule">
+            <strong>{t('Schedule every draft at once')}</strong>
+            <span>{t('Every league above drafts at the same time. You can still change one league’s draft from that league.')}</span>
+            <div className="af-lsh-modal-row">
+              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} aria-label={t('Draft time')} className="af-lsh-input" data-testid="connected-schedule-when" />
+              <button type="button" className="af-lsh-btn" data-variant="primary" disabled={!when || busy} onClick={() => void schedule()} data-testid="connected-schedule-save">
+                {t(busy ? 'Saving…' : 'Set every draft')}
+              </button>
+            </div>
+            {note ? <p className="af-lsh-note" data-tone={note.tone} role={note.tone === 'error' ? 'alert' : 'status'}>{t(note.text)}</p> : null}
+          </div>
+        ) : !group.isGroupOwner && text.ownerOnly ? (
+          <p className="af-lsh-empty" data-testid="connected-owner-only">{t(text.ownerOnly)}</p>
+        ) : null}
+        <div className="af-lsh-modal-foot">
+          <a className="af-lsh-btn" href={group.hubHref} data-testid="connected-hub-link">{t(text.hub)}</a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots?: HubSlots }) {
+  const { t } = useT()
+  const [showAll, setShowAll] = useState(false)
+  const [groupOpen, setGroupOpen] = useState(false)
+  const tasks = data.commissionerTasks
+  const count = tasks ? tasks.cards.length + tasks.overflow.length : 0
+  return (
+    // `display: contents` keeps the cards direct items of `.af-lsh-stack`, so they get its gap.
+    <div data-testid="league-settings-hub-commissioner" style={{ display: 'contents' }}>
+      {data.connected ? (
+        <Card
+          id="connected"
+          title="Connected leagues"
+          sub={GROUP_KIND_TEXT[data.connected.kind].banner}
+          action={<button type="button" className="af-lsh-btn" data-variant="primary" data-size="sm" onClick={() => setGroupOpen(true)} data-testid="connected-open">{t('Open connected leagues')}</button>}
+        >
+          <p className="af-lsh-empty" style={{ paddingTop: 0 }}>{data.connected.name} · {t(data.connected.leagues.length === 1 ? '1 league' : `${data.connected.leagues.length} leagues`)}</p>
+        </Card>
+      ) : null}
+      {groupOpen && data.connected ? <ConnectedLeaguesDialog group={data.connected} cb={cb} onClose={() => setGroupOpen(false)} /> : null}
+      <Card id="needs" title={tasks && count ? `Needs you · ${count}` : 'Needs you'} sub="What needs you in this league, most urgent first.">
+        {tasks === undefined ? (
+          <Loading lines={2} />
+        ) : tasks === null ? (
+          <p className="af-lsh-empty">{t('Could not load what needs you. Try again in a minute.')}</p>
+        ) : count === 0 ? (
+          <p className="af-lsh-empty" data-testid="hub-tasks-empty">{t('Nothing needs you right now.')}</p>
+        ) : (
+          <div className="af-lsh-list">
+            {tasks.cards.map((c) => <TaskRow key={c.id} card={c} />)}
+            {showAll ? tasks.overflow.map((c) => <TaskRow key={c.id} card={c} />) : null}
+            {tasks.overflow.length && !showAll ? (
+              <div className="af-lsh-row">
+                <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={() => setShowAll(true)}>
+                  {t(`Show ${tasks.overflow.length} more`)}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </Card>
+      <Card id="season" title="Season controls" sub="Lineups, locks, members and points, for any team.">
+        <HubLinks links={SEASON_LINKS} cb={cb} />
+      </Card>
+      <Card id="schedule" title="Schedule" sub="Who plays whom each week.">
+        <HubLinks links={SCHEDULE_LINKS} cb={cb} />
+      </Card>
+      <Card id="rivalry" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
+        {slots?.rivalryWeek ?? <HubLinks links={[{ label: 'Set up Rivalry Week', description: 'Preview the pairs, then apply them to that week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-rivalry-open' }]} cb={cb} />}
+      </Card>
+      <Card id="options" title="League options" sub="The same settings as League Setup, with the editors that change them.">
+        {data.afOptions === undefined ? <Loading lines={2} /> : data.afOptions.length ? <AfOptionRows options={data.afOptions} cb={cb} canOpen /> : null}
+        <HubLinks links={withoutAfDuplicates(leagueOptionLinks(data.kind, data.leagueId), data.afOptions)} cb={cb} />
+      </Card>
+      <Card id="storyline" title="Storyline" sub="How Chimmy tells your season in the league chat.">
+        {slots?.storyline ?? <p className="af-lsh-empty">{t('Storyline loads here on the league page.')}</p>}
+      </Card>
+    </div>
+  )
+}
+
 /* ---------------------------------------------------------------- My tab */
 
-function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
+function MyTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots?: HubSlots }) {
   const { t } = useT()
   const [name, setName] = useState<string | null>(null)
   const [status, setStatus] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
@@ -444,6 +788,8 @@ function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
           )}
         </div>
       </Card>
+      {/* Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): take a real team; renders nothing elsewhere. */}
+      {slots?.copyLeague ?? null}
 
       <Card id="notifications" title="Notifications" sub="What pings you about this league">
         {n === undefined ? <Loading /> : n === null ? (
@@ -524,6 +870,12 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
       {data.typeRules === undefined || data.typeRules.length ? (
         <Card id="rules" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
           {data.typeRules === undefined ? <Loading /> : <GroupGrid groups={data.typeRules} canEdit={edit} />}
+        </Card>
+      ) : null}
+
+      {data.afOptions === undefined || data.afOptions.length ? (
+        <Card id="afoptions" title="AllFantasy options" sub="Rules only AllFantasy has. Each one is also in the Commissioner Hub.">
+          {data.afOptions === undefined ? <Loading lines={2} /> : <AfOptionRows options={data.afOptions} cb={cb} canOpen={edit} tagged />}
         </Card>
       ) : null}
 

@@ -36,6 +36,7 @@ function resolveRequiredPlanLabel(
 function resolveTokenHref(ruleCode: string): string {
   const params = new URLSearchParams()
   params.set('ruleCode', ruleCode)
+  params.set('offer', 'starter')
   return `/tokens?${params.toString()}`
 }
 

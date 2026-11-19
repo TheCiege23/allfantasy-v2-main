@@ -54,7 +54,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
           const msg =
             data?.error ??
             (res.status === 403
-              ? 'AF Pro required to enable AI queue auto-pick.'
+              ? 'AF Pro required to enable Chimmy queue auto-pick.'
               : 'Failed to save preference.')
           throw new Error(msg)
         }
@@ -126,7 +126,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             title={isProEligible ? undefined : 'AF Pro required'}
             onClick={() => {
               if (!isProEligible) {
-                setError('AF Pro required to enable AI queue auto-pick.')
+                setError('AF Pro required to enable Chimmy queue auto-pick.')
                 return
               }
               void save(true, 'ai_queue')
@@ -137,7 +137,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
                 : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
             } ${!isProEligible ? 'cursor-not-allowed opacity-45' : ''}`}
           >
-            AI Queue{!isProEligible ? ' (Pro)' : ''}
+            Chimmy Queue{!isProEligible ? ' (Pro)' : ''}
           </button>
           <button
             type="button"

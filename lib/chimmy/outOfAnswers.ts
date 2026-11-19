@@ -46,9 +46,9 @@ export type OutOfAnswers = {
  * app (3.1.1) — so the app shows this instead, built from the same status fields.
  */
 export function inIosAppAccessLine(status: { hasSubscription: boolean; tokenBalance: number }): string {
-  if (status.hasSubscription) return 'Premium AI active.'
+  if (status.hasSubscription) return 'Premium Chimmy active.'
   if (status.tokenBalance > 0) {
-    return `${status.tokenBalance} AI token${status.tokenBalance === 1 ? '' : 's'} available.`
+    return `${status.tokenBalance} Chimmy token${status.tokenBalance === 1 ? '' : 's'} available.`
   }
   return `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy questions a day.`
 }

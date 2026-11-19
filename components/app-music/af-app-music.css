@@ -74,6 +74,41 @@
 }
 .af-amd-yt[data-in-chat] iframe { height: 100%; }
 
+/*
+ * ⚠ THE PAGE MAKES ROOM FOR THE CORNER BOX — the user's call on 2026-11-19, after
+ * it sat on a league page's "Plan your next move" card. YouTube forbids a smaller
+ * or hidden player, so moving the box only covers a different card; the page
+ * gives way instead. `data-af-music-box` is set on <html> by AppMusicDock while
+ * the box is in the corner (not in the chat, not in a page's slot).
+ *
+ * Wide screens: a right-hand strip as wide as the box plus its offset, so no card
+ * ever sits under it. Narrower ones can't spare 300px, so they get room at the
+ * bottom instead, enough to scroll the last card clear of the box.
+ *
+ * ⚠ `:root[attr] .af-content` is (0,3,0), deliberately above af-core-shell.css's
+ * `.af-core .af-content` (0,2,0), which sets the phone bottom padding.
+ */
+:root[data-af-music-box] .af-content {
+  /* box: 36px title + 200px player + 2px border, plus a gap */
+  padding-bottom: calc(var(--amp-bottom) + 238px + 16px);
+}
+@media (min-width: 1280px) {
+  :root[data-af-music-box] .af-content {
+    padding-right: calc(var(--af-fab-inset, 18px) + 56px + 12px + 200px + 16px);
+    padding-bottom: calc(var(--af-fab-inset, 18px) + 56px + 16px);
+  }
+}
+
+/* In a page's own slot (the draft room's music row): laid over the slot, inline like the chat.
+   It keeps the corner box's z-index (58), so the chat panel and sheets still cover it. */
+.af-amd-yt[data-in-slot] {
+  right: auto;
+  bottom: auto;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.af-amd-yt[data-in-slot] iframe { height: 100%; }
+
 .af-amd-yt-head {
   display: flex;
   align-items: center;
@@ -109,7 +144,7 @@
 .af-amd-yt-btn:hover { background: var(--amp-bg); color: var(--amp-accent); }
 
 @media (max-width: 720px) {
-  .af-amd-yt:not([data-in-chat]) { left: 12px; right: auto; }
+  .af-amd-yt:not([data-in-chat]):not([data-in-slot]) { left: 12px; right: auto; }
 }
 
 /* ── The chat panel's Music tab ─────────────────────────────────────────── */

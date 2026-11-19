@@ -179,7 +179,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     currentOnClockRosterId: onClockRosterId,
     existingPicks: session.picks
       .filter((p) => !isDraftPickRowEmpty(p))
-      .map((p) => ({ playerName: p.playerName, position: p.position })),
+      .map((p) => ({ playerName: p.playerName, position: p.position, playerId: p.playerId ?? null })),
+    playerId: input.playerId ?? null,
     sessionStatus: session.status,
     commissionerOverride: input.commissionerOverride === true || input.source === 'commissioner',
   })
@@ -807,6 +808,18 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
 
   const poolError = await prepareSeasonDraftPool(input.leagueId)
   if (poolError) return { success: false, error: poolError }
+  // A pick that arrives with no player id (some autopick paths) is given the id its stats are filed
+  // under before it is saved; without one the player never scores (lib/draft/resolveMissingPickPlayerId.ts).
+  if (!String(input.playerId ?? '').trim() && input.playerName && (!input.assetType || input.assetType === 'player')) {
+    try {
+      const league = await prisma.league.findUnique({ where: { id: input.leagueId }, select: { sport: true } })
+      const { resolveMissingNflPickPlayerId } = await import('@/lib/draft/resolveMissingPickPlayerId')
+      const found = await resolveMissingNflPickPlayerId({ sport: league?.sport ? String(league.sport) : null, playerName: input.playerName, position: input.position })
+      if (found) input = { ...input, playerId: found }
+    } catch {
+      // Best-effort: the pick is saved as it came.
+    }
+  }
   const lockResult = await withPickLock(input.leagueId, () => _submitPickCore(input))
   if (!lockResult.acquired) {
     // Competing instance is writing — tell client to refresh and retry.

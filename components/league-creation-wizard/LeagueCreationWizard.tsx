@@ -123,7 +123,7 @@ const STEP_LABELS: Record<ActiveWizardStepId, string> = {
   sport: 'Sport & setup',
   team_setup: 'League details',
   scoring: 'Scoring & rosters',
-  draft_privacy: 'AI & privacy',
+  draft_privacy: 'Chimmy & privacy',
   review: 'Review & create',
 }
 
@@ -789,7 +789,7 @@ export function LeagueCreationWizard({
     setError(null)
     try {
       if (state.leagueType === 'guillotine' && !state.formatOptions.guillotineRulesAcknowledged) {
-        setError('Confirm Guilly elimination rules on the AI & privacy step.')
+        setError('Confirm Guilly elimination rules on Chimmy & privacy step.')
         setCreating(false)
         return
       }

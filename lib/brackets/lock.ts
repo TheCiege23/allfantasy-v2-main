@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { sha256Hex } from "@/lib/tokens"
 
-export type BracketLifecycleStatus = "DRAFT" | "SUBMITTED" | "LOCKED" | "SCORED" | "INVALIDATED"
-
 type BracketSnapshotPayload = {
   entryId: string
   leagueId: string

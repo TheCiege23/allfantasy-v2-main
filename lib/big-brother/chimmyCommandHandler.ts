@@ -362,7 +362,7 @@ export async function processBigBrotherLeagueChatInput(
       '• `@chimmy status` — house snapshot',
       '• `@chimmy deadlines` — configured windows',
       '• `@chimmy minigame` — themed HOH/POV minigame for this week',
-      '• `@chimmy explain [term]` — rules glossary / AI',
+      '• `@chimmy explain [term]` — rules glossary / Chimmy',
       '• Actions (role + phase): nominate, replacement, veto, vote (private only)',
       '• Eviction votes are always private — use Vote Center or DM Chimmy.',
     ].join('\n')

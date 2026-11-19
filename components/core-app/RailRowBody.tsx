@@ -362,7 +362,9 @@ export function RailRowBody({
   exileStatus,
 }: RailRowBodyProps) {
   const msg = useMessages(railRowMessages)
-  const headToHead = Boolean(m && !m.guillotine && !m.unpaired)
+  /* ESPN knocked you out (railRecordRank.ts): there is no matchup left to show, only when you went. */
+  const knockedOutWeek = record?.knockedOutWeek ?? null
+  const headToHead = knockedOutWeek == null && Boolean(m && !m.guillotine && !m.unpaired)
   /* Only a played week has a leader; a level score has none. */
   const lead = headToHead && m?.scored ? Math.sign((m.yourScore ?? 0) - (m.opponentScore ?? 0)) : 0
   const odds = headToHead && pWin != null && pWin > 0 && pWin < 1 ? Math.round(pWin * 100) : null
@@ -414,7 +416,18 @@ export function RailRowBody({
       {m?.extraMatchup ? (
         <span className="af-rail-row-career" data-testid="rail-extra-matchup">{m.extraMatchup.line}</span>
       ) : null}
-      {m ? (
+      {knockedOutWeek != null ? (
+        /*
+          The knocked-out line of a native Guilly row (`RailGuillotine`, state 'eliminated'): the same
+          classes and tone, so both read alike. It replaces "Matchup unavailable from ESPN", which
+          was true and beside the point. `data-knocked-out` turns the words themselves red.
+        */
+        <span className="af-rail-row-line" data-testid="rail-knocked-out">
+          <span className="af-rail-row-rank" data-tone="bad" data-guillotine="eliminated" data-knocked-out="">
+            <span className="af-rail-row-rank-pos">{msg.knockedOutWeek(knockedOutWeek)}</span>
+          </span>
+        </span>
+      ) : m ? (
         <span
           className="af-rail-row-line"
           data-vs={headToHead ? 'true' : undefined}

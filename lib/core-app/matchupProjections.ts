@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import { isAtRisk, isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
@@ -67,6 +67,12 @@ export type SideProjection = {
     /** AllFantasy's own engine for the same starter, carried into this league's rules. Display only. */
     afEngine?: number | null
   }>
+  /**
+   * The slot the PROVIDER recorded for each starter, keyed by roster id — ESPN's `lineupSlotId`
+   * label, stored at import as `starter_slot_by_id`. Absent for a side read from a live lineup, and
+   * for any roster imported before the field existed. The board places starters by it.
+   */
+  slotById?: Record<string, string> | null
 }
 
 /**
@@ -202,11 +208,19 @@ export async function loadSideProjections(args: {
    * translated, and `lineup[].playerId` below stays exactly what came off the
    * roster.
    */
-  const sleeperIdByRosterId = await crosswalkToSleeperIds(
+  const playerCrosswalk = await crosswalkToSleeperIds(
     String(league?.platform ?? ''),
     String(league?.sport ?? 'NFL'),
     rosterIds,
   ).catch(() => new Map<string, string>())
+  /*
+   * ⚠ AN ESPN D/ST IS `-16000 - proTeamId` (`-16002` is BUF) AND THE PLAYER CROSSWALK DOES NOT
+   * CARRY IT, so the defence on every ESPN lineup was unpriced here. The id alone names the club, so
+   * the rows are just the ids. NFL only — a defence is an NFL slot.
+   */
+  const sleeperIdByRosterId = String(league?.sport ?? 'NFL').toUpperCase() === 'NFL'
+    ? withTeamDefenseIds(String(league?.platform ?? ''), playerCrosswalk, rosterIds.map((playerId) => ({ playerId })))
+    : playerCrosswalk
 
   const leaguePlatform = String(league?.platform ?? '')
   const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId, league?.sport)
@@ -347,9 +361,17 @@ export async function loadSideProjections(args: {
     })
   }
 
+  /* A live lineup carries no provider slot map — only a side read from its stored row does. */
+  const storedSlots = (key: string, live: readonly string[] | null | undefined): Record<string, string> | null => {
+    if (live) return null
+    const data = dataByUser.get(key)
+    const map = data && typeof data === 'object' ? (data as Record<string, unknown>).starter_slot_by_id : null
+    return map && typeof map === 'object' && !Array.isArray(map) ? (map as Record<string, string>) : null
+  }
+
   return {
-    you: build(yourIds),
-    opponent: build(oppIds),
+    you: { ...build(yourIds), slotById: storedSlots(args.yourPlatformUserId, args.liveLineups?.you) },
+    opponent: { ...build(oppIds), slotById: storedSlots(args.opponentPlatformUserId, args.liveLineups?.opponent) },
     ...(bestBall ? { bestBall: {
       slots: startingSlotTemplate(league?.settings),
       you: candidates(yourPlayers, args.yourPlatformUserId),

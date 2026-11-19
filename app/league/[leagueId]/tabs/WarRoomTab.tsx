@@ -155,7 +155,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       },
       {
         title: 'Mock draft simulator',
-        description: 'Practice drafts with AI helpers and AF Legacy context.',
+        description: 'Practice drafts with Chimmy helpers and AF Legacy context.',
         href: '/mock-draft-simulator',
         icon: Wrench,
       },
@@ -181,7 +181,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       },
       {
         title: 'Power rankings',
-        description: 'League and player power views with AI commentary.',
+        description: 'League and player power views with Chimmy commentary.',
         href: '/power-rankings',
         icon: Sparkles,
       },

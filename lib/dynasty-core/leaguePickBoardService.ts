@@ -11,6 +11,7 @@
  *
  * DB-first: league, team and pick reads only. No provider call.
  */
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { matchTeamIdForRoster } from '@/lib/leagues/rosterTeamIdentity'
@@ -38,7 +39,7 @@ export async function loadLeaguePickBoard(leagueId: string, userId: string | nul
   if (!league) return { ok: false, status: 404, error: 'League not found' }
 
   const [rosters, teams] = await Promise.all([
-    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
+    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, managerUserId: true, playerData: true } }),
     prisma.leagueTeam.findMany({
       where: { leagueId },
       select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true },
@@ -50,7 +51,7 @@ export async function loadLeaguePickBoard(leagueId: string, userId: string | nul
     const team = teamId ? teamById.get(teamId) : undefined
     return { rosterId: r.id, name: team?.teamName?.trim() || team?.ownerName?.trim() || `Team ${i + 1}` }
   })
-  const viewerRosterId = rosters.find((r) => r.platformUserId === userId)?.id ?? null
+  const viewerRosterId = rosters.find((r) => isRosterManagedBy(r, userId))?.id ?? null
   const trade: PickBoardTradeContext = { platform: league.platform ?? null, sport: league.sport != null ? String(league.sport) : null }
 
   if (isNativeFuturePickLeague(league)) {

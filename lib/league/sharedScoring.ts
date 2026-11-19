@@ -40,7 +40,7 @@ import {
 } from '@/lib/league/applySportScoring'
 
 /** One apply touches at most this many leagues; a commissioner with more applies in batches. */
-export const SHARED_SCORING_MAX_LEAGUES = 50
+const SHARED_SCORING_MAX_LEAGUES = 50
 
 type LeagueRow = {
   id: string
@@ -66,10 +66,10 @@ const LEAGUE_SELECT = {
   lifecycleState: true,
 } as const
 
-export type SharedScoringIncompatibility = 'imported' | 'tournament' | 'survivor_guillotine' | 'past_season' | 'devy' | 'category' | 'carried_over'
+type SharedScoringIncompatibility = 'imported' | 'tournament' | 'survivor_guillotine' | 'past_season' | 'devy' | 'category' | 'carried_over'
 
 /** What each reason means, in the API's own words (the screen shows its own translated copy for each code). */
-export const SHARED_SCORING_INCOMPATIBILITY_MESSAGE: Record<SharedScoringIncompatibility, string> = {
+const SHARED_SCORING_INCOMPATIBILITY_MESSAGE: Record<SharedScoringIncompatibility, string> = {
   imported: 'Imported league — its scoring follows the site it was imported from.',
   tournament: 'Tournament leagues keep the tournament’s scoring.',
   survivor_guillotine: 'Survivor guillotine scores from its own rules.',
@@ -128,9 +128,9 @@ async function commissionerLeagues(userId: string, sport: string): Promise<Leagu
   return [...owned, ...others.filter((_, i) => allowed[i])] as LeagueRow[]
 }
 
-export type SharedScoringStatus = 'ready' | 'matches' | 'mid_season' | 'locked' | 'refused' | 'incompatible'
+type SharedScoringStatus = 'ready' | 'matches' | 'mid_season' | 'locked' | 'refused' | 'incompatible'
 
-export type SharedScoringLeague = {
+type SharedScoringLeague = {
   id: string
   name: string
   status: SharedScoringStatus
@@ -139,7 +139,7 @@ export type SharedScoringLeague = {
   presetKey: string | null
 }
 
-export type SharedScoringSource = {
+type SharedScoringSource = {
   id: string
   name: string
   sport: PointsScoringSport
@@ -148,7 +148,7 @@ export type SharedScoringSource = {
   needsPremium: boolean
 }
 
-export type SharedScoringView =
+type SharedScoringView =
   | { ok: true; source: SharedScoringSource; leagues: SharedScoringLeague[]; hasPremium: boolean }
   | { ok: false; status: number; error: string }
 
@@ -205,7 +205,7 @@ export async function getSharedScoringView(userId: string, sourceLeagueId: strin
   return { ok: true, source: src.source, leagues, hasPremium }
 }
 
-export type SharedScoringResult = {
+type SharedScoringResult = {
   leagueId: string
   name: string
   outcome: ScoringApplyOutcome
@@ -213,7 +213,7 @@ export type SharedScoringResult = {
   incompatibility?: SharedScoringIncompatibility
 }
 
-export type SharedScoringApply =
+type SharedScoringApply =
   | { ok: true; results: SharedScoringResult[]; saved: number }
   | { ok: false; status: number; error: string; code?: string }
 

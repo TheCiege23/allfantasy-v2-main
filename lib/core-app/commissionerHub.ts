@@ -73,6 +73,7 @@ import type { DynastyRolloverStep } from '@/lib/season-rollover/dynastyRolloverW
 import type { DynastyPickBalance, DynastyTaxiOverLimit } from '@/lib/commissioner-hub/dynastyHealthSignals'
 import { pickBalanceFlag, rookieOrderFlag, taxiOverLimitFlag } from './commissioner/dynastyHealthFlags'
 import { isBestBallLeagueRow } from './leagueBestBall'
+import { importCarriesNoWaiverBudget, waiverBudgetOnFile } from '@/lib/trade-value-console/league-loader'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -266,7 +267,19 @@ export type CommissionerHubData = {
   network: { id: string; name: string; role: string } | null
   history: CommissionerHistory
   grant: CommissionerGrant
-  league: { id: string; name: string; platform: string; sport?: string; season: number | null; native: boolean }
+  league: {
+    id: string
+    name: string
+    platform: string
+    sport?: string
+    season: number | null
+    native: boolean
+    /**
+     * The budget the trade grader prices budget moves against, and whether it is set HERE: only for a platform whose
+     * import records none (Fantrax, Yahoo). `value` null = not known, so budget in a trade reads as not graded.
+     */
+    waiverBudget?: { value: number | null; settableHere: boolean }
+  }
   /** The viewer's own role — drives the co-commissioner boundary note. */
   role: 'commissioner' | 'co_commissioner'
   /** `League.userId`. The Discord bridge routes accept only this person. */
@@ -537,6 +550,7 @@ export async function getCommissionerHub(input: {
       season: true,
       status: true,
       settings: true,
+      waiverBudget: true,
       starters: true,
       lastSyncedAt: true,
       syncStatus: true,
@@ -1198,7 +1212,18 @@ export async function getCommissionerHub(input: {
     network: networkMember ? { id: networkMember.network.id, name: networkMember.network.name, role: networkMember.role } : null,
     history,
     grant,
-    league: { id: leagueId, name: leagueName, platform, sport, season: league.season ?? null, native },
+    league: {
+      id: leagueId,
+      name: leagueName,
+      platform,
+      sport,
+      season: league.season ?? null,
+      native,
+      waiverBudget: {
+        value: waiverBudgetOnFile({ platform: league.platform, waiverBudget: league.waiverBudget, settings: league.settings }),
+        settableHere: importCarriesNoWaiverBudget(league.platform),
+      },
+    },
     role,
     viewerIsOwner,
     viewerCanBroadcast,

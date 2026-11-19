@@ -269,6 +269,8 @@ export interface NormalizedTransaction {
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string
   created_at: string
+  /** Provider-reported status change time; distinct from when a trade was proposed. */
+  status_updated_at?: string
   adds?: Record<string, string>
   drops?: Record<string, string>
   roster_ids: string[]
@@ -307,6 +309,27 @@ export interface NormalizedTradedPick {
   original_roster_id: string
   current_owner_roster_id: string
   previous_owner_roster_id?: string
+  /**
+   * Whether the pick has changed hands. Absent means true: Sleeper and MFL list only moved picks.
+   * Fantrax lists every pick with its holder, so its untraded picks carry `false` and are stored
+   * as the team's own.
+   */
+  traded?: boolean
+}
+
+/**
+ * A future pick the provider POSITIVELY reports as held by its original team.
+ *
+ * Exists for the traded-back case. `future_draft_picks` holds a row only for a
+ * pick that has left its original roster, and nothing ever removed one — so a
+ * pick traded away and later traded home kept showing its old holder forever.
+ * A provider that lists every pick (Fantrax, MFL) can say "this one is home",
+ * and that is what clears the stale row.
+ */
+export interface NormalizedReturnedPick {
+  season: number
+  round: number
+  original_roster_id: string
 }
 
 /** Title-game result for one season, in the adapter's own team id space. */
@@ -365,12 +388,21 @@ export interface NormalizedImportResult {
   scoring: NormalizedScoring | null
   schedule: NormalizedMatchup[]
   draft_picks: NormalizedDraftPick[]
+  /** Fresh draft lifecycle observations when the provider exposes them. */
+  drafts?: Array<{ source_draft_id: string; status: string; start_time?: number }>
   /**
    * Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`).
    * Absent = provider does not expose traded picks; empty array = provider
    * exposes them but no picks are currently in a traded state.
    */
   traded_picks?: NormalizedTradedPick[]
+  /**
+   * Future picks the provider reports as back with (or never having left) their
+   * original team. Absent = the provider cannot say — Sleeper's `/traded_picks`
+   * lists moved picks only, so silence about a pick there proves nothing and no
+   * stored row is ever cleared on its account.
+   */
+  returned_picks?: NormalizedReturnedPick[]
   /**
    * Who won the season's title and who lost it, from the provider's own playoff
    * result — NOT from `standings`. Absent = the adapter has no such result (season

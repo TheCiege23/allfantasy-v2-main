@@ -12,7 +12,7 @@
 import { prisma } from '@/lib/prisma'
 
 export const STRUCTURAL_LEAGUE_KEYS = ['sport', 'season', 'leagueSize', 'leagueType', 'isDynasty'] as const
-export type StructuralLeagueKey = (typeof STRUCTURAL_LEAGUE_KEYS)[number]
+type StructuralLeagueKey = (typeof STRUCTURAL_LEAGUE_KEYS)[number]
 
 const NOT_STARTED_DRAFT_STATUSES = new Set(['pre_draft', 'configuring', 'configured'])
 

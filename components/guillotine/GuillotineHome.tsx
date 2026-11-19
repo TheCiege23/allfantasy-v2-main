@@ -161,7 +161,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-200 hover:bg-cyan-950/50"
           data-testid="guillotine-quick-ai"
         >
-          <Sparkles className="h-4 w-4" /> AI Tools
+          <Sparkles className="h-4 w-4" /> Chimmy Tools
         </Link>
         <Link
           href={leagueQueryPath(leagueId, { view: 'players' })}
@@ -302,7 +302,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           className="text-sm text-cyan-400 hover:underline"
           data-testid="guillotine-more-ai-tools"
         >
-          More research &amp; AI tools →
+          More research &amp; Chimmy tools →
         </Link>
       </section>
 

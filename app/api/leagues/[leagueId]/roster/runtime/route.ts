@@ -1,5 +1,5 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
@@ -27,7 +27,6 @@ export async function GET(
   }
 
   const { leagueId } = await ctx.params
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
   const { searchParams } = new URL(req.url)
   const requestedRosterId = searchParams.get('rosterId')?.trim() || null
 
@@ -43,13 +42,13 @@ export async function GET(
   let rosterId = requestedRosterId
 
   if (!commissioner) {
-    const ownRoster = await prisma.roster.findFirst({
-      where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
-      select: { id: true },
-    })
+    // The named team when it is one of the manager's (or their co-owned team), else their first.
+    const viewing = await resolveViewingRoster(leagueId, userId, requestedRosterId)
+    const ownRoster = viewing ? { id: viewing.rosterId } : null
     if (!ownRoster) {
       return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
     }
+    // A team that is not theirs falls back to their first above, so a mismatch means "not yours".
     if (requestedRosterId && requestedRosterId !== ownRoster.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

@@ -174,7 +174,7 @@ export function buildPremiumLineupDecision(input: PremiumLineupDecisionInput): {
     const pl = byId.get(row.playerId)
     const hints = getSportSignalHints(sportKey)
     const reasons: string[] = [
-      `Weekly Start Score ${pl ? pl.breakdown.weeklyStartScore.toFixed(1) : '—'} (${mode}) using deterministic weights before AI narration.`,
+      `Weekly Start Score ${pl ? pl.breakdown.weeklyStartScore.toFixed(1) : '—'} (${mode}) using deterministic weights before Chimmy narration.`,
       pl
         ? `Volatility ${pl.breakdown.volatilityScore.toFixed(1)} vs floor ${pl.breakdown.floorScore.toFixed(1)} / ceiling ${pl.breakdown.ceilingScore.toFixed(1)}.`
         : 'Scores unavailable for this player row.',

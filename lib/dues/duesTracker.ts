@@ -224,6 +224,44 @@ export function applySelfReport(config: DuesConfig, teamId: string, note: unknow
 }
 
 /**
+ * A payment verified outside the tracker (a LeagueSafe notice for a payer the commissioner has confirmed)
+ * marks those teams paid. `confirmedBy` records the source, never a person. A team already marked paid
+ * keeps its own date and confirmer.
+ */
+export function applyVerifiedPayment(
+  config: DuesConfig,
+  teamIds: readonly string[],
+  opts: { season: number; multiSeason: boolean; now: Date; source: string },
+): DuesConfig {
+  if (teamIds.length === 0) return config
+  let changed = false
+  const stamp = (e: DuesEntry): DuesEntry => {
+    const seasonDone = !opts.multiSeason || e.paidSeasons.includes(opts.season)
+    if (e.paid && seasonDone) return e
+    changed = true
+    return {
+      ...e,
+      paid: true,
+      paidSeasons: opts.multiSeason && !e.paidSeasons.includes(opts.season) ? [...e.paidSeasons, opts.season].sort() : e.paidSeasons,
+      paidAt: e.paidAt ?? opts.now.toISOString(),
+      confirmedBy: e.confirmedBy ?? opts.source,
+    }
+  }
+  const wanted = new Set(teamIds)
+  const seen = new Set<string>()
+  const entries = config.entries.map((e) => {
+    if (!wanted.has(e.teamId)) return e
+    seen.add(e.teamId)
+    return stamp(e)
+  })
+  for (const teamId of wanted) {
+    if (seen.has(teamId)) continue
+    entries.push(stamp({ teamId, paid: false, paidSeasons: [], paidAt: null, selfReportedAt: null, selfReportedNote: null, confirmedBy: null }))
+  }
+  return changed ? { ...config, entries, lastUpdatedAt: opts.now.toISOString(), lastUpdatedBy: opts.source } : config
+}
+
+/**
  * Is this league tracking dues? The switch, or simply having set an amount: the tracker never showed the
  * switch, so `enabled` was false for every league that used it.
  */

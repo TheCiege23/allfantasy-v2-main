@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
@@ -340,8 +341,9 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
         emergencyPaused: true,
       },
     }),
-    prisma.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+    // The manager's team, or their first when they run several (a read: lib/league/viewerTeams.ts).
+    resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false }).then((viewing) => !viewing ? null : prisma.roster.findFirst({
+      where: { leagueId, id: viewing.rosterId },
       select: {
         id: true,
         platformUserId: true,
@@ -349,7 +351,7 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
         faabRemaining: true,
         waiverPriority: true,
       },
-    }),
+    })),
     prisma.roster.findMany({
       where: { leagueId },
       select: {

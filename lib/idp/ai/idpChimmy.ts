@@ -5,6 +5,7 @@
  * never given a hash-generated stat line.
  */
 
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { prisma } from '@/lib/prisma'
 import { requireAfSubUserIdOrThrow } from '@/lib/redraft/ai/requireAfSub'
 import { isIdpLeague } from '@/lib/idp'
@@ -186,7 +187,7 @@ async function assertIdpLeague(leagueId: string): Promise<void> {
 
 async function getRosterForUser(leagueId: string, userId: string) {
   const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: await viewingRosterWhere(leagueId, userId),
     select: { id: true, playerData: true },
   })
   return roster
@@ -540,7 +541,7 @@ export async function getIDPMatchupAnalysis(
     temperature: 0.45,
     maxTokens: 650,
   })
-  const analysis = res.ok ? res.text : 'AI unavailable.'
+  const analysis = res.ok ? res.text : 'Chimmy unavailable.'
 
   return {
     defensiveHighlights: `Week ${week}: focus on tackle floor LBs if opponent runs often; edge rushers if pass-heavy scripts.`,
@@ -609,7 +610,7 @@ Reply with ONLY a JSON object (no markdown) with keys:
     temperature: 0.45,
     maxTokens: 600,
   })
-  const text = res.ok ? res.text : 'AI unavailable.'
+  const text = res.ok ? res.text : 'Chimmy unavailable.'
   const parsed = res.ok ? parseIdpTradeEvalJson(text) : null
   if (parsed) return parsed
   return {
@@ -773,7 +774,7 @@ export async function getIDPScarcityReport(leagueId: string, _week: number): Pro
   })
 
   return {
-    summary: res.ok ? res.text : 'AI unavailable.',
+    summary: res.ok ? res.text : 'Chimmy unavailable.',
     byPosition: {
       DL: `${byPos.DL ?? 0} unrostered DL in this league.`,
       LB: `${byPos.LB ?? 0} unrostered LB — often thinnest in IDP.`,
@@ -870,7 +871,7 @@ export function getIdpChimmyHelpText(): string {
     '• `@chimmy cut [name]` — cut dead-money preview (public)',
     '• `@chimmy extend [name]` — extension salary preview (public)',
     '• `@chimmy simulate defense cap` — IDP salary vs room snapshot (public)',
-    '• `@chimmy cap advice` — AI cap moves (AfSub)',
+    '• `@chimmy cap advice` — Chimmy cap moves (AfSub)',
     '• `@chimmy defender value [name]` — 10-pillar eval (AfSub)',
     '• `@chimmy contract eval [name] [cut|extend|tag]` — contract decision (AfSub)',
     '• `@chimmy cap efficiency` — pts/$ rankings (AfSub)',
@@ -880,7 +881,7 @@ export function getIdpChimmyHelpText(): string {
     '• `@chimmy weekly recap` — defensive recap (AfSub)',
     '• `@chimmy help idp` — this list',
     '',
-    '🔒 AI IDP features require the AF Commissioner Subscription.',
+    '🔒 Chimmy IDP features require the AF Commissioner Subscription.',
   ].join('\n')
 }
 
@@ -917,6 +918,6 @@ Incorporate contract/salary context in 2-3 sentences when relevant.`,
     temperature: 0.45,
     maxTokens: 500,
   })
-  return res.ok ? res.text : 'AI unavailable.'
+  return res.ok ? res.text : 'Chimmy unavailable.'
 }
 

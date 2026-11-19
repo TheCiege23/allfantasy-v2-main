@@ -43,6 +43,7 @@ import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 import { gradeProviderCompletedTrades } from '@/lib/provider-trades/providerCompletedGrades'
+import { buildProviderCompletedHistory } from '@/lib/provider-trades/providerCompletedHistory'
 import { pickChipFromTradeItem } from '@/lib/dynasty-core/dynastyDetails'
 
 export const dynamic = 'force-dynamic'
@@ -1053,11 +1054,35 @@ export async function GET(req: NextRequest) {
 
   if (!sleeperLeagueId) {
     const grader = lazyGrader(leagueId, userId)
-    const [activeTrades, historyTrades] = await Promise.all([
+    const platform = String(league.platform ?? 'manual').toLowerCase()
+    const [activeTrades, nativeHistory, providerHistory] = await Promise.all([
       buildNativeActiveTrades(leagueId, userId, league.sport, grader),
       buildNativeTradeHistory(league, userId),
+      /*
+       * The league's own completed trades on ESPN / Yahoo / MFL / Fleaflicker — synced into `LeagueTrade`,
+       * graded and frozen exactly as /core Trades shows them (`providerCompletedHistory.ts`). Until
+       * 2026-11-17 this tab listed only trades made inside AllFantasy, so an imported league's history read
+       * empty here while /core Trades listed every deal. Read from the database only; a failure costs this
+       * list, never the panel.
+       */
+      resolveWriteAuthority(league.platform) === 'NATIVE'
+        ? Promise.resolve([] as LeagueTradeHistoryItem[])
+        : prisma.leagueTeam
+            .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
+            .then((team) =>
+              buildProviderCompletedHistory({
+                leagueId,
+                userId,
+                platform,
+                platformLeagueId: league.platformLeagueId ?? null,
+                sport: league.sport ?? null,
+                viewerPlatformUserId: team?.platformUserId ?? null,
+              }),
+            )
+            .catch(() => [] as LeagueTradeHistoryItem[]),
     ])
-    const platform = String(league.platform ?? 'manual').toLowerCase()
+    // Provider-completed first, as on a Sleeper league; AllFantasy-native negotiations follow.
+    const historyTrades = [...providerHistory, ...nativeHistory]
 
     /*
      * ── Yahoo ────────────────────────────────────────────────────────────

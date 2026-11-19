@@ -194,6 +194,57 @@ describe('imported drafts are folded into the same recompute', () => {
     expect(report.uniqueContexts).toBe(2)
   })
 
+  it('aggregates a production-sized imported corpus without dropping the batch', async () => {
+    const draftCount = 2_000
+    const draftLength = 80
+    const leagues = Array.from({ length: draftCount }, (_, index) => ({
+      ...importedLeague,
+      id: `imported-${index}`,
+    }))
+    const identities = Array.from({ length: draftLength }, (_, index) => ({
+      sleeperId: `player-${index}`,
+      canonicalName: `Imported Player ${index}`,
+      position: 'WR',
+    }))
+    mockLeagueFindMany.mockResolvedValue(leagues)
+    mockIdentityFindMany.mockResolvedValue(identities)
+    const facts = leagues.flatMap((league, draftIndex) =>
+      identities.map((player, index) => ({
+        draftId: String(draftIndex * draftLength + index).padStart(6, '0'),
+        leagueId: league.id,
+        season: 2026,
+        round: Math.floor(index / 10) + 1,
+        pickNumber: index + 1,
+        playerId: player.sleeperId,
+      })),
+    )
+    mockDraftFactFindMany.mockImplementation(async ({ where, take }) => {
+      const start = where.draftId ? Number(where.draftId.gt) + 1 : 0
+      return facts.slice(start, start + take)
+    })
+
+    const report = await recomputeAllFantasyAdp({ sport: 'NFL', apply: false })
+    expect(report.errors).toEqual([])
+    expect(report.importedDraftsCovered).toBe(draftCount)
+    expect(mockDraftFactFindMany.mock.calls.length).toBeGreaterThan(1)
+    expect(report.picksKept).toBe(draftCount * draftLength)
+    expect(report.uniquePlayers).toBe(draftLength)
+  })
+
+  it('rebuilds just the imported board when the backfill selects that draft type', async () => {
+    armImports()
+    const report = await recomputeAllFantasyAdp({
+      sport: 'NFL',
+      season: '2024',
+      draftType: 'imported',
+      apply: false,
+    })
+    expect(mockDraftPickFindMany).not.toHaveBeenCalled()
+    expect(report.errors).toEqual([])
+    expect(report.picksKept).toBe(importedFacts.length)
+    expect(report.uniqueContexts).toBe(1)
+  })
+
   it('can be switched off without touching the live pass', async () => {
     mockDraftPickFindMany.mockResolvedValue([mirroredPick()])
     armImports()

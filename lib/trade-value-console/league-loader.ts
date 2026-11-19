@@ -26,6 +26,42 @@ export type LoadedTradeLeague = {
   status?: string | null
 }
 
+/** The `League.waiverBudget` column default — what an import leaves when the platform supplies no budget. */
+export const WAIVER_BUDGET_COLUMN_DEFAULT = 100
+
+/**
+ * Platforms whose import never supplies a waiver budget: no Fantrax mapper sets `faab_budget`, and Yahoo's sets it
+ * to null. On these, a stored 100 is the column default, not a fact about the league.
+ */
+const IMPORT_CARRIES_NO_WAIVER_BUDGET: ReadonlySet<string> = new Set(['fantrax', 'yahoo'])
+
+/** True for a platform whose import records no waiver budget, so the commissioner must state it in AllFantasy. */
+export function importCarriesNoWaiverBudget(platform: string | null | undefined): boolean {
+  return IMPORT_CARRIES_NO_WAIVER_BUDGET.has(String(platform ?? '').trim().toLowerCase())
+}
+
+/** The `League.settings` key a commissioner's own budget save stamps, so a deliberate 100 is trusted. */
+export const WAIVER_BUDGET_SET_KEY = 'waiverBudgetSetAt'
+
+/**
+ * The league's waiver budget, or null when the stored number is not known to be the league's.
+ *
+ * 🛑 THE COLUMN DEFAULTS TO 100, AND THE TRADE GRADER READ THAT AS THE LEAGUE'S BUDGET (2026-11-18). A Fantrax league
+ * (whose import never records a budget) graded a $5,000 budget move against $100 — a confident, wrong grade — where
+ * `waiverBudgetFromLeague` was meant to withhold it as "not graded". So on a platform whose import carries no
+ * budget, a stored 100 counts as unknown unless a commissioner saved it (`WAIVER_BUDGET_SET_KEY`). Any other
+ * value was put there on purpose, and every other platform's import writes the budget the platform reports — 100
+ * is a common real budget there, so it stands.
+ */
+export function waiverBudgetOnFile(row: { platform: string | null; waiverBudget: number | null; settings: unknown }): number | null {
+  const b = row.waiverBudget
+  if (typeof b !== 'number' || !Number.isFinite(b) || b <= 0) return null
+  if (b !== WAIVER_BUDGET_COLUMN_DEFAULT) return b
+  if (!importCarriesNoWaiverBudget(row.platform)) return b
+  const settings = row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings) ? (row.settings as Record<string, unknown>) : null
+  return settings?.[WAIVER_BUDGET_SET_KEY] ? b : null
+}
+
 export async function loadLeagueForTrade(args: {
   leagueId: string
   userId: string
@@ -78,7 +114,8 @@ export async function loadLeagueForTrade(args: {
     leagueType: row.leagueType,
     scoring: row.scoring,
     settings,
-    waiverBudget: row.waiverBudget,
+    // Read off the raw row: the stamp a commissioner's save leaves lives in `settings`, which is stripped above.
+    waiverBudget: waiverBudgetOnFile({ platform: row.platform, waiverBudget: row.waiverBudget, settings: row.settings }),
     taxiSlots: row.taxiSlots,
     leagueVariant: row.leagueVariant,
     bestBallMode: row.bestBallMode,

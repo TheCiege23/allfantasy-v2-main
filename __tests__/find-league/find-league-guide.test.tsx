@@ -108,7 +108,7 @@ describe("the card says each fact once", () => {
     expect(count(text, /NBA/g)).toBe(1)
     expect(count(text, /redraft/gi)).toBe(1)
     expect(count(text, /draft not scheduled/gi)).toBe(1)
-    for (const gone of ["Fantasy", "Rank fit", "AI features", "League type:", "Draft status:", "Teams filled:", "Career Level", "None"]) {
+    for (const gone of ["Fantasy", "Rank fit", "Chimmy features", "League type:", "Draft status:", "Teams filled:", "Career Level", "None"]) {
       expect(text).not.toContain(gone)
     }
     expect(screen.getByTestId("find-league-facts-L1").textContent).toBe("2026 season · snake draft")
@@ -120,11 +120,11 @@ describe("the card says each fact once", () => {
     expect(screen.getByTestId("find-league-view-L1").textContent).toBe("View")
   })
 
-  it("a league drafting now says so, and an AI league says it once as a tag", () => {
+  it("a league drafting now says so, and a Chimmy league says it once as a tag", () => {
     render(<FindLeagueCard league={card({ draftStatus: "in_progress", draftDate: "2026-11-20T01:00:00.000Z", aiFeatures: ["Draft helper"] })} />)
     expect(screen.getByTestId("find-league-draft-time-L1").textContent).toBe("Drafting now")
     const text = screen.getByTestId("find-league-card-L1").textContent ?? ""
-    expect(count(text, /AI-enabled/g)).toBe(1)
+    expect(count(text, /Chimmy-enabled/g)).toBe(1)
     expect(count(text, /Draft helper/g)).toBe(1)
   })
 

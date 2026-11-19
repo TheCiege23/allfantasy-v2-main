@@ -169,7 +169,7 @@ function buildOpenTeamName(slotNumber: number): string {
   return `Open Team ${slotNumber}`
 }
 
-export type CanonicalCreateTransactionResult = {
+type CanonicalCreateTransactionResult = {
   leagueId: string
   homepageUrl: string
   inviteUrl: string
@@ -682,6 +682,17 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
+      /*
+       * ⚠ THE LEAGUE ROW CARRIES ITS OWN COPY OF THE WAIVER TYPE, AND IT DEFAULTS TO "rolling".
+       * The engine reads `leagueWaiverSettings` (written below from `waiverDefaults`), but the
+       * commissioner's waiver panel and the league constitution read these columns. Left unset, a
+       * redraft league that runs FAAB told its commissioner "rolling" and hid the FAAB budget field.
+       * Zombie keeps its own override after this.
+       */
+      waiverType: waiverDefaults.waiver_type,
+      ...(waiverDefaults.waiver_type === 'faab' && typeof waiverDefaults.FAAB_budget_default === 'number'
+        ? { waiverBudget: waiverDefaults.FAAB_budget_default }
+        : {}),
       ...(formatId === 'zombie' ? { waiverType: 'fcfs', waiverHours: 0 } : {}),
       /*
        * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
@@ -1010,6 +1021,17 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
     })
+    /*
+     * 🛑 THE LEAGUE COLUMN TOO. The taxi squad size has two stores (lib/taxi/taxiSlotsSync.ts): this
+     * config, and `League.taxiSlots`, which lineup validation, the rollover housekeeping and the rookie
+     * taxi placement read. Creation wrote only the config, so a new dynasty league said "4" in its
+     * settings and 0 on the column: no lineup save could put a player on the taxi squad, and drafted
+     * rookies stayed on the bench, until the commissioner re-saved the size (found re-walking a
+     * dynasty league, 2026-11-19). Plain dynasty only: devy and C2C size theirs on their own config.
+     */
+    if (formatId === 'dynasty') {
+      await tx.league.update({ where: { id: league.id }, data: { taxiSlots: taxiSlotsForCreate } })
+    }
   }
 
   /**

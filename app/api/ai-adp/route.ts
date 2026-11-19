@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       computedAt: null,
       stale: true,
       ageHours: null,
-      message: 'No AI ADP snapshot for this segment. Run the daily AI ADP job or use standard ADP.',
+      message: 'No Chimmy ADP snapshot for this segment. Run the daily Chimmy ADP job or use standard ADP.',
     })
   }
 
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     stale: result.stale,
     ageHours: result.ageHours,
     message: result.stale
-      ? 'AI ADP snapshot is stale. Run the daily AI ADP job to refresh this segment.'
+      ? 'Chimmy ADP snapshot is stale. Run the daily Chimmy ADP job to refresh this segment.'
       : null,
   })
 }

@@ -35,7 +35,7 @@ import {
  */
 export type CommissionerNeed = CoCommissionerScope | 'head' | 'view'
 
-export type CommissionerAccess =
+type CommissionerAccess =
   | { ok: true; role: 'head' | 'co_commissioner'; scopes: CoCommissionerScope[] }
   | { ok: false; status: 403 | 404; error: string; missingScopes?: CoCommissionerScope[] }
 

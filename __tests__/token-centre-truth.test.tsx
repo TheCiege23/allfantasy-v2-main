@@ -97,7 +97,7 @@ describe('/tokens', () => {
     // 2026-11-14: one fold, "What tokens don't cover", holds this and what never costs tokens.
     expect(not).toContain('What tokens don’t cover')
     expect(not).toContain('AF Pro')
-    expect(not).toContain('Survivor and Big Brother AI')
+    expect(not).toContain('Survivor and Big Brother Chimmy')
     expect(document.body.textContent).not.toContain('before you click')
     expect(document.body.textContent).toContain('never expire')
   })
@@ -126,7 +126,14 @@ describe('lock cards', () => {
       </FeatureGate>,
     )
     const link = await screen.findByTestId('locked-feature-token-fallback-link')
-    expect(link.getAttribute('href')).toBe('/tokens?ruleCode=ai_trade_analyzer_full_review')
+    const url = new URL(link.getAttribute('href')!, window.location.origin)
+    expect(url.pathname).toBe('/tokens')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      ruleCode: 'ai_trade_analyzer_full_review',
+      offer: 'starter',
+      from: 'token_trade_analyzer',
+      back: '/',
+    })
   })
 
   it('🛑 never offers tokens for a feature nothing will charge', async () => {

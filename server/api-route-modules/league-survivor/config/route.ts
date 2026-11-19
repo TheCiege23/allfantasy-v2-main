@@ -1,4 +1,5 @@
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { prisma } from '@/lib/prisma'
 /**
  * GET/PUT: Survivor league config. PROMPT 349 QA — commissioner or league member can read; only commissioner can write.
@@ -64,6 +65,12 @@ export async function GET(
   })
 }
 
+const SURVIVOR_CONFIG_INT_FIELDS = [
+  'tribeCount', 'tribeSize', 'mergeWeek', 'mergePlayerCount', 'juryStartAfterMerge', 'exileReturnTokens',
+  'tribeShuffleConsecutiveLosses', 'voteDeadlineDayOfWeek', 'tribalCouncilDayOfWeek', 'regularSeasonEndWeek',
+] as const
+const SURVIVOR_CONFIG_TIME_FIELDS = ['voteDeadlineTimeUtc', 'tribalCouncilTimeUtc'] as const
+
 export async function PUT(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
@@ -81,7 +88,20 @@ export async function PUT(
   const isSurvivor = await isSurvivorLeague(leagueId)
   if (!isSurvivor) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
 
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
+
   const body = await req.json().catch(() => ({}))
+  // `Number("abc")` used to reach the database as NaN and a time of "25:00" was stored as-is. Every number here is a
+  // whole count, week or day; every time is HH:MM.
+  const badField = SURVIVOR_CONFIG_INT_FIELDS.find((k) => body[k] != null && !(Number.isInteger(Number(body[k])) && Number(body[k]) >= 0))
+  if (badField) return NextResponse.json({ error: `"${badField}" must be a whole number.`, field: badField }, { status: 400 })
+  // The one decimal (a Float column).
+  if (body.tribeShuffleImbalanceThreshold != null && !(Number.isFinite(Number(body.tribeShuffleImbalanceThreshold)) && Number(body.tribeShuffleImbalanceThreshold) >= 0)) {
+    return NextResponse.json({ error: '"tribeShuffleImbalanceThreshold" must be a number.', field: 'tribeShuffleImbalanceThreshold' }, { status: 400 })
+  }
+  const badTime = SURVIVOR_CONFIG_TIME_FIELDS.find((k) => body[k] != null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body[k])))
+  if (badTime) return NextResponse.json({ error: `"${badTime}" must be a time as HH:MM.`, field: badTime }, { status: 400 })
   if (body.idolCount != null) return NextResponse.json({ error: 'Set idol count in Survivor Idols settings before the draft.' }, { status: 400 })
   const mutableAfterDraft = new Set(['voteDeadlineDayOfWeek', 'voteDeadlineTimeUtc'])
   const changingLockedRule = Object.keys(body).some(key => !mutableAfterDraft.has(key))
@@ -129,5 +149,6 @@ export async function PUT(
     }),
   })
   if (!updated) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+  await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: Object.keys(body) })
   return NextResponse.json({ ok: true, config: updated })
 }

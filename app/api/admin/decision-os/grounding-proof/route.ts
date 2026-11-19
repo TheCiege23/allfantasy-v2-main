@@ -180,6 +180,8 @@ export async function GET(request: NextRequest) {
       devy: sport.toUpperCase() === 'NCAAF',
       projections: true,
       leagueRules: true,
+      // As the chat route asks on every turn — without it this page measured a lighter packet than users get.
+      idpKicker: true,
       ...deriveWantFromIntent(classifyChimmyIntent(question ?? '').intent),
       ...forced,
     },

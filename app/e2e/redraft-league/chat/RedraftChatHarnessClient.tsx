@@ -41,7 +41,7 @@ function installFixtureNetwork(sport: string, withChimmyShare = false) {
     const at = new Date(Date.now() - 60_000).toISOString()
     messages.push(
       { id: 'fx-chimmy-q', authorId: FIXTURE_VIEWER_ID, authorName: 'Fourth & Long', authorAvatarUrl: null, createdAt: at, messageType: 'text', source: null, parentMessageId: null, text: '@chimmy who should I start at flex, Puka Nacua or Drake London?', metadata: null },
-      { id: 'fx-chimmy-a', authorId: '', authorName: 'Chimmy', authorAvatarUrl: null, createdAt: at, messageType: 'system', source: null, parentMessageId: null, text: 'Start Puka Nacua. He has seen 9+ targets in four straight weeks; London faces a top-three pass defense.', metadata: { isSystem: true, chimmyPrivateReply: true, chimmyShareable: true, questionMessageId: 'fx-chimmy-q' } },
+      { id: 'fx-chimmy-a', authorId: '', authorName: 'Chimmy', authorAvatarUrl: null, createdAt: at, messageType: 'system', source: null, parentMessageId: null, text: '**Start Puka Nacua.**\n\n- **Volume:** 9+ targets in four straight weeks.\n- **Matchup:** London faces a top-three pass defense.', metadata: { isSystem: true, chimmyPrivateReply: true, chimmyShareable: true, questionMessageId: 'fx-chimmy-q' } },
     )
   }
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {

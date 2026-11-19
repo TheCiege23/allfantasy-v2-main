@@ -169,7 +169,7 @@ export type CfbdGameLogReport = {
 export async function planCfbdGameLogs(
   args: { season: number; now?: Date },
   db: Db = defaultPrisma,
-): Promise<{ isComplete: (week: number) => boolean; dateByGame: Map<string, Date> }> {
+): Promise<{ isComplete: (week: number) => boolean; hasStarted: (week: number) => boolean; dateByGame: Map<string, Date> }> {
   const now = (args.now ?? new Date()).getTime()
   const [ledger, schedule] = await Promise.all([
     db.statIngestionJob.findMany({
@@ -183,6 +183,7 @@ export async function planCfbdGameLogs(
   ])
 
   const lastKickoff = new Map<number, number>()
+  const firstKickoff = new Map<number, number>()
   const dateByGame = new Map<string, Date>()
   for (const g of schedule) {
     if (g.startTime == null || g.week == null) continue
@@ -193,10 +194,18 @@ export async function planCfbdGameLogs(
     if (id && day) dateByGame.set(id, day)
     const t = g.startTime.getTime()
     if (t > (lastKickoff.get(g.week) ?? -Infinity)) lastKickoff.set(g.week, t)
+    if (t < (firstKickoff.get(g.week) ?? Infinity)) firstKickoff.set(g.week, t)
   }
 
   return {
     dateByGame,
+    // A week with no game kicked off yet has no player lines to fetch. With no schedule on file at
+    // all we cannot say, so every week counts as started and is asked for, as before.
+    hasStarted: (week) => {
+      if (firstKickoff.size === 0) return true
+      const kickoff = firstKickoff.get(week)
+      return kickoff != null && kickoff <= now
+    },
     isComplete: (week) => {
       const kickoff = lastKickoff.get(week)
       if (kickoff == null) return false

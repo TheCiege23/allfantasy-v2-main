@@ -16,15 +16,41 @@
  * Pure. Callers read the rows; this only decides.
  */
 
+import { importedGuillyFormat } from '@/lib/guillotine/importedGuillyHealth'
+
 const GUILLOTINE_VARIANTS: ReadonlySet<string> = new Set(['guillotine', 'survivor_guillotine'])
 
-export function isGuillotineLeague(league: { guillotineMode?: boolean | null; leagueVariant?: string | null }): boolean {
-  return league.guillotineMode === true || GUILLOTINE_VARIANTS.has(String(league.leagueVariant ?? '').toLowerCase())
+export type EliminationLeague = {
+  guillotineMode?: boolean | null
+  leagueVariant?: string | null
+  /** `League.leagueType` — an importer's guess unless the commissioner confirmed the type. */
+  leagueType?: string | null
+  /** `League.settings`, read for `leagueTypeConfirmation` only. */
+  settings?: unknown
+}
+
+/**
+ * ⚠ AN IMPORTED GUILLY LEAGUE SETS NEITHER NATIVE FLAG (user report, 2026-11-18). ESPN's
+ * "Washington Pro Knockout" knocked its owner out in week 8, and the owner had confirmed the league
+ * as Guilly — but `guillotineMode` was false and `leagueVariant` null, so My Team read the emptied
+ * roster as "no starting lineup recorded" and offered Fix Lineup to a team that could not play.
+ * The confirmation and the `leagueType` column are where an import says it, and Home already reads
+ * them through `importedGuillyFormat` (the confirmation wins, so a league a human set back to
+ * redraft stays redraft). Callers that pass neither field get the answer they always got.
+ */
+export function isGuillotineLeague(league: EliminationLeague): boolean {
+  if (league.guillotineMode === true || GUILLOTINE_VARIANTS.has(String(league.leagueVariant ?? '').toLowerCase())) return true
+  if (league.leagueType === undefined && league.settings === undefined) return false
+  return importedGuillyFormat({
+    leagueType: league.leagueType == null ? null : String(league.leagueType).toLowerCase(),
+    guillotineMode: league.guillotineMode ?? null,
+    settings: league.settings ?? null,
+  }) != null
 }
 
 export function isTeamEliminated(args: {
   playerData: unknown
-  league: { guillotineMode?: boolean | null; leagueVariant?: string | null }
+  league: EliminationLeague
   /** A `GuillotineElimination` row exists for this owner, this league, this season. */
   eliminationRecorded: boolean
 }): boolean {

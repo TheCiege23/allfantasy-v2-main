@@ -39,6 +39,12 @@ describe('lander → guide links', () => {
     expect(LEAGUE_TYPE_GUIDES.idp?.[0].slug).toBe('idp-fantasy-football')
     expect(LEAGUE_TYPE_GUIDES.c2c?.[0].slug).toBe('campus-to-canton-fantasy-football')
     expect(LEAGUE_TYPE_GUIDES.survivor?.[0].slug).toBe('survivor-fantasy-league')
+    expect(LEAGUE_TYPE_GUIDES.zombie?.[0].slug).toBe('zombie-fantasy-league')
+    expect(LEAGUE_TYPE_GUIDES['big-brother']?.[0].slug).toBe('big-brother-fantasy-league')
+    expect(SPORT_GUIDES['fantasy-football']?.map((g) => g.slug)).toContain('faab-fantasy-football')
+    expect(SPORT_GUIDES['fantasy-football']?.[0].slug).toBe('how-to-start-a-fantasy-football-league')
+    expect(SPORT_GUIDES['fantasy-basketball']?.map((g) => g.slug)).toContain('fantasy-basketball-streaming')
+    expect(SPORT_GUIDES['fantasy-football']?.[1].slug).toBe('import-fantasy-league')
     expect(blogGuideHref('keeper-league-guide')).toBe('/blog/keeper-league-guide')
   })
 

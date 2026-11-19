@@ -1,3 +1,4 @@
+import { actingTeamRefusal, chooseActingTeam, listHeldTeams, requestedRosterIdFrom } from '@/lib/league/viewerTeams'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
@@ -116,17 +117,24 @@ export async function POST(req: NextRequest) {
       ? Math.max(1, Math.floor(editingWeekRaw))
       : weekFromLeagueSettings(league.settings)
 
-  const memberRoster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
-  const coOwnerRosterId = memberRoster ? null : await acceptedCoOwnerRosterId(leagueId, userId)
+  // Every team this manager holds (lib/league/viewerTeams.ts); a co-owned team only when they hold none.
+  const heldTeams = await listHeldTeams(leagueId, userId)
+  const coOwnerRosterId = heldTeams.length > 0 ? null : await acceptedCoOwnerRosterId(leagueId, userId)
+  const ownRosterIds = new Set<string>([...heldTeams.map((team) => team.rosterId), ...(coOwnerRosterId ? [coOwnerRosterId] : [])])
   const canActAsCommissioner = (await canCommissionerAct(leagueId, userId, 'rosters'))
-  if (!memberRoster && !coOwnerRosterId && !canActAsCommissioner) {
+  if (ownRosterIds.size === 0 && !canActAsCommissioner) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let targetRosterId = rosterIdInput ?? memberRoster?.id ?? coOwnerRosterId ?? null
+  // The body's `rosterId` names the team (it always has); the header / query may name it too.
+  const namedRosterId = rosterIdInput ?? requestedRosterIdFrom(req)
+  // Several teams and none named: refused, never a guess at which lineup this is.
+  if (!namedRosterId && heldTeams.length > 1) {
+    const refusal = chooseActingTeam(heldTeams, null)
+    if (!refusal.ok) return actingTeamRefusal(refusal)
+  }
+
+  let targetRosterId = namedRosterId ?? heldTeams[0]?.rosterId ?? coOwnerRosterId ?? null
   if (!targetRosterId && canActAsCommissioner) {
     const firstRoster = await (prisma as any).roster.findFirst({
       where: { leagueId },
@@ -139,7 +147,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (!canActAsCommissioner && targetRosterId !== (memberRoster?.id ?? coOwnerRosterId)) {
+  if (!canActAsCommissioner && !ownRosterIds.has(targetRosterId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

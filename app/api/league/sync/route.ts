@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
                   <li>Format: ${(result as any).isDynasty ? 'Dynasty' : 'Redraft'}</li>
                   <li>Scoring: ${((result as any).scoring || (result as any).scoringType || 'STD').toUpperCase()}</li>
                 </ul>
-                <p>Your AI tools (Waiver AI, Trade Analyzer, Roster Report) will now use the latest data.</p>
+                <p>Your Chimmy tools (Waiver Chimmy, Trade Analyzer, Roster Report) will now use the latest data.</p>
                 <p style="color: #64748b; font-size: 0.85em; margin-top: 24px;">
                   Sync ID: ${(result as any).leagueId || (result as any).id || 'N/A'}<br>
                   If this wasn't you, contact support.

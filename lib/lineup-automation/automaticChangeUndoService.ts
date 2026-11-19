@@ -1,3 +1,4 @@
+import { listHeldTeams } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 /**
@@ -31,7 +32,8 @@ export type AutomaticChangeRow = {
   undone: boolean
 }
 
-type Access = { ok: true; commissioner: boolean; ownRosterId: string | null } | { ok: false; status: 403 | 404 | 409 }
+/** `ownRosterIds`: every team the manager holds, so a manager with several sees and can undo each one's changes. */
+type Access = { ok: true; commissioner: boolean; ownRosterIds: string[] } | { ok: false; status: 403 | 404 | 409 }
 
 async function access(leagueId: string, userId: string): Promise<Access> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
@@ -39,10 +41,10 @@ async function access(leagueId: string, userId: string): Promise<Access> {
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409 }
   const [commissioner, own] = await Promise.all([
     isElevatedCommissioner(leagueId, userId),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    listHeldTeams(leagueId, userId),
   ])
-  if (!commissioner && !own) return { ok: false, status: 403 }
-  return { ok: true, commissioner, ownRosterId: own?.id ?? null }
+  if (!commissioner && own.length === 0) return { ok: false, status: 403 }
+  return { ok: true, commissioner, ownRosterIds: own.map((team) => team.rosterId) }
 }
 
 export async function readAutomaticChanges(leagueId: string, userId: string, now = new Date()): Promise<{ ok: true; rows: AutomaticChangeRow[]; commissioner: boolean } | { ok: false; status: 403 | 404 | 409 }> {
@@ -50,7 +52,7 @@ export async function readAutomaticChanges(leagueId: string, userId: string, now
   if (!a.ok) return a
   const since = new Date(now.getTime() - LOG_DAYS * 86_400_000)
   const logRows = await prisma.automationAuditLog.findMany({
-    where: { leagueId, entityType: 'roster', createdAt: { gte: since }, ...(a.commissioner ? {} : { entityId: a.ownRosterId ?? '' }) },
+    where: { leagueId, entityType: 'roster', createdAt: { gte: since }, ...(a.commissioner ? {} : { entityId: { in: a.ownRosterIds } }) },
     orderBy: { createdAt: 'desc' },
     take: LOG_MAX,
     select: { id: true, entityId: true, createdAt: true, message: true, metadata: true },
@@ -97,7 +99,7 @@ export async function undoAutomaticChange(leagueId: string, userId: string, audi
   if (!a.ok) return { ok: false, status: a.status, error: a.status === 404 ? 'League not found' : a.status === 409 ? 'AllFantasy only changes lineups in leagues it runs.' : 'Forbidden' }
   const row = await prisma.automationAuditLog.findFirst({ where: { id: auditId, leagueId, entityType: 'roster' }, select: { id: true, entityId: true, message: true, metadata: true } })
   if (!row?.entityId) return { ok: false, status: 404, error: 'That automatic change was not found.' }
-  const owner = row.entityId === a.ownRosterId
+  const owner = a.ownRosterIds.includes(row.entityId)
   if (!owner && !a.commissioner) return { ok: false, status: 403, error: 'Only the team’s owner or the commissioner can undo this.' }
   const undo = readAutomaticChangeUndo(row.metadata)
   if (!undo) return { ok: false, status: 409, error: 'This change was made before undo was available, so set the lineup yourself.' }

@@ -171,7 +171,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
       { label: 'Mock Draft', href: '/tools/mock-draft-simulator' },
-      { label: 'Chimmy AI', href: '/chimmy' },
+      { label: 'Chimmy', href: '/chimmy' },
       { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
@@ -227,7 +227,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
-      { label: 'Chimmy AI', href: '/chimmy' },
+      { label: 'Chimmy', href: '/chimmy' },
       { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
@@ -296,14 +296,14 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     openToolHref: '/trade-evaluator',
     examples: [
       'Evaluate redraft and dynasty trades with league context',
-      'See letter grades and AI explanations for both sides',
+      'See letter grades and Chimmy explanations for both sides',
       'Get counter-offer suggestions to maximize value',
     ],
     relatedToolSlugs: ['mock-draft-simulator', 'waiver-wire-advisor', 'ai-draft-assistant', 'legacy-dynasty'],
     keywords: ['fantasy trade analyzer', 'trade analyzer', 'fantasy football trade', 'AI trade analysis'],
     faqs: [
       { q: 'What sports does the trade analyzer support?', a: 'NFL, NBA, MLB, NHL, NCAA Basketball, NCAA Football, and Soccer. Redraft and dynasty formats.' },
-      { q: 'How does the AI grade trades?', a: 'Grades consider lineup impact, replacement value, and your league settings. You get letter grades and explanations for both sides.' },
+      { q: 'How does Chimmy grade trades?', a: 'Grades consider lineup impact, replacement value, and your league settings. You get letter grades and explanations for both sides.' },
       { q: 'Do I need to connect my league?', a: 'You can use the analyzer standalone or with a connected league for better context.' },
     ],
   },
@@ -312,7 +312,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     title: 'AI Trade Finder - League-Wide Trade Discovery | AllFantasy',
     description:
       'AI scans your synced Sleeper league to find the best available fantasy trades based on roster fit, trade goals, partner alignment, and market context.',
-    headline: 'AI Trade Finder',
+    headline: 'Chimmy Trade Finder',
     benefitSummary:
       'Scan your full league for realistic trade paths, partner fits, and analyzer-ready packages without manually checking every roster.',
     openToolHref: '/core/trades#trade-finder',
@@ -331,8 +331,8 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Full AI-powered mock draft room that looks and feels like a live draft board. Import your Sleeper league for real managers and draft slots, or run a custom open mock across all supported sports.',
     headline: 'Mock Draft Simulator',
     benefitSummary:
-      'Import a real Sleeper league or build a custom room, then draft against AI teams using ADP, roster needs, and scoring-aware logic in one shareable board.',
-    badge: 'AI-Powered',
+      'Import a real Sleeper league or build a custom room, then draft against Chimmy teams using ADP, roster needs, and scoring-aware logic in one shareable board.',
+    badge: 'Chimmy-powered',
     openToolHref: '/mock-draft',
     examples: [
       'Import real Sleeper managers, avatars, and draft order when available',
@@ -349,7 +349,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'AllFantasy waiver wire advisor gives AI-powered pickup recommendations and lineup help tuned to your league settings and scoring.',
     headline: 'Waiver Wire Advisor',
     benefitSummary:
-      'Get pickup and lineup recommendations based on your league. AI considers scoring, roster needs, and availability.',
+      'Get pickup and lineup recommendations based on your league. Chimmy considers scoring, roster needs, and availability.',
     openToolHref: '/waiver-ai',
     examples: [
       'Waiver and free-agent pickup recommendations',
@@ -366,10 +366,10 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Compare any two fantasy managers head-to-head. AI grades records, win rates, championships, and play style across redraft, dynasty, and specialty formats. Includes trade style and manager DNA.',
     headline: 'Manager Comparison',
     benefitSummary:
-      'Stack two Sleeper managers side-by-side with AI grades, verdict hero, DNA signals, trade style context, and shared-league opponent tendencies.',
+      'Stack two Sleeper managers side-by-side with Chimmy grades, verdict hero, DNA signals, trade style context, and shared-league opponent tendencies.',
     openToolHref: '/manager-compare',
     icon: '⚔️',
-    badge: 'AI-Powered',
+    badge: 'Chimmy-powered',
     examples: [
       'Compare redraft, dynasty, and specialty format grades for two managers',
       'See trade style, manager DNA, and shared-league opponent tendencies in one place',
@@ -379,7 +379,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     keywords: ['manager comparison', 'fantasy manager grades', 'sleeper manager compare', 'head to head fantasy managers'],
     faqs: [
       { q: 'What does Manager Comparison measure?', a: 'It compares Sleeper manager history, format-specific grades, win rates, championships, and play-style tendencies.' },
-      { q: 'Does the tool include AI analysis?', a: 'Yes. The head-to-head verdict, manager grading, and follow-up context are presented through an AI-assisted comparison flow.' },
+      { q: 'Does the tool include Chimmy analysis?', a: 'Yes. The head-to-head verdict, manager grading, and follow-up context are presented through a Chimmy-assisted comparison flow.' },
       { q: 'Can I share a comparison with someone else?', a: 'Yes. After loading results, you can copy a shareable URL with both manager usernames baked into the page.' },
     ],
   },
@@ -413,10 +413,10 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Generate AI-powered social captions for your fantasy career rank, trades, league standings, player takes, and waiver wins. Load a dynasty report, edit the caption, and earn reward tokens for sharing.',
     headline: 'Career Share',
     benefitSummary:
-      'Turn your fantasy moments into post-ready captions with Grok AI, optional dynasty report context, platform-aware formatting, and daily share rewards.',
+      'Turn your fantasy moments into post-ready captions with Grok Chimmy, optional dynasty report context, platform-aware formatting, and daily share rewards.',
     openToolHref: '/career-share',
     icon: '🚀',
-    badge: 'Grok AI',
+    badge: 'Grok Chimmy',
     examples: [
       'Create a ranking flex post from your AllFantasy career tier and XP snapshot',
       'Generate social copy for trade debates, league standing updates, player stock takes, and waiver pickups',
@@ -459,13 +459,13 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     title: 'AI Draft Assistant – Fantasy Draft Help | AllFantasy',
     description:
       'AllFantasy AI draft assistant helps you draft smarter with real-time rankings, strategy tips, and Chimmy AI guidance during your draft.',
-    headline: 'AI Draft Assistant',
+    headline: 'Chimmy Draft Assistant',
     benefitSummary:
-      'Draft with AI support: rankings, strategy, and Chimmy answering your questions in real time.',
+      'Draft with Chimmy support: rankings, strategy, and Chimmy answering your questions in real time.',
     openToolHref: '/legacy?tab=mock-draft',
     examples: [
       'Real-time draft rankings and suggestions',
-      'Chimmy AI for draft questions',
+      'Chimmy for draft questions',
       'Snake and auction support',
     ],
     relatedToolSlugs: ['mock-draft-simulator', 'trade-analyzer', 'waiver-wire-advisor', 'legacy-dynasty'],
@@ -500,11 +500,11 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'AllFantasy NCAA bracket challenge: create pools, invite friends, fill out brackets, and use AI to stress-test your picks. Compete in public and private contests.',
     headline: 'NCAA Bracket Challenge',
     benefitSummary:
-      'Build bracket pools, track standings, and get AI bracket analysis. March Madness made social and smart.',
+      'Build bracket pools, track standings, and get Chimmy bracket analysis. March Madness made social and smart.',
     openToolHref: '/brackets',
     examples: [
       'Create and join bracket pools',
-      'AI bracket review and simulation',
+      'Chimmy bracket review and simulation',
       'Live standings and leaderboards',
     ],
     relatedToolSlugs: ['power-rankings', 'legacy-dynasty', 'trade-analyzer'],
@@ -539,7 +539,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     examples: [
       'Dynasty history and legacy score',
       'Hall of fame moments and reputation',
-      'Trade analyzer, waiver AI, and Chimmy chat',
+      'Trade analyzer, waiver Chimmy, and Chimmy chat',
     ],
     relatedToolSlugs: ['trade-analyzer', 'mock-draft-simulator', 'waiver-wire-advisor', 'bracket-challenge'],
     keywords: ['dynasty fantasy', 'legacy fantasy', 'hall of fame fantasy', 'fantasy commissioner'],

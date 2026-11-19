@@ -138,7 +138,7 @@ export function availableImportPlatformsPhrase(conjunction: 'or' | 'and' = 'or')
  * `available: true` — the same flag the import API routes refuse on — so a page can never call a
  * platform live that the backend will turn away.
  */
-export type ImportPlatformStatus = 'live' | 'coming_soon';
+type ImportPlatformStatus = 'live' | 'coming_soon';
 
 export type ImportPlatform = {
   provider: ImportProvider;
@@ -210,7 +210,7 @@ export function getImportProviderSupportedSports(provider: ImportProvider): read
   return IMPORT_PROVIDER_UI_OPTIONS.find((option) => option.provider === provider)?.supportedSports ?? [];
 }
 
-export type ImportSportCheck =
+type ImportSportCheck =
   | { ok: true; sport: ImportSupportedSport }
   | { ok: false; reason: 'missing' | 'unsupported'; message: string };
 
@@ -226,7 +226,7 @@ export type ImportSportCheck =
  * basketball league with football rules.
  */
 /** Every sport AllFantasy runs leagues for. A league in any other sport has nowhere to go. */
-export const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'];
+const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'];
 
 /**
  * The looser gate for the live importers that are not held to their `supportedSports` list

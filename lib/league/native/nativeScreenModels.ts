@@ -218,6 +218,28 @@ export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number |
   }
 }
 
+/**
+ * The playoff format as the bracket will actually run it in a league of `teamCount` teams.
+ *
+ * A league's stored playoff size can be larger than the league: a 4-team league created with the
+ * sport's default of 6. The playoff runtime plays every team that exists
+ * (`canonicalNflRedraftPlayoffRuntime.ts`: `min(configured, teamCount)`, byes filling the bracket to a
+ * power of two), but this screen drew the setting — "Teams 6 · 2 byes", a "top 6" cut line and BYE
+ * chips in a league where nobody gets a bye. Only a format larger than the league is changed; a
+ * play-in is left as stored.
+ */
+export function fitPlayoffFormatToLeague(format: PlayoffFormat, teamCount: number | null | undefined): PlayoffFormat {
+  const size = Number(teamCount)
+  if (!Number.isInteger(size) || size < 2 || format.teams == null || format.teams <= size || format.playIn) return format
+  const rounds = playoffRoundsFor(size)
+  return {
+    ...format,
+    teams: size,
+    byes: 2 ** (rounds ?? 0) - size,
+    weeks: format.weeks != null && rounds != null ? Math.min(format.weeks, rounds) : format.weeks,
+  }
+}
+
 /** Single-elimination rounds for N playoff teams: ceil(log2 N). 6 → 3, 4 → 2, 8 → 3. */
 function playoffRoundsFor(teams: number): number | null {
   if (!Number.isFinite(teams) || teams < 2) return null

@@ -27,7 +27,7 @@ export const SALARY_CAP_TABS: ReadonlyArray<{ id: string; label: string; view: S
   { id: 'cap_contracts', label: 'Contracts', view: 'contracts' },
   { id: 'cap_team_builder', label: 'Team builder', view: 'team-builder' },
   { id: 'cap_auction', label: 'Startup auction', view: 'draft' },
-  { id: 'cap_ai', label: 'Cap AI', view: 'ai' },
+  { id: 'cap_ai', label: 'Cap Chimmy', view: 'ai' },
   { id: 'cap_rules', label: 'Cap rules', view: 'rules' },
 ]
 

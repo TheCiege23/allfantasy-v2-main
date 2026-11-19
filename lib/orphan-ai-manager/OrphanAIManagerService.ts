@@ -200,7 +200,7 @@ export async function executeDraftPickForOrphan(
   const { leagueId, triggeredByUserId } = input
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
   if (!uiSettings.orphanTeamAiManagerEnabled) {
-    return { success: false, error: 'Orphan team AI manager is not enabled for this league.' }
+    return { success: false, error: 'Orphan team Chimmy manager is not enabled for this league.' }
   }
   if (uiSettings.executionMode === 'offline') {
     return { success: false, error: 'This is an offline draft: the commissioner enters every pick.' }
@@ -218,7 +218,7 @@ export async function executeDraftPickForOrphan(
   const orphanRosterIds = await getOrphanRosterIdsForLeague(leagueId)
   const currentRosterId = snapshot.currentPick.rosterId
   if (!orphanRosterIds.includes(currentRosterId)) {
-    return { success: false, error: 'Current pick is not an orphan roster. Only orphan rosters use the AI manager.' }
+    return { success: false, error: 'Current pick is not an orphan roster. Only orphan rosters use Chimmy manager.' }
   }
 
   const league = await prisma.league.findUnique({
@@ -329,8 +329,8 @@ export async function executeDraftPickForOrphan(
   const reasonBits = [
     usedFallback
       ? aiProviderAvailable
-        ? 'AI mode fell back to deterministic CPU execution for this pick.'
-        : 'AI providers unavailable; deterministic CPU fallback executed.'
+        ? 'Chimmy mode fell back to deterministic CPU execution for this pick.'
+        : 'Chimmy providers unavailable; deterministic CPU fallback executed.'
       : null,
     `${strategyProfile.label} profile.`,
     pickResult.reason,

@@ -87,10 +87,11 @@ describe('the mock picker list is the league list', () => {
     for (const n of [4, 5, 7, 18, 19, 20]) expect(OLD_PICKER).not.toContain(n)
   })
 
-  it('dynasty offers only the even sizes a dynasty league takes, from 4', () => {
+  it('dynasty offers every size a dynasty league takes, from 4, odd ones included', () => {
     const opts = getMockDraftTeamCountOptions('NFL', 'dynasty')
-    expect(opts).toContain(4)
-    expect(opts.every((n) => n % 2 === 0)).toBe(true)
+    expect(opts[0]).toBe(4)
+    for (const n of [4, 5, 9, 34, 36, 160, 250]) expect(opts).toContain(n)
+    expect(opts).not.toContain(251)
   })
 
   it('an unknown league type reads as redraft', () => {
@@ -112,8 +113,9 @@ describe('normalizeMockDraftTeamCount', () => {
   })
 
   it('moves a size the type does not take to the nearest one it does', () => {
-    expect(normalizeMockDraftTeamCount(7, 'NFL', 'dynasty')).toBe(6)
-    expect(normalizeMockDraftTeamCount(40, 'NFL', 'dynasty')).toBe(16)
+    expect(normalizeMockDraftTeamCount(7, 'NFL', 'dynasty')).toBe(7)
+    expect(normalizeMockDraftTeamCount(3, 'NFL', 'dynasty')).toBe(4)
+    expect(normalizeMockDraftTeamCount(400, 'NFL', 'dynasty')).toBe(250)
     expect(normalizeMockDraftTeamCount(999, 'NFL', 'redraft')).toBe(Math.max(...getTeamCountOptions('NFL', 'redraft')))
   })
 
@@ -172,9 +174,11 @@ describe('server: create, session, settings', () => {
     expect(json.slotConfig).toHaveLength(numTeams)
   })
 
-  it('a dynasty create snaps an odd size to the nearest dynasty size', async () => {
+  it('a dynasty create keeps an odd size, and snaps one below the minimum up to 4', async () => {
     const json = (await (await post({ sport: 'NFL', leagueType: 'dynasty', numTeams: 5 })).json()) as { config: { numTeams: number } }
-    expect(json.config.numTeams).toBe(4)
+    expect(json.config.numTeams).toBe(5)
+    const low = (await (await post({ sport: 'NFL', leagueType: 'dynasty', numTeams: 3 })).json()) as { config: { numTeams: number } }
+    expect(low.config.numTeams).toBe(4)
   })
 
   it('settings read and write keep 4 and 20', async () => {

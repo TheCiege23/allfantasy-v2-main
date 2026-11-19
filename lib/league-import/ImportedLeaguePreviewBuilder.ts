@@ -23,7 +23,7 @@ import {
 } from '@/lib/league/format-engine'
 import { expandProviderRosterPositions, footballSlotSpec } from '@/lib/league/importedLineupTemplate'
 
-export interface ImportPreviewLeague {
+interface ImportPreviewLeague {
   id: string
   name: string
   sport: string
@@ -43,7 +43,7 @@ export interface ImportPreviewLeague {
   }
 }
 
-export interface ImportPreviewManager {
+interface ImportPreviewManager {
   rosterId: string
   ownerId: string
   username: string
@@ -109,7 +109,7 @@ function resolveImportTeamIdentity(
   }
 }
 
-export interface ImportPreviewDataQuality {
+interface ImportPreviewDataQuality {
   fetchedAt: number
   sources: {
     users: boolean
@@ -443,7 +443,7 @@ function finiteOrNull(v: unknown): number | null {
 }
 
 /** Pure projection of the normalized league onto the fields the review screen shows. */
-export function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
+function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
   const l = normalized.league as NormalizedImportResult['league'] & Record<string, unknown>
   const rawType = l.league_type ?? l.sleeper_league_type
   return {
@@ -469,7 +469,8 @@ export function buildImportReviewFacts(normalized: NormalizedImportResult): Impo
       .filter((r) => r.is_orphan === true || !String(r.owner_name ?? '').trim())
       .map((r) => r.source_team_id),
     failedRosterTeamIds: normalized.rosters.filter((r) => r.fetch_status === 'failed').map((r) => r.source_team_id),
-    tradedPickCount: normalized.traded_picks?.length ?? 0,
+    // Fantrax lists untraded picks too (`traded: false`); only the moved ones are "traded picks".
+    tradedPickCount: (normalized.traded_picks ?? []).filter((p) => p.traded !== false).length,
     standingsCount: normalized.standings?.length ?? 0,
   }
 }

@@ -12,10 +12,12 @@
  *     import is switched off); Fantrax infers adds from roster diffs and has no person per team;
  *     Fleaflicker imports no waiver activity.
  *
- *   TRADES — not counted for any of them yet. ESPN splits one trade into one row per message (and
- *     production held no ESPN trades); MFL's parser is suspected of dropping trades; Fleaflicker's sides
- *     lose what was given; Fantrax trades are inferred and deliberately kept out; Yahoo import is off.
- *     A count built on any of those would be a wrong number that looks right.
+ *   TRADES — counted for Fantrax from the commissioner's own trade-history upload only (2026-11-19, build
+ *     item 6): `importFantraxTradeHistory` writes a trade only when every player, pick and team in it was
+ *     placed, both sides at once, keyed `fantrax-csv:` — so the trade-inferred-from-roster-diffs rows stay
+ *     out. Not counted yet for the rest: ESPN splits one trade into one row per message (and production
+ *     held no ESPN trades); MFL's parser is suspected of dropping trades; Fleaflicker's sides lose what was
+ *     given; Yahoo import is off. A count built on any of those would be a wrong number that looks right.
  *
  *   DRAFTS — the backfill writes picks under the TEAM, never the person who owned it that season, so
  *     a pick cannot be credited to a manager across seasons. Fleaflicker writes no picks at all.
@@ -30,6 +32,7 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
 import type { EdgeWaiverClaim } from './waiverEdge'
+import type { EdgeTrade, EdgeTradeSide } from './tradeEdge'
 
 /** Platforms whose `waiver_add` rows carry the claiming team. */
 const WAIVER_TEAM_PLATFORMS = new Set(['espn', 'mfl'])
@@ -41,6 +44,126 @@ const STALE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
 
 export function providerTradesReason(platform: string): string {
   return `${platformLabel(platform)} trades aren't imported in a form that can be counted per manager yet.`
+}
+
+/** The id prefix of a trade written from a commissioner's Fantrax export (`fantraxTradeHistoryCsv.ts`). */
+const FANTRAX_UPLOAD_PREFIX = 'fantrax-csv:'
+
+type StoredTradeSide = {
+  transactionId: string
+  season: number
+  week: number
+  tradeDate: Date | null
+  createdAt: Date
+  playersGiven: unknown
+  playersReceived: unknown
+  picksGiven: unknown
+  picksReceived: unknown
+}
+
+const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [])
+const count = (v: unknown): number => (Array.isArray(v) ? v.length : 0)
+
+/**
+ * Pure: stored trade sides (one `LeagueTrade` row per side, filed under its owner's `LeagueTradeHistory`) into the
+ * record builder's trades. A trade is the rows sharing a transaction id; each row is one owner's side.
+ */
+export function storedTradeSidesToEdge(
+  histories: ReadonlyArray<{ ownerId: string; trades: ReadonlyArray<StoredTradeSide> }>,
+  positionOf: (playerId: string) => string | null,
+): EdgeTrade[] {
+  const byTx = new Map<string, { first: StoredTradeSide; sides: EdgeTradeSide[] }>()
+  for (const h of histories) {
+    for (const t of h.trades) {
+      const side: EdgeTradeSide = {
+        ownerId: h.ownerId,
+        playersIn: ids(t.playersReceived).map((id) => ({ position: positionOf(id) })),
+        playersOut: ids(t.playersGiven).map((id) => ({ position: positionOf(id) })),
+        picksIn: Array.from({ length: count(t.picksReceived) }, () => ({})),
+        picksOut: Array.from({ length: count(t.picksGiven) }, () => ({})),
+      }
+      const held = byTx.get(t.transactionId)
+      if (held) held.sides.push(side)
+      else byTx.set(t.transactionId, { first: t, sides: [side] })
+    }
+  }
+  return [...byTx.entries()]
+    .map(([id, { first, sides }]) => ({
+      id,
+      season: String(first.season),
+      week: first.week,
+      createdIso: (first.tradeDate ?? first.createdAt).toISOString(),
+      sides,
+    }))
+    .sort((a, b) => b.createdIso.localeCompare(a.createdIso))
+}
+
+/**
+ * A Fantrax league's trades from the commissioner's uploaded trade history, or why there are none to count.
+ *
+ * ⚠ NO ROWS IS NOT "NOBODY TRADED". Fantrax sends no trades, so an empty history means the export has not been
+ * uploaded — said in words, so a record does not read "0 trades" for a league that traded all season.
+ * ⚠ AND OWNERS THAT MATCH NO TEAM ARE NOT ZEROS: if no stored owner is a team's person in this league, every manager
+ * would count 0 — the record says the trades could not be matched instead.
+ */
+export async function readFantraxUploadedTrades(
+  league: { platformLeagueId: string | null; sport: string; platform: string },
+  teamOwnerIds: ReadonlySet<string>,
+  now: Date = new Date(),
+): Promise<SectionState<{ trades: EdgeTrade[]; seasonsScanned: string[]; historyGaps: string[]; asOf: string; stale: boolean }>> {
+  if (!league.platformLeagueId) return { available: false, reason: 'This league has no Fantrax league id on file.' }
+  const histories = await prisma.leagueTradeHistory.findMany({
+    where: { sleeperLeagueId: league.platformLeagueId },
+    select: {
+      sleeperUsername: true,
+      trades: {
+        where: { platform: 'fantrax', transactionId: { startsWith: FANTRAX_UPLOAD_PREFIX } },
+        select: {
+          transactionId: true,
+          season: true,
+          week: true,
+          tradeDate: true,
+          createdAt: true,
+          playersGiven: true,
+          playersReceived: true,
+          picksGiven: true,
+          picksReceived: true,
+        },
+      },
+    },
+  })
+  const withTrades = histories.filter((h) => h.trades.length > 0)
+  if (withTrades.length === 0) {
+    return {
+      available: false,
+      reason: 'No Fantrax trade history has been uploaded for this league yet. The commissioner adds it under Commissioner → Trades and draft archive.',
+    }
+  }
+  if (!withTrades.some((h) => teamOwnerIds.has(h.sleeperUsername))) {
+    return { available: false, reason: 'The uploaded Fantrax trades could not be matched to this league’s managers.' }
+  }
+  const playerIds = withTrades.flatMap((h) => h.trades.flatMap((t) => [...ids(t.playersGiven), ...ids(t.playersReceived)]))
+  const space = playerIdSpaceFor({ platform: league.platform, sport: league.sport })
+  const players = await resolveTradePlayers(playerIds, { space, sport: league.sport }).catch(() => new Map())
+  const positionOf = (id: string) => {
+    const p = players.get(id)
+    return p?.ok ? p.position : null
+  }
+  const trades = storedTradeSidesToEdge(
+    withTrades.map((h) => ({ ownerId: h.sleeperUsername, trades: h.trades })),
+    positionOf,
+  )
+  return {
+    available: true,
+    data: {
+      trades,
+      seasonsScanned: [...new Set(trades.map((t) => t.season))].sort(),
+      // Only what was uploaded: a trade after the last export is not here until the next upload.
+      historyGaps: ['Only trades in the uploaded Fantrax export are counted; trades made since the last upload are not.'],
+      asOf: now.toISOString(),
+      stale: false,
+    },
+  }
 }
 
 export function providerDraftsReason(platform: string): string {

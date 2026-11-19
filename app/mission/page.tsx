@@ -31,7 +31,7 @@ export default async function MissionPage(props: MissionPageProps) {
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">Why AllFantasy Exists</h2>
         <p>
           AllFantasy helps fantasy sports players draft smarter, manage better, and build a lasting legacy across
-          every league, season, and sport — powered by AI, built for commissioners, and designed without gambling.
+          every league, season, and sport — powered by Chimmy, built for commissioners, and designed without gambling.
         </p>
         <p className="mt-3">
           Fantasy sports live and die on the work commissioners do behind the scenes: setting up scoring, chasing
@@ -49,7 +49,7 @@ export default async function MissionPage(props: MissionPageProps) {
             not just the players in it.
           </li>
           <li>
-            <strong>AI should help, not replace.</strong> Our AI features are optional guidance — the platform is
+            <strong>Chimmy should help, not replace.</strong> Our AI features are optional guidance — the platform is
             fully useful with AI turned off. See our{" "}
             <Link href="/ai-transparency" className="text-cyan-400 hover:text-cyan-300">
               AI Transparency

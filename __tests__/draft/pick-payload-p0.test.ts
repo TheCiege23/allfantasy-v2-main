@@ -219,7 +219,7 @@ describe('Invariant 12: PickSubmissionService filters empty-slot rows before val
     expect(submissionSrc).toMatch(/isDraftPickRowEmpty\(p\)/)
     // Filter must precede the existingPicks map
     const filterIdx = submissionSrc.indexOf('.filter((p) => !isDraftPickRowEmpty(p))')
-    const mapIdx = submissionSrc.indexOf(".map((p) => ({ playerName: p.playerName, position: p.position }))", filterIdx)
+    const mapIdx = submissionSrc.indexOf(".map((p) => ({ playerName: p.playerName, position: p.position, playerId: p.playerId ?? null }))", filterIdx)
     expect(filterIdx).toBeGreaterThan(-1)
     expect(mapIdx).toBeGreaterThan(filterIdx)
   })

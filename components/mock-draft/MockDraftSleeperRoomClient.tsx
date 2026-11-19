@@ -22,6 +22,7 @@ import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/Dr
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
+import { tileSignatureChipsByOverall } from '@/lib/draft-room/leagueSignature'
 import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import { LanguageFallbackBoundary } from '@/components/i18n/LanguageProviderClient'
@@ -249,6 +250,10 @@ interface AvailablePlayer {
   /* Optional so a mock saved before headshots existed still restores. */
   headshotUrl?: string | null
   teamLogoUrl?: string | null
+  /* The league signature chip (room v2): age, or a college player's class. Optional for older saved mocks. */
+  age?: number | null
+  classYearLabel?: string | null
+  poolType?: string | null
 }
 
 interface ChatMessage {
@@ -634,7 +639,7 @@ function applyAuctionTick(state: DraftState, now: number, queue: string[]): Draf
 function createOpenMockTeams(settings: DraftSettings): TeamSlot[] {
   return Array.from({ length: settings.teamCount }, (_, index) => {
     const slot = index + 1
-    const managerName = slot === settings.myPickSlot ? 'You' : `AI Team ${slot}`
+    const managerName = slot === settings.myPickSlot ? 'You' : `Chimmy Team ${slot}`
     const baseTeam: TeamSlot = {
       slot,
       managerId: `slot-${slot}`,
@@ -913,6 +918,20 @@ export default function MockDraftSleeperRoomClient({
   }, [settings.teamCount])
 
   const draftedIds = useMemo(() => new Set(draftState?.picks.map((pick) => pick.playerId) ?? []), [draftState?.picks])
+  /*
+   * A league mock's tiles carry the live board's signature chip: age in a dynasty, keeper, devy, C2C or
+   * EFL league, a college pick's class in devy and C2C. The pool keeps drafted players, so it is the lookup.
+   * An open mock has no league, so no chip.
+   */
+  const leagueConceptForMock = leaguePayload ? leagueAccentFor(leaguePayload.leagueConcept ?? null, { isDynasty: leaguePayload.isDynasty }).concept : null
+  const signatureByOverall = useMemo(
+    () => tileSignatureChipsByOverall(
+      leagueConceptForMock,
+      draftState?.picks ?? [],
+      (draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id })),
+    ),
+    [leagueConceptForMock, draftState?.picks, draftState?.availablePlayers],
+  )
 
   useEffect(() => {
     setQueue((current) => {
@@ -1481,6 +1500,9 @@ export default function MockDraftSleeperRoomClient({
           tier: Math.max(1, Math.ceil((index + 1) / 12)),
           posRank: `${position}${index + 1}`,
           isRookie: raw.isRookie === true,
+          age: numberFromUnknown(raw.age),
+          classYearLabel: stringFromUnknown(raw.classYearLabel),
+          poolType: stringFromUnknown(raw.poolType),
         } satisfies AvailablePlayer
       })
       .filter((player): player is AvailablePlayer => player != null)
@@ -1514,7 +1536,7 @@ export default function MockDraftSleeperRoomClient({
             content:
               mode === 'league' && leaguePayload
                 ? `Loaded ${leaguePayload.leagueName}. Draft room is live.`
-                : 'Open mock is ready. AI will handle every non-user pick.',
+                : 'Open mock is ready. Chimmy will handle every non-user pick.',
           },
         ],
       }
@@ -2168,9 +2190,9 @@ export default function MockDraftSleeperRoomClient({
           <div className="rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.15),transparent_42%),#0a1124] p-6 sm:p-8">
             <div className="max-w-2xl">
               <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">Mock Draft Simulator</div>
-              <h1 className="mt-4 text-3xl font-black sm:text-4xl">AI-powered drafting for every team in your league</h1>
+              <h1 className="mt-4 text-3xl font-black sm:text-4xl">Chimmy-powered drafting for every team in your league</h1>
               <p className="mt-3 text-sm leading-6 text-white/55">
-                Import a real Sleeper league for actual managers and draft slots, or build a custom room from scratch and let AllFantasy AI handle every other pick.
+                Import a real Sleeper league for actual managers and draft slots, or build a custom room from scratch and let AllFantasy Chimmy handle every other pick.
               </p>
             </div>
 
@@ -2198,7 +2220,7 @@ export default function MockDraftSleeperRoomClient({
                 <div className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Open Mock</div>
                 <h2 className="mt-3 text-2xl font-black">Custom draft room</h2>
                 <p className="mt-3 text-sm leading-6 text-white/50">
-                  Pick the team count, rounds, draft type, sport, scoring, and your slot. AI drafts every other team locally.
+                  Pick the team count, rounds, draft type, sport, scoring, and your slot. Chimmy drafts every other team locally.
                 </p>
                 <button
                   type="button"
@@ -2232,6 +2254,7 @@ export default function MockDraftSleeperRoomClient({
       draftType={draftState.settings.draftType} sport={draftState.settings.sport}
       currentOverall={draftState.status === 'drafting' ? draftState.currentPick : null}
       slotSalaryByOverall={draftState.settings.draftType === 'auction' ? null : leaguePayload?.leagueFacts?.slotSalaryByOverall ?? null}
+      signatureByOverall={signatureByOverall}
     />
 
     const sport = draftState.settings.sport

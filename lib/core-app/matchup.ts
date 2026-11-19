@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -16,7 +16,7 @@ import { BEST_BALL_REASON, matchupStarted, SCORING_TYPE_REASON, STATES_UNKNOWN_R
 import { weeklyFormat } from './weeklyCapabilities'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { startingSlotTemplate } from './rosterSlots'
+import { assignLineupToSlots, expandSlotCountTemplate, startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
@@ -31,6 +31,7 @@ import { realManagerName, rosterLabel } from './managerName'
 import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import { withNewestKickoffs } from './nextGameMap'
 import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /*
@@ -220,6 +221,46 @@ export type MatchupSlot = {
   opponent: MatchupPlayerCell | null
 }
 
+/** One of a team's games in a multi-game week, as a line: who, the score, and how it went. */
+export type MatchupWeekGame = {
+  game: number
+  opponentName: string | null
+  yourPoints: number
+  opponentPoints: number
+  /** Null until the game has points on either side. */
+  result: 'win' | 'loss' | 'tie' | null
+  selected: boolean
+}
+
+type WeekGameRow = { rosterId: string; matchupId: number | null; game?: number | null; pointsFor: number; pointsAgainst: number }
+
+/** A team's rows in one week, in game order: one in an ordinary league, several where teams play more. */
+export function teamGamesInWeek<T extends WeekGameRow>(rows: readonly T[], rosterId: string): T[] {
+  return rows.filter((r) => r.rosterId === rosterId).sort((a, b) => (a.game ?? 1) - (b.game ?? 1))
+}
+
+/** The week's games as lines, or null when the team plays only one (nothing to choose between). */
+export function weekGameLines<T extends WeekGameRow>(
+  rows: readonly T[],
+  myGames: readonly T[],
+  selected: T | null,
+  teamName: (rosterId: string) => string | null,
+): MatchupWeekGame[] | null {
+  if (myGames.length < 2) return null
+  return myGames.map((row) => {
+    const other = row.matchupId != null ? rows.find((r) => r.matchupId === row.matchupId && r.rosterId !== row.rosterId) : undefined
+    const scored = row.pointsFor > 0 || row.pointsAgainst > 0
+    return {
+      game: row.game ?? 1,
+      opponentName: other ? teamName(other.rosterId) : null,
+      yourPoints: row.pointsFor,
+      opponentPoints: row.pointsAgainst,
+      result: !scored ? null : row.pointsFor > row.pointsAgainst ? 'win' : row.pointsFor < row.pointsAgainst ? 'loss' : 'tie',
+      selected: row === selected,
+    }
+  })
+}
+
 export type MatchupData = {
   league: {
     id: string
@@ -343,6 +384,12 @@ export type MatchupData = {
   } | null
   /** The neighbouring weeks this league has results stored for, for the week picker. */
   weekNav?: { prev: number | null; next: number | null } | null
+  /**
+   * Every game your team plays this week, when the league plays more than one a week (Fantrax leagues
+   * with 3 or 5). The screen's detail is the one marked `selected`; the others are a tap away
+   * (`?game=`). Absent in a league that plays one game a week.
+   */
+  weekGames?: MatchupWeekGame[] | null
 }
 
 type H2HRow = { seasonYear: number; week: number; rosterId: string; matchupId: number | null; pointsFor: number }
@@ -390,6 +437,8 @@ export async function getMatchupData(
   weekParam?: number | null,
   /** The render's shared league context — see `leagueContext.ts`. */
   ctx?: LeagueContext | null,
+  /** Which of the team's games this week to show in detail, in a league that plays several. */
+  gameParam?: number | null,
 ): Promise<MatchupData | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
   /*
@@ -401,7 +450,7 @@ export async function getMatchupData(
    */
   const timer = createRenderTimer('matchup')
   const extraRead = timer.time('extraMatchup', nativeExtraMatchup(lc, userId, weekParam))
-  const data = await buildMatchupData(lc, userId, weekParam, timer)
+  const data = await buildMatchupData(lc, userId, weekParam, timer, gameParam)
   if (!data) return data
   const result = withExtraMatchupOpponent(data, await extraRead)
   timer.done({ platform: data.league.platform })
@@ -462,6 +511,7 @@ async function buildMatchupData(
   userId: string,
   weekParam: number | null | undefined,
   timer: RenderTimer,
+  gameParam?: number | null,
 ): Promise<MatchupData | null> {
   const league = await lc.league()
   if (!league) return null
@@ -652,7 +702,7 @@ async function buildMatchupData(
   }
   const rows = await prisma.weeklyMatchup.findMany({
     where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
-    select: { rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true, win: true },
+    select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
   })
   // All-zero rows are a scheduled matchup, not a scored result.
   const anyPoints = rows.some((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
@@ -688,7 +738,9 @@ async function buildMatchupData(
   // rosterId became a native string instead of an Int this always had to
   // round-trip through.
   const myRosterId = myTeam.externalId
-  const mine = rows.find((r) => r.rosterId === myRosterId)
+  // A league that plays several games a week has one row per game; the one asked for, else the first.
+  const myGames = teamGamesInWeek(rows, myRosterId)
+  const mine = myGames.find((r) => (r.game ?? 1) === gameParam) ?? myGames[0]
 
   if (!mine) {
     return {
@@ -746,6 +798,7 @@ async function buildMatchupData(
   const teamByExternal = new Map(teams.map((t) => [String(t.externalId), t]))
 
   const oppTeam = opponentRow ? teamByExternal.get(String(opponentRow.rosterId)) : undefined
+  const weekGames = weekGameLines(rows, myGames, mine ?? null, (rosterId) => teamByExternal.get(String(rosterId))?.teamName?.trim() || null)
 
   /*
    * Roster keys and projections for both sides — shared with the home exposure
@@ -836,11 +889,15 @@ async function buildMatchupData(
    * is written with the platform's own ids too. Translating anything but this
    * one lookup would silently break the score join.
    */
-  const sleeperIdByRosterId = scoreIds.length
+  const playerCrosswalk = scoreIds.length
     ? await timer.time('crosswalk', crosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
         () => new Map<string, string>(),
       ))
     : new Map<string, string>()
+  /* ⚠ ESPN D/ST ids (`-16002` is BUF) are not in the player crosswalk; the id alone names the club. */
+  const sleeperIdByRosterId = String(sport ?? 'NFL').toUpperCase() === 'NFL'
+    ? withTeamDefenseIds(league.platform, playerCrosswalk, scoreIds.map((playerId) => ({ playerId })))
+    : playerCrosswalk
 
   const lookupIds = [
     ...new Set(
@@ -931,8 +988,11 @@ async function buildMatchupData(
    * kickoff wins. A club with no fixture this week gets nothing, never a guess.
    */
   const gameByClub = new Map<string, { kickoff: string | null; opponent: string | null; home: boolean }>()
-  for (const g of [...games]
-    .filter((x) => x.seasonType === 'regular')
+  /*
+   * Kickoffs from the newest-fetched row for each game: a weekly-refreshed source can carry a time
+   * the league has since moved, and the untyped rows are often the fresh ones. See `withNewestKickoffs`.
+   */
+  for (const g of withNewestKickoffs(games.filter((x) => x.seasonType === 'regular'), games)
     .sort((a, b) => (a.startTime?.getTime() ?? 0) - (b.startTime?.getTime() ?? 0))) {
     const home = normalizeTeamAbbrev(g.homeTeam)
     const away = normalizeTeamAbbrev(g.awayTeam)
@@ -1175,6 +1235,39 @@ async function buildMatchupData(
           }
         }
         const template = startingSlotTemplate(league.settings)
+        /*
+         * ⚠ AN ESPN LINEUP CANNOT BE PAIRED BY INDEX. Its `starters` come in ESPN's roster-array order
+         * — a WR first, the QB fifth — and the opponent's come in THEIR roster's order, so index
+         * pairing put your WR against their QB under a label named after whoever stood on your side.
+         * There is no aligned template to fall back on (`startingSlotTemplate` refuses ESPN's
+         * SLOT:COUNT shape, rightly), so each side is PLACED into the league's own slot list instead
+         * and the two are paired slot by slot. A Sleeper template and a native lineup never reach this.
+         */
+        const leagueSlots = template || isNativePlatform(league.platform) ? null : expandSlotCountTemplate(league.settings)
+        if (leagueSlots) {
+          const place = (line: typeof yourLine, slotById: Record<string, string> | null | undefined) =>
+            assignLineupToSlots(
+              leagueSlots,
+              line.map((entry) => ({ entry, cell: cellFor(entry) })),
+              (c) => slotById?.[c.entry.playerId],
+              (c) => (c.cell && !c.cell.empty ? c.cell.position : null),
+              sport,
+            )
+          const mine = place(yourLine, sideProjections.you.slotById)
+          const theirs = place(oppLine, sideProjections.opponent.slotById)
+          const placed: MatchupSlot[] = leagueSlots.map((slotLabel, i) => ({
+            slotLabel,
+            you: mine.slots[i]?.cell ?? null,
+            opponent: theirs.slots[i]?.cell ?? null,
+          }))
+          // A starter who fits no slot the template names still shows — appended, never dropped.
+          for (let i = 0; i < Math.max(mine.extra.length, theirs.extra.length); i++) {
+            const you = mine.extra[i]?.cell ?? null
+            const opponent = theirs.extra[i]?.cell ?? null
+            placed.push({ slotLabel: inferSlotLabel(you?.position ?? opponent?.position ?? null, placed.length), you, opponent })
+          }
+          return { available: true as const, data: placed }
+        }
         const slots: MatchupSlot[] = []
         for (let i = 0; i < depth; i++) {
           const you = cellFor(yourLine[i])
@@ -1295,6 +1388,7 @@ async function buildMatchupData(
       ...base,
       week,
       weekNav,
+      weekGames,
       headToHead,
       teams: teamsSection,
       projectedFinal,
@@ -1325,6 +1419,7 @@ async function buildMatchupData(
       ...base,
       week,
       weekNav,
+      weekGames,
       teams: teamsSection,
       sides: {
         available: true,
@@ -1347,6 +1442,7 @@ async function buildMatchupData(
     ...base,
     week,
     weekNav,
+    weekGames,
     headToHead,
     teams: teamsSection,
     projectedFinal,

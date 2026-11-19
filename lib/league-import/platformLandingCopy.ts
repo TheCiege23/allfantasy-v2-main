@@ -17,7 +17,7 @@
 import type { ImportProvider } from './types'
 import { isImportProviderAvailable } from './provider-ui-config'
 
-export type PlatformLanding = {
+type PlatformLanding = {
   provider: ImportProvider
   /** The URL segment. Kept separate from the provider id so a slug can differ. */
   slug: string

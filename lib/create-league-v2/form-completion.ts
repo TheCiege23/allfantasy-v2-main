@@ -3,6 +3,7 @@
  * Keeps parity with legacy `isFormComplete` rules while adding draft/scoring/team validation.
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import type { CreateLeagueV2State } from './state'
 import {
@@ -89,7 +90,7 @@ export function analyzeCreateLeagueCompletion(
   } else if (lt === 'redraft' && !isUniversalTeamCount(state.teamCount)) {
     issues.push({
       code: 'team_count_invalid',
-      message: 'Team count must be from 2 through 32.',
+      message: `Team count must be from 2 through ${MAX_NATIVE_TEAMS}.`,
     })
   } else {
     const allowedTeams = teamCountOptionsWithImported(

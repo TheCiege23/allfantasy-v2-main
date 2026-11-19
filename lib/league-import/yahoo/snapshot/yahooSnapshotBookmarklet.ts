@@ -35,11 +35,11 @@
 
 export const YAHOO_FOOTBALL_ORIGIN = 'https://football.fantasysports.yahoo.com'
 export const YAHOO_SNAPSHOT_RECEIVER_PATH = '/import/yahoo-receive'
-export const YAHOO_SNAPSHOT_WINDOW_NAME = 'af-yahoo-receive'
+const YAHOO_SNAPSHOT_WINDOW_NAME = 'af-yahoo-receive'
 export const YAHOO_READY_MESSAGE = 'af-yahoo-ready'
 export const YAHOO_PAGE_MESSAGE = 'af-yahoo-page'
 /** Same bound the paste route enforces; the server re-checks it either way. */
-export const YAHOO_BOOKMARKLET_MAX_TEXT = 200_000
+const YAHOO_BOOKMARKLET_MAX_TEXT = 200_000
 
 /** The `javascript:` URL to put in a link the commissioner drags to their bookmarks bar. */
 /**
@@ -66,7 +66,7 @@ export function buildYahooSnapshotBookmarklet(afOrigin: string, receiverPath: st
   return `javascript:${encodeURIComponent(code)}`
 }
 
-export type YahooPageMessageResult =
+type YahooPageMessageResult =
   | { ok: true; url: string; text: string }
   | { ok: false; reason: 'origin' | 'shape' | 'rid' | 'url' | 'empty' | 'size' }
 

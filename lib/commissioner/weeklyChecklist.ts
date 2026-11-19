@@ -1,8 +1,14 @@
 /**
- * The weekly commissioner checklist for redraft leagues: this week's jobs in the order a week runs —
- * last week's scores, waivers, this week's lineups, trades waiting on the commissioner, dues, and
- * what is coming up. Each item is either done, needs the commissioner, or is a heads-up, and each
- * one links to where it is fixed.
+ * The weekly commissioner checklist for AllFantasy-run season leagues — redraft, keeper, dynasty,
+ * guillotine and best ball: this week's jobs in the order a week runs — last week's scores (and, in
+ * guillotine, last week's chop), waivers, this week's lineups, trades waiting on the commissioner,
+ * dues, and what is coming up.
+ *
+ * Formats change which items apply, never what an item means: best ball sets its own lineups, so it
+ * has no lineup item; guillotine has no playoffs, so it has no playoff items, and it adds the chop.
+ *
+ * Each item is either done, needs the commissioner, or is a heads-up, and each one links to where it
+ * is fixed.
  *
  * It CONFIRMS as well as warns. The action queue lists only problems; a commissioner who sees
  * "Week 6 scores are final ✓" knows the job was checked, not merely that nothing was found.
@@ -16,10 +22,13 @@
 import { cannotStart, isNonStarterSlot } from '@/lib/redraft/lineupValidation'
 
 export type ChecklistStatus = 'done' | 'todo' | 'heads_up'
+/** The league formats the checklist covers (lib/commissioner/weeklyChecklistService.ts `checklistFormat`). */
+export type ChecklistFormat = 'redraft' | 'keeper' | 'dynasty' | 'guillotine' | 'best_ball' | 'zombie'
 type Bilingual = { en: string; es: string }
 
 export type ChecklistItem = {
-  id: 'scores' | 'waivers' | 'lineups' | 'trades' | 'dues' | 'trade_deadline' | 'playoffs' | 'final_week'
+  id: 'scores' | 'chop' | 'waivers' | 'lineups' | 'trades' | 'dues' | 'trade_deadline' | 'playoffs' | 'final_week'
+    | 'zombie_paused' | 'zombie_hold' | 'zombie_correction' | 'zombie_whisperer' | 'zombie_ok'
   status: ChecklistStatus
   title: Bilingual
   detail: Bilingual
@@ -44,6 +53,14 @@ export type WeeklyChecklistInput = {
   tradeDeadlineWeek: number | null
   /** Null when the league does not track dues. */
   dues: { unpaid: string[]; total: number } | null
+  /** Plain redraft when omitted. */
+  format?: ChecklistFormat
+  /** Best ball (and a best ball guillotine): the optimizer sets every lineup, so there is nothing to check. */
+  lineupsSetThemselves?: boolean
+  /** Guillotine: the teams chopped after last week. Empty when that week has no recorded chop. */
+  lastWeekChopped?: string[]
+  /** Guillotine: a tied chop held for the commissioner's decision, not yet decided and not yet expired. */
+  chopTiebreak?: { week: number; deadline: Date } | null
 }
 
 /** A pending claim older than this means the waiver run that should have processed it did not. */
@@ -79,6 +96,29 @@ export function buildWeeklyChecklist(input: WeeklyChecklistInput, now: Date): Ch
     )
   }
 
+  // 1b · Guillotine: last week's chop, and a tie only the commissioner can break
+  if (input.format === 'guillotine') {
+    if (input.chopTiebreak) {
+      const { week: tw, deadline } = input.chopTiebreak
+      const by = deadline.toUTCString().replace(/:\d\d GMT$/, ' UTC')
+      items.push({
+        id: 'chop', status: 'todo', href: `/league/${id}/guillotine-tiebreak`,
+        title: { en: `You decide the week ${tw} chop`, es: `Tú decides la eliminación de la semana ${tw}` },
+        detail: {
+          en: `Teams are tied for the chop and your league's tiebreak asks you. Pick by ${by}, or the next tiebreak rule decides.`,
+          es: `Hay equipos empatados para la eliminación y el desempate de tu liga te lo pide a ti. Elige antes de ${by}, o decide la siguiente regla de desempate.`,
+        },
+      })
+    } else if (last >= 1 && input.lastWeekChopped?.length) {
+      const names = list(input.lastWeekChopped)
+      items.push({
+        id: 'chop', status: 'done', href: `/core/standings?league=${id}`,
+        title: { en: `The week ${last} chop is done`, es: `La eliminación de la semana ${last} está hecha` },
+        detail: { en: `Chopped: ${names}. Their players are on waivers.`, es: `Eliminados: ${names}. Sus jugadores están en la lista de reclamos.` },
+      })
+    }
+  }
+
   // 2 · Waivers
   const stale = input.pendingClaims.filter((c) => now.getTime() - c.submittedAt.getTime() > STALE_CLAIM_MS).length
   if (stale) {
@@ -100,34 +140,36 @@ export function buildWeeklyChecklist(input: WeeklyChecklistInput, now: Date): Ch
     })
   }
 
-  // 3 · This week's lineups
-  const short = input.lineups.filter((l) => l.required > 0 && l.filled < l.required)
-  const hurt = input.lineups.filter((l) => l.unavailable.length > 0)
-  const flagged = [...new Set([...short, ...hurt].map((l) => l.teamName))]
-  items.push(
-    flagged.length
-      ? {
-          id: 'lineups', status: 'todo', href: `/core/standings?league=${id}`,
-          title: { en: `${plural(flagged.length, 'team needs', 'teams need')} a lineup fix for week ${w}`, es: `${plural(flagged.length, 'equipo necesita', 'equipos necesitan')} arreglar su alineación de la semana ${w}` },
-          detail: {
-            en: [
-              short.length ? `Empty starting slots: ${list(short.map((l) => l.teamName))}.` : '',
-              hurt.length ? `Starting someone who can't play: ${list(hurt.map((l) => l.teamName))}.` : '',
-              'Nudge the manager, or set the lineup yourself before it locks.',
-            ].filter(Boolean).join(' '),
-            es: [
-              short.length ? `Puestos titulares vacíos: ${list(short.map((l) => l.teamName))}.` : '',
-              hurt.length ? `Titulares que no pueden jugar: ${list(hurt.map((l) => l.teamName))}.` : '',
-              'Avisa al mánager o pon tú la alineación antes de que se bloquee.',
-            ].filter(Boolean).join(' '),
+  // 3 · This week's lineups (best ball sets its own)
+  if (!input.lineupsSetThemselves) {
+    const short = input.lineups.filter((l) => l.required > 0 && l.filled < l.required)
+    const hurt = input.lineups.filter((l) => l.unavailable.length > 0)
+    const flagged = [...new Set([...short, ...hurt].map((l) => l.teamName))]
+    items.push(
+      flagged.length
+        ? {
+            id: 'lineups', status: 'todo', href: `/core/standings?league=${id}`,
+            title: { en: `${plural(flagged.length, 'team needs', 'teams need')} a lineup fix for week ${w}`, es: `${plural(flagged.length, 'equipo necesita', 'equipos necesitan')} arreglar su alineación de la semana ${w}` },
+            detail: {
+              en: [
+                short.length ? `Empty starting slots: ${list(short.map((l) => l.teamName))}.` : '',
+                hurt.length ? `Starting someone who can't play: ${list(hurt.map((l) => l.teamName))}.` : '',
+                'Nudge the manager, or set the lineup yourself before it locks.',
+              ].filter(Boolean).join(' '),
+              es: [
+                short.length ? `Puestos titulares vacíos: ${list(short.map((l) => l.teamName))}.` : '',
+                hurt.length ? `Titulares que no pueden jugar: ${list(hurt.map((l) => l.teamName))}.` : '',
+                'Avisa al mánager o pon tú la alineación antes de que se bloquee.',
+              ].filter(Boolean).join(' '),
+            },
+          }
+        : {
+            id: 'lineups', status: 'done', href: `/core/standings?league=${id}`,
+            title: { en: `Every week ${w} lineup is set`, es: `Todas las alineaciones de la semana ${w} están listas` },
+            detail: { en: 'No empty starting slots and nobody is starting a player who is out.', es: 'No hay puestos titulares vacíos ni titulares que estén fuera.' },
           },
-        }
-      : {
-          id: 'lineups', status: 'done', href: `/core/standings?league=${id}`,
-          title: { en: `Every week ${w} lineup is set`, es: `Todas las alineaciones de la semana ${w} están listas` },
-          detail: { en: 'No empty starting slots and nobody is starting a player who is out.', es: 'No hay puestos titulares vacíos ni titulares que estén fuera.' },
-        },
-  )
+    )
+  }
 
   // 4 · Trades waiting on the commissioner
   items.push(
@@ -171,6 +213,8 @@ export function buildWeeklyChecklist(input: WeeklyChecklistInput, now: Date): Ch
       detail: { en: `Trades close after week ${input.tradeDeadlineWeek}. A reminder in league chat helps.`, es: `Los intercambios cierran tras la semana ${input.tradeDeadlineWeek}. Un recordatorio en el chat de la liga ayuda.` },
     })
   }
+  // Guillotine has no playoffs: the season ends when one team is left.
+  if (input.format === 'guillotine') return items
   if (input.playoffStartWeek === w || input.playoffStartWeek === w + 1) {
     const thisWeek = input.playoffStartWeek === w
     items.push({

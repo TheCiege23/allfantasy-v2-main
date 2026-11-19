@@ -5,7 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { namedRosterId, resolveAuctionActor } from '@/lib/live-draft-engine/auction/multiTeamAuction'
 import { placeBid } from '@/lib/live-draft-engine/auction/AuctionEngine'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { prisma } from '@/lib/prisma'
@@ -29,10 +30,15 @@ export async function POST(
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const rosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  if (!rosterId) return NextResponse.json({ error: 'No roster for this league' }, { status: 403 })
-
   const body = await req.json().catch(() => ({}))
+  // A manager with several teams bids for the team named or the one they switched to, and never against
+  // another of their own teams (lib/live-draft-engine/auction/multiTeamAuction.ts).
+  const actor = await resolveAuctionActor({ leagueId, userId, purpose: 'bid', requestedRosterId: namedRosterId(req, body) })
+  if (!actor.ok) {
+    return NextResponse.json({ error: actor.error, code: actor.code, ...(actor.code === 'TEAM_REQUIRED' ? { rosterIds: actor.rosterIds } : {}) }, { status: actor.status })
+  }
+  const rosterId = actor.rosterId
+
   const amount = Number(body.amount ?? body.bid)
   if (!Number.isInteger(amount) || amount < 0) {
     return NextResponse.json({ error: 'Valid amount (integer) required' }, { status: 400 })

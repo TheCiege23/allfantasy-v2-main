@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { captureLeagueSafeEmail } from "@/lib/leaguesafe/capture"
+import { processLeagueSafeNotification } from "@/lib/leaguesafe/process-notification"
+import { applyParsedLeagueSafeEmail } from "@/lib/leaguesafe/league-connection"
 import {
   getLeagueSafeInboundConfig, InboundBodyTooLarge, readLeagueSafeRequestBody,
   verifyLeagueSafeSignature, LS_SIGNATURE_WINDOW_SECONDS,
@@ -44,6 +46,19 @@ export async function POST(request: Request) {
     const result = envelopeSchema.safeParse(decoded)
     if (!result.success) return respond({ error: "Invalid capture envelope" }, 400)
     const captured = await captureLeagueSafeEmail(result.data, config.domains)
+    /*
+     * Hands-off mode, off unless LS_AUTO_PROCESS=1: parse the notice and file it under its league as
+     * it arrives, so a payment reaches the dues tracker without an admin opening the capture viewer.
+     * It never changes the capture's answer; a failure here leaves the notice for the manual path.
+     */
+    if (process.env.LS_AUTO_PROCESS === "1" && !captured.duplicate && captured.processingStatus === "captured") {
+      try {
+        const outcome = await processLeagueSafeNotification(captured.id, config.domains)
+        if (outcome === "parsed") await applyParsedLeagueSafeEmail(captured.id)
+      } catch {
+        console.error("[leaguesafe] auto_process_failed")
+      }
+    }
     // Stored DKIM rejections are terminal receipts too; the admin can inspect them.
     return respond({ ok: true, stored: true, ...captured }, captured.duplicate ? 200 : 202)
   } catch (error) {

@@ -12,6 +12,8 @@
  *   copy only (commissioner-facing); does not replace per-user AF Pro + roster flag for persisting reorder.
  */
 
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -72,7 +74,7 @@ export async function POST(
     })
     if (draftSessionProbe) {
       const row = await prisma.draftQueue.findUnique({
-        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId } },
+        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId: await draftQueueKeyForUser(leagueId, userId) } },
       })
       const order = (row?.order as unknown as QueueEntry[]) ?? []
       queue = order.filter(Boolean)
@@ -132,10 +134,11 @@ export async function POST(
     'pro_draft_ai'
   )
 
-  const rosterPrefs = await prisma.roster.findUnique({
-    where: { leagueId_platformUserId: { leagueId, platformUserId: userId } },
-    select: { settings: true },
-  })
+  // The preference lives on a team: the named one when the manager holds it, else their first.
+  const prefsTeam = await resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(req, body), { allowCoOwner: false })
+  const rosterPrefs = prefsTeam
+    ? await prisma.roster.findFirst({ where: { id: prefsTeam.rosterId, leagueId }, select: { settings: true } })
+    : null
   const aiManageDraftQueueEnabled = getAiManageDraftQueueEnabled(rosterPrefs?.settings)
 
   const plan = planDraftQueueAiReorder({
@@ -148,11 +151,12 @@ export async function POST(
   })
 
   if (plan.mode === 'persist' && plan.persistOrder) {
+    const queueKey = await draftQueueKeyForUser(leagueId, userId)
     await prisma.draftQueue.upsert({
-      where: { sessionId_userId: { sessionId: draftSession.id, userId } },
+      where: { sessionId_userId: { sessionId: draftSession.id, userId: queueKey } },
       create: {
         sessionId: draftSession.id,
-        userId,
+        userId: queueKey,
         order: plan.persistOrder as never,
       },
       update: {
@@ -290,7 +294,7 @@ export async function POST(
   if (plan.mode === 'suggestion_af_pro_required') {
     return NextResponse.json(
       {
-        error: 'AF Pro required to persist AI-adjusted draft queue order.',
+        error: 'AF Pro required to persist Chimmy-adjusted draft queue order.',
         code: 'AF_PRO_REQUIRED',
         persisted: false,
         suggestionOnly: true,
@@ -305,7 +309,7 @@ export async function POST(
     return NextResponse.json({
       persisted: false,
       mode: 'suggestion_only',
-      message: 'AI queue management is disabled.',
+      message: 'Chimmy queue management is disabled.',
       reordered: plan.displayOrder,
       ...common,
     })

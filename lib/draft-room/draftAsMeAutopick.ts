@@ -1,3 +1,4 @@
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -65,8 +66,8 @@ export async function draftAsMeEnabledForLeague(leagueId: string, rosterId?: str
  * downgrade in `getViewerAutopickPreference` already drops the mode when Pro lapses.
  */
 export async function personalDraftAsMeOn(draftSessionId: string, rosterId: string): Promise<boolean> {
-  const roster = await prisma.roster.findUnique({ where: { id: rosterId }, select: { platformUserId: true } })
-  const userId = String(roster?.platformUserId ?? '')
+  const roster = await prisma.roster.findUnique({ where: { id: rosterId }, select: { platformUserId: true, managerUserId: true } })
+  const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
   if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return false
   const pref = await getViewerAutopickPreference(draftSessionId, userId)
   return pref.enabled && pref.mode === 'draft_as_me'

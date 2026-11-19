@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import {
+import { buildAfOptions,
   buildAllTimeStandings,
   buildDraftGroups,
   buildGeneralGroups,
@@ -161,6 +161,37 @@ export function HubPreviewClient({
       },
       // Week 10 is open with three changed players; week 9 was checked and nothing moved; earlier
       // weeks were never checked (no `changes`), so all three states of the card are one click apart.
+      afOptions: buildAfOptions(p, kind, 'kn-2026'),
+      // Connected leagues (Phase C4), sample: a Zombie universe, a tournament round, Survivor's two islands.
+      connected: kind === 'zombie'
+        ? { kind: 'zombie', name: 'The Outbreak', hubHref: '#', isGroupOwner: true, draftSchedule: { kind: 'zombie', universeId: 'u1' }, leagues: [
+            { leagueId: 'kn-2026', name: 'Kingdom North', role: 'Gamma', status: 'in_season', draftAt: null, current: true },
+            { leagueId: 'z2', name: 'Outbreak South', role: 'Gamma', status: 'in_season', draftAt: null, current: false },
+            { leagueId: 'z3', name: 'Quarantine Zone', role: 'Beta', status: 'setup', draftAt: '2026-11-29T00:00:00Z', current: false },
+          ] }
+        : kind === 'tournament'
+          ? { kind: 'tournament', name: 'Fall Classic', hubHref: '#', isGroupOwner: false, draftSchedule: null, leagues: [
+              { leagueId: 'kn-2026', name: 'Group A', role: 'Round 1', status: 'forming', draftAt: null, current: true },
+              { leagueId: 't2', name: 'Group B', role: 'Round 1', status: 'forming', draftAt: null, current: false },
+              { leagueId: null, name: 'Group C', role: 'Round 1', status: 'forming', draftAt: null, current: false },
+            ] }
+          : kind === 'survivor'
+            ? { kind: 'survivor', name: 'Kingdom North', hubHref: '#', isGroupOwner: true, draftSchedule: null, leagues: [
+                { leagueId: 'kn-2026', name: 'Kingdom North', role: 'Main Island', status: 'in_season', draftAt: null, current: true },
+                { leagueId: 'x2', name: 'Kingdom North Exile', role: 'Exile Island', status: 'in_season', draftAt: null, current: false },
+              ] }
+            : null,
+      // Commissioner Hub "Needs you" (sample; the live list comes from /api/leagues/[id]/commissioner-hub).
+      commissionerTasks: {
+        cards: [
+          { id: 's1', severity: 'bad', source: 'review', title: 'A trade is waiting on your review', detail: 'Blitz Brigade sends Justin Jefferson for Bijan Robinson and a 2027 1st.', due: null, action: { label: 'Review', href: '#', external: false } },
+          { id: 's2', severity: 'warn', source: 'health', title: '2 teams have an empty starting slot', detail: 'Taco Tuesday and Gridiron Ghosts, before Sunday’s lock.', due: null, action: { label: 'Remind them', href: '#', external: false } },
+          { id: 's3', severity: 'info', source: 'deadline', title: 'Trade deadline in 5 days', detail: 'Week 11, Wednesday 11:59 PM.', due: null, action: null },
+        ],
+        overflow: [
+          { id: 's4', severity: 'info', source: 'deadline', title: 'Rookie draft not scheduled', detail: 'Set a date so managers can queue players.', due: null, action: null },
+        ],
+      },
       correctionWeeks: {
         season: 2026,
         weeks: Array.from({ length: 10 }, (_, i) => ({
@@ -183,7 +214,7 @@ export function HubPreviewClient({
     <LeagueSettingsHubView
       key={kind + String(commish)}
       data={data}
-      initialTab={(['my', 'setup', 'members', 'record'].includes(tab) ? tab : 'setup') as HubTabId}
+      initialTab={(['my', 'setup', 'members', 'hub', 'record'].includes(tab) ? tab : 'setup') as HubTabId}
       advanced={commish ? { label: 'Advanced settings', onOpen: () => {} } : undefined}
       cb={{
         onToggleSetting: () => {},
@@ -196,6 +227,7 @@ export function HubPreviewClient({
         onOpenEditor: () => {},
         onLeaveLeague: importedFrom ? undefined : () => {},
         onCopy: () => {},
+        onScheduleConnectedDrafts: async () => null,
       }}
     />
   )
@@ -213,7 +245,7 @@ export function HubPreviewClient({
         <LeagueSettingsHubView
           key={kind + String(commish)}
           data={data}
-          initialTab={(['my', 'setup', 'members', 'record'].includes(tab) ? tab : 'setup') as HubTabId}
+          initialTab={(['my', 'setup', 'members', 'hub', 'record'].includes(tab) ? tab : 'setup') as HubTabId}
           advanced={commish ? { label: 'Advanced settings', onOpen: () => {} } : undefined}
           cb={{
             onToggleSetting: () => {},
@@ -226,6 +258,7 @@ export function HubPreviewClient({
             onOpenEditor: () => {},
             onLeaveLeague: () => {},
             onCopy: () => {},
+            onScheduleConnectedDrafts: async () => null,
           }}
         />
       </div>

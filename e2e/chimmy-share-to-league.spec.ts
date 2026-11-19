@@ -22,6 +22,10 @@ for (const viewport of [
     const button = page.getByTestId('chimmy-share-button')
     await expect(button).toBeVisible({ timeout: 60_000 })
     await expect(page.getByTestId('chimmy-share-note')).toHaveText('Only you see this until you share it.')
+    // Chimmy's Markdown is drawn, not printed: bold labels, a list, and no stray ** (found live 2026-11-17).
+    const answer = page.locator('.af-cm-chimmy-text', { hasText: 'Start Puka Nacua.' }).first()
+    await expect(answer.locator('strong')).toHaveText(['Start Puka Nacua.', 'Volume:', 'Matchup:'])
+    await expect(answer).not.toContainText('**')
     await button.scrollIntoViewIfNeeded()
     await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-share-button.png`) })
 
@@ -29,6 +33,9 @@ for (const viewport of [
     await expect(page.getByTestId('chimmy-share-done')).toHaveText('Shared with your league')
     await expect(page.getByText('Fourth & Long asked Chimmy: "who should I start at flex, Puka Nacua or Drake London?"')).toBeVisible()
     await page.getByText('Fourth & Long asked Chimmy').scrollIntoViewIfNeeded()
+    // The shared copy is the bubble's only child; it must keep the bubble's padding, unlike a lone GIF.
+    const shared = page.locator('.af-cm-bubble', { has: page.locator('.af-cm-chimmy-text', { hasText: 'asked Chimmy' }) }).last()
+    expect(await shared.evaluate((el) => getComputedStyle(el).paddingLeft)).not.toBe('0px')
     await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-shared.png`) })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })

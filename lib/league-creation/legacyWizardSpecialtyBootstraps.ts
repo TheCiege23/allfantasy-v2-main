@@ -5,7 +5,7 @@
  * - POST /api/league/create legacy Prisma league.create path (deprecated shell — kept for non-manual platforms)
  */
 
-export type LegacyWizardSpecialtyBootstrapArgs = {
+type LegacyWizardSpecialtyBootstrapArgs = {
   league: { id: string; name: string | null; sport: string; leagueSize: number | null }
   userId: string
   name: string | null | undefined

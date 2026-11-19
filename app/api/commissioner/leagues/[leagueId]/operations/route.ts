@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
+import { MANUAL_FINAL_ERROR_TEXT, finalizeMatchupManually, reopenMatchupManually } from '@/lib/score-adjustments/manualFinalService'
 import { ADJUSTMENT_ERROR_TEXT } from '@/lib/score-adjustments/scoreAdjustments'
 import {
   ADJUSTMENT_SERVICE_ERROR_TEXT,
@@ -49,7 +50,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
 
 /**
  * League operations: post to public dashboard, set orphan seeking, ranked visibility, orphan
- * difficulty, add / remove a commissioner score adjustment, and apply stat corrections
+ * difficulty, add / remove a commissioner score adjustment, mark one regular-season game final by hand
+ * or reopen it (`matchup_finalize` / `matchup_reopen`, lib/score-adjustments/manualFinal.ts), and apply stat corrections
  * (`stat_correction_apply`, `matchupId` or `'all'`) as tagged score adjustments.
  */
 export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
@@ -75,6 +77,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (action === 'score_adjustment_remove') {
     const r = await removeScoreAdjustment(params.leagueId, userId, body?.adjustmentId)
     return r.ok ? NextResponse.json({ status: 'ok', adjustment: r.adjustment, net: r.net }) : adjustmentErrorResponse(r.error)
+  }
+
+  if (action === 'matchup_finalize' || action === 'matchup_reopen') {
+    const r = action === 'matchup_finalize'
+      ? await finalizeMatchupManually(params.leagueId, userId, body)
+      : await reopenMatchupManually(params.leagueId, userId, body)
+    if (r.ok) return NextResponse.json({ status: 'ok', matchupId: r.matchupId, week: r.week, homeScore: r.homeScore, awayScore: r.awayScore })
+    return NextResponse.json({ error: MANUAL_FINAL_ERROR_TEXT[r.error], code: r.error }, { status: r.error === 'not_found' ? 404 : r.error === 'bad_reason' ? 400 : 409 })
   }
 
   if (action === 'stat_correction_apply') {
@@ -136,6 +146,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   }
 
   return NextResponse.json({
-    error: 'Invalid action. Use: post_to_dashboard, set_orphan_seeking, set_ranked_visibility, update_orphan_difficulty, score_adjustment_add, score_adjustment_remove, stat_correction_apply',
+    error: 'Invalid action. Use: post_to_dashboard, set_orphan_seeking, set_ranked_visibility, update_orphan_difficulty, score_adjustment_add, score_adjustment_remove, stat_correction_apply, matchup_finalize, matchup_reopen',
   }, { status: 400 })
 }

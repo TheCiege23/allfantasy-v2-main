@@ -11,6 +11,7 @@
  * The only additions are friendlier wording for the same codes.
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { getEffectiveLeagueType, type CreateLeagueV2State } from './state'
 import { getTeamCountOptions } from './rules-engine'
 import type { CreateLeagueCompletionIssue } from './form-completion'
@@ -104,7 +105,7 @@ export function friendlyIssueMessage(issue: CreateLeagueCompletionIssue, state: 
       const sizes = lt === 'redraft' ? [] : getTeamCountOptions(state.sport, lt, state.soccerPipeline)
       if (sizes.length === 1) return `${format} leagues need exactly ${sizes[0]} managers.`
       if (sizes.length > 1) return `${format} leagues need ${listSizes(sizes)} managers. You have ${state.teamCount}.`
-      return 'Pick between 2 and 32 teams.'
+      return `Pick between 2 and ${MAX_NATIVE_TEAMS} teams.`
     }
     case 'team_count_required':
       return 'Enter how many teams will play.'

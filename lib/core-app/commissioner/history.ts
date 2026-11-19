@@ -5,6 +5,7 @@ import { readRecentImportedTrades } from '@/lib/league-history/leagueWarehouseRe
 import { describeImportedActivityRows, type LeagueActivityItem } from '@/lib/core-app/leagueActivity'
 import { messagesFor } from '@/lib/i18n/messages'
 import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
+import { draftArchiveCatalog } from '@/lib/draft-archive/catalog'
 
 export type CommissionerHistory = {
   tradeAvailable: boolean
@@ -15,6 +16,12 @@ export type CommissionerHistory = {
     status: string; source: string
     picks: Array<{ overall: number; round: number; owner: string; player: string; corrections: string[] }>
   }>
+  /**
+   * Drafts brought in from another platform. They are stored apart from AllFantasy draft sessions and shown pick by
+   * pick in the Draft HQ archive, so here each one is a line that opens it there. Without this an imported league
+   * read "No draft sessions on file" while its whole draft was on file.
+   */
+  importedDrafts?: Array<{ key: string; season: number | null; href: string }>
   tradeNote: string
   draftNote: string
   /** Only draws that were actually recorded in the league audit log. */
@@ -82,7 +89,7 @@ export async function loadCommissionerHistory(
   language = 'en',
 ): Promise<CommissionerHistory> {
   const m = messagesFor(commissionerBuildersMessages, language)
-  const [nativeTrades, importedTrades, sessions, redraftDrafts, corrections, lotteryAudit] = await Promise.all([
+  const [nativeTrades, importedTrades, sessions, redraftDrafts, corrections, lotteryAudit, archive] = await Promise.all([
     native ? prisma.redraftLeagueTrade.findMany({
       where: { leagueId }, orderBy: { createdAt: 'desc' }, take: 10,
       select: { id: true, createdAt: true, status: true, proposerRoster: { select: { teamName: true, ownerName: true } }, receiverRoster: { select: { teamName: true, ownerName: true } } },
@@ -100,6 +107,7 @@ export async function loadCommissionerHistory(
       where: { leagueId }, select: { draftSessionId: true, overallPickNumber: true, action: true, oldPlayerName: true, newPlayerName: true, reason: true }, orderBy: { createdAt: 'desc' }, take: 500,
     }).catch(() => null),
     native ? prisma.leagueAuditLog.findMany({ where: { leagueId, actionType: 'draft_lottery_run' }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, createdAt: true, afterState: true } }).catch(() => null) : Promise.resolve([]),
+    draftArchiveCatalog([leagueId], { limit: 20 }).catch(() => null),
   ])
 
   // Naming is best-effort: a failed lookup leaves the trade dated and sourced, never dropped.
@@ -146,14 +154,17 @@ export async function loadCommissionerHistory(
   ]
   return {
     tradeAvailable: native ? nativeTrades !== null : importedTrades !== null,
-    draftAvailable: sessions !== null && redraftDrafts !== null && corrections !== null,
+    draftAvailable: sessions !== null && redraftDrafts !== null && corrections !== null && archive !== null,
     trades: native
       ? (nativeTrades ?? []).map((trade) => ({ id: trade.id, at: trade.createdAt.toISOString(), label: `${trade.proposerRoster.teamName ?? trade.proposerRoster.ownerName} ↔ ${trade.receiverRoster.teamName ?? trade.receiverRoster.ownerName}`, status: trade.status, source: 'AllFantasy' }))
       : (importedTrades ?? []).map((trade, i) => ({ id: trade.id, at: trade.occurredAt.toISOString(), label: namedTrades?.[i] ? importedTradeLabel(namedTrades[i], language) : m.historyTradeDetailsUnavailable, status: 'recorded', source: trade.provider })),
     drafts,
+    importedDrafts: (archive?.choices ?? [])
+      .filter((choice) => choice.source === 'imported' || choice.source === 'legacy')
+      .map((choice) => ({ key: choice.key, season: choice.season, href: `/core/draft-hq?${new URLSearchParams({ league: leagueId, draft: choice.key }).toString()}` })),
     ...(lotteries.length ? { lotteries: lotteries.slice(0, 10) } : {}),
     ...(native && lotteryAudit === null ? { lotteryReadFailed: true } : {}),
     tradeNote: nativeTrades === null || importedTrades === null ? m.historyTradeUnread : native ? m.historyTradeNoteNative : m.historyTradeNoteImported,
-    draftNote: sessions === null || redraftDrafts === null || corrections === null ? m.historyDraftUnread : m.historyDraftNote,
+    draftNote: sessions === null || redraftDrafts === null || corrections === null || archive === null ? m.historyDraftUnread : m.historyDraftNote,
   }
 }

@@ -152,7 +152,7 @@ export type SwitchResult = { ok: true; managed: boolean } | { ok: false; status:
 export async function setInactiveManagerMode(leagueId: string, userId: string, rosterId: unknown, on: unknown): Promise<SwitchResult> {
   if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
   if (typeof rosterId !== 'string' || !rosterId || typeof on !== 'boolean') return { ok: false, status: 400, error: 'Name a team and whether to turn it on.' }
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, name: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only set lineups in leagues it runs.' }
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
@@ -169,6 +169,27 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
   })
   if (changed) {
     await logAction({ leagueId, userId, actionType: on ? ON_ACTION : OFF_ACTION, entityType: 'roster', entityId: rosterId, metadata: { rosterId } })
+  }
+  /*
+   * The manager is told when the commissioner hands their lineup to Chimmy (owner decision 2026-11-18:
+   * notify, and the manager can take it back). Saving a lineup of their own ends it — the existing way
+   * back (`endInactiveManagerModeOnOwnerSave`) — so the notice says exactly that.
+   */
+  const owner = roster.platformUserId
+  if (changed && on && owner && owner !== userId && !isOrphanPlatformUserId(owner) && !isAiManagerPlatformUserId(owner)) {
+    await dispatchNotification({
+      userIds: [owner],
+      category: 'autocoach',
+      type: 'chimmy_lineup_on',
+      title: `Chimmy is setting your lineup · ${league.name ?? 'your league'}`,
+      body: 'Your commissioner turned on Chimmy lineup for your team: Chimmy sets your best starters before each lock. Save a lineup yourself at any time and it turns off.',
+      severity: 'low',
+      leagueId,
+      actionHref: `/league/${leagueId}?tab=team`,
+      actionLabel: 'View team',
+      dedupePrefix: `chimmy-lineup-on:${rosterId}:${new Date().toISOString().slice(0, 10)}`,
+      meta: { leagueId, rosterId },
+    }).catch(() => {})
   }
   return { ok: true, managed: on }
 }

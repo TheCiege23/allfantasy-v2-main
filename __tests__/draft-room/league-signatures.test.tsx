@@ -189,6 +189,18 @@ describe('the chip on a drafted tile', () => {
     expect(before.split('{').length - before.split('}').length).toBe(0)
   })
 
+  it('says what the ADP gap means in words, never a bare minus number', () => {
+    renderBoard({ adpDeltaByOverall: { 1: -6 } })
+    const reach = screen.getByTestId('draft-board-cell-adp-delta')
+    expect(reach.textContent).toBe('6 early')
+    expect(reach.getAttribute('aria-label')).toBe('Taken 6 picks before ADP')
+  })
+
+  it('a faller reads as late', () => {
+    renderBoard({ adpDeltaByOverall: { 1: 4 } })
+    expect(screen.getByTestId('draft-board-cell-adp-delta').textContent).toBe('4 late')
+  })
+
   it('a tile without a chip wraps as before', () => {
     renderBoard({ adpDeltaByOverall: { 1: -6 } })
     expect(screen.getByTestId('draft-board-cell-info-1').className).toContain('flex-wrap')

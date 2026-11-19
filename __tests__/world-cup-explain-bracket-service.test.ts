@@ -195,7 +195,7 @@ describe("generateWorldCupBracketExplanation — ownership + privacy", () => {
     // Provider error message must not leak through to user copy.
     expect(JSON.stringify(result)).not.toMatch(/OPENAI_API_KEY|OpenAI provider/i)
     // Must surface a friendly note about deterministic fallback.
-    expect(result.lines.some((l) => /AI narrative is temporarily unavailable/i.test(l))).toBe(true)
+    expect(result.lines.some((l) => /Chimmy narrative is temporarily unavailable/i.test(l))).toBe(true)
   })
 
   it("sanitizes wagering/betting terms from AI output", async () => {

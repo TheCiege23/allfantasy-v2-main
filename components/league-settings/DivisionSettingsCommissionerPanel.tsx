@@ -16,10 +16,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Sparkles, Users, RotateCcw } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { divisionSportMatch } from '@/lib/league/divisions/divisionSportMatch'
 import {
   DEFAULT_DIVISION_PLAYOFF_RULE,
   DIVISION_PLAYOFF_RULES,
   divisionCountAllowed,
+  STANDARD_DIVISION_COUNTS,
   evenDivisionSizes,
   type DivisionPlayoffRule,
 } from '@/lib/league/divisions/leagueDivisions'
@@ -47,10 +49,7 @@ interface TeamSlot {
 }
 
 const DIVISION_COUNT_OPTIONS = [
-  { value: 0, label: 'No' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4' },
+  ...STANDARD_DIVISION_COUNTS.map((value) => ({ value, label: value === 0 ? 'No' : String(value) })),
 ]
 
 const TRIBE_COUNT_OPTIONS = [
@@ -76,6 +75,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
   const [success, setSuccess] = useState(false)
   const [isCommissioner, setIsCommissioner] = useState(false)
   const [isSurvivor, setIsSurvivor] = useState(false)
+  const [sport, setSport] = useState<string | null>(null)
 
   const [count, setCount] = useState(0)
   const [names, setNames] = useState<string[]>([])
@@ -102,6 +102,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         if (!active) return
         setIsCommissioner(data.isCommissioner ?? false)
         setIsSurvivor(data.isSurvivor ?? false)
+        setSport(typeof data.sport === 'string' ? data.sport : null)
         const cfg: DivisionConfig = data.config ?? { count: 0, names: [], teamAssignments: {}, aiNamingEnabled: false, lastUpdatedAt: null, lastUpdatedBy: null }
         setCount(cfg.count)
         setNames(cfg.names)
@@ -229,8 +230,13 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
     const uneven = sizes.some((n) => n > cap) || (complete && Math.max(...sizes) - Math.min(...sizes) > 1)
     return uneven ? sizes : null
   }, [isSurvivor, count, teams.length, teamsByDivision])
-  const countOptions = isSurvivor ? TRIBE_COUNT_OPTIONS : DIVISION_COUNT_OPTIONS
+  // A standard league lists the counts it can fill, plus the first one it cannot, so the reason shows.
+  const firstBlockedDivisionCount = DIVISION_COUNT_OPTIONS.find((opt) => !divisionCountAllowed(teams.length, opt.value))?.value ?? null
+  const countOptions = isSurvivor
+    ? TRIBE_COUNT_OPTIONS
+    : DIVISION_COUNT_OPTIONS.filter((opt) => firstBlockedDivisionCount == null || opt.value <= Math.max(firstBlockedDivisionCount, 4))
 
+  const sportMatch = isSurvivor ? null : divisionSportMatch(sport, count)
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('division.loading')}</div>
 
   const noneLabel = isSurvivor ? t('division.noTribes') : t('division.noDivisions')
@@ -270,7 +276,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           </button>
 
           {dropdownOpen && isCommissioner && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
               {countOptions.map((opt) => {
                 const blocked = !isSurvivor && !divisionCountAllowed(teams.length, opt.value)
                 return (
@@ -340,6 +346,17 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           <p data-testid="division-schedule-note" className="text-[11px] text-white/30">
             {t(rivalsTwice ? 'division.scheduleNote.twice' : 'division.scheduleNote.once')}
           </p>
+          {/* Owner's page review #17: when the division count matches the real sport's, say what that sport plays. */}
+          {sportMatch ? (
+            <div data-testid="division-sport-match" className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/[0.06] px-3 py-2">
+              <p className="m-0 flex-1 text-[12px] leading-relaxed text-white/75">{t(sportMatch.key)}</p>
+              {isCommissioner && !rivalsTwice ? (
+                <button type="button" onClick={() => setRivalsTwice(true)} data-testid="division-sport-match-on" className="min-h-[36px] rounded-full border border-blue-400/50 px-3 text-[12px] font-bold text-blue-200">
+                  {t('division.sportMatch.turnOn')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 

@@ -59,7 +59,7 @@ export default function ContentFeedPage() {
       <header>
         <h1 className="text-2xl font-bold text-white mb-2" data-testid="content-feed-title">Content feed</h1>
         <p className="text-sm text-white/60 mb-4">
-          Creator posts, AI insights, story cards, blogs, recaps, trend alerts, and platform highlights.
+          Creator posts, Chimmy insights, story cards, blogs, recaps, trend alerts, and platform highlights.
         </p>
         <FeedTabs activeTab={activeTab} onTabChange={setActiveTab} />
       </header>

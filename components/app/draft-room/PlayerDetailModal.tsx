@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Star, Flame } from 'lucide-react'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import type { NormalizedDraftRoomPlayer } from '@/lib/players/normalizePlayer'
@@ -81,8 +82,8 @@ interface PlayerDetailModalProps {
   assistantRoomContext?: DraftAssistantRoomContext | null
   /** Live snake redraft: denser chrome aligned with draft room surfacing */
   presentationVariant?: 'default' | 'redraft_snake'
-  /** Header rankings row: label next to numeric ADP (matches list when using AI ADP sort). */
-  adpDisplayLabel?: 'ADP' | 'AI ADP'
+  /** Header rankings row: label next to numeric ADP (matches list when using Chimmy ADP sort). */
+  adpDisplayLabel?: 'ADP' | 'Chimmy ADP'
   /** When Draft is disabled, clarifies drafted vs wrong turn */
   draftUnavailableReason?: 'already_drafted' | 'not_your_pick' | null
   /** NFL: season projection + splits from `/draft/pool` (mobile detail access without list grid). */
@@ -324,7 +325,9 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
   const rankings = analytics?.rankings ?? null
   const news = analytics?.news ?? []
 
-  return (
+  // Rendered into <body>: inside a panel (the phone's player tray is `relative z-10`) a
+  // `fixed` overlay is trapped in that panel's stacking context and can land under other layers.
+  const card = (
     <div
       className="fixed inset-0 z-[120] flex items-start justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
@@ -755,7 +758,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           )}
         </div>
 
-        {/* Right rail: news + AI insight */}
+        {/* Right rail: news + Chimmy insight */}
         <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-white/8 bg-black/25 lg:flex">
           <div className="border-b border-white/8 px-4 py-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Latest news</p>
@@ -778,7 +781,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
             {analytics?.aiInsights && (
               <div className="border-t border-cyan-500/25 bg-cyan-500/[0.04] px-4 py-3">
                 <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">
-                  AI insight
+                  Chimmy insight
                 </p>
                 <p className="text-[12px] leading-relaxed text-white/75">{analytics.aiInsights}</p>
               </div>
@@ -788,6 +791,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
       </div>
     </div>
   )
+  return typeof document !== 'undefined' ? createPortal(card, document.body) : card
 }
 
 function DraftPoolNflProjectionSplitsSection({

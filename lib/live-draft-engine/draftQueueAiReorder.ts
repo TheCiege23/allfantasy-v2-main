@@ -121,7 +121,7 @@ export function planDraftQueueAiReorder(input: {
 /** Used when entitlement/policy denies persist but we still want a labeled suggestion list. */
 export function suggestionOnlyExplanation(base: string, reason: 'af_pro' | 'ai_manage_disabled'): string {
   if (reason === 'af_pro') {
-    return `${base} (AF Pro required to save an AI-adjusted queue.)`
+    return `${base} (AF Pro required to save a Chimmy-adjusted queue.)`
   }
-  return `${base} Enable "AI manage draft queue" on your roster settings to save AI reorder.`
+  return `${base} Enable "Chimmy manage draft queue" on your roster settings to save Chimmy reorder.`
 }

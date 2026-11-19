@@ -13,6 +13,8 @@
 import { requestScheduleRebuild } from '@/lib/schedule-runtime/rebuildScheduleRequest'
 import { ScheduleSwapForm } from '@/components/league-settings/ScheduleSwapForm'
 import { RivalryWeekCard } from '@/components/league-settings/RivalryWeekCard'
+import { ScheduleToolsCard } from '@/components/league-settings/ScheduleToolsCard'
+import { MemberLineupSettings } from '@/components/league/MemberLineupSettings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Lock, Unlock, Check } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -57,6 +59,14 @@ type SubView =
   | 'update-commissioners'
   | 'lock-roster'
   | 'edit-schedule'
+  | 'member-settings'
+
+const SUB_VIEWS: ReadonlySet<string> = new Set(['edit-lineups', 'update-commissioners', 'lock-roster', 'edit-schedule', 'member-settings'])
+
+/** A view the Commissioner Hub asked for, or null for the menu (an unknown name opens the menu). */
+export function commissionerSubView(view: string | null | undefined): SubView {
+  return view && SUB_VIEWS.has(view) ? (view as SubView) : null
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -64,15 +74,19 @@ type SubView =
 
 interface Props {
   leagueId: string
+  /** Open straight on this view (the Commissioner Hub's cards); Back still returns to the menu. */
+  initialView?: string | null
 }
 
-export function CommissionerControlPanel({ leagueId }: Props) {
+export function CommissionerControlPanel({ leagueId, initialView = null }: Props) {
   const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [teams, setTeams] = useState<TeamInfo[]>([])
-  const [subView, setSubView] = useState<SubView>(null)
+  const [subView, setSubView] = useState<SubView>(() => commissionerSubView(initialView))
+  /** Bumped when the schedule tools change the schedule, so the swap form and Rivalry Week re-read it. */
+  const [scheduleNonce, setScheduleNonce] = useState(0)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [selectedWeek, setSelectedWeek] = useState(1)
   const [actionLoading, setActionLoading] = useState(false)
@@ -550,8 +564,22 @@ export function CommissionerControlPanel({ leagueId }: Props) {
         </button>
         {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{success}</div>}
         {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
-        <ScheduleSwapForm leagueId={leagueId} />
-        <RivalryWeekCard leagueId={leagueId} />
+        <ScheduleToolsCard leagueId={leagueId} onChanged={() => setScheduleNonce((n) => n + 1)} />
+        <ScheduleSwapForm key={`swap-${scheduleNonce}`} leagueId={leagueId} />
+        <RivalryWeekCard key={`rivalry-${scheduleNonce}`} leagueId={leagueId} />
+      </div>
+    )
+  }
+
+  // ===== SUB-VIEW: Member Settings (Chimmy lineup, auto-switch injured starters) =====
+  if (subView === 'member-settings') {
+    return (
+      <div className="space-y-4">
+        <button type="button" onClick={() => setSubView(null)}
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-cyan-400 hover:text-cyan-300">
+          <ArrowLeft className="h-4 w-4" /> {t('commControl.back')}
+        </button>
+        <MemberLineupSettings leagueId={leagueId} />
       </div>
     )
   }
@@ -586,6 +614,16 @@ export function CommissionerControlPanel({ leagueId }: Props) {
         <button type="button" onClick={() => setSubView('lock-roster')}
           className="w-full rounded-lg bg-[#1a2744] px-4 py-3 text-[12px] font-bold uppercase tracking-wide text-cyan-300 hover:bg-[#1e2d52] border border-white/10 transition">
           {t('commControl.lockRoster')}
+        </button>
+      </div>
+
+      {/* Member Settings: Chimmy lineup and auto-switch injured starters, team by team */}
+      <div className="space-y-2">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('commControl.memberSettings')}</p>
+        <p className="text-[12px] text-white/40">{t('commControl.memberSettingsDesc')}</p>
+        <button type="button" onClick={() => setSubView('member-settings')} data-testid="commissioner-member-settings"
+          className="w-full rounded-lg bg-[#1a2744] px-4 py-3 text-[12px] font-bold uppercase tracking-wide text-cyan-300 hover:bg-[#1e2d52] border border-white/10 transition">
+          {t('commControl.memberSettings')}
         </button>
       </div>
 

@@ -30,7 +30,7 @@ const DASHBOARD_QUICK_ACTIONS: QuickActionConfig[] = [
   },
   {
     id: "open_legacy",
-    label: "Open Legacy AI",
+    label: "Open Legacy Chimmy",
     href: "/af-legacy",
     description: "Team scan, trade center, draft war room.",
   },
@@ -38,7 +38,7 @@ const DASHBOARD_QUICK_ACTIONS: QuickActionConfig[] = [
     id: "open_tools_hub",
     label: "Open Tools Hub",
     href: "/tools-hub",
-    description: "Cross-product tools and AI workflows.",
+    description: "Cross-product tools and Chimmy workflows.",
   },
   {
     id: "open_notifications",

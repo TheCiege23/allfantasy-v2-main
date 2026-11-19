@@ -25,6 +25,7 @@ import { EmojiPicker } from '@/app/dashboard/components/chat/EmojiPicker'
 import { useOverlayContainment } from '../useOverlayContainment'
 import { QuotedMessage } from './QuotedMessage'
 import { renderMessageText } from './messageText'
+import { ChimmyRichText } from './ChimmyRichText'
 import { MessageReactions } from './MessageReactions'
 import { hasRichContent } from './RichMessage'
 import { ChimmyVerdictChip } from './ChimmyAnswerPolish'
@@ -655,7 +656,18 @@ export function ChatMessageList({
                         />
                       ) : null}
                       {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
-                      {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
+                      {/*
+                        Chimmy writes Markdown, and a plain bubble printed it raw — "**Fill the seats:**"
+                        in a private answer, and in the copy "Share with league" posts to everyone (found
+                        live 2026-11-17). Its rows use the drawer's renderer: React elements only, no HTML,
+                        no links. Keyed on the server-owned marker (`chimmy`), never on a name, so a member
+                        cannot get formatting by calling themselves Chimmy.
+                      */}
+                      {shown && chimmy ? (
+                        <ChimmyRichText text={censorProfanity(shown)} className="af-cm-bubble-text af-cm-rich af-cm-chimmy-text" />
+                      ) : shown ? (
+                        <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p>
+                      ) : null}
                       {rich ? renderRich(m) : null}
                       {onShareChimmyAnswer && !m.pending && isShareableChimmyAnswer(m.metadata) ? (
                         <ShareChimmyAnswerButton shared={typeof m.metadata?.sharedMessageId === 'string'} onShare={() => onShareChimmyAnswer(m)} />

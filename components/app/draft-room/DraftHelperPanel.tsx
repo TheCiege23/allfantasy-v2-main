@@ -93,7 +93,7 @@ export type DraftHelperPanelProps = {
     orphanAiEnabled: boolean
     commissionerAiManagersCount: number
   } | null
-  /** Live War Room (AI draft assistant) — optional; renders above legacy helper when provided. */
+  /** Live War Room (Chimmy draft assistant) — optional; renders above legacy helper when provided. */
   warRoom?: {
     snapshot: DraftWarRoomSnapshot | null
     loading: boolean
@@ -291,20 +291,20 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
                   Live Brain {aiFeatureStatus.liveBrainReady ? 'live' : 'standby'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.aiAdpEnabled ? 'border-emerald-300/35 bg-emerald-500/10 text-emerald-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
-                  AI ADP {aiFeatureStatus.aiAdpEnabled ? 'on' : 'off'}
+                  Chimmy ADP {aiFeatureStatus.aiAdpEnabled ? 'on' : 'off'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.queueReorderEnabled ? 'border-amber-300/35 bg-amber-500/10 text-amber-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
-                  Queue AI {aiFeatureStatus.queueReorderEnabled ? 'on' : 'off'}
+                  Chimmy queue {aiFeatureStatus.queueReorderEnabled ? 'on' : 'off'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.draftExplanationEnabled ? 'border-sky-300/35 bg-sky-500/10 text-sky-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                   Explain {aiFeatureStatus.draftExplanationEnabled ? 'on' : 'off'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.orphanAiEnabled ? 'border-fuchsia-300/35 bg-fuchsia-500/10 text-fuchsia-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
-                  Orphan AI {aiFeatureStatus.orphanAiEnabled ? 'armed' : 'off'}
+                  Orphan Chimmy {aiFeatureStatus.orphanAiEnabled ? 'armed' : 'off'}
                 </span>
                 {aiFeatureStatus.commissionerAiManagersCount > 0 ? (
                   <span className="rounded border border-rose-300/35 bg-rose-500/10 px-1.5 py-0.5 text-[11px] text-rose-100">
-                    Commissioner AI {aiFeatureStatus.commissionerAiManagersCount}
+                    Commissioner Chimmy {aiFeatureStatus.commissionerAiManagersCount}
                   </span>
                 ) : null}
               </div>

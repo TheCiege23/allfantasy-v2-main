@@ -142,7 +142,7 @@ export function DraftIntelQueuePanel({
         </button>
       ) : null}
       <p className="mt-2 text-[11px] text-white/45">
-        AI queue is advisory. Use your board context and league strategy before committing a pick.
+        Chimmy queue is advisory. Use your board context and league strategy before committing a pick.
       </p>
     </>
   )
@@ -161,7 +161,7 @@ export function DraftIntelQueuePanel({
           <div className="rounded-lg border border-white/[0.06] bg-[#0d1424] p-2.5">
             <div className="mb-2.5 flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.06] pb-2.5">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8b91a7]">AI queue · lookahead</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8b91a7]">Chimmy queue · lookahead</p>
                 <p className="mt-1 text-sm font-semibold text-white" data-testid="draft-intel-headline">
                   {headline || (loading ? 'Chimmy is building your queue…' : 'No active lookahead window yet.')}
                 </p>
@@ -199,7 +199,7 @@ export function DraftIntelQueuePanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8b91a7]">
-            AI Queue
+            Chimmy Queue
           </p>
           <p className="mt-1 text-sm font-semibold text-white" data-testid="draft-intel-headline">
             {headline || (loading ? 'Chimmy is building your queue…' : 'No active lookahead window yet.')}
