@@ -25,6 +25,7 @@ import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
 import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
+import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -240,6 +241,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
       id: true,
       redraftRosterId: true,
       platformUserId: true,
+      managerUserId: true,
       playerData: true,
       faabRemaining: true,
       waiverPriority: true,
@@ -248,35 +250,49 @@ async function ensureRedraftRosterForGenericRoster(params: {
 
   if (!genericRoster) return { redraftRoster: null, created: false, genericRoster: null }
 
-  const team = await prisma.leagueTeam.findFirst({
-    where: {
-      leagueId: params.leagueId,
-      OR: [
-        { externalId: genericRoster.id },
-        { platformUserId: genericRoster.platformUserId },
-        { claimedByUserId: genericRoster.platformUserId },
-      ],
-    },
-    select: {
-      ownerName: true,
-      teamName: true,
-      avatarUrl: true,
-      claimedByUserId: true,
-      platformUserId: true,
-    },
-  })
+  const teamSelect = { ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true, platformUserId: true } as const
+  // The team that IS this roster first: a manager who runs two teams has claimed both, so a match on
+  // who claimed it could hand this roster the other team's name and face.
+  const team =
+    (await prisma.leagueTeam.findFirst({
+      where: { leagueId: params.leagueId, externalId: genericRoster.id },
+      select: teamSelect,
+    })) ??
+    (await prisma.leagueTeam.findFirst({
+      where: {
+        leagueId: params.leagueId,
+        OR: [
+          { platformUserId: genericRoster.platformUserId },
+          { claimedByUserId: genericRoster.platformUserId },
+        ],
+      },
+      select: teamSelect,
+    }))
 
-  const ownerId =
-    String(team?.claimedByUserId ?? team?.platformUserId ?? genericRoster.platformUserId ?? '').trim() ||
-    `roster:${genericRoster.id}`
+  /*
+   * 🛑 A MANAGER'S SECOND TEAM IS ITS OWN SEASON TEAM. Found on a 36-team walkthrough (2026-11-19):
+   * the season came out with 35 teams, one of them holding 26 players. A further team run by the same
+   * manager is keyed by a key of its own (lib/league/rosterManager.ts), but the season row was looked
+   * up and written under the manager's user id, which is the FIRST team's key, and
+   * `(seasonId, ownerId)` is unique: both teams landed on one row. Such a team keeps its own key as
+   * the season owner and names its manager beside it, exactly as `assignLeagueSeat` writes it.
+   */
+  const extraTeam = isExtraTeamOwnerKey(genericRoster.platformUserId)
+  const ownerId = extraTeam
+    ? genericRoster.platformUserId
+    : String(team?.claimedByUserId ?? team?.platformUserId ?? genericRoster.platformUserId ?? '').trim() ||
+      `roster:${genericRoster.id}`
+  const managerUserId = extraTeam ? genericRoster.managerUserId ?? team?.claimedByUserId ?? null : null
 
-  const ownerIdCandidates = buildRedraftOwnerIdCandidates({
-    preferredOwnerId: ownerId,
-    claimedByUserId: team?.claimedByUserId,
-    teamPlatformUserId: team?.platformUserId,
-    genericRosterPlatformUserId: genericRoster.platformUserId,
-    genericRosterId: genericRoster.id,
-  })
+  const ownerIdCandidates = extraTeam
+    ? [ownerId]
+    : buildRedraftOwnerIdCandidates({
+        preferredOwnerId: ownerId,
+        claimedByUserId: team?.claimedByUserId,
+        teamPlatformUserId: team?.platformUserId,
+        genericRosterPlatformUserId: genericRoster.platformUserId,
+        genericRosterId: genericRoster.id,
+      })
 
   const existing = await prisma.redraftRoster.findFirst({
     where: {
@@ -330,6 +346,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
       seasonId: params.seasonId,
       leagueId: params.leagueId,
       ownerId,
+      ...(managerUserId ? { managerUserId } : {}),
       ownerName: team?.ownerName ?? `Team ${genericRoster.id.slice(0, 6)}`,
       teamName: team?.teamName ?? team?.ownerName ?? `Team ${genericRoster.id.slice(0, 6)}`,
       avatarUrl: team?.avatarUrl ?? null,
