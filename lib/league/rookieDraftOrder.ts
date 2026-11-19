@@ -83,8 +83,16 @@ export async function computeRookieDraftOrder(
   const nextSeason = currentSeason + 1
   const settings = (league.settings as Record<string, unknown>) ?? {}
 
-  // Get active (non-orphan) teams
-  const activeTeams = league.teams.filter(t => !t.isOrphan)
+  /*
+   * 🛑 EVERY TEAM, INCLUDING ONE NOBODY HAS CLAIMED. This used to drop orphan teams, but an unclaimed
+   * team still holds a slot in the rookie draft and its picks are still made. With one orphan in the
+   * league the engine's order (which seats every team) never matched the shortened list, so the order
+   * fell back to the old sort over the claimed teams alone: the Draft tab previewed a league of 4 as
+   * one team labelled "Champion" (seen re-walking a dynasty league, 2026-11-19), and
+   * `resolveRookieDraftSlotOrderForLeague` got an order that could not seat every roster and applied
+   * nothing. Dynasty leagues are where orphan teams are most common.
+   */
+  const activeTeams = league.teams
   if (activeTeams.length === 0) {
     return emptyResult(mode, nextSeason, 'No active teams')
   }
