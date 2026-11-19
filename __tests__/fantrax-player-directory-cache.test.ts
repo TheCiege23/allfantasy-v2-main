@@ -106,7 +106,8 @@ describe('the import uses the shared copy', () => {
   it('asks the cache, not the API directly, for every sport directory', async () => {
     const { readFileSync } = await import('node:fs')
     const source = readFileSync('lib/league-import/fantrax/importFantraxLeague.ts', 'utf8')
-    expect(source).toMatch(/^\s*const directoryFor = .*getCachedFantraxPlayerIds\(sport\)/m)
-    expect(source).not.toMatch(/^\s*const directoryFor = .*[^d]getFantraxPlayerIds\(sport\)/m)
+    expect(source).toMatch(/^\s*const loadDirectory = .*getCachedFantraxPlayerIds\(sport\)/m)
+    /* And nowhere does it call the uncached reader. */
+    expect(source).not.toMatch(/[^d]getFantraxPlayerIds\(/)
   })
 })
