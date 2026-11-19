@@ -58,6 +58,7 @@ export async function updateStandings(
 
   const rotoStats = new Map<string, TeamStatTotals[]>()
   const seenRotoPeriods = new Set<string>()
+  const pointsForCounted = new Set<string>()
   let matchupsCounted = 0
   for (const matchup of matchups) {
     if (!matchup.awayRosterId) continue
@@ -83,9 +84,20 @@ export async function updateStandings(
       }
       matchupsCounted++; continue
     }
-    home.pointsFor += homeScore
+    /*
+     * Points For counts a team's weekly score ONCE, however many games it plays that week. In a league
+     * that plays several games a week (settings: games per team each week) the same weekly score is
+     * the team's score in every one of those games, so adding it per game made a five-games league's
+     * Points For read five times its real total (owner's call, 2026-11-19). Points Against still adds
+     * each opponent's score, since those are different teams. A one-game league is unchanged.
+     */
+    for (const [id, row, score] of [[matchup.homeRosterId, home, homeScore], [matchup.awayRosterId, away, awayScore]] as const) {
+      const key = `${id}:${matchup.week}`
+      if (pointsForCounted.has(key)) continue
+      pointsForCounted.add(key)
+      row.pointsFor += score
+    }
     home.pointsAgainst += awayScore
-    away.pointsFor += awayScore
     away.pointsAgainst += homeScore
 
     const snapshot = matchup.lineupSnapshots as Record<string, any> | null

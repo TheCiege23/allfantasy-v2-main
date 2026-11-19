@@ -763,6 +763,7 @@ export function buildCanonicalScheduleStandings(input: {
     outcomesByRosterId.set(team.rosterId, [])
   }
 
+  const pointsForCounted = new Set<string>()
   const byWeek = [...input.matchups].sort((a, b) => a.week - b.week || a.slot - b.slot)
   for (const matchup of byWeek) {
     if (matchup.bye) {
@@ -776,9 +777,17 @@ export function buildCanonicalScheduleStandings(input: {
 
     const homeScore = matchup.homeScore ?? 0
     const awayScore = matchup.awayScore ?? 0
-    home.pointsFor = round1(home.pointsFor + homeScore)
+    // Points For counts a team's weekly score once, however many games it plays that week
+    // (lib/redraft/standingsEngine.ts has the reason); Points Against adds each opponent's score.
+    if (!pointsForCounted.has(`${matchup.homeRosterId}:${matchup.week}`)) {
+      pointsForCounted.add(`${matchup.homeRosterId}:${matchup.week}`)
+      home.pointsFor = round1(home.pointsFor + homeScore)
+    }
+    if (!pointsForCounted.has(`${matchup.awayRosterId}:${matchup.week}`)) {
+      pointsForCounted.add(`${matchup.awayRosterId}:${matchup.week}`)
+      away.pointsFor = round1(away.pointsFor + awayScore)
+    }
     home.pointsAgainst = round1(home.pointsAgainst + awayScore)
-    away.pointsFor = round1(away.pointsFor + awayScore)
     away.pointsAgainst = round1(away.pointsAgainst + homeScore)
 
     const divisionGame = Boolean(home.divisionId && home.divisionId === away.divisionId)
