@@ -55,14 +55,24 @@ function Shell({ active }: { active: 'home' | 'my-team' }) {
   )
 }
 
+/* Since 2026-11-19 the cadence is how often the shell ASKS whether the page changed
+   (/api/core/league-version); it rebuilds only on a change (core-shell-change-only-refresh.test.tsx).
+   So the cadence is counted in checks. */
+const fetchMock = vi.fn(async () => new Response(JSON.stringify({ version: 'same' }), { status: 200 }))
+const checks = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/core/league-version')).length
+const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
 beforeEach(() => {
   vi.useFakeTimers()
   nav.router.refresh.mockClear()
+  fetchMock.mockClear()
+  vi.stubGlobal('fetch', fetchMock)
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
 })
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
@@ -75,25 +85,37 @@ describe('shellRouteRefreshMs', () => {
   })
 })
 
-describe('the shell refresh on a game day', () => {
-  it('does not re-render my-team every 20s', () => {
+describe('the shell check on a game day', () => {
+  it('does not check my-team every 20s', async () => {
     render(<Shell active="my-team" />)
-    act(() => void vi.advanceTimersByTime(100_000))
-    expect(nav.router.refresh).not.toHaveBeenCalled()
-    act(() => void vi.advanceTimersByTime(20_000))
-    expect(nav.router.refresh).toHaveBeenCalledTimes(1)
+    await tick(0)
+    const baseline = checks()
+    await tick(100_000)
+    expect(checks()).toBe(baseline)
+    await tick(20_000)
+    expect(checks()).toBe(baseline + 1)
   })
 
-  it('still refreshes home every 20s', () => {
+  it('still checks home every 20s', async () => {
     render(<Shell active="home" />)
-    act(() => void vi.advanceTimersByTime(20_000))
-    expect(nav.router.refresh).toHaveBeenCalledTimes(1)
+    await tick(0)
+    const baseline = checks()
+    await tick(20_000)
+    expect(checks()).toBe(baseline + 1)
   })
 
-  it('switching from my-team to home picks up the game-day cadence', () => {
+  it('switching from my-team to home picks up the game-day cadence', async () => {
     const { rerender } = render(<Shell active="my-team" />)
     rerender(<Shell active="home" />)
-    act(() => void vi.advanceTimersByTime(20_000))
-    expect(nav.router.refresh).toHaveBeenCalledTimes(1)
+    await tick(0)
+    const baseline = checks()
+    await tick(20_000)
+    expect(checks()).toBe(baseline + 1)
+  })
+
+  it('an unchanged page is not rebuilt on the cadence', async () => {
+    render(<Shell active="home" />)
+    await tick(20_000 * 5)
+    expect(nav.router.refresh).not.toHaveBeenCalled()
   })
 })

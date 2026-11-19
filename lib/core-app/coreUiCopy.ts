@@ -1470,6 +1470,11 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // A manager's record on a platform whose history is not counted per manager yet (2026-11-16,
   // lib/competitive-edge/providerManagerHistory.ts).
   [/^(.+) trades aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los intercambios de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
+  // Fantrax trades from the commissioner's uploaded trade history (lib/competitive-edge/providerManagerHistory.ts).
+  [/^No Fantrax trade history has been uploaded for this league yet\. The commissioner adds it under Commissioner → Trades and draft archive\.$/, () => 'Aún no se ha subido el historial de intercambios de Fantrax de esta liga. El comisionado lo agrega en Comisionado → Intercambios y archivo de drafts.'],
+  [/^The uploaded Fantrax trades could not be matched to this league’s managers\.$/, () => 'Los intercambios de Fantrax subidos no se pudieron asociar a los mánagers de esta liga.'],
+  [/^This league has no Fantrax league id on file\.$/, () => 'Esta liga no tiene registrado un id de liga de Fantrax.'],
+  [/^Only trades in the uploaded Fantrax export are counted; trades made since the last upload are not\.$/, () => 'Solo se cuentan los intercambios del archivo de Fantrax subido; los hechos desde la última subida no.'],
   [/^(.+) waiver claims aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los reclamos de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
   [/^(.+) draft picks aren't matched to the manager who made them yet\.$/, (m) => `Las selecciones del draft de ${m[1]} todavía no están asignadas al mánager que las hizo.`],
   [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],

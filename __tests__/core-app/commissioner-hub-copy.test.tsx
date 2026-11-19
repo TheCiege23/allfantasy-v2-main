@@ -226,6 +226,21 @@ function hub(over: Partial<CommissionerHubData> = {}): CommissionerHubData {
 }
 
 describe('the Commissioner Hub follows en → es → en', () => {
+  it('links an imported draft to the draft archive instead of saying no draft is on file', () => {
+    const history = { tradeAvailable: true, draftAvailable: true, trades: [], drafts: [], tradeNote: '', draftNote: '' }
+    const { unmount } = render(<CommissionerHub data={hub({ history })} language="en" />)
+    expect(screen.getByText('No draft sessions on file.')).toBeTruthy()
+    unmount()
+
+    const imported = { ...history, importedDrafts: [{ key: 'imported:abc', season: 2025, href: '/core/draft-hq?league=L1&draft=imported%3Aabc' }, { key: 'legacy:NFL:unknown', season: null, href: '/core/draft-hq?league=L1&draft=legacy%3ANFL%3Aunknown' }] }
+    const es = render(<CommissionerHub data={hub({ history: imported })} language="es" />)
+    expect(screen.queryByText('No hay drafts registrados.')).toBeNull()
+    const links = screen.getAllByRole('link', { name: 'Abrir en el archivo de drafts' })
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(imported.importedDrafts.map((d) => d.href))
+    expect(links[0].closest('li')?.querySelector('strong')?.textContent).toBe('2025 · Draft importado')
+    expect(links[1].closest('li')?.querySelector('strong')?.textContent).toBe('Temporada desconocida · Draft importado')
+    es.unmount()
+  })
   it('shows recorded lottery order and odds in the commissioner archive', () => {
     const data = hub({ history: { tradeAvailable: true, draftAvailable: true, trades: [], drafts: [], tradeNote: '', draftNote: '', lotteries: [{ id: 'draw', at: '2026-04-01T12:00:00Z', season: 2027, slots: [{ slot: 1, team: 'Alpha', odds: 42.5 }] }] } })
     render(<CommissionerHub data={data} language="es" />)

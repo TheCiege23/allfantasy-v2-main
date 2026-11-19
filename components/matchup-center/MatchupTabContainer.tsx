@@ -19,6 +19,7 @@ import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { cn } from '@/lib/utils'
 import { refusalOf, type PlanRefusal } from '@/lib/monetization/planRefusal'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 
 function matchupRelativeAge(loadedAt: number | null, nowMs: number): string {
   if (!loadedAt) return ''
@@ -65,7 +66,13 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : new Date().getFullYear()
   }, [league.season])
   const [season, setSeason] = useState<number>(initialSeason)
-  const [week, setWeek] = useState(() => Math.max(1, league.currentWeek ?? 1))
+  /*
+   * Null = "the league's current week", resolved by the server (`buildMatchupCenterPayload`) from the league's own
+   * schedule. It used to default to 1, so an imported league that states no week opened on week 1 in week 11.
+   */
+  const [week, setWeek] = useState<number | null>(() =>
+    typeof league.currentWeek === 'number' && league.currentWeek >= 1 ? league.currentWeek : null,
+  )
   const [payload, setPayload] = useState<MatchupCenterPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,9 +99,9 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
         setLoading(true)
       }
       try {
-        const data = await dedupe(`matchup:${league.id}:${season}:${week}`, async () => {
+        const data = await dedupe(`matchup:${league.id}:${season}:${week ?? 'current'}`, async () => {
           const res = await fetch(
-            `/api/leagues/${encodeURIComponent(league.id)}/matchup-center?season=${season}&week=${week}`,
+            `/api/leagues/${encodeURIComponent(league.id)}/matchup-center?season=${season}${week != null ? `&week=${week}` : ''}`,
             { credentials: 'include' },
           )
           const json = await res.json().catch(() => ({}))
@@ -107,7 +114,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
           sendProductAnalyticsBeacon(ENGAGEMENT.MATCHUP_CENTER_VIEW, {
             leagueId: league.id,
             season,
-            week,
+            week: week ?? data.week,
             sport: sportU,
           })
         }
@@ -191,7 +198,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
       <div className="flex items-center justify-between gap-2">
         <MatchupWeekSelector
           season={season}
-          week={week}
+          week={week ?? payload?.week ?? 1}
           maxWeek={maxW}
           disabled={loading}
           onChange={(n) => {
@@ -254,7 +261,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
               setMatchupAiRefusal(null)
               void (async () => {
                 try {
-                  const r = await runMatchupAnalysis({ season, week })
+                  const r = await runMatchupAnalysis({ season, week: week ?? payload?.week ?? 1 })
                   setMatchupAi(r)
                 } catch (e) {
                   setMatchupAi(null)
@@ -266,9 +273,22 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
           />
           <div className="rounded-2xl border border-white/[0.08] bg-[#060b18]/80 px-2">
             {rows.length === 0 ? (
-              <p className="py-8 text-center text-sm text-white/45">
-                No starter rows yet — set your lineup for week {payload.week}, or run weekly scoring.
-              </p>
+              <div className="py-8 text-center text-sm text-white/45">
+                <p>No starter rows yet — set your lineup for week {payload.week}, or run weekly scoring.</p>
+                {/*
+                 * An imported league's matchup is read from its platform's schedule by the Matchup screen
+                 * (lib/core-app/matchup.ts); this tab's tables are not written for every platform (a Fantrax league
+                 * showed no opponent and no starters here in week 11). Point at the screen that has it.
+                 */}
+                {isImportedPlatform(league.platform) ? (
+                  <a
+                    className="mt-3 inline-block rounded-lg border border-white/15 px-3 py-1.5 text-white/80 hover:text-white"
+                    href={`/core/matchup?league=${encodeURIComponent(league.id)}&week=${payload.week}`}
+                  >
+                    Open this week’s matchup
+                  </a>
+                ) : null}
+              </div>
             ) : (
               rows.map((row, i) => (
                 <MatchupStarterRow

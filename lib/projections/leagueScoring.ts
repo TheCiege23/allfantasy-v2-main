@@ -26,6 +26,8 @@ import {
   resolveProviderScoringStatKey,
   type YahooCapturedStatCategory,
 } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
+import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 
 /**
  * IDP naming variants — the same stat under two names.
@@ -586,6 +588,37 @@ export function extractScoringSettings(
 ): Record<string, unknown> | null {
   if (!leagueSettings || typeof leagueSettings !== 'object') return null
   const s = leagueSettings as Record<string, unknown>
+  const stored = storedScoringSettings(s)
+  /*
+   * 🛑 A FANTRAX LEAGUE WITH NO STORED RULES STILL HAS ITS RULES (2026-11-19). The import kept Fantrax's own
+   * `fantrax_settings.scoringSystem` while `scoringSettings.rules` came out empty, so this returned nothing usable and
+   * every projection, My Team's "0 of 16 starters priced" and the league's matchup projections with it, read as
+   * unscorable on a league whose scoring was sitting in the row. Read through `fantraxScoringRules` — the converter
+   * the import and the trade context already use — only when the stored rules give nothing, so a rulebook that
+   * exists always wins.
+   */
+  if (hasScoringRules(stored)) return stored
+  return fantraxStoredRules(s) ?? stored
+}
+
+/**
+ * The league's rules from Fantrax's own scoring system, in Sleeper's vocabulary (`fantraxScoringRules`), or null when
+ * the settings carry none. A category league converts to no rules and stays null.
+ *
+ * ⚠ BEST-EFFORT, AS THE IMPORT IS: a per-position rule Fantrax states (other than the tight-end reception premium)
+ * has no slot here and is left out, exactly as `fantraxScoringRules` reports in its gaps.
+ */
+function fantraxStoredRules(s: Record<string, unknown>): Record<string, unknown> | null {
+  const fantrax = s.fantrax_settings
+  const system = fantrax && typeof fantrax === 'object' ? (fantrax as Record<string, unknown>).scoringSystem : null
+  if (!system || typeof system !== 'object' || !Array.isArray((system as Record<string, unknown>).scoringCategorySettings)) return null
+  const { rules } = fantraxScoringRules({ scoringSystem: system } as unknown as FantraxLeagueInfo)
+  const out: Record<string, number> = {}
+  for (const r of rules) if (typeof r.points_value === 'number' && Number.isFinite(r.points_value)) out[r.stat_key] = r.points_value
+  return hasScoringRules(out) ? out : null
+}
+
+function storedScoringSettings(s: Record<string, unknown>): Record<string, unknown> | null {
   // Provider-captured rulebooks (ESPN/Yahoo) translate first; anything else
   // falls through to the original behavior untouched.
   const bridged = bridgeProviderScoringRules(s)

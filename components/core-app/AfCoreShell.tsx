@@ -36,7 +36,7 @@ import { LEAGUE_SWIPE_SCREENS } from '@/lib/core-app/leagueSwipe'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
-import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
+import { coreRefreshIntervalMs, decideCoreRefresh, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
 import { canRefreshInBackground, primeDeployBaseline } from '@/lib/core-app/deployGuard'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
@@ -1561,8 +1561,10 @@ function AfCoreShell(incoming: AfCoreShellProps) {
   const shellRefreshPendingRef = useRef(false)
   shellRefreshPendingRef.current = shellRefreshPending
 
-  /* The rail is a live surface. Refresh the server snapshot while games are on,
-     then back off between slates. Hidden tabs never spend a refresh. */
+  /* The rail is a live surface, but the PAGE is rebuilt only when its data changed: the timer asks
+     for a fingerprint and rebuilds when it moved, with a 5-minute backstop (coreRefreshPolicy.ts,
+     decideCoreRefresh). Live scores update in place through the rail's own poll. Hidden tabs never
+     spend a check. */
   useEffect(() => {
     setRailClock(Date.now())
     const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
@@ -1570,16 +1572,20 @@ function AfCoreShell(incoming: AfCoreShellProps) {
     const refreshMs = shellRouteRefreshMs(active, Boolean(props.gameDayActive), props.liveGameCount ?? 0)
     let lastRefreshAt=Date.now()
     let alive=true
+    let checking=false
+    // The page on screen was just rendered (mount or navigation), so the first answer is its baseline.
+    let seenVersion:string|null=null
+    const controller=new AbortController()
     void primeDeployBaseline()
-    const refreshRoute=()=>{
-      if (document.visibilityState !== 'visible') return
-      if (Date.now()-lastRefreshAt<1000 || shellRefreshPendingRef.current) return
-      // A tab click is already fetching a fresh render; a refresh landing first would clear its
-      // skeleton and flash the screen being left.
-      if (navPendingRef.current) return
-      // The matchup board polls the same route on a better-informed cadence; two
-      // timers on one route paid for two full renders every period.
-      if (routeRefreshClaimed()) return
+    const fetchVersion=async():Promise<string|null>=>{
+      try {
+        const res=await fetch('/api/core/league-version',{cache:'no-store',signal:controller.signal})
+        if(!res.ok)return null
+        const v=(await res.json() as {version?:unknown}).version
+        return typeof v==='string'?v:null
+      } catch { return null }
+    }
+    const rebuild=()=>{
       lastRefreshAt=Date.now()
       // 🛑 After a deploy this refresh would be a FULL PAGE RELOAD under the reader — see
       // lib/core-app/deployGuard. The guard skips it; NewVersionReload picks the build up unseen.
@@ -1588,17 +1594,37 @@ function AfCoreShell(incoming: AfCoreShellProps) {
         startShellRefresh(() => router.refresh())
       })
     }
-    const refresh = window.setInterval(refreshRoute, refreshMs)
+    const refreshRoute=async()=>{
+      if (document.visibilityState !== 'visible') return
+      if (checking || Date.now()-lastRefreshAt<1000 || shellRefreshPendingRef.current) return
+      // A tab click is already fetching a fresh render; a refresh landing first would clear its
+      // skeleton and flash the screen being left.
+      if (navPendingRef.current) return
+      // The matchup board polls the same route on a better-informed cadence; two
+      // timers on one route paid for two full renders every period.
+      if (routeRefreshClaimed()) return
+      checking=true
+      const next=await fetchVersion()
+      checking=false
+      if (!alive || navPendingRef.current) return
+      const decision=decideCoreRefresh(seenVersion,next,Date.now()-lastRefreshAt)
+      seenVersion=decision.seen
+      if (decision.refresh) rebuild()
+    }
+    // Baseline now, so a change landing before the first tick is not mistaken for the page's own state.
+    void fetchVersion().then((v)=>{ if (alive && seenVersion===null) seenVersion=v })
+    const refresh = window.setInterval(()=>void refreshRoute(), refreshMs)
     // Resume/reconnect must read a fresh roster and schedule, even between timer ticks.
     const resume=(event:Event)=>{
       if(event.type==='pageshow'&&!(event as PageTransitionEvent).persisted)return
-      setRailClock(Date.now());refreshRoute()
+      setRailClock(Date.now());void refreshRoute()
     }
     window.addEventListener('pageshow',resume)
     window.addEventListener('online',resume)
     document.addEventListener('visibilitychange',resume)
     return () => {
       alive=false
+      controller.abort()
       window.clearInterval(clock)
       window.clearInterval(refresh)
       window.removeEventListener('pageshow',resume)
