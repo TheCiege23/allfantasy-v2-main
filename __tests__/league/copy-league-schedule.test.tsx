@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
   games: [] as Array<{ homeTeam: string; awayTeam: string; week: number | null; seasonType: string | null; startTime: Date | null }>,
   rows: [] as Array<{ seasonId: string; week: number; type: string; homeRosterId: string; awayRosterId: string | null; isMedianMatchup: boolean; status: string }>,
   currentWeek: 1,
+  sport: 'NFL',
 }))
 
 vi.mock('@/lib/prisma', () => {
@@ -26,10 +27,10 @@ vi.mock('@/lib/prisma', () => {
     prisma: {
       redraftSeason: {
         findUnique: async () => ({
-          id: 'S1', leagueId: 'L1', sport: 'NFL', season: 2026, currentWeek: db.currentWeek, playoffStartWeek: 15,
+          id: 'S1', leagueId: 'L1', sport: db.sport, season: 2026, currentWeek: db.currentWeek, playoffStartWeek: 15,
           rosters: ['r1', 'r2', 'r3', 'r4', 'r5'].map((id) => ({ id })),
           schedule: db.rows.map((r) => ({ week: r.week, status: r.status, homeScore: 0, awayScore: 0 })),
-          league: { settings: db.settings, sport: 'NFL' },
+          league: { settings: db.settings, sport: db.sport },
         }),
       },
       leagueTeam: { findMany: async () => ['1', '2', '3', '4', '5'].map((n) => ({ id: `t${n}`, externalId: `x${n}` })) },
@@ -180,6 +181,22 @@ describe('the service', () => {
     db.settings = withCopyLeague({}, { enabled: true, sport: 'NFL', teams: {}, previous: {} })
     db.games = []
     expect(await applyRealSchedule({ seasonId: 'S1', actorUserId: 'boss' })).toMatchObject({ ok: false, code: 'SCHEDULE_NOT_LOADED' })
+  })
+
+  it('an NBA, NHL or MLB copy league gets name and logo only: the real schedule is refused and nothing is written', async () => {
+    for (const sport of ['NBA', 'NHL', 'MLB']) {
+      db.sport = sport
+      db.settings = withCopyLeague({}, { enabled: true, sport, teams: {}, previous: {} })
+      const before = JSON.stringify(db.settings)
+      expect(await previewRealSchedule({ seasonId: 'S1' })).toMatchObject({ ok: false, code: 'NO_REAL_SCHEDULE' })
+      expect(await applyRealSchedule({ seasonId: 'S1', actorUserId: 'boss' })).toMatchObject({
+        ok: false,
+        code: 'NO_REAL_SCHEDULE',
+        message: 'The real schedule is for NFL copy leagues. Your teams still have their real names and logos.',
+      })
+      expect(JSON.stringify(db.settings)).toBe(before)
+    }
+    db.sport = 'NFL'
   })
 })
 

@@ -4,7 +4,7 @@ import { applyRivalryWeek, previewRivalryWeek } from '@/lib/schedule-runtime/riv
 import { keepWeekAsCustom, randomizeSchedule, setCustomWeek } from '@/lib/schedule-runtime/scheduleToolsService'
 import { readCustomWeeks, type CustomPair } from '@/lib/schedule-runtime/customWeeks'
 import { applyRealSchedule, previewRealSchedule } from '@/lib/league/copyLeagueScheduleService'
-import { readCopyLeague } from '@/lib/league/copyLeague'
+import { copyLeagueHasRealSchedule, readCopyLeague } from '@/lib/league/copyLeague'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -96,7 +96,8 @@ export async function GET(req: NextRequest) {
     schedule: resolved.state,
     coverage: resolved.coverage,
     customWeeks,
-    copyLeague: copy.enabled,
+    // The real-schedule tools: an NFL copy league only (NBA, NHL and MLB copy leagues get name and logo only).
+    copyLeague: copy.enabled && copyLeagueHasRealSchedule(copy.sport),
     realGames,
   })
 }

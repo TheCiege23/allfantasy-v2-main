@@ -47,8 +47,14 @@ SEASON="${4:-}"
 SPORT="$(echo "$SPORT_RAW" | tr '[:lower:]' '[:upper:]')"
 case "$SPORT" in
   NBA)
-    if [[ "$ENDPOINT" != "scoreboard" ]]; then echo "NBA currently supports only scoreboard capture" >&2; exit 2; fi
+    # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
+    case "$ENDPOINT" in scoreboard|teams) ;; *) echo "NBA currently supports scoreboard and teams capture" >&2; exit 2 ;; esac
     SPORT_PATH="basketball/nba"
+    ;;
+  NHL)
+    # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
+    if [[ "$ENDPOINT" != "teams" ]]; then echo "NHL currently supports only teams capture" >&2; exit 2; fi
+    SPORT_PATH="hockey/nhl"
     ;;
   NCAAB) SPORT_PATH="basketball/mens-college-basketball" ;;
   NFL)
@@ -60,7 +66,8 @@ case "$SPORT" in
     SPORT_PATH="football/nfl"
     ;;
   MLB)
-    if [[ "$ENDPOINT" != "fantasy-league" ]]; then echo "MLB currently supports only fantasy-league capture" >&2; exit 2; fi
+    # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
+    case "$ENDPOINT" in fantasy-league|teams) ;; *) echo "MLB currently supports fantasy-league and teams capture" >&2; exit 2 ;; esac
     SPORT_PATH="baseball/mlb"
     ;;
   *)
