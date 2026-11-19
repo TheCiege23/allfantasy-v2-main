@@ -52,6 +52,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { picksUntilNextTurn, type ScoringWindow } from '@/lib/draft-helper/draftContextSignals'
+import { ownDraftSlot, planOwnNextPick, poolAtPlannedPick, type OwnPickPlan } from './planForOwnPick'
 import { projectionKey, projectionsFromPoolEntries } from '@/lib/draft-room/poolProjections'
 
 /**
@@ -133,6 +134,12 @@ export interface BuildDraftDecisionContextInput {
   leagueId: string
   rosterId: string
   mode?: 'bpa' | 'needs'
+  /**
+   * Off the clock, rank for the roster's own next turn (`plannedFor`). Only the pick DECISION asks for this
+   * (`pickDecision.ts`, the decision route). The pick outlook must see the pool as it stands NOW — its whole job
+   * is to say who is likely gone — and the shadow compare is about the pick on the clock, so both leave it off.
+   */
+  planForOwnTurn?: boolean
 }
 
 export interface DraftDecisionContext {
@@ -157,6 +164,12 @@ export interface DraftDecisionContext {
   pickInRound: number
   /** The weeks this draft scores, for a tournament-stage league; null for a season-long one. */
   scoringWindow: ScoringWindow | null
+  /**
+   * Set when the roster is NOT on the clock — before the draft, or while another team picks (build item 8,
+   * 2026-11-19). `round`, `pick`, `pickInRound` and the engine input are then for the roster's NEXT turn, and the
+   * players ADP says go before it are left out of the pool (`planForOwnPick.ts`). Null on the clock.
+   */
+  plannedFor: OwnPickPlan | null
   totalTeams: number
   status: string | null
   draftType: string | null
@@ -618,6 +631,22 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
   })
   const ownPickIds = new Set([input.rosterId, ...targetRosterAliases])
   const targetRosterPickCount = picks.filter((p) => ownPickIds.has(p.rosterId)).length
+  /*
+   * Off the clock, rank for the roster's own next turn rather than the pick being made now (planForOwnPick.ts):
+   * before the draft that is the roster's first pick, not overall pick 1.
+   */
+  const plan = !input.planForOwnTurn
+    ? null
+    : planOwnNextPick({
+        status: session.status ?? null,
+        draftType: session.draftType ?? null,
+        currentOverall: overallPick,
+        ownSlot: ownDraftSlot({ slotOrder: session.slotOrder, ownIds: ownPickIds, picks }),
+        totalTeams,
+        rounds: session.rounds ?? null,
+      })
+  const targetRound = plan?.round ?? round
+  const targetPickInRound = plan?.pickInRound ?? pickInRound
   const auctionContext = resolveAuctionContext(session, input.rosterId, rosterSlots, targetRosterPickCount)
 
   const assembled = assembleEngineInputFromPicks({
@@ -638,8 +667,8 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     adpEntries: adpResult.entries,
     poolByKey,
     rosterSlots,
-    round,
-    pick: pickInRound,
+    round: targetRound,
+    pick: targetPickInRound,
     totalTeams,
     sport: league.sport,
     isDynasty: league.isDynasty,
@@ -652,6 +681,13 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     mode: input.mode ?? 'needs',
   })
 
+  let plannedFor: OwnPickPlan | null = null
+  if (plan) {
+    const { pool, leftOut } = poolAtPlannedPick(assembled.engineInput.available, plan.picksAway)
+    assembled.engineInput.available = pool
+    plannedFor = { ...plan, leftOut }
+  }
+
   return {
     leagueId: input.leagueId,
     rosterId: input.rosterId,
@@ -661,10 +697,11 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     isDynasty: league.isDynasty,
     isSF,
     is2QB,
-    round,
-    pick: overallPick,
-    pickInRound,
+    round: targetRound,
+    pick: plannedFor?.overall ?? overallPick,
+    pickInRound: targetPickInRound,
     scoringWindow,
+    plannedFor,
     totalTeams,
     status: session.status,
     draftType: session.draftType ?? null,

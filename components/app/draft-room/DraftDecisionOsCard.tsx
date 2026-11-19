@@ -30,6 +30,11 @@ export type DraftDecisionPayload = {
   dataCompleteness: number
   uncertaintySources: string[]
   forOverall: number | null
+  /**
+   * Set when you are not on the clock — before the draft, or while another team picks: the decision is for your
+   * own next turn, with the players ADP has going before it left out (lib/shared-services/draft/planForOwnPick.ts).
+   */
+  plannedFor?: { overall: number; round: number; pickInRound: number; picksAway: number; leftOut: number } | null
   /** The specifics of THIS draft (2026-11-14): scoring window, position run, teams ahead. */
   context?: {
     scoringWindow: string | null
@@ -158,6 +163,11 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
             {decision.fourAnswers.what_to_do}
           </p>
           <p className="text-white/75">{decision.fourAnswers.what_happened}</p>
+          {decision.plannedFor ? (
+            <p className="text-white/65" data-testid="draft-decision-os-planned">
+              {plannedForLine(decision.plannedFor)}
+            </p>
+          ) : null}
           {top ? <p className="text-white/65">{decision.fourAnswers.why_it_matters}</p> : null}
           <p className="text-white/50">{decision.fourAnswers.how_confident}</p>
 
@@ -194,6 +204,17 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
       ) : null}
     </section>
   )
+}
+
+/** "Planned for your next pick, 1.10 (overall 10) — 9 picks away. Left out: the 9 players ADP has going first." */
+export function plannedForLine(p: NonNullable<DraftDecisionPayload['plannedFor']>): string {
+  const where = `Planned for your next pick, ${p.round}.${String(p.pickInRound).padStart(2, '0')} (overall ${p.overall})`
+  const away = p.picksAway > 0 ? ` — ${p.picksAway} pick${p.picksAway === 1 ? '' : 's'} away.` : '.'
+  const left =
+    p.leftOut > 0
+      ? ` Left out: the ${p.leftOut === 1 ? 'player' : `${p.leftOut} players`} ADP has going in the pick${p.picksAway === 1 ? '' : 's'} before yours.`
+      : ''
+  return `${where}${away}${left}`
 }
 
 /** This draft's specifics, said once each: scoring window, a position run, the teams picking before you. */
