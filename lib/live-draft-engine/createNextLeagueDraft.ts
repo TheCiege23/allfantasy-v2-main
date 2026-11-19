@@ -1,3 +1,4 @@
+import { nativeLeagueStatusPatch } from '@/lib/league/nativeLeagueStatus'
 import { readRookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
 import { readPickTermsRecords, parseFuturePickRef } from '@/lib/league-trade-engine/pickTerms'
@@ -484,6 +485,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
           where: { id: leagueId },
           data: {
             lifecycleState: 'pre_draft',
+            ...nativeLeagueStatusPatch(league.platform, 'pre_draft'),
             lifecycleMetadata: {
               ...meta,
               lastTransitionAt: now.toISOString(),
