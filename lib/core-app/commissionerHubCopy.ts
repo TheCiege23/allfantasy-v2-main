@@ -379,6 +379,10 @@ const PATTERNS: Pattern[] = [
   [/^No team in this league is named "(.+)"\.$/, (team) => `Ningún equipo de esta liga se llama "${team}".`],
   [/^Two teams in this league are named "(.+)"\.$/, (team) => `Dos equipos de esta liga se llaman "${team}".`],
   [/^"(.+)" has no manager on file in this league\.$/, (team) => `"${team}" no tiene mánager registrado en esta liga.`],
+  [
+    /^This looks like the Claims\/Drops export, not Trades\. On Fantrax, open Transactions → History, choose Trades and download that CSV\.$/,
+    () => 'Este parece ser el archivo de Claims/Drops, no el de Trades. En Fantrax, abre Transactions → History, elige Trades y descarga ese CSV.',
+  ],
   [/^This is not a Fantrax trade history export — missing columns?: (.+)\.$/, (cols) => `Este no es un historial de intercambios de Fantrax: faltan columnas: ${cols}.`],
   // gate
   [/^You are a member of (.+)\. Ask its commissioner to add you as a co-commissioner if you need this\.$/s, (l) => `Eres miembro de ${l}. Pide a su comisionado que te añada como cocomisionado si lo necesitas.`],
