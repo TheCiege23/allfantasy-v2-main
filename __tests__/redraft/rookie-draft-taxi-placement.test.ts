@@ -34,14 +34,14 @@ const PICKS = [
   { overall: 4, rosterId: 'roster-a', playerId: 'r4', playerName: 'Dax Dolan' },
 ]
 
-async function seed(opts: { taxiSlots?: number; playerPool?: string; dynasty?: boolean } = {}) {
+async function seed(opts: { taxiSlots?: number; playerPool?: string; dynasty?: boolean; settings?: Record<string, unknown> } = {}) {
   const db = holder.db
   const dynasty = opts.dynasty ?? true
   for (const id of ['user-a', 'user-b']) await db.appUser.create({ data: { id, email: `${id}@test.allfantasy`, username: id } })
   await db.league.create({
     data: {
       id: LEAGUE, userId: 'user-a', name: 'Rookie Taxi', sport: 'NFL', platform: 'manual', platformLeagueId: LEAGUE,
-      leagueType: dynasty ? 'dynasty' : 'redraft', isDynasty: dynasty, leagueSize: 2, season: 2027, settings: {},
+      leagueType: dynasty ? 'dynasty' : 'redraft', isDynasty: dynasty, leagueSize: 2, season: 2027, settings: opts.settings ?? {},
       taxiSlots: opts.taxiSlots ?? 2,
     },
   })
@@ -85,6 +85,12 @@ describe('a dynasty league’s rookie draft finishing', () => {
     await holder.db.redraftRosterPlayer.update({ where: { id: promoted.id }, data: { slotType: 'bench' } })
     await syncCompletedDraftToRedraftSeason(LEAGUE)
     expect(slots()).toEqual({ r1: 'bench', r2: 'taxi', r3: 'bench', r4: 'taxi' })
+  })
+
+  it('a commissioner who switched it off keeps every rookie on the bench', async () => {
+    await seed({ settings: { taxi_auto_place_rookies: false } })
+    await syncCompletedDraftToRedraftSeason(LEAGUE)
+    expect(slots()).toEqual({ r1: 'bench', r2: 'bench', r3: 'bench', r4: 'bench' })
   })
 
   it('[control] no taxi squad, a startup draft, or a redraft league: everyone stays on the bench', async () => {

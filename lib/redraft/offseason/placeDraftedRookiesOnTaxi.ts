@@ -16,6 +16,9 @@
  *   - it runs after the rollover housekeeping, so spots freed by players who aged off the squad are
  *     counted as free.
  *
+ * A commissioner can switch it off (`League.settings.taxi_auto_place_rookies === false`, the Taxi rules
+ * card, any plan); a league that never saved it has it on.
+ *
  * A rookie is always taxi-eligible, so no experience lookup is needed. This is a system placement in
  * the offseason, when the taxi move rules are open (lib/taxi/taxiMoveRules.ts). Each write is guarded
  * on the row still being an undropped bench row.
@@ -23,6 +26,13 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
 import { isDynastyFamilyLeague } from './carryDynastyRosters'
+
+export const TAXI_AUTO_PLACE_ROOKIES_KEY = 'taxi_auto_place_rookies'
+
+/** On unless the commissioner switched it off. */
+export function readTaxiAutoPlaceRookies(settings: unknown): boolean {
+  return !(settings && typeof settings === 'object' && (settings as Record<string, unknown>)[TAXI_AUTO_PLACE_ROOKIES_KEY] === false)
+}
 
 /** A row finalization just created, in pick order. */
 export type DraftedRookieRow = { rowId: string; rosterId: string }
@@ -51,10 +61,10 @@ export async function placeDraftedRookiesOnTaxi(leagueId: string, drafted: reado
   if (drafted.length === 0) return 0
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { leagueType: true, isDynasty: true, taxiSlots: true },
+    select: { leagueType: true, isDynasty: true, taxiSlots: true, settings: true },
   })
   const taxiSlots = league?.taxiSlots ?? 0
-  if (!league || taxiSlots <= 0 || !isDynastyFamilyLeague(league)) return 0
+  if (!league || taxiSlots <= 0 || !isDynastyFamilyLeague(league) || !readTaxiAutoPlaceRookies(league.settings)) return 0
 
   const rosterIds = [...new Set(drafted.map((d) => d.rosterId))]
   const held = await prisma.redraftRosterPlayer.findMany({

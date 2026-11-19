@@ -827,6 +827,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsTaxiRules.title": "Taxi squad rules",
     "lsTaxiRules.subtitle": "Week {{week}} · {{phase}}",
     "lsTaxiRules.maxYears": "Seasons a player can spend on the taxi squad",
+    "lsTaxiRules.autoPlace": "Put drafted rookies on the taxi squad",
+    "lsTaxiRules.autoPlaceDesc": "When the rookie draft finishes, each team’s new rookies fill its open taxi spots. If there are more rookies than spots, the earliest picks stay on the bench. Any commissioner can change it.",
     "lsTaxiRules.maxYearsDesc": "Counted over finished seasons, on any team. When they are used, the player moves to the bench as the next season starts and can’t go back on. Any commissioner can change it.",
     "lsTaxiRules.maxYears.one": "{{n}} season",
     "lsTaxiRules.maxYears.other": "{{n}} seasons",

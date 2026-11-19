@@ -3115,6 +3115,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsTaxiRules.title": "Reglas de la escuadra taxi",
   "lsTaxiRules.subtitle": "Semana {{week}} · {{phase}}",
   "lsTaxiRules.maxYears": "Temporadas que un jugador puede pasar en la escuadra taxi",
+  "lsTaxiRules.autoPlace": "Poner a los novatos elegidos en la escuadra taxi",
+  "lsTaxiRules.autoPlaceDesc": "Cuando termina el draft de novatos, los nuevos novatos de cada equipo ocupan sus lugares libres en la escuadra taxi. Si hay más novatos que lugares, las primeras selecciones se quedan en el banquillo. Cualquier comisionado puede cambiarlo.",
   "lsTaxiRules.maxYearsDesc": "Se cuentan las temporadas terminadas, en cualquier equipo. Cuando se agotan, el jugador pasa al banquillo al empezar la siguiente temporada y no puede volver. Cualquier comisionado puede cambiarlo.",
   "lsTaxiRules.maxYears.one": "{{n}} temporada",
   "lsTaxiRules.maxYears.other": "{{n}} temporadas",
