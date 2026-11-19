@@ -15,6 +15,7 @@ import {
   formatStreak,
 } from '@/lib/standings/seasonForm'
 import { parseActiveLeagueDivisions, resolveRosterDivisions, type LeagueTeamIdentity } from '@/lib/league/divisions/leagueDivisions'
+import { loadNativeSeasonStandings } from '@/server/services/nativeStandings'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -71,28 +72,40 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   }
 
   /*
+   * 🛑 A LEAGUE THAT PLAYS HERE IS READ FROM ITS OWN SEASON. Its records live on `RedraftRoster`; the
+   * tables below are written for it only in a rotisserie league, so this tab was empty for every points
+   * and head-to-head category league (lib/standings/nativeSeasonStandings.ts). Rotisserie keeps the read
+   * below, which its scoring does fill. Null means the league has no season for this year.
+   */
+  const native = scoringMode !== 'roto'
+    ? await loadNativeSeasonStandings({ leagueId, platform: league.platform, seasonYear: season, scoringMode })
+    : null
+
+  /*
    * Streak and all-play (standings 9a) are DERIVED from the same weekly results the standings
    * themselves are built from — never stored, never estimated. `TeamWeekResult` is the only
    * source; when a league has no processed weeks the helpers return empty maps and the columns
    * render a dash rather than a zero that would read as a real record.
    */
-  const [rows, labels, weekResults] = await Promise.all([
-    prisma.fantasyStanding.findMany({
-      where: { leagueId, season },
-      orderBy: [{ rank: 'asc' }],
-    }),
-    buildRosterLabelMap(leagueId),
-    prisma.teamWeekResult.findMany({
-      where: { leagueId, season, status: 'final' },
-      select: { week: true, rosterId: true, totalPoints: true, winLoss: true },
-    }),
-  ])
+  const [rows, labels, weekResults] = native
+    ? [[], new Map<string, string>(), []]
+    : await Promise.all([
+        prisma.fantasyStanding.findMany({
+          where: { leagueId, season },
+          orderBy: [{ rank: 'asc' }],
+        }),
+        buildRosterLabelMap(leagueId),
+        prisma.teamWeekResult.findMany({
+          where: { leagueId, season, status: 'final' },
+          select: { week: true, rosterId: true, totalPoints: true, winLoss: true },
+        }),
+      ])
 
   const streaks = computeStreaks(weekResults)
   const allPlay = computeAllPlay(weekResults)
 
   const scoredRosterIds = new Set(weekResults.map(r => r.rosterId))
-  const standings = rows.filter(r => scoredRosterIds.has(r.rosterId)).map((r) => ({
+  const standings = native ? native.standings : rows.filter(r => scoredRosterIds.has(r.rosterId)).map((r) => ({
     rosterId: r.rosterId,
     teamName: labels.get(r.rosterId) ?? r.rosterId,
     wins: r.wins,
@@ -108,6 +121,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     streak: formatStreak(streaks.get(r.rosterId)),
     allPlay: formatAllPlay(allPlay.get(r.rosterId)),
   }))
+  const scoredWeeks = native ? native.scoredWeeks : new Set(weekResults.map(r => r.week)).size
 
   /*
    * Which row is the viewer's. Drives the "you" highlight in the 9a table; null when the viewer
@@ -169,5 +183,5 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     }
   }
 
-  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut, divisions, divisionPlayoffRule: divisions ? activeDivisions?.playoffRule ?? null : null, source: 'native', sourcePlatform: 'AllFantasy', scoredWeeks: new Set(weekResults.map(r => r.week)).size, cumulative: league.bestBallMode && league.bbMatchupFormat === 'cumulative' }, { headers: { 'Cache-Control': 'private, no-store' } })
+  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut, divisions, divisionPlayoffRule: divisions ? activeDivisions?.playoffRule ?? null : null, source: 'native', sourcePlatform: 'AllFantasy', scoredWeeks, cumulative: league.bestBallMode && league.bbMatchupFormat === 'cumulative' }, { headers: { 'Cache-Control': 'private, no-store' } })
 }

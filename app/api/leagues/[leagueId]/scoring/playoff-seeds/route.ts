@@ -63,11 +63,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   // the bracket, divisions included. `projected` marks "if the season ended today".
   const native = await loadNativePlayoffSeedPreview(leagueId, season).catch(() => null)
   if (native && native.seeds.length > 0) {
-    const [labels, standingRows] = await Promise.all([
+    // Wins and points for come from the season's own rosters: `fantasyStanding` is not written for a
+    // points league that plays here, so every seed read 0 wins and 0.0 (nativeSeasonStandings.ts).
+    const [labels, seasonRosters] = await Promise.all([
       buildRosterLabelMap(leagueId),
-      prisma.fantasyStanding.findMany({ where: { leagueId, season } }),
+      prisma.redraftRoster.findMany({
+        where: { id: { in: native.seeds.map((s) => s.redraftRosterId) } },
+        select: { id: true, wins: true, pointsFor: true },
+      }),
     ])
-    const standingByRoster = new Map(standingRows.map((r) => [r.rosterId, r]))
+    const seasonRosterById = new Map(seasonRosters.map((r) => [r.id, r]))
     return NextResponse.json({
       season,
       source: 'playoff_runtime',
@@ -77,8 +82,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         seed: s.seed,
         teamName: labels.get(s.rosterId) ?? s.displayName,
         qualifiedBy: s.qualifiedBy,
-        wins: standingByRoster.get(s.rosterId)?.wins ?? 0,
-        pointsFor: standingByRoster.get(s.rosterId)?.pointsFor ?? 0,
+        wins: seasonRosterById.get(s.redraftRosterId)?.wins ?? 0,
+        pointsFor: seasonRosterById.get(s.redraftRosterId)?.pointsFor ?? 0,
       })),
       // Best-of-N series rounds (lib/playoff-runtime/playoffSeries.ts), from the scorer's own week rule.
       series: native.series,

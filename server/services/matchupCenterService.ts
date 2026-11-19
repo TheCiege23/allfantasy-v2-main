@@ -15,6 +15,7 @@ import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbabilit
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
+import { buildNativeMatchupCenterPayload } from './nativeMatchupCenter'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
 
@@ -123,6 +124,8 @@ export async function buildMatchupCenterPayload(params: {
   viewerUserId: string
   season?: number
   week?: number
+  /** A league that plays more than one game a week: which of the viewer's games to show (1-based). */
+  game?: number
 }): Promise<MatchupCenterPayload | { error: string; status: number; code?: string }> {
   const league = await prisma.league.findFirst({
     where: { id: params.leagueId },
@@ -134,6 +137,7 @@ export async function buildMatchupCenterPayload(params: {
       leagueVariant: true,
       userId: true,
       platform: true,
+      playoffWeeksPerRound: true,
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
@@ -149,6 +153,21 @@ export async function buildMatchupCenterPayload(params: {
   if (!membership.ok) {
     return { error: 'Forbidden', status: 403 }
   }
+
+  /*
+   * 🛑 A LEAGUE THAT PLAYS HERE IS READ FROM ITS OWN SEASON. Its schedule and scores live in
+   * `RedraftMatchup` and its bracket in `RedraftPlayoffMatchup`; the `teamWeekResult` rows read below
+   * are never written for it on a schedule, so this tab showed "No opponent" and 0.0 for a league with
+   * a scored week (lib/matchup-center/nativeMatchupModel.ts). Null means it has no season yet.
+   */
+  const native = await buildNativeMatchupCenterPayload({
+    league,
+    viewerUserId: params.viewerUserId,
+    season: params.season,
+    week: params.week,
+    game: params.game,
+  })
+  if (native) return native
 
   const season = params.season ?? league.season
   const week = params.week ?? weekFromSettings(league.settings)

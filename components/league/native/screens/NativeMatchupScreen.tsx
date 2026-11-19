@@ -7,6 +7,7 @@ import type { MatchupCenterPayload, MatchupPlayerSlot } from '@/lib/matchup-cent
 import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
+import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { Card, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
@@ -16,12 +17,20 @@ import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenConte
 /**
  * Matchup — handoff §3, `Matchup.png` / `MobileMatchup.png`.
  *
- * Reads the same two DB-backed routes as before: `/api/leagues/[id]/matchup-center` (the viewer's
- * matchup, win probability and the deterministic insight copy) and
- * `/api/leagues/[id]/scoring/matchups` (every `teamWeekResult` row for the week, for the league
- * scoreboard). No provider is called from here and no score is computed client-side.
+ * Reads two DB-backed routes: `/api/leagues/[id]/matchup-center` (the viewer's matchup, win
+ * probability and the deterministic insight copy) and `/api/leagues/[id]/scoring/matchups` (the
+ * week's games, for the league scoreboard). Both answer from the league's own season — its schedule,
+ * its bracket and the points its scoring counted (lib/matchup-center/nativeMatchupModel.ts). No
+ * provider is called from here and no score is computed client-side.
+ *
+ * THE WEEK IS THE SERVER'S UNTIL THE MANAGER PICKS ONE. This screen used to start on
+ * `league.currentWeek ?? 1`, read once on mount, before the league's week had loaded — so it sat on
+ * week 1 all season. It now asks for no week, and the routes answer for the season's current one.
  */
 type View = 'mine' | 'league'
+
+/** How many games the scoreboard shows beside "My matchup" before offering the full list. */
+const SCOREBOARD_GLANCE_GAMES = 8
 
 function sideLine(rec: MatchupCenterPayload['left']['record'], remaining: number) {
   return (
@@ -99,10 +108,15 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
     return Number.isFinite(n) && n > 0 ? n : new Date().getFullYear()
   }, [league.season])
   const maxWeek = maxWeekForSport(String(league.sport ?? 'NFL'))
-  const [week, setWeek] = useState(() => Math.min(maxWeek, Math.max(1, league.currentWeek ?? 1)))
+  // null: the league's current week, which the routes resolve. A number: the week the manager picked.
+  const [pickedWeek, setPickedWeek] = useState<number | null>(null)
+  // A league that plays several games a week: which of the viewer's games the card shows (1-based).
+  const [gameNumber, setGameNumber] = useState(1)
   const [view, setView] = useState<View>('mine')
   const [payload, setPayload] = useState<MatchupCenterPayload | null>(null)
   const [board, setBoard] = useState<ScoreboardRow[]>([])
+  const [games, setGames] = useState<NativeBoardGame[] | null>(null)
+  const [boardWeek, setBoardWeek] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -113,13 +127,14 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
         setError(null)
       }
       const id = encodeURIComponent(league.id)
+      const weekQuery = pickedWeek != null ? `&week=${pickedWeek}` : ''
       try {
         const [mRes, bRes] = await Promise.all([
-          fetch(`/api/leagues/${id}/matchup-center?season=${season}&week=${week}`, { credentials: 'include', cache: 'no-store' }),
-          fetch(`/api/leagues/${id}/scoring/matchups?season=${season}&week=${week}`, { credentials: 'include', cache: 'no-store' }),
+          fetch(`/api/leagues/${id}/matchup-center?season=${season}${weekQuery}${gameNumber > 1 ? `&game=${gameNumber}` : ''}`, { credentials: 'include', cache: 'no-store' }),
+          fetch(`/api/leagues/${id}/scoring/matchups?season=${season}${weekQuery}`, { credentials: 'include', cache: 'no-store' }),
         ])
         const mJson = (await mRes.json().catch(() => ({}))) as { payload?: MatchupCenterPayload; error?: string }
-        const bJson = (await bRes.json().catch(() => ({}))) as { matchups?: ScoreboardRow[] }
+        const bJson = (await bRes.json().catch(() => ({}))) as { week?: number; matchups?: ScoreboardRow[]; games?: NativeBoardGame[] }
         if (!mRes.ok) {
           if (!silent) {
             setPayload(null)
@@ -128,16 +143,29 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
         } else {
           setPayload(mJson.payload ?? null)
         }
-        if (bRes.ok) setBoard(Array.isArray(bJson.matchups) ? bJson.matchups : [])
-        else if (!silent) setBoard([])
+        if (bRes.ok) {
+          setBoard(Array.isArray(bJson.matchups) ? bJson.matchups : [])
+          setGames(Array.isArray(bJson.games) ? bJson.games : null)
+          setBoardWeek(typeof bJson.week === 'number' ? bJson.week : null)
+        } else if (!silent) {
+          setBoard([])
+          setGames(null)
+        }
       } catch {
         if (!silent) setError('We could not load this matchup.')
       } finally {
         if (!silent) setLoading(false)
       }
     },
-    [league.id, season, week],
+    [league.id, season, pickedWeek, gameNumber],
   )
+
+  // The week on screen: the one picked, else the one the routes answered for.
+  const week = pickedWeek ?? payload?.week ?? boardWeek ?? Math.min(maxWeek, Math.max(1, league.currentWeek ?? 1))
+  const goToWeek = (next: number) => {
+    setGameNumber(1)
+    setPickedWeek(Math.min(maxWeek, Math.max(1, next)))
+  }
 
   useEffect(() => {
     void load()
@@ -160,6 +188,13 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
     })
   }, [payload])
   const pairs = useMemo(() => pairScoreboard(board, payload?.left.rosterId ?? null), [board, payload?.left.rosterId])
+  const native = payload?.native ?? null
+  // A category league's two numbers are categories won: whole numbers, and no points beside a player.
+  const categories = native?.scoreUnit === 'categories'
+  const showPlayerPoints = native ? native.playerPointsAvailable : true
+  const fmtScore = (n: number) => (categories ? String(Math.round(n)) : n.toFixed(1))
+  // A week with no game for this team (a bye, or nothing scheduled): no score card for a game nobody plays.
+  const noGame = native != null && native.gameCount === 0
 
   const prob = payload?.winProbabilityLeft
   const left = payload?.left
@@ -170,36 +205,66 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
   const weekControls = (
     <>
       <Segmented label="Matchup view" value={view} onChange={setView} options={[{ id: 'mine', label: 'My matchup' }, { id: 'league', label: 'League scoreboard' }]} />
-      <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => setWeek((w) => Math.max(1, w - 1))}>
+      <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => goToWeek(week - 1)}>
         <ChevronLeft size={18} aria-hidden />
       </button>
-      <button type="button" className="nls-iconbtn" aria-label="Next week" disabled={week >= maxWeek || loading} onClick={() => setWeek((w) => Math.min(maxWeek, w + 1))}>
+      <button type="button" className="nls-iconbtn" aria-label="Next week" disabled={week >= maxWeek || loading} onClick={() => goToWeek(week + 1)}>
         <ChevronRight size={18} aria-hidden />
       </button>
     </>
   )
 
-  const scoreboard = (
+  const boardLine = (name: string, pts: number | null, lead: boolean) => (
+    <div className="nls-board-line" data-lead={lead}>
+      <span>{name}</span>
+      <span>{pts == null ? '—' : categories ? String(Math.round(pts)) : fmt1(pts)}</span>
+    </div>
+  )
+  /*
+   * The week's games. Beside "My matchup" the list is a glance, not the whole league: a 36-team league
+   * that plays five games a week has 90 games, which pushed the page to nine screens (seen on a real
+   * league, 2026-11-19). It shows the first few, the viewer's own first, and a way to the full list.
+   */
+  const boardCard = (limit: number | null) => {
+    const shown = games && limit != null && games.length > limit ? games.slice(0, limit) : games
+    return (
     <Card label={`League scoreboard · Wk ${week}`}>
-      {pairs.length ? (
+      {games && shown ? (
+        games.length ? (
+          // One line per game, from the league's own schedule and bracket.
+          <>
+          <ul className="nls-board" data-testid="native-scoreboard">
+            {shown.map((g) => {
+              const hp = g.home.totalPoints
+              const ap = g.away?.totalPoints ?? null
+              return (
+                <li key={g.id} data-mine={g.mine || undefined} data-state={g.status}>
+                  {g.label ? <div className="nls-board-line"><span className="nls-muted">{g.label}</span><span /></div> : null}
+                  {boardLine(g.home.teamName, hp, hp != null && ap != null && hp > ap)}
+                  {g.away ? boardLine(g.away.teamName, ap, hp != null && ap != null && ap > hp) : <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>}
+                </li>
+              )
+            })}
+          </ul>
+          {shown.length < games.length ? (
+            <div className="nls-card-foot">
+              <span className="nls-muted nls-mono">{shown.length} of {games.length} games</span>
+              <button type="button" className="nls-btn" data-testid="native-scoreboard-all" onClick={() => setView('league')}>See all {games.length} games</button>
+            </div>
+          ) : null}
+          </>
+        ) : (
+          <p className="nls-muted">No games are scheduled for week {week}.</p>
+        )
+      ) : pairs.length ? (
         <ul className="nls-board">
           {pairs.map((p) => {
             const hp = p.home.totalPoints ?? null
             const ap = p.away?.totalPoints ?? null
             return (
               <li key={p.home.rosterId} data-mine={p.mine || undefined}>
-                <div className="nls-board-line" data-lead={hp != null && ap != null && hp > ap}>
-                  <span>{p.home.teamName}</span>
-                  <span>{fmt1(hp)}</span>
-                </div>
-                {p.away ? (
-                  <div className="nls-board-line" data-lead={hp != null && ap != null && ap > hp}>
-                    <span>{p.away.teamName}</span>
-                    <span>{fmt1(ap)}</span>
-                  </div>
-                ) : (
-                  <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>
-                )}
+                {boardLine(p.home.teamName, hp, hp != null && ap != null && hp > ap)}
+                {p.away ? boardLine(p.away.teamName, ap, hp != null && ap != null && ap > hp) : <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>}
               </li>
             )
           })}
@@ -208,7 +273,31 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
         <p className="nls-muted">Scores appear here once week {week} is scored.</p>
       )}
     </Card>
-  )
+    )
+  }
+  const scoreboard = boardCard(null)
+  const scoreboardGlance = boardCard(SCOREBOARD_GLANCE_GAMES)
+
+  // A league that plays more than one game a week: the viewer's other games, each one a tap away.
+  const otherGames = native && native.gameCount > 1 ? (
+    <Card label={`Your games this week · ${native.gameNumber} of ${native.gameCount}`}>
+      <div className="nls-actions" data-testid="native-matchup-games">
+        {Array.from({ length: native.gameCount }, (_, i) => (
+          <button key={i} type="button" className="nls-btn" data-variant={native.gameNumber === i + 1 ? 'primary' : undefined} aria-pressed={native.gameNumber === i + 1} disabled={loading} onClick={() => setGameNumber(i + 1)}>
+            Game {i + 1}
+          </button>
+        ))}
+      </div>
+      <ul className="nls-board">
+        {native.otherGames.map((g) => (
+          <li key={g.id} data-state={g.status}>
+            {boardLine(g.home.teamName, g.home.totalPoints, false)}
+            {g.away ? boardLine(g.away.teamName, g.away.totalPoints, false) : null}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  ) : null
 
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
@@ -218,10 +307,18 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !payload ? <p className="nls-empty" role="status">Loading matchup…</p> : null}
+      {/* No team in this league (a commissioner who does not play): the week's games still show. */}
+      {!payload && !loading && games?.length ? scoreboard : null}
+      {native?.gameLabel ? <p className="nls-overlay" data-testid="native-matchup-round">{native.gameLabel}</p> : null}
+      {noGame ? (
+        <p className="nls-empty" role="status" data-testid="native-matchup-no-game">
+          {native?.bye ? `Your team has a bye in week ${week}.` : `Your team has no game in week ${week}.`}
+        </p>
+      ) : null}
 
       {/* Redraft: the broadcast score bug (same payload, same numbers). Every other format: the score card. */}
-      {payload && left && right && rd ? <RedraftScoreBug payload={payload} week={week} /> : null}
-      {payload && left && right && !rd ? (
+      {payload && left && right && rd && !noGame ? <RedraftScoreBug payload={payload} week={week} /> : null}
+      {payload && left && right && !rd && !noGame ? (
         <section className="nls-card nls-card-flush" aria-label="Score">
           {payload.conceptOverlay ? <p className="nls-overlay">{payload.conceptOverlay}</p> : null}
           <div className="nls-score">
@@ -233,10 +330,10 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               </div>
             </div>
             <div className="nls-score-mid">
-              <div className="nls-score-nums" aria-label={`${left.teamName} ${left.totalPoints.toFixed(1)}, ${right.teamName} ${right.totalPoints.toFixed(1)}`}>
-                <b data-lead={leftLeads}>{left.totalPoints.toFixed(1)}</b>
+              <div className="nls-score-nums" aria-label={`${left.teamName} ${fmtScore(left.totalPoints)}, ${right.teamName} ${fmtScore(right.totalPoints)}`}>
+                <b data-lead={leftLeads}>{fmtScore(left.totalPoints)}</b>
                 <span>vs</span>
-                <b data-lead={!leftLeads}>{right.totalPoints.toFixed(1)}</b>
+                <b data-lead={!leftLeads}>{fmtScore(right.totalPoints)}</b>
               </div>
             </div>
             <div className="nls-side" data-side="right">
@@ -282,9 +379,9 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
                     return (
                       <li key={`${row.pos}-${i}`} className="nls-mrow">
                         <SlotCell p={row.l} side="left" />
-                        <span className="nls-pts" data-side="left" data-pts={rowPointTone(lp, rp, row.l?.gameStatus === 'final')}>{row.l ? lp.toFixed(1) : '—'}</span>
+                        <span className="nls-pts" data-side="left" data-pts={rowPointTone(lp, rp, row.l?.gameStatus === 'final')}>{row.l && showPlayerPoints ? lp.toFixed(1) : '—'}</span>
                         <PosPill label={row.pos} />
-                        <span className="nls-pts" data-side="right" data-pts={rowPointTone(rp, lp, row.r?.gameStatus === 'final')}>{row.r ? rp.toFixed(1) : '—'}</span>
+                        <span className="nls-pts" data-side="right" data-pts={rowPointTone(rp, lp, row.r?.gameStatus === 'final')}>{row.r && showPlayerPoints ? rp.toFixed(1) : '—'}</span>
                         <SlotCell p={row.r} side="right" />
                       </li>
                     )
@@ -306,7 +403,8 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               <p>{insight || 'No edge to report for this week yet.'}</p>
               <button type="button" className="nls-btn" data-variant="primary" data-block="true" onClick={() => onSelectTab('roster')}>Review lineup</button>
             </Card>
-            {view === 'mine' ? scoreboard : null}
+            {otherGames}
+            {view === 'mine' ? scoreboardGlance : null}
           </aside>
         </div>
       ) : null}

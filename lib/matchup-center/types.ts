@@ -2,6 +2,8 @@
  * Shared types for the league hub Matchup tab + `/api/leagues/[leagueId]/matchup-center`.
  */
 
+import type { NativeMatchupExtras } from './nativeMatchupModel'
+
 export type MatchupGameStatus = 'upcoming' | 'live' | 'final' | 'unknown'
 
 export type MatchupPlayerSlot = {
@@ -76,4 +78,6 @@ export type MatchupCenterPayload = {
   partialData: boolean
   /** Client poll interval when matchup is live (ms). */
   refreshIntervalMs: number
+  /** Only for a league that plays on AllFantasy, read from its own season (nativeMatchupModel.ts). */
+  native?: NativeMatchupExtras
 }
