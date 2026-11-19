@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ScoreAdjustmentsEditor } from '@/components/league-settings/home/ScoreAdjustmentsEditor'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -44,6 +44,29 @@ describe('score adjustments editor', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some((c) => String((c[1] as RequestInit | undefined)?.body ?? '').includes('score_adjustment_remove'))).toBe(true))
     const call = fetchMock.mock.calls.find((c) => String((c[1] as RequestInit | undefined)?.body ?? '').includes('remove'))!
     expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({ action: 'score_adjustment_remove', adjustmentId: 'adj1' })
+  })
+
+  it('marks an unfinished game final with a reason, and offers to reopen one closed by hand', async () => {
+    const open = { matchupId: 'm1', status: 'active', manualFinal: null, teams: [{ rosterId: 'h', name: 'Hawks', score: 101.5, adjustment: 0 }, { rosterId: 'a', name: 'Owls', score: 85, adjustment: 0 }] }
+    const closed = { ...open, matchupId: 'm2', status: 'final', manualFinal: { reason: 'no stat feed' } }
+    const fetchMock = stub(week({ matchups: [open, closed], adjustments: [] }))
+    render(<ScoreAdjustmentsEditor leagueId="L" />)
+    // One game still open: one "Mark final". The closed one shows its reason and "Reopen game".
+    const mark = await screen.findByTestId('score-adj-mark-final')
+    expect(screen.getAllByTestId('score-adj-mark-final')).toHaveLength(1)
+    expect(screen.getByTestId('score-adj-manual-final').textContent).toContain('no stat feed')
+    fireEvent.click(mark)
+    const confirm = within(screen.getByTestId('score-final-form')).getByRole('button', { name: 'Mark final' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true) // no reason yet
+    fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: 'game called off' } })
+    fireEvent.click(confirm)
+    const posted = () => fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === 'POST').map((c) => JSON.parse(String((c[1] as RequestInit).body)))
+    await waitFor(() => expect(posted()).toHaveLength(1))
+    expect(posted()[0]).toEqual({ action: 'matchup_finalize', matchupId: 'm1', reason: 'game called off' })
+    await screen.findByText('Marked final: Hawks vs Owls.')
+    fireEvent.click(screen.getByTestId('score-adj-reopen'))
+    await waitFor(() => expect(posted()).toHaveLength(2))
+    expect(posted()[1]).toEqual({ action: 'matchup_reopen', matchupId: 'm2' })
   })
 
   it('explains why a category league has no adjustments', async () => {

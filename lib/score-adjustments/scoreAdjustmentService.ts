@@ -17,6 +17,7 @@ import {
   type AdjustmentInputError,
   type ScoreAdjustment,
 } from './scoreAdjustments'
+import { readManualFinals } from './manualFinal'
 
 /**
  * Add or remove a commissioner score adjustment (./scoreAdjustments). Free on every tier (spec §2.1).
@@ -216,6 +217,8 @@ export type AdjustmentWeekView = {
   matchups: Array<{
     matchupId: string
     status: string
+    /** Closed by the commissioner by hand (./manualFinal), with the reason given. */
+    manualFinal: { reason: string } | null
     teams: Array<{ rosterId: string; name: string; score: number; adjustment: number }>
   }>
   adjustments: ScoreAdjustment[]
@@ -247,6 +250,7 @@ export async function readAdjustmentWeek(leagueId: string, weekParam: unknown): 
     orderBy: { id: 'asc' },
   })
   const all = readScoreAdjustments(settings)
+  const manualFinals = readManualFinals(settings)
   const ids = new Set(rows.map((r) => r.id))
   const name = (r: { teamName: string | null; ownerName: string } | null) => r?.teamName?.trim() || r?.ownerName || 'Team'
   return {
@@ -256,6 +260,10 @@ export async function readAdjustmentWeek(leagueId: string, weekParam: unknown): 
     matchups: rows.map((r) => ({
       matchupId: r.id,
       status: r.status,
+      manualFinal: (() => {
+        const f = manualFinals.find((x) => x.matchupId === r.id)
+        return f ? { reason: f.reason } : null
+      })(),
       teams: [
         { rosterId: r.homeRosterId, name: name(r.homeRoster), score: r.homeScore, adjustment: adjustmentFor(all, r.id, r.homeRosterId) },
         { rosterId: r.awayRosterId!, name: name(r.awayRoster), score: r.awayScore, adjustment: adjustmentFor(all, r.id, r.awayRosterId!) },
