@@ -132,7 +132,7 @@ learning loop ⚠ · multi-model ❌ · operability ⚠.
 | 5 | Commissioner: Manager Highlights off the 410 route; owner decides the live-ready rows | S + owner |
 | 6 | Trade reach: summarize offers past 3; provider trades/drafts in manager records | S–M |
 | 7 | Learning loop: outcomes calibrate waiver/trade/commissioner advice | L — **waiver + trade shipped 2026-11-19** (see note below) |
-| 8 | Draft: one engine in the draft room; a pick before the draft | M |
+| 8 | Draft: one engine in the draft room; a pick before the draft | M — **shipped 2026-11-19** (see note below) |
 | 9 | Three-brain: schedule `runManagedIntelligence` or retire `savedAnalysis` | M |
 | 10 | Cleanup: retired label engine in `import-players` / `fantasy-os-exec-sync` | S |
 
@@ -145,6 +145,15 @@ hook is deleted. ⚠ The calls themselves are NOT shifted: a letter or a confide
 second calibration on top of the engine's, and the ledger measures less than a letter claims (standard PPR, players
 only, redraft only). ⚠ Commissioner advice is not in it: nothing records a commissioner call with a gradable outcome.
 Draft tips are recorded (`draft_recommendation_records`) but graded only by `scripts/draft-backtest.ts --recorded`.
+
+**Item 8, 2026-11-19 — what shipped.** *One engine:* the copilot (`/api/draft/recommend`) and the War Room
+(`/api/ai/draft/recommend`) now take the decision card's pick (`sharedDraftPickForUser`, `lib/shared-services/draft/
+pickDecision.ts`): the server's pool, this draft's context and the live pick rules, with their prose written about
+that pick. They keep their own answer only in best-available mode (the card ranks by need), outside a league draft,
+in an auction, or when the draft cannot be read. *A pick before the draft:* off the clock the decision now ranks for
+the user's OWN next turn, with the players ADP has going in the picks before it left out (`planForOwnPick.ts`, opt-in
+`planForOwnTurn`). It used to rank the pick on the clock, which before the draft is overall pick 1. The pick outlook
+and the shadow compare stay on the current board, and a planned pick is not written to the forward-test recorder.
 
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
