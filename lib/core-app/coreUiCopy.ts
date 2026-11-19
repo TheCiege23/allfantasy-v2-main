@@ -21,6 +21,9 @@ const spanish: Record<string, string> = {
   Matchup: 'Enfrentamiento',
   Match: 'Partido',
   Team: 'Equipo',
+  // The /core league tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, 2026-11-19).
+  Trade: 'Intercambios',
+  'Sections of this tab': 'Secciones de esta pestaña',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
   // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.

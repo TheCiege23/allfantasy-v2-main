@@ -100,6 +100,8 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import {
   LEAGUE_CHIP_SECTION,
   LEAGUE_RAIL_OMITTED_SECTIONS,
+  LEAGUE_SCOPED_SECTIONS,
+  groupLeagueTabs,
   NAV_SECTION_ORDER,
   NAV_SECTION_ORDER_NO_LEAGUE,
   leagueDestinationHidden,
@@ -1394,6 +1396,14 @@ function AfCoreShell(incoming: AfCoreShellProps) {
    * the SCREEN rather than the nav (refresh cadence, prompts) still reads `active`.
    */
   const navActive: CoreNavKey = active === 'portfolio' ? 'my-leagues' : active
+  /*
+   * Inside a league the rail is Sleeper's tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, owner 2026-11-19): the
+   * league's screens fold into Matchup, Team, League, Trade and Settings, and the open tab's screens show as a row of
+   * links above the screen. Outside a league the rail is unchanged.
+   */
+  // A themed league (Survivor) keeps its show-named sections: the island theme is that league's identity, not clutter.
+  const leagueTabs = useMemo(() => (props.selectedLeagueId && !props.leagueTheme ? groupLeagueTabs(navRailSections) : null), [props.selectedLeagueId, props.leagueTheme, navRailSections])
+  const activeLeagueTab = leagueTabs?.find((tab) => tab.children.some((child) => child.key === navActive)) ?? null
 
   /*
    * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
@@ -2434,7 +2444,40 @@ function AfCoreShell(incoming: AfCoreShellProps) {
           support") were the two furthest from the fold.
         */}
         <div className="af-nav-scroll">
-        {navRailSections.map((section) => (
+        {leagueTabs ? (
+          <div className="af-nav-group" data-league-tabs="">
+            {selectedLeagueName ? (
+              <div className="af-nav-league" title={selectedLeagueName}>
+                <span className="af-nav-league-dot" aria-hidden />
+                <span className="af-nav-league-name">{selectedLeagueName}</span>
+              </div>
+            ) : null}
+            <ul className="af-nav-items" aria-label={copy('League')}>
+              {leagueTabs.map((tab) => {
+                const first = tab.children[0]!
+                const on = tab === activeLeagueTab
+                // A tab carries a screen's badge (the waivers count, a live game), so folding hides no alert.
+                const badge = tab.children.find((child) => child.badge)?.badge
+                return (
+                  <li key={tab.id}>
+                    <Link href={first.href} className="af-nav-item" data-core-nav="" prefetch={false} data-active={on} aria-current={on ? 'page' : undefined} data-league-tab={tab.id}>
+                      <span className="af-nav-glyph" aria-hidden>
+                        <CoreNavIcon navKey={first.key} size={16} />
+                      </span>
+                      <span className="af-nav-label">{copy(tab.label)}</span>
+                      {badge ? (
+                        <span className="af-nav-badge" data-tone={badge.tone}>
+                          {badgeText(badge.text, language)}
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : null}
+        {(leagueTabs ? navRailSections.filter((s) => !LEAGUE_SCOPED_SECTIONS.has(s.id)) : navRailSections).map((section) => (
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
@@ -2918,6 +2961,20 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               leagues={leagues.map((l) => ({ id: l.id, name: l.name, imageUrl: l.imageUrl ?? null, mark: l.mark }))}
               selectedLeagueId={props.selectedLeagueId}
             />
+          ) : null}
+          {activeLeagueTab && activeLeagueTab.children.length > 1 ? (
+            <nav className="af-subtabs" aria-label={copy('Sections of this tab')} data-testid="af-subtabs">
+              {activeLeagueTab.children.map((child) => (
+                <Link key={child.key} href={child.href} className="af-subtab" data-core-nav="" prefetch={false} aria-current={child.key === navActive ? 'page' : undefined} data-subtab={child.key}>
+                  {copy(child.label)}
+                  {child.badge ? (
+                    <span className="af-nav-badge" data-tone={child.badge.tone}>
+                      {badgeText(child.badge.text, language)}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
           ) : null}
           <ShellSignalsContext.Provider value={setPublishedSignals}>
             <CoreNavPendingContext.Provider value={navPending != null}>
