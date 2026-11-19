@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { hasScoringRules } from '@/lib/projections/leagueScoring'
 import { leagueProjectionGap, sumLeagueScoredStarters } from './playerProjections'
 import { buildRosterIdMap } from './rosterIdMatch'
-import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { loadLeagueRosterWeeks } from '@/lib/af-projections/leagueRosterWeek'
 
 /**
  * Every game in the league this week, not just yours.
@@ -196,7 +196,7 @@ export async function getLeagueScoreboard(args: {
   const teamBy = buildRosterIdMap(teams, (t) => t.externalId)
 
   const rosters = await prisma.roster.findMany({
-    where: { leagueId }, select: { platformUserId: true, playerData: true },
+    where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { sport: true } } },
   }).catch(() => [])
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
 
@@ -241,21 +241,16 @@ export async function getLeagueScoreboard(args: {
    * points exist they are the answer, and pricing twelve lineups to show a
    * number nobody will read is a lot of work for nothing.
    */
-  const everyStarter =
-    anyScored || !hasScoringRules(args.scoringSettings) ? [] : [...new Set([...startersBy.values()].flat())]
-  const board = everyStarter.length ? await loadLeaguePlayerMetrics({
-    leagueId, week, rosterIds: everyStarter, limit: everyStarter.length, includeTradeValues: false,
-  }).catch(() => null) : null
-  const projections = new Map(board?.season === seasonYear && board.week === week && board.unit === 'fantasy points'
-    ? board.rows.flatMap(row => row.rosterPlayerId && row.weekly != null ? [[row.rosterPlayerId, row.weekly] as const] : [])
-    : [])
+  const sport = rosters.find(r => r.league?.sport)?.league?.sport ?? 'NFL'
+  const everyStarter = anyScored || (sport === 'NFL' && !hasScoringRules(args.scoringSettings))
+    ? [] : [...new Set([...startersBy.values()].flat())]
+  const projections = (await loadLeagueRosterWeeks([{ leagueId, season: seasonYear, week, ids: everyStarter }])).get(leagueId)
 
   function build(rosterId: string, points: number | null): ScoreboardTeam {
     const t = teamBy.get(String(rosterId))
     const starters = startersBy.get(rosterId) ?? []
 
-    const { projected, projectedFrom } = sumLeagueScoredStarters(starters, id => projections.get(id))
-    const afProjected = projected
+    const { projected, projectedFrom } = sumLeagueScoredStarters(starters, id => projections?.get(id)?.points)
 
     return {
       rosterId,
@@ -265,7 +260,7 @@ export async function getLeagueScoreboard(args: {
       points,
       projected,
       projectedFrom,
-      afProjected,
+      afProjected: projected,
       starterCount: starters.length,
       isYou: args.yourRosterId != null && rosterId === args.yourRosterId,
     }
@@ -342,7 +337,7 @@ export async function getLeagueScoreboard(args: {
     allUnplayed: !anyScored,
     unpaired,
     projectionBasis:
-      projections.size > 0 ? { season: String(seasonYear), week, matchesViewedWeek: true } : null,
+      everyTeam.some(t => t.projectedFrom > 0) ? { season: String(seasonYear), week, matchesViewedWeek: true } : null,
     unpricedReason: anyScored
       ? null
       : leagueProjectionGap({

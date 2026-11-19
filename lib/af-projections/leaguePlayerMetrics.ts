@@ -31,6 +31,8 @@ type LeaguePlayerMetricRate = {
 
 export type LeaguePlayerMetric = LeaguePlayerMetricRate & {
   rosterPlayerId?: string
+  team?: string | null
+  availabilityId?: string | null
   daily?: number | null
   remainingGames?: number | null
   positionCount?: number
@@ -340,7 +342,8 @@ export async function loadLeaguePlayerMetrics(args: {
       positionCount: positionCounts.get(row.position),
       remainingGames: team ? schedule.get(team)?.remainingGames ?? null : null,
       ...(args.day ? { daily: projectedTotal(row.perGame, team ? schedule.get(team)?.dayGames ?? null : null) } : {}),
-      ...(args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId) } : args.searchName ? {
+      ...(args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId), team: recordedTeams.get(row.playerId) ?? linked?.team ?? null,
+        availabilityId: sport === 'NBA' || sport === 'NFL' ? leagueIdOf(linked, sport === 'NBA' ? 'sleeperNbaId' : 'sleeperId') : null } : args.searchName ? {
         rosterPlayerId: idColumn ? leagueIdOf(linked, sport === 'NFL' && idColumn === 'rollingInsightsId' ? 'sleeperId' : idColumn) ?? undefined : undefined,
       } : {}),
       fullSeason,

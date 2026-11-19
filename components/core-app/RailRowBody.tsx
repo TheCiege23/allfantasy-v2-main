@@ -6,7 +6,6 @@ import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { useMessages } from '@/components/i18n/useMessages'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import { platformLabel } from '@/lib/core-app/platformLinks'
-import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
@@ -132,7 +131,7 @@ function RailSide({
       data-leading={leading ? 'true' : undefined}
       title={projection
         ? msg.sideTitle(
-            PROJECTION_PROVIDER_LABEL,
+            'AllFantasy',
             projection.pricedFrom,
             projection.starterCount,
             projection.afProjected == null,
