@@ -6,6 +6,8 @@
  * Each sport carries its own slot template, positions, cadence (weekly vs daily) and waiver type, so a
  * capture shows the sport differences the screens must handle — not seven copies of NFL.
  */
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+
 export type HarnessSport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 export type HarnessStage = 'season' | 'playoffs'
 
@@ -109,6 +111,14 @@ function unified(sport: HarnessSport, p: Player, bench: boolean) {
     periodOpponent: p.opponent,
     periodHomeAway: bench ? 'away' : 'home',
     positionRankLabel: SPORTS[sport].daily ? `${p.position}${3 + (p.name.length % 20)}` : null,
+    // NFL: what lib/redraft/nflRosterOutlook.ts stamps — crest, kickoff and the opponent's rank against the position.
+    ...(sport === 'NFL'
+      ? {
+          teamLogoUrl: teamLogoUrl('NFL', p.team),
+          periodKickoffIso: p.off ? null : '2026-11-22T18:00:00.000Z',
+          opponentRank: p.off || !p.opponent ? null : { rank: 1 + ((p.name.length * 7 + p.position.length * 5) % 32), of: 32, position: p.position, allowedPerGame: 17.4, games: 10 },
+        }
+      : {}),
   }
 }
 

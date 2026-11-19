@@ -97,6 +97,13 @@ export type UnifiedPlayerWireDto = {
    */
   periodOpponent?: string | null
   periodHomeAway?: 'home' | 'away' | null
+  /**
+   * NFL leagues that play here: the week's kickoff, the opponent's rank against the player's position
+   * and the opponent's crest, stamped by the roster route (lib/redraft/nflRosterOutlook.ts).
+   */
+  periodKickoffIso?: string | null
+  opponentRank?: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  opponentLogoUrl?: string | null
 }
 
 export type { ProviderFallbackDiagnostics }

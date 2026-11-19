@@ -39,6 +39,7 @@ import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
+import { matchupTone } from '@/lib/redraft/nflRosterOutlookModel'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
 import {
@@ -200,6 +201,13 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
   return bits.join(' · ')
 }
 
+/** The game line, with the player's own club hidden on a phone when its crest is already on his picture. */
+function gameLineNode(p: DisplayPlayerRecord | undefined, crestShown: boolean): ReactNode {
+  const line = gameLine(p)
+  if (!line || !crestShown || !p?.team || !p.teamLogoUrl || !line.startsWith(`${p.team} · `)) return line
+  return <><span data-long>{p.team} · </span>{line.slice(p.team.length + 3)}</>
+}
+
 /** `2026-10-20` → `Tue 20`, read as the calendar day it names (not shifted by the viewer's zone). */
 function dayLabel(day: string): string {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -209,6 +217,42 @@ function dayLabel(day: string): string {
 function RankTag({ p }: { p: DisplayPlayerRecord | undefined }) {
   if (!p?.positionRankLabel) return null
   return <span className="nls-player-pos" title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {p.positionRankLabel}</span>
+}
+
+/** Headshot with the club crest on its corner. Falls back to initials; a crest that fails to load hides itself. */
+function PlayerAvatar({ p }: { p: DisplayPlayerRecord | undefined }) {
+  const [broken, setBroken] = useState(false)
+  const src = p?.headshotUrl ?? p?.imageUrl ?? null
+  const initials = (p?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  return (
+    <span className="nls-pavatar" aria-hidden data-empty={!p || undefined}>
+      {src && !broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />
+      ) : (
+        <span>{initials}</span>
+      )}
+      {p?.teamLogoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="nls-pavatar-crest" src={p.teamLogoUrl} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+      ) : null}
+    </span>
+  )
+}
+
+/** "vs QB 28th": how the week's opponent ranks against this player's position. 1st allows the fewest points. */
+function OpponentRankChip({ p }: { p: DisplayPlayerRecord | undefined }) {
+  const r = p?.opponentRank
+  if (!p || !r) return null
+  const tone = matchupTone(r)
+  const word = tone === 'easy' ? 'a favourable matchup' : tone === 'hard' ? 'a tough matchup' : 'an average matchup'
+  const title = `${p.opponent} rank ${ordinal(r.rank)} of ${r.of} against ${r.position}: ${r.allowedPerGame} fantasy points allowed per game over ${r.games} games. 1st allows the fewest. This is ${word}.`
+  return (
+    <small className="nls-oprank" data-tone={tone ?? undefined} title={title} data-testid={`lineup-opponent-rank-${p.id}`}>
+      <span aria-hidden>vs {r.position} <b>{ordinal(r.rank)}</b></span>
+      <span className="nls-sr">{title}</span>
+    </small>
+  )
 }
 
 function untilLabel(ms: number): string {
@@ -630,6 +674,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const record = formatRecord({ wins: userTeam.wins, losses: userTeam.losses, ties: userTeam.ties })
   const place = ordinal(userTeam.currentRank)
   const startersProj = lists ? projectedTotal(lists.starters, players) : null
+  // Headshots and crests are drawn when the roster carries any; a sport with none keeps its plain rows.
+  const showMedia = Object.values(players).some((p) => p.headshotUrl || p.teamLogoUrl)
   const afFormProjected = Object.values(players).some((p) => p.projectionsSource === AF_FORM_PROJECTION_SOURCE)
   const faab = data?.faabRemaining ?? null
   const runLabel = nextRunAt ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
@@ -727,17 +773,26 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           disabled={saving}
           onTap={() => onTap(tap)}
         >
-          <strong>
-            {p?.name ?? (id ? 'Unknown player' : 'Empty')}
-            {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
-            <RankTag p={p} />
-            <InjuryFlag status={p?.injuryStatus} />
-            {dayBadge(id)}
-          </strong>
-          {/* On the second line, so a long name truncating on a phone never hides them. */}
-          <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
+          <span className="nls-pl" data-media={showMedia || undefined}>
+            {showMedia ? <PlayerAvatar p={p} /> : null}
+            <span className="nls-pl-text">
+              <strong>
+                {p?.name ?? (id ? 'Unknown player' : 'Empty')}
+                {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
+                <RankTag p={p} />
+                <InjuryFlag status={p?.injuryStatus} />
+                {dayBadge(id)}
+              </strong>
+              {/* On the second line, so a long name truncating on a phone never hides them. */}
+              <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLineNode(p, showMedia) || (id ? '—' : 'Open slot')}</small>
+              {isPicked ? null : <OpponentRankChip p={p} />}
+            </span>
+          </span>
         </PlayerCell>
-        <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
+        <span className="nls-proj" data-has={p?.projectedPoints != null || undefined}>
+          {fmt1(p?.projectedPoints ?? null)}
+          {showMedia && p?.projectedPoints != null ? <small>proj</small> : null}
+        </span>
         <span className="nls-lrow-action">
           {editable ? (
             isLocked ? (
