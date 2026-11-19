@@ -1217,7 +1217,10 @@ export async function executeChimmyTool(
 
       case 'get_available_players': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
-        const { loadWaiverBoard } = await import('@/lib/waivers/waiverBoard')
+        const [{ loadWaiverBoard }, { prisma }] = await Promise.all([
+          import('@/lib/waivers/waiverBoard'),
+          import('@/lib/prisma'),
+        ])
         const board = await loadWaiverBoard({
           prisma, leagueId: ctx.leagueId, userId: ctx.userId, limit: 15,
         }).catch(() => null)
