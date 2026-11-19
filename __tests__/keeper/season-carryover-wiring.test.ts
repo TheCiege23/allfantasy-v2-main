@@ -152,11 +152,14 @@ describe('ensureNextRedraftSeasonShell — team identity carries across seasons'
 
 describe('ensureNextRedraftSeasonShell', () => {
   it('returns an already-existing next season without creating anything', async () => {
+    // The completed season is read first, so "already exists" can mean a LATER season only.
+    mockRedraftSeasonFindUnique.mockResolvedValueOnce({ sport: 'nfl', season: 2024, totalWeeks: 17, playoffStartWeek: 15, medianGame: false })
     mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-2', season: 2025 })
 
     const result = await ensureNextRedraftSeasonShell('league-1', 'season-1')
 
     expect(result).toEqual({ id: 'season-2', season: 2025 })
+    expect(mockRedraftSeasonFindFirst.mock.calls[0]?.[0].where).toEqual({ leagueId: 'league-1', NOT: { id: 'season-1' }, season: { gt: 2024 } })
     expect(mockTransaction).not.toHaveBeenCalled()
   })
 
