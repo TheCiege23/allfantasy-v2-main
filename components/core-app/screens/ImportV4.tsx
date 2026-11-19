@@ -3276,6 +3276,43 @@ export function ImportV4({
         </details>
       ) : null}
 
+      {/*
+        What an import cannot bring, and where it goes instead. Fantrax's API has no completed-trade
+        feed and lists future picks for rounds 1-4 only, so both arrive through the commissioner's
+        trade-history upload — which lives on a different screen that nothing here pointed to.
+
+        ⚠ IT NAMES THE EXPORT, BECAUSE THE WRONG ONE IS ONE CLICK AWAY. Fantrax's Transactions page
+        offers Trades and Claims/Drops side by side and downloads either under a near-identical file
+        name. The Claims/Drops file is refused by the uploader ("missing columns: From, To"), which
+        reads as the upload being broken rather than as the wrong file.
+      */}
+      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">After importing: add trades and later-round picks</summary>
+          <div className="af-im-fx-after">
+            <p>
+              Fantrax does not share completed trades, or future draft picks past round 4. A
+              commissioner can add both for an NFL league:
+            </p>
+            <ol>
+              <li>
+                On Fantrax, open Transactions &rarr; History, choose <strong>Trades</strong> (not
+                Claims/Drops) and download the CSV.
+              </li>
+              <li>
+                Here, open the league&rsquo;s Commissioner screen and go to &ldquo;Trades and draft
+                archive&rdquo;.
+              </li>
+              <li>
+                Choose &ldquo;Upload trade history CSV&rdquo; and pick the file with{' '}
+                <strong>Trade</strong> in its name.
+              </li>
+            </ol>
+            <p>Uploading the same file again does not add a trade twice.</p>
+          </div>
+        </details>
+      ) : null}
+
       {/* ── Attestation gate ────────────────────────────────────────── */}
       {phase.k === 'attest' ? (
         <section className="af-im-card af-im-card--attest" ref={outcomeRef}>
