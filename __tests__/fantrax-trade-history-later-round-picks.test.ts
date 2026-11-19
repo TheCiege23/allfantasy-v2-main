@@ -11,7 +11,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   snapshot: null as Record<string, unknown> | null,
   traded: [] as Array<{ leagueId: string; picks: unknown[] }>,
-  cleared: [] as Array<{ leagueId: string; picks: unknown[] }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -37,10 +36,6 @@ vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   persistTradedPicks: vi.fn(async (leagueId: string, picks: unknown[]) => {
     m.traded.push({ leagueId, picks })
     return { written: picks.length, skipped: 0 }
-  }),
-  clearReturnedTradedPicks: vi.fn(async (leagueId: string, picks: unknown[]) => {
-    m.cleared.push({ leagueId, picks })
-    return { cleared: picks.length, skipped: 0 }
   }),
 }))
 
@@ -105,7 +100,6 @@ const CSV = [
 describe('the upload places later-round picks', () => {
   beforeEach(() => {
     m.traded = []
-    m.cleared = []
     /* Fantrax publishes rounds 1-4 for 2027 through 2029. */
     m.snapshot = {
       transactions: {
@@ -123,17 +117,32 @@ describe('the upload places later-round picks', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.imported).toBe(1)
-    expect(res.laterRoundPicks).toEqual({ traded: 1, cleared: 0 })
+    expect(res.laterRoundPicks).toEqual({ traded: 1, returned: 0 })
     expect(m.traded).toEqual([
       { leagueId: 'af-league', picks: [{ season: 2029, round: 5, original_roster_id: '202', current_owner_roster_id: '101' }] },
     ])
-    expect(m.cleared).toEqual([])
   })
 
   it('with no pick list on file, the export is the only source and both picks are placed', async () => {
     m.snapshot = { transactions: { claims: [] } }
     const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: CSV })
-    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 2, cleared: 0 })
+    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 2, returned: 0 })
+  })
+
+  /** A Fantrax league stores every pick, own ones flagged untraded, so a pick that came home is rewritten as that. */
+  it('a later-round pick traded away and back is stored as its original team\'s own', async () => {
+    const BACK = [
+      '"Player","Team","Position","From","To","# Obj","Date (EST)","Week"',
+      '"2029 Draft Pick, Round 5 (Mesa Comets)","","","Harbor Owls","Mesa Comets","0","Tue Nov 17, 2026, 5:23PM","11"',
+      '"Quarterback One","PHI","QB","Mesa Comets","Harbor Owls","0","Tue Nov 17, 2026, 5:23PM","11"',
+      '"2029 Draft Pick, Round 5 (Mesa Comets)","","","Mesa Comets","Harbor Owls","0","Mon Nov 16, 2026, 4:26PM","11"',
+      '"Quarterback One","PHI","QB","Harbor Owls","Mesa Comets","0","Mon Nov 16, 2026, 4:26PM","11"',
+    ].join('\n')
+    const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: BACK })
+    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 0, returned: 1 })
+    expect(m.traded).toEqual([
+      { leagueId: 'af-league', picks: [{ season: 2029, round: 5, original_roster_id: '202', current_owner_roster_id: '202', traded: false }] },
+    ])
   })
 
   it('a failure placing picks does not fail the upload', async () => {
