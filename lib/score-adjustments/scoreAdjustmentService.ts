@@ -224,11 +224,35 @@ export type AdjustmentWeekView = {
   adjustments: ScoreAdjustment[]
 }
 
+/**
+ * PURE: the week the card opens on when none is asked for.
+ *
+ * The season's CURRENT week, when it has games. It used to be the latest week with an active or final
+ * game, which is the current week only in a league whose stats are flowing. In a league with no stat
+ * feed the current week's games are still `scheduled`, so the card opened on the week before, where
+ * everything is final, and "Mark final" (the control that league needs most) was a dropdown away
+ * (seen in a browser on the re-walk, 2026-11-19). A season with no current week on the schedule
+ * (before the draft, or after the last week) falls back to the latest week played, then the first.
+ */
+export function defaultAdjustmentWeek(input: {
+  asked: unknown
+  weeks: readonly number[]
+  currentWeek: number | null | undefined
+  latestPlayed: number | null | undefined
+}): number {
+  // `Number(null)` and `Number('')` are 0, so a missing week must be told apart from week 0.
+  const asked = input.asked == null || input.asked === '' ? NaN : Number(input.asked)
+  if (Number.isInteger(asked) && input.weeks.includes(asked)) return asked
+  if (input.currentWeek != null && input.weeks.includes(input.currentWeek)) return input.currentWeek
+  if (input.latestPlayed != null && input.weeks.includes(input.latestPlayed)) return input.latestPlayed
+  return input.weeks[0] ?? 1
+}
+
 /** One week of the league's current season: each head-to-head matchup, its scores and adjustments. */
 export async function readAdjustmentWeek(leagueId: string, weekParam: unknown): Promise<AdjustmentWeekView | null> {
   const [league, season] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
-    prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true } }),
+    prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true, currentWeek: true } }),
   ])
   if (!league || !season) return null
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
@@ -236,11 +260,10 @@ export async function readAdjustmentWeek(leagueId: string, weekParam: unknown): 
   const weekRows = await prisma.redraftMatchup.findMany({ where: { seasonId: season.id }, select: { week: true }, distinct: ['week'], orderBy: { week: 'asc' } })
   const weeks = weekRows.map((w) => w.week)
   if (!weeks.length) return { week: 1, weeks, scoringMode, matchups: [], adjustments: [] }
-  const asked = Number(weekParam)
   const latestPlayed = await prisma.redraftMatchup.findFirst({
     where: { seasonId: season.id, status: { in: ['active', 'final'] } }, orderBy: { week: 'desc' }, select: { week: true },
   })
-  const week = Number.isInteger(asked) && weeks.includes(asked) ? asked : latestPlayed?.week ?? weeks[0]
+  const week = defaultAdjustmentWeek({ asked: weekParam, weeks, currentWeek: season.currentWeek, latestPlayed: latestPlayed?.week })
   const rows = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week, NOT: { awayRosterId: null } },
     select: {
