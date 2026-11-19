@@ -56,6 +56,7 @@ export interface AssetValue {
 }
 
 export interface PricedAsset {
+  valueAsOf?: string;
   name: string;
   type: 'player' | 'pick';
   value: number;

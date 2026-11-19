@@ -115,7 +115,7 @@ export function linesOf(
       leagueValue: l.leagueValue ?? null,
       source: l.dataSource ?? null,
       valueSource,
-      valueAsOf: tradeValueAsOf(valueSource, chartSyncedAt),
+      valueAsOf: priced[side][i]?.valueAsOf ?? tradeValueAsOf(valueSource, chartSyncedAt),
       valueScope: valueSource === 'league_idp' && scope?.season && scope?.week ? `${scope.season} week ${scope.week}` : null,
     }
   }

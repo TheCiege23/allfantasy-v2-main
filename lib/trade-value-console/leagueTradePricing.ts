@@ -1,5 +1,5 @@
 import { valueBookFor } from '@/lib/core-app/valueBook'
-import { loadAfTradeMarketRows } from '@/lib/trade-market/afTradeMarketReads'
+import { loadAfNflMarketQuote } from './afLeaguePlayerPrice'
 import 'server-only'
 
 import type { SportsPlayerRecord } from '@prisma/client'
@@ -829,13 +829,19 @@ export async function resolveAssets(
       let pa: PricedAsset
       const afBook = args.nflCtx.afLeagueMarketBook
       if (afBook) {
-        const id = knownSleeperId ?? matched?.player.sleeperId
-        const market = id ? (await loadAfTradeMarketRows(prisma, [id], afBook, new Date(), true)).get(id) : undefined
-        const specialty = id ? args.nflCtx.leagueValueBySleeperId?.get(id) : null
+        const id = knownSleeperId
+        const market = await loadAfNflMarketQuote({ book: afBook, sleeperId: id, name: displayName, position,
+          allowNameLookup: !raw.playerId && !raw.providerIdentity }).catch(() => null)
+        const specialty = (id || (!raw.playerId && !raw.providerIdentity)) ? leagueValueForPlayer({
+          name: displayName, identity: { sleeperId: id, position },
+          bySleeperId: args.nflCtx.leagueValueBySleeperId, byNameLower: args.nflCtx.leagueValueByNameLower,
+        }) : null
         const price = market?.marketValue ?? specialty?.value
         pa = price == null ? unpricedAsset({ name: displayName, type: 'player', position,
           reason: { code: 'priced_on_analysis', label: 'AF has no verified league trade price for this player.' } })
-          : { name: displayName, type: 'player', position: position ?? undefined, value: price, source: 'allfantasy',
+          : { name: displayName, type: 'player', position: position ?? market?.position ?? specialty?.position ?? undefined, value: price,
+              source: market ? 'allfantasy' : specialty?.basis ?? 'allfantasy',
+              ...(market ? { valueAsOf: market.generatedAt.toISOString() } : {}),
               assetValue: { marketValue: price, impactValue: price, vorpValue: price, volatility: 0 } }
       } else {
         pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
