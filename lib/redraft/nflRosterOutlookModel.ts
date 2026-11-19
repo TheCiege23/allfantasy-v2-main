@@ -32,6 +32,56 @@ export type NflPlayerOutlook = {
   headshotUrl: string | null
   teamLogoUrl: string | null
   opponentLogoUrl: string | null
+  /** The club's bye week this season, or null when the stored schedule cannot say. */
+  byeWeek: number | null
+  /** The forecast at the game, from the weather cache only; null when none is cached. */
+  weather: RosterGameWeather | null
+}
+
+export type RosterGameWeather = {
+  indoors: boolean
+  symbol: string
+  conditionLabel: string | null
+  temperatureF: number | null
+  windSpeedMph: number | null
+  precipChancePct: number | null
+}
+
+/** A week's regular-season fixture, folded to club codes. */
+export type SeasonFixture = { week: number; home: string; away: string }
+
+/** A week with fewer distinct fixtures than this is a partly stored slate, not a week of byes. */
+export const MIN_PLAUSIBLE_NFL_SLATE = 12
+
+/**
+ * Each club's bye week, from the season's stored schedule.
+ *
+ * A bye is the one week, among the weeks whose slate is plausibly whole, in which a club that plays
+ * the rest of them has no game. A club missing from two such weeks is a hole in the data, and gets
+ * no answer rather than the first gap.
+ */
+export function byeWeeksFromSchedule(fixtures: readonly SeasonFixture[]): Map<string, number> {
+  const playing = new Map<number, Set<string>>()
+  const games = new Map<number, Set<string>>()
+  for (const f of fixtures) {
+    if (!Number.isInteger(f.week) || f.week < 1 || !f.home || !f.away) continue
+    const teams = playing.get(f.week) ?? new Set<string>()
+    teams.add(f.home)
+    teams.add(f.away)
+    playing.set(f.week, teams)
+    const keys = games.get(f.week) ?? new Set<string>()
+    keys.add(`${f.home}|${f.away}`)
+    games.set(f.week, keys)
+  }
+  const weeks = [...playing.keys()].filter((w) => (games.get(w)?.size ?? 0) >= MIN_PLAUSIBLE_NFL_SLATE)
+  const clubs = new Set<string>()
+  for (const w of weeks) for (const t of playing.get(w)!) clubs.add(t)
+  const out = new Map<string, number>()
+  for (const club of clubs) {
+    const off = weeks.filter((w) => !playing.get(w)!.has(club))
+    if (off.length === 1) out.set(club, off[0])
+  }
+  return out
 }
 
 /** One defense's total allowed to one position in one game. */
@@ -102,6 +152,8 @@ export type NflOutlookWireFields = {
   periodKickoffIso?: string | null
   opponentRank?: OpponentRank | null
   opponentLogoUrl?: string | null
+  teamByeWeek?: number | null
+  periodWeather?: RosterGameWeather | null
 }
 
 export const AF_WEEK_PROJECTION_SOURCE = 'allfantasy'
@@ -128,6 +180,8 @@ export function applyNflRosterOutlook<T extends { id: string } & NflOutlookWireF
       periodKickoffIso: row.periodKickoffIso ?? o.kickoffTimeIso,
       opponentRank: o.opponentRank,
       opponentLogoUrl: o.opponentLogoUrl,
+      teamByeWeek: o.byeWeek,
+      periodWeather: o.weather,
     }
   })
 }
