@@ -36,6 +36,9 @@ export type DisplayPlayerRecord = SlimPlayer & {
   opponent?: string | null
   homeAway?: string | null
   kickoffTimeIso?: string | null
+  /** The opponent's rank against this player's position: 1 allows the fewest points. */
+  opponentRank?: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  opponentLogoUrl?: string | null
   gameStatus?: string | null
   liveGameStatus?: string | null
   gameClock?: string | null
@@ -103,7 +106,9 @@ export function displayPlayerFromUnifiedRow(row: UnifiedPlayerWireDto): DisplayP
     // NBA / NHL / MLB carry no NFL game context; a daily-lineup row carries the selected day's opponent.
     opponent: gameContext?.isByeWeek ? 'BYE' : gameContext?.opponent.teamAbbr ?? row.periodOpponent ?? null,
     homeAway: gameContext?.homeAway ?? row.periodHomeAway ?? null,
-    kickoffTimeIso: gameContext?.kickoffTimeIso ?? null,
+    kickoffTimeIso: gameContext?.kickoffTimeIso ?? row.periodKickoffIso ?? null,
+    opponentRank: row.opponentRank ?? null,
+    opponentLogoUrl: row.opponentLogoUrl ?? null,
     gameStatus: liveGameStatus ?? gameContext?.gameStatus ?? null,
     liveGameStatus,
     gameClock: liveScoringContext?.gameClock.display ?? null,

@@ -128,7 +128,9 @@ describe('future soccer calendar certification', () => {
     expect(deriveVerifiedSoccerCalendar(2027, new Map([['EPL', shifted.get('EPL')!]]))).toBeNull()
     const regularEpl = shifted.get('EPL')!.find((game) => game.seasonType === 'regular' && !game.replacedBy)!
     const overfull = new Map(shifted)
-    overfull.set('EPL', [...shifted.get('EPL')!, { ...regularEpl, gameId: 'extra-regular-game' }])
+    // A 381st fixture: a pairing the league does not have. (The same pairing listed twice is a moved
+    // game, covered below.)
+    overfull.set('EPL', [...shifted.get('EPL')!, { ...regularEpl, gameId: 'extra-regular-game', awayTeamId: 'extra-club' }])
     expect(deriveVerifiedSoccerCalendar(2027, overfull)).toBeNull()
     const { store, db } = memoryCache()
     store.set('SOCCER:rischedule:2027:calendar', { season: 2027, starts })
@@ -141,6 +143,66 @@ describe('future soccer calendar certification', () => {
     } finally {
       clearVerifiedSoccerGameweeks()
     }
+  })
+})
+
+describe('a moved game is one fixture, not two', () => {
+  const parsed = () => new Map(LEAGUES.map((l) => [l as string, parseRiScheduleSeason(ROWS[l]).map((g) => ({ ...g, competition: l }))]))
+  const clone = (row: unknown, over: Record<string, unknown>) => ({ ...(row as Record<string, unknown>), ...over })
+  // Levante v Athletic Club, called off on 16 Sep 2026: the fixture's own postponed row.
+  const postponed = () => (ROWS.LALIGA as Array<Record<string, unknown>>).find((r) => r.status === 'postponed')!
+
+  it('[control] the captured schedules certify as they stand', () => {
+    expect(postponed().game_ID).toBe('20260916-28-70')
+    expect(deriveVerifiedSoccerCalendar(2026, parsed())?.length).toBe(38)
+  })
+
+  it('🛑 a postponed game listed again on its new date still certifies (production, 2026-11-02)', () => {
+    // The vendor keeps the old row `postponed` with no `replaced_by` and adds the new date beside it.
+    const replay = clone(postponed(), { game_ID: '20261021-28-70', game_time: 'Wed, 21 Oct 2026 19:30:00 GMT', status: 'completed' })
+    const leagues = parsed()
+    leagues.set('LALIGA', parseRiScheduleSeason([...ROWS.LALIGA, replay]).map((g) => ({ ...g, competition: 'LALIGA' })))
+    const before = deriveVerifiedSoccerCalendar(2026, parsed())
+    expect(deriveVerifiedSoccerCalendar(2026, leagues)).toEqual(before)
+  })
+
+  it('a rescheduled game listed on both dates before the old one is marked replaced still certifies', () => {
+    const row = (ROWS.EPL as Array<Record<string, unknown>>).find((r) => r.status === 'scheduled' && String(r.game_ID).startsWith('202703'))!
+    const [, away, home] = String(row.game_ID).split('-')
+    const moved = clone(row, { game_ID: `20270415-${away}-${home}`, game_time: 'Thu, 15 Apr 2027 19:00:00 GMT' })
+    const leagues = parsed()
+    leagues.set('EPL', parseRiScheduleSeason([...ROWS.EPL, moved]).map((g) => ({ ...g, competition: 'EPL' })))
+    expect(deriveVerifiedSoccerCalendar(2026, leagues)?.length).toBe(38)
+  })
+
+  it('🛑 two rows retired in favour of each other are still one fixture (production, 2026-11-02)', () => {
+    // Aston Villa v Fulham: 10-31 `replaced` by 11-01 and 11-01 `replaced` by 10-31. Dropping both
+    // left the EPL at 379.
+    const row = (ROWS.EPL as Array<Record<string, unknown>>).find((r) => r.status === 'completed')!
+    const [day, away, home] = String(row.game_ID).split('-')
+    const next = String(Number(day) + 1)
+    const a = clone(row, { status: 'replaced', replaced_by: `${next}-${away}-${home}` })
+    const b = clone(row, { game_ID: `${next}-${away}-${home}`, status: 'replaced', replaced_by: row.game_ID })
+    const leagues = parsed()
+    leagues.set('EPL', parseRiScheduleSeason([...ROWS.EPL.filter((r) => r !== row), a, b]).map((g) => ({ ...g, competition: 'EPL' })))
+    expect(leagues.get('EPL')!.filter((g) => g.replacedBy || g.status === 'replaced').length).toBeGreaterThanOrEqual(20)
+    expect(deriveVerifiedSoccerCalendar(2026, leagues)).toEqual(deriveVerifiedSoccerCalendar(2026, parsed()))
+  })
+
+  it('[control] a league genuinely short of a fixture is still refused', () => {
+    const leagues = parsed()
+    const drop = (ROWS.SERIEA as Array<Record<string, unknown>>).find((r) => r.status === 'scheduled')!
+    leagues.set('SERIEA', parseRiScheduleSeason(ROWS.SERIEA.filter((r) => r !== drop)).map((g) => ({ ...g, competition: 'SERIEA' })))
+    expect(deriveVerifiedSoccerCalendar(2026, leagues)).toBeNull()
+  })
+
+  it('[control] a fixture that is not in the league’s 380 is still refused', () => {
+    // A 381st pairing: the same two clubs with home and away swapped a third time cannot exist, so
+    // invent a club. Only a duplicate of a known pairing is forgiven.
+    const extra = clone(postponed(), { game_ID: '20261021-28-9999', away_team_ID: 9999, away_team: 'Nobody FC', status: 'scheduled', game_time: 'Wed, 21 Oct 2026 19:30:00 GMT' })
+    const leagues = parsed()
+    leagues.set('LALIGA', parseRiScheduleSeason([...ROWS.LALIGA, extra]).map((g) => ({ ...g, competition: 'LALIGA' })))
+    expect(deriveVerifiedSoccerCalendar(2026, leagues)).toBeNull()
   })
 })
 
