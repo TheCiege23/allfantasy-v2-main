@@ -54,7 +54,9 @@ export type FantraxCsvParseResult =
   | { ok: false; error: string }
 
 const REQUIRED_HEADERS = ['Player', 'Team', 'Position', 'From', 'To', 'Date (EST)'] as const
-const PICK = /^(\d{4}) Draft Pick, Round (\d+) \((.+)\)$/
+export const WRONG_EXPORT_ERROR =
+  'This looks like the Claims/Drops export, not Trades. On Fantrax, open Transactions → History, choose Trades and download that CSV.'
+const PICK =/^(\d{4}) Draft Pick, Round (\d+) \((.+)\)$/
 const BUDGET = /^Budget Amount: \$([\d,]+(?:\.\d+)?)$/
 const DATE = /^(?:[A-Za-z]{3} )?([A-Za-z]{3}) (\d{1,2}), (\d{4}), (\d{1,2}):(\d{2})\s*([AP]M)$/i
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -159,6 +161,14 @@ export function parseFantraxTradeHistoryCsv(text: string): FantraxCsvParseResult
   for (const name of [...REQUIRED_HEADERS, 'Week']) col[name] = header.indexOf(name)
   const missing = REQUIRED_HEADERS.filter((h) => col[h] < 0)
   if (missing.length) {
+    /*
+     * Fantrax's Transactions page offers Trades and Claims/Drops side by side and downloads either
+     * under a near-identical file name. The Claims/Drops file has every column but these two (seen
+     * on production), and "missing columns: From, To" read as the upload being broken.
+     */
+    if (missing.length === 2 && missing.includes('From') && missing.includes('To')) {
+      return { ok: false, error: WRONG_EXPORT_ERROR }
+    }
     return { ok: false, error: `This is not a Fantrax trade history export — missing column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.` }
   }
 

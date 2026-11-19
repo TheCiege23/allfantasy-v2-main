@@ -644,12 +644,31 @@ export function DraftRoomPageClient({
     return `${session.version}-${session.picks.length}-${traded}-${session.updatedAt}${onClock}`
   }, [session, currentPick])
   /** Fallback when Chimmy SSE has not emitted (no roster yet) or intel is idle: picks until the viewer's turn. */
+  /**
+   * 🛑 The LIVE session decides "You're up next", never the Chimmy intel copy. Intel only
+   * refreshes when Chimmy emits an event, so its count went stale between picks and the top
+   * bar kept telling a manager "You're up next" after the board had moved past them. The
+   * session updates on every pick and knows whose seat this viewer holds; a viewer with no
+   * seat (commissioner watching, spectator) gets nothing. Intel is used only when it describes
+   * the same pick the session is on.
+   */
   const ribbonPicksUntilUser = useMemo(() => {
-    if (draftIntel?.picksUntilUser != null) return draftIntel.picksUntilUser
     if (!session || (session.status !== 'in_progress' && session.status !== 'paused')) return null
     const rid = (session as DraftSessionSnapshot & { currentUserRosterId?: string }).currentUserRosterId
-    return computePicksUntilViewerTurn(session as DraftSessionSnapshot, rid ?? null)
-  }, [draftIntel?.picksUntilUser, session])
+    if (!rid) return null
+    const live = computePicksUntilViewerTurn(session as DraftSessionSnapshot, rid)
+    if (live != null) return live
+    const onClockOverall = resolveEffectiveCurrentPick(session)?.overall ?? null
+    if (
+      draftIntel?.picksUntilUser != null &&
+      draftIntel.rosterId === rid &&
+      onClockOverall != null &&
+      draftIntel.currentOverall === onClockOverall
+    ) {
+      return draftIntel.picksUntilUser
+    }
+    return null
+  }, [draftIntel?.picksUntilUser, draftIntel?.rosterId, draftIntel?.currentOverall, session])
   const players: PlayerEntry[] = useMemo(() => {
     const rawEntries = Array.isArray(draftPool?.entries)
       ? draftPool.entries
@@ -1362,7 +1381,9 @@ export function DraftRoomPageClient({
         setIdpRosterSummary(data.idpRosterSummary ?? null)
       }
     } catch {
-      setDraftUISettings(null)
+      // Keep the last good settings on a failed refetch: nulling them reads as "every league
+      // option off" for a moment, which is exactly what used to switch auto-draft off.
+      setDraftUISettings((prev) => prev ?? null)
       setSkipPickAllowed(false)
       setOrphanAiStatus(null)
       setCommissionerAiDraft(null)
@@ -4230,12 +4251,16 @@ export function DraftRoomPageClient({
   )
 
   const lastPrunedQueueRef = useRef<string>('')
-  useEffect(() => {
-    if (autoPickEnabled) return
-    if (!autoPickFromQueue && !awayMode) return
-    setAutoPickFromQueue(false)
-    setAwayMode(false)
-  }, [autoPickEnabled, autoPickFromQueue, awayMode])
+  /*
+   * 🛑 A manager's auto-draft stays on until THAT MANAGER turns it off.
+   *
+   * An effect here used to clear `autoPickFromQueue` and `awayMode` whenever the league's
+   * `autoPickEnabled` read false — and it reads false whenever `draftUISettings` is null, which
+   * is every failed settings refetch (the catch below nulls it, and settings refetch on pick
+   * events). So auto-draft switched itself off a pick or two after being set, and the off state
+   * was then saved to localStorage. Firing is still gated on the league setting below; the
+   * manager's choice is never rewritten by it.
+   */
 
   useEffect(() => {
     if (draftUISettings?.aiQueueReorderEnabled !== false) return
