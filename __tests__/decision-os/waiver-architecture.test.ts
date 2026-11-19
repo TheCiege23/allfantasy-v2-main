@@ -24,7 +24,7 @@ const ALL_WAIVER = [
   'lib/decision-os/waiver/shadow.ts',
   'lib/decision-os/waiver/index.ts',
   'lib/decision-os/waiver/waiverCardAdapter.ts',
-  'lib/decision-os/waiver/outcome.ts',
+  // outcome.ts (a no-op hook with no callers) was deleted 2026-11-19: the advice ledger grades waiver outcomes.
 ].map((p) => [p, read(p)] as const)
 
 describe('architecture: the waiver decision layer consumes only the DCO (no prisma/config reads)', () => {

@@ -3290,6 +3290,7 @@ export function TradeCenter(props: {
             reloadToken={inboxReloadToken}
             onChanged={bumpInboxReload}
             importedHistory={completedHistory.list}
+            sport={props.sport}
           />
         ) : null}
       </div>
