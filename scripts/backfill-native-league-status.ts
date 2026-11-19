@@ -15,6 +15,13 @@
  *     its provider's word and its sync owns it.
  *   - never an archived league: archiving does not touch `status`.
  *   - only `status`, only where it differs from what the lifecycle state carries.
+ *   - never a league with NO status. 🛑 The first production run (2026-11-19) filled `in_season` into
+ *     twelve of them: ten tournament division shells and two Survivor Exile Island shells, with no
+ *     claimed team, no season and no real phase. Their `lifecycleState` read `in_season` only because
+ *     that is the column's DEFAULT, so it described nothing. A league with no status already falls
+ *     back to its lifecycle state in every reader that asks `status ?? lifecycleState`, so filling
+ *     one in fixes nothing and can assert a phase that never happened. The stale value this script
+ *     exists for is a status that was WRITTEN (`setup` at creation) and never moved.
  *   - each write is guarded on the status AND lifecycle state that were read, so a league that
  *     changed phase while this ran is skipped, not overwritten.
  *
@@ -55,6 +62,8 @@ export function planNativeStatusBackfill(rows: readonly StatusRow[]): StatusChan
     if (String(row.lifecycleState ?? '').toLowerCase() === 'archived') continue
     const next = nativeLeagueStatusForLifecycle(row.lifecycleState)
     if (!next || next === row.status) continue
+    // No status on file: nothing stale to correct, and the lifecycle state may be the column default.
+    if (row.status == null || row.status.trim() === '') continue
     out.push({ ...row, next })
   }
   return out
