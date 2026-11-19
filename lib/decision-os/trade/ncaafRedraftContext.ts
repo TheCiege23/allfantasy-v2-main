@@ -2,6 +2,8 @@ import 'server-only'
 
 import type { TradeValuationGap } from './tradeGrade'
 
+import { loadCompletedSportDeals, sportMarketAdjustments } from '@/lib/trade-market/sportCompletedMarket'
+import { leagueIdColumn, resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import { prisma } from '@/lib/prisma'
 import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { latestNcaafProjectionSeason, lookupNcaafProjections, lookupNcaafProjectionsForCfbdLinks } from '@/lib/core-app/ncaafProjections'
@@ -241,6 +243,25 @@ export async function loadNcaafRedraftBase(league: {
   for (const [id, proj] of projections) {
     const perGame = perGameFrom(proj.componentStats, rules)
     if (perGame != null) perGameByRosterId.set(id, { perGame, position: proj.position ?? null })
+  }
+
+  const format = await Promise.resolve().then(() => prisma.league.findUnique({ where: { id: league.id }, select: { leagueType: true, season: true } })).catch(() => null)
+  const deals = format?.season === season ? await loadCompletedSportDeals('NCAAF', season, format.leagueType).catch(() => []) : []
+  const column = leagueIdColumn(league.platform, 'NCAAF')
+  if (deals.length && column) {
+    const ids = [...new Set(deals.flatMap((t) => [...t.given, ...t.received]))]
+    const [rates, links] = await Promise.all([
+      prisma.aFProjectionSnapshot.findMany({ where: { sport: 'NCAAF', season, week: null, eventId: null, playerId: { in: ids } },
+        select: { playerId: true, adjustmentFactors: true } }),
+      resolveRosterIdsToKeys(prisma, 'NCAAF', column, rosteredIds),
+    ])
+    const chart = new Map<string, number>()
+    for (const row of rates) {
+      const value = perGameFrom(readComponentStats(row.adjustmentFactors), rules)
+      if (value != null) chart.set(row.playerId, value)
+    }
+    const adjustments = sportMarketAdjustments(deals, chart)
+    for (const [id, line] of perGameByRosterId) line.tradeMarket = adjustments.get(links.get(id) ?? '')
   }
 
   const bestFreeAgent = async (position: string): Promise<NcaafReplacement | null> => {

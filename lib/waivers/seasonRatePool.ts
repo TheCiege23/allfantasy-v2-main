@@ -73,7 +73,7 @@ export function starterIdsOf(playerData: unknown): Set<string> {
 }
 
 /** The `PlayerIdentityMap` columns a league's roster ids can be written in. */
-export type LeagueIdColumn = 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId'
+export type LeagueIdColumn = 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId' | 'sleeperNbaId'
 
 const LEAGUE_ID_COLUMNS: readonly LeagueIdColumn[] = [
   'rollingInsightsId',
@@ -82,6 +82,7 @@ const LEAGUE_ID_COLUMNS: readonly LeagueIdColumn[] = [
   'mflId',
   'fleaflickerId',
   'sleeperId',
+  'sleeperNbaId',
 ]
 
 const PLATFORM_COLUMN: Record<string, LeagueIdColumn> = {
@@ -101,8 +102,9 @@ const PLATFORM_COLUMN: Record<string, LeagueIdColumn> = {
  * roster ids measured on production 2026-09-29 were RI numbers (see resolvePlayerNames.ts). Any
  * other id a native roster holds simply fails to resolve and counts against the resolution floor.
  */
-export function leagueIdColumn(platform: string | null | undefined): LeagueIdColumn | null {
+export function leagueIdColumn(platform: string | null | undefined, sport?: string): LeagueIdColumn | null {
   const p = String(platform ?? '').trim().toLowerCase()
+  if (p === 'sleeper' && sport === 'NBA') return 'sleeperNbaId'
   if (isNativePlatform(p || null)) return 'rollingInsightsId'
   return PLATFORM_COLUMN[p] ?? null
 }
@@ -231,6 +233,7 @@ const IDENTITY_SELECT = {
   mflId: true,
   fleaflickerId: true,
   sleeperId: true,
+  sleeperNbaId: true,
 } as const
 
 /** Identity for each projection key, scoped to the sport. One read. */

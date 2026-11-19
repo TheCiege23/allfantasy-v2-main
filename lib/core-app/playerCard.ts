@@ -460,7 +460,7 @@ export type PlayerCardData = {
   injuryFeed: SectionState<PlayerCardInjuryFeed>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
-  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason'>
+  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue'>
     & Pick<LeaguePlayerMetrics, 'week' | 'unit'>
   /**
    * Whether the signed-in reader follows him across every league (2026-09-14).
@@ -1946,7 +1946,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   const afLeagueMetricsPromise = req.leagueId && req.userId && leagueMatches
     ? loadLeaguePlayerMetrics({
       leagueId: req.leagueId, playerName: player.name, limit: 2,
-      includeTradeValues: false, valueBoard: leagueValueBoard,
+      valueBoard: leagueValueBoard,
     }).catch(() => null)
     : Promise.resolve(null)
 
@@ -2163,6 +2163,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
         rank: afRow.rank, positionRank: afRow.positionRank, perGame: afRow.perGame,
         weekly: afRow.weekly, fullSeason: afRow.fullSeason, fullSeasonBasis: afRow.fullSeasonBasis, restOfSeason: afRow.restOfSeason,
         week: afMetrics.week, unit: afMetrics.unit,
+        tradeValue: afRow.tradeValue, tradeValueUnit: afRow.tradeValueUnit, dynastyTradeValue: afRow.dynastyTradeValue,
       },
     } : {}),
     ...(follow ? { follow } : {}),

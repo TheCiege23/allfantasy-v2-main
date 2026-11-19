@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { loadSportPointsBase, type SportPointsBaseResult, type SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
 import { MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
 import { MIN_AT_BATS, MIN_INNINGS } from '@/lib/decision-os/trade/mlbTeamGame'
-import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
+import { isDynastyGradedSport, missingAgeAssumption, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
 
 /**
  * A league's own value board, for the surfaces that price a player OUTSIDE a trade (2026-11-16, re-score
@@ -139,6 +139,7 @@ export type BoardPlayerValue = {
   seasonLabel: string
   sample: BoardSample | null
   baselineSeasonLabel: string | null
+  completedTradeSample?: number
   dynastyValue: number | null
   age: number | null
 }
@@ -157,12 +158,13 @@ export function boardPlayerValue(
   if (ctx.window.gamesRemaining <= 0) {
     return { available: false, reason: `The ${ctx.window.seasonLabel} regular season has no games left, so there is no rest-of-season value.` }
   }
-  const price = priceBoardPlayer(asset, ctx)
+  const price = priceBoardPlayer(asset, ctx, asset.playerId && board.byId.has(asset.playerId) ? board.byId : undefined)
   if (!price.ok) return { available: false, reason: price.reason }
   const age = ctx.dynasty?.ages.get(price.player.id) ?? null
+  const classYear = ctx.dynasty?.classYears?.get(price.player.id)
   const dynastyValue =
-    ctx.dynasty && isDynastyGradedSport(sport)
-      ? playerDynastyValue({ sport, player: price.player, age: age ?? undefined, replacementPerGame: price.replacementPerGame, gamesRemaining: ctx.window.gamesRemaining })
+    ctx.dynasty && isDynastyGradedSport(sport) && (sport !== 'NCAAB' || classYear != null)
+      ? playerDynastyValue({ sport, player: price.player, age: sport === 'NCAAB' ? undefined : age ?? missingAgeAssumption(sport, price.player.position), collegeSeasons: classYear == null ? undefined : 5 - classYear, replacementPerGame: price.replacementPerGame, gamesRemaining: ctx.window.gamesRemaining })
       : null
   return {
     available: true,
@@ -172,6 +174,7 @@ export function boardPlayerValue(
       perGame: price.player.perGame,
       replacementPerGame: price.replacementPerGame,
       replacementName: price.replacementName,
+      completedTradeSample: price.player.tradeMarket?.trades ?? 0,
       value: price.value,
       gamesRemaining: ctx.window.gamesRemaining,
       scheduleKnown: ctx.window.scheduleKnown !== false,
@@ -182,4 +185,9 @@ export function boardPlayerValue(
       age,
     },
   }
+}
+
+/** Candidate identities come from the same scored population as the league's rankings. */
+export function boardRateRows(board: Extract<LeagueValueBoard, { kind: 'ok' }>) {
+  return board.ctx.board.map(p => ({ key: p.id, name: p.name, position: p.position, perGame: p.perGame, components: null }))
 }

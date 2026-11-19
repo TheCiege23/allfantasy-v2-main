@@ -68,13 +68,13 @@ const NHL_TEAMS: Record<string, string[]> = {
 
 /** Fantrax club abbreviations paired with Rolling Insights team IDs from its EPL schedule. */
 const EPL_TEAMS: Record<string, string[]> = {
-  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth'], BHA: ['3', 'Brighton & Hove Albion'],
+  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth', 'Bournemouth'], BHA: ['3', 'Brighton & Hove Albion', 'Brighton and Hove Albion'],
   CHE: ['6', 'Chelsea'], CRY: ['7', 'Crystal Palace'], EVE: ['8', 'Everton'], FUL: ['9', 'Fulham'],
-  LIV: ['12', 'Liverpool'], MCI: ['13', 'Manchester City'], MUN: ['14', 'Manchester United'],
-  NEW: ['15', 'Newcastle United'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
+  LIV: ['12', 'Liverpool', 'Liverpool FC'], MCI: ['13', 'Manchester City', 'MNC'], MUN: ['14', 'Manchester United', 'MAN'],
+  NEW: ['15', 'Newcastle United', 'Newcastle'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
   WHU: ['19', 'West Ham United', 'West Ham'],
-  BRF: ['24', 'Brentford'], NOT: ['25', 'Nottingham Forest'], IPS: ['26', 'Ipswich Town'],
-  LEE: ['67', 'Leeds United'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
+  BRF: ['24', 'Brentford', 'BRE'], NOT: ['25', 'Nottingham Forest', 'NFO'], IPS: ['26', 'Ipswich Town'],
+  LEE: ['67', 'Leeds United', 'LUFC'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
 }
 
 const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']

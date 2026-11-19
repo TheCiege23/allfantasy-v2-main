@@ -19,7 +19,7 @@ import {
 } from './seasonRatePool'
 import { bestLineup, type Scored, type WaiverBoard, type WaiverBoardState, type WaiverCandidate } from './waiverBoard'
 import { noSeasonProjectionsReason, waiverBasisSentence, waiverSportLabel, type WaiverSportPlan } from './waiverSportBasis'
-import { boardPerGame, boardSample, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
+import { boardPerGame, boardRateRows, boardSample, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 
 /**
  * The one-league "Worth adding" board for the sports priced on a SEASON RATE — NBA, NCAAB, NHL,
@@ -106,14 +106,18 @@ export async function loadSeasonRateWaiverBoard(args: {
   const myIds = allRosterIds(mine.playerData)
   if (myIds.length === 0) return empty('no_roster', plan)
 
-  const column = leagueIdColumn(league.platform)
+  const column = leagueIdColumn(league.platform, sport)
   const unreadable = `This league's ${label} player ids can't be matched to our projections yet, so free agents cannot be told apart from rostered players.`
   if (!column) return empty('ids_unreadable', plan, [unreadable])
 
-  const season = await newestSeasonRateSeason(prisma, sport)
+  const season = onBoard?.ctx.window.season ?? await newestSeasonRateSeason(prisma, sport)
   if (season == null) return empty('no_projections', plan, [noSeasonProjectionsReason(sport)])
 
   const myKeys = await resolveRosterIdsToKeys(prisma, sport, column, myIds)
+  for (const id of myIds) {
+    const key = onBoard?.ctx.rosterIndex?.get(id)?.id
+    if (key) myKeys.set(id, key)
+  }
   if (myKeys.size / myIds.length < SEASON_RATE_ID_FLOOR) return empty('ids_unreadable', plan, [unreadable], season)
 
   /* Everyone rostered anywhere in the league, in the LEAGUE's id space — the only space a roster speaks. */
@@ -123,7 +127,8 @@ export async function loadSeasonRateWaiverBoard(args: {
   const taken = new Set<string>(myIds)
   for (const r of allRosters) for (const id of allRosterIds(r.playerData)) taken.add(id)
 
-  const [pool, rosterRows] = await Promise.all([
+  const boardRows = onBoard ? boardRateRows(onBoard) : null
+  const [pool, rosterRows] = boardRows ? [boardRows, new Map(boardRows.map(r => [r.key, r]))] as const : await Promise.all([
     loadSeasonRatePool(prisma, sport, season, SEASON_RATE_POOL),
     loadSeasonRateRows(prisma, sport, season, [...myKeys.values()]),
   ])
@@ -163,7 +168,7 @@ export async function loadSeasonRateWaiverBoard(args: {
   const candidatesPool: Scored[] = []
   for (const row of pool) {
     if (myKeySet.has(row.key)) continue
-    const leagueId = leagueIdOf(identity.get(row.key), column)
+    const leagueId = onBoard?.byId.get(row.key)?.rosterAlias ?? leagueIdOf(identity.get(row.key), column)
     if (!leagueId) {
       // Cannot be looked for on this league's rosters, so cannot be called a free agent.
       unprovable++

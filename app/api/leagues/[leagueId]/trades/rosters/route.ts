@@ -13,13 +13,11 @@ import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProvi
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getFantasyCalcValuesDbFirst, readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
 import { fantasyCalcSettingsForChart, LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
-import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
 import { pickPreviewKey, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
-import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
-import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
-import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import type { StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
 import { gradeRebuildPackages, loadRebuildPlan } from '@/lib/trade-intel/rebuildPlanLoader'
@@ -47,8 +45,6 @@ import {
   type RedraftDraftPick,
 } from '@/lib/league-trade-engine/redraftDraftPicks'
 import { valueBookFor, describeValueBook, pricesOnDynastyChart } from '@/lib/core-app/valueBook'
-import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
-import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import {
   generateMultiTeamTradeSuggestions,
   generateTradePartnerSuggestions,
@@ -111,7 +107,7 @@ export type TradeableRosterPlayer = {
   /** The 30-day delta itself, so the arrow can carry a number rather than only a colour. */
   stockDelta?: number | null
   /**
-   * Market value on the 0-10000 FantasyCalc convention, or null when the player is not on the
+   * AF value in the league board’s units, or null when the player is not on the
    * board.
    *
    * ⚠ NULL IS "NOT PRICED", NEVER 0. A zero would read as a worthless player, and the picker must
@@ -119,7 +115,7 @@ export type TradeableRosterPlayer = {
    * judge, so hiding the distinction here would hide the reason downstream.
    */
   value: number | null
-  /** Current provider weekly projection used only for before/after simulation. */
+  /** Current AF league-scored weekly projection used only for before/after simulation. */
   weeklyProjection: number | null
   /**
    * AllFantasy's own engine for the same week, carried into this league's scoring by the player's
@@ -302,7 +298,7 @@ export async function GET(
    * together. Each read keeps exactly the failure handling it had in series — a `.catch` where it had
    * one, a request failure where it had none — so the only thing that changed is when they start.
    */
-  const [rosters, league, savedStrategy, teams, identityIds, projectionWeek, historicalTrades, tradeDepth] =
+  const [rosters, league, savedStrategy, teams, identityIds, historicalTrades, tradeDepth] =
     await Promise.all([
       prisma.roster.findMany({
         where: { leagueId },
@@ -376,7 +372,6 @@ export async function GET(
         if (profile?.sleeperUserId) ids.add(profile.sleeperUserId)
         return ids
       })(),
-      latestProjectionWeek().catch(() => null),
       tradeStore
         ? tradeStore.findMany({
           where: { leagueId },
@@ -425,9 +420,6 @@ export async function GET(
     : Array.isArray(nestedSettings.roster_positions)
       ? nestedSettings.roster_positions
       : []).map(String)
-  const scoring = settingsBag.scoring_settings && typeof settingsBag.scoring_settings === 'object'
-    ? settingsBag.scoring_settings as Record<string, unknown>
-    : {}
   const chartTeams = Number(league?.leagueSize) || 12
   const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
   const chartIsDynasty = pricesOnDynastyChart(marketContext.variant)
@@ -743,73 +735,16 @@ export async function GET(
     : Promise.resolve(null)
   historyRead.catch(() => undefined)
 
-  /*
-   * ── MARKET VALUE, IN ONE BATCH FOR THE WHOLE LEAGUE ────────────────────────────────────────
-   *
-   * Resolved after the rosters are assembled rather than inside the per-roster loop: every roster
-   * in a league draws from the same valuation snapshot, so a lookup per roster would read it twelve
-   * to thirty-two times for one answer.
-   *
-   * ⚠ THE SETTINGS MATCH `/api/trade-value/player-search` EXACTLY, and that is not incidental. The
-   * picker shows search results beside roster rows; if the two resolved value under different
-   * settings the SAME player would carry two different numbers on one screen, and a manager would
-   * have no way to tell which the engine used. `getFantasyCalcValuesDbFirst` defaults to
-   * `numQbs: 2`, so the settings are passed explicitly rather than defaulted.
-   *
-   * DB-first by construction — this is a request path, and `getFantasyCalcValuesDbFirst` reads
-   * `sportsDataCache` rather than the vendor. A failed chart read withholds prices while preserving the roster list.
-   */
-  /*
-   * ── THIRTY-DAY STOCK, ONE QUERY FOR THE WHOLE LEAGUE ───────────────────────────────────────
-   *
-   * ⚠ THE FORMAT MATCHES THE VALUE PASS BELOW ON PURPOSE. Both reads use the league-specific
-   * value book so a player cannot carry two different numbers on one screen; an arrow drawn from
-   * a different format series would contradict the number it sits beside, which is worse than no arrow.
-   */
-  const stockIds = result.flatMap((r) => r.players.map((p) => p.id)).filter(Boolean)
-  const allNames = result.flatMap((r) => r.players.map((p) => p.name)).filter(Boolean)
-
-  /*
-   * ⚠ THESE TWO LOOKUPS ARE INDEPENDENT AND WERE PAID FOR IN SERIES. The stock read keys on
-   * `sleeperId` and the value read keys on NAME; neither consumes the other's output, so the
-   * request was simply waiting twice. Both still degrade to an empty map on their own, which is
-   * what keeps a missing snapshot table from costing the rosters.
-   */
-  const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, loadedMarketRows, leagueValues, afEngine] = await Promise.all([
-    stockIds.length > 0
-      ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
-          () => new Map(),
-        )
-      : Promise.resolve(new Map()),
-    stockIds.length > 0
-      ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
-      : Promise.resolve(new Map()),
-    // One chart read supplies both players and picks, using the evaluator's profile and freshness.
-    league ? (largeLeagueRookiePicks
+  const rosterIds = [...new Set(result.flatMap((r) => r.players.map((p) => p.id)).filter(Boolean))]
+  const [metrics, loadedMarketRows] = await Promise.all([
+    rosterIds.length ? loadLeaguePlayerMetrics({ leagueId, rosterIds, limit: rosterIds.length }).catch(() => null) : null,
+    league?.sport === 'NFL' ? (largeLeagueRookiePicks
       ? readFantasyCalcValuesFromDb(chartSettings, { allowStale: false }).then(row => row.players)
-      : getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 })).catch(() => null)
-      : Promise.resolve(null),
-    loadLeagueTradeValues({
-      prisma,
-      platformLeagueId: league?.platform === 'sleeper' ? league.platformLeagueId : null,
-      isDynasty: valueBook.format === 'DYNASTY',
-      prefetched: {
-        rosterPositions: rosterPositions.length ? rosterPositions : null,
-        numTeams: Number(league?.leagueSize) || rosters.length || null,
-      },
-    }).catch(() => null),
-    /* AllFantasy's own engine, same ids and week as the provider read above. Display only; a failed
-       read costs the AF figures and nothing else. */
-    stockIds.length > 0
-      ? lookupAfEngineProjections(stockIds, projectionWeek, String(league?.sport ?? 'NFL')).catch(
-          (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
-        )
-      : Promise.resolve(new Map() as Awaited<ReturnType<typeof lookupAfEngineProjections>>),
+      : getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 })).catch(() => null) : null,
   ])
-
+  const projectionWeek = metrics?.week != null ? { week: metrics.week, season: metrics.season } : null
+  const metricByRosterId = new Map(metrics?.rows.map(row => [row.rosterPlayerId, row]))
   const marketRows = loadedMarketRows ?? []
-  const values = buildPlayerValuesForNames(marketRows, allNames)
   const pickPreviewBook: TradePickPreviewBook = { leagueId, values: {} }
   const requestedPicks = new Map<string, { year: number; round: number }>()
   const rememberPick = (year: number, round: number) => {
@@ -863,60 +798,16 @@ export async function GET(
     }
   }
 
-  /*
-   * ⚠ WHETHER THE FEED LOADED IS INFERRED, BECAUSE THE LOOKUP HIDES IT. Both of its failure paths
-   * return an empty map, exactly as a read that matched nobody would. A whole league matching
-   * nobody is the tell: measured on staging 2026-09-16, 10 of 223 leagues matched no one, and not
-   * one of them rosters an identified NFL skill player — they hold only unidentified ids, team
-   * defenses or college players, and those reasons are decided before this one is consulted.
-   */
-  const marketLoaded = values.size > 0
   const sport = String(league?.sport ?? 'NFL')
-
-  for (const r of result) {
-    for (const p of r.players) {
-      const s = stock.get(p.id)
-      if (s) {
-        p.stock = s.direction
-        p.stockDelta = s.trend30d
-      }
-      // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
-      // which the picker renders differently from a low value.
-      const identified = resolvedForLeague.has(p.id)
-      const leagueValue = identified ? leagueValueForPlayer({ name: p.name,
-        identity: { sleeperId: p.id, position: p.position },
-        bySleeperId: leagueValues?.bySleeperId, byNameLower: leagueValues?.byNameLower,
-      }) : null
-      const market = values.get(p.name.toLowerCase())
-      const marketMatches = identified && market && valuePositionsAgree(p.position, market.position)
-        && (!(String(league?.platform).toLowerCase() === 'sleeper' && market.sleeperId) || market.sleeperId === p.id)
-      p.value = leagueValue?.value ?? (marketMatches ? market.value : null)
-      const projection = projections.get(p.id)
-      const leagueProjection = projection?.componentStats
-        ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
+  for (const roster of result) {
+    for (const player of roster.players) {
+      const row = metricByRosterId.get(player.id)
+      player.value = row?.dynastyTradeValue ?? row?.tradeValue ?? null
+      player.weeklyProjection = metrics?.unit === 'fantasy points' ? row?.weekly ?? null : null
+      player.unpricedReason = player.value == null
+        ? playerUnpricedReason({ identified: resolvedForLeague.has(player.id), position: player.position, sport,
+            marketLoaded: Boolean(metrics?.rows.length), leagueDerived: true })
         : null
-      p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
-      // Set only when the engine priced him, so every other player's shape is exactly as before.
-      const afProjection = afEngineForLeague(
-        afEngine.get(p.id),
-        projection?.projectedPoints ?? null,
-        leagueProjection,
-        scoring,
-      )
-      if (afProjection != null) p.afProjection = afProjection
-      p.unpricedReason =
-        p.value == null
-          ? (resolvedForLeague.has(p.id)
-              ? leagueValues?.unpricedReasonBySleeperId?.get(p.id)
-                ?? leagueValues?.unpricedReasonByNameLower?.get(p.name.trim().toLowerCase())
-              : null) ?? playerUnpricedReason({
-              identified: resolvedForLeague.has(p.id),
-              position: p.position,
-              sport,
-              marketLoaded,
-              leagueDerived: true,
-            })
-          : null
     }
   }
 
@@ -1100,8 +991,8 @@ export async function GET(
             managerStrategy,
             simulation: proposal.simulation,
             modelVersion: 'league-proposal-v3',
-            valueSource: `FantasyCalc · ${describeValueBook(valueBook)}`,
-            projectionSource: projectionWeek ? `league-scored projection feed · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
+            valueSource: `AllFantasy · ${describeValueBook(valueBook)}`,
+            projectionSource: projectionWeek ? `AllFantasy league projection · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
             capturedAt: evidenceCapturedAt,
           })
         : null
@@ -1120,8 +1011,8 @@ export async function GET(
           managerStrategy,
           simulation: proposal.simulation,
           modelVersion: 'league-proposal-v3',
-          valueSource: `FantasyCalc · ${describeValueBook(valueBook)}`,
-          projectionSource: projectionWeek ? `league-scored projection feed · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
+          valueSource: `AllFantasy · ${describeValueBook(valueBook)}`,
+          projectionSource: projectionWeek ? `AllFantasy league projection · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
           capturedAt: evidenceCapturedAt,
         })
       : null

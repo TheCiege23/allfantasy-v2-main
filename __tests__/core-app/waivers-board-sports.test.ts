@@ -31,6 +31,13 @@ function matches(row: Row, where: Row = {}): boolean {
   return true
 }
 
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const rows = await prisma.fantasyProjection.findMany({})
+    return new Map(rows.map((r) => [r.playerId, { ...r, componentStats: (r.stats as { stats: unknown }).stats }]))
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -219,9 +226,9 @@ describe('getWaiversBoard — every sport gets a section, and a sport with no pr
 
   it('gives soccer its reason instead of dropping the league', async () => {
     const soccer = await sectionOf('SOCCER')
-    expect(soccer?.state).toBe('no_producer')
+    expect(soccer?.state).toBe('no_projections')
     expect(soccer?.considered).toBe(1)
-    expect(soccer?.reason).toMatch(/No projection exists for soccer players/)
+    expect(soccer?.reason).toMatch(/projection/i)
   })
 
   it('keeps the sports out of the NFL rows, and counts no NFL league when there is none', async () => {

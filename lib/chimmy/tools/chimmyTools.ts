@@ -1349,23 +1349,16 @@ export async function executeChimmyTool(
        */
       case 'get_player_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
-        /*
-         * The active league’s value board takes precedence when its sport uses one.
-         */
         if (ctx.leagueId) {
-          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
-          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
-          if (board != null) return board
-          if (asked.trim()) {
-            const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
-            const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
-            const row = metrics?.rows.length === 1 ? metrics.rows[0] : null
-            if (metrics?.sport === 'NCAAF' && row?.tradeValue != null) {
-              return `${row.playerName} has an AF trade value of ${row.tradeValue.toFixed(2)} ${row.tradeValueUnit} in this league’s format.`
-            }
-          }
+          if (!asked.trim()) return 'Ask which player the manager means.'
+          const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
+          const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
+          if (metrics && metrics.rows.length > 1) return 'Multiple players in this league sport match. Ask for their position or team.'
+          const row = metrics?.rows[0]
+          const value = row?.dynastyTradeValue ?? row?.tradeValue
+          if (value == null || !row) return 'AF has no verified trade value for that player in this league.'
+          return `${row.playerName} has an AF trade value of ${value.toFixed(2)} ${row.tradeValueUnit} in this league.${row.completedTradeSample ? ' Completed trade sample: ' + row.completedTradeSample + '.' : ''}`
         }
-        // The player card's number, on this league's chart when one is in scope (`playerMarketValue.ts`).
         return await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId ?? null })
       }
 
@@ -1388,15 +1381,11 @@ export async function executeChimmyTool(
       case 'explain_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
-        /*
-         * In an NBA league in scope, "why is he worth that" is answered from the league's own value board —
-         * per game against the best free agent, times games left (lib/chimmy/sportBoardValue.ts). Null for
-         * any other league sport, or when the model asked about another sport.
-         */
-        if (ctx.leagueId && (!sport || sport.trim().toUpperCase() === 'NBA')) {
+        if (ctx.leagueId) {
           const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
           const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
-          if (board != null) return `WHY (the league's own value, step by step):\n${board}`
+          if (board != null) return board
+          return await buildPlayerProjectionContext({ leagueId: ctx.leagueId, playerName: asked, sport })
         }
         return await buildExplainValueContext({ playerName: asked, sport })
       }

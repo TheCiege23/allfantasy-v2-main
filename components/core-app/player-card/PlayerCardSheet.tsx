@@ -726,6 +726,11 @@ export default function PlayerCardSheet({
                   <>
                     <Tile label={projectionInSpanish ? 'Ranking AF en la liga' : 'AF league rank'} value={`#${afProjection.rank}`} tone="plain"
                       sub={`#${afProjection.positionRank} ${data.player.position ?? ''} · ${projectionNumber(afProjection.perGame)} ${projectionUnit} ${projectionInSpanish ? 'por partido' : 'per game'}`} />
+                    {(afProjection.dynastyTradeValue ?? afProjection.tradeValue) != null ? (
+                      <Tile label={projectionInSpanish ? 'Valor de intercambio AF' : 'AF league trade value'}
+                        value={projectionNumber((afProjection.dynastyTradeValue ?? afProjection.tradeValue)!)} tone="plain"
+                        sub={afProjection.tradeValueUnit ?? undefined} />
+                    ) : null}
                     {afProjection.weekly != null ? (
                       <Tile label={projectionInSpanish ? `AF semana ${afProjection.week}` : `AF week ${afProjection.week}`} value={projectionNumber(afProjection.weekly)} tone="plain" sub={projectionUnit} />
                     ) : null}

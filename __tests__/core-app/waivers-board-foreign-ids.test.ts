@@ -19,6 +19,13 @@ const prismaMock = vi.hoisted(() => ({
   sportsPlayer: { findMany: vi.fn() },
 }))
 
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const rows = await prisma.fantasyProjection.findMany({})
+    return new Map(rows.map((r) => [r.playerId, { ...r, componentStats: (r.stats as { stats: unknown }).stats }]))
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/core-app/playerProjections', () => ({

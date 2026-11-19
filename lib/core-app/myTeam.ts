@@ -41,6 +41,7 @@ import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { lookupNcaafProjections } from './ncaafProjections'
 import { applyDailySportToLineup, type DailyLineupPeriod } from './myTeamDailySport'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
@@ -204,6 +205,7 @@ export type LineupPlayer = {
    * daily-lineup league (an off day), `week` in a weekly one (an idle week). Absent when the slate is
    * unknown or the sport is football, which is not the same as "he plays" (myTeamDailySport.ts).
    */
+  periodGames?: number | null
   noGamePeriod?: 'day' | 'week'
   latestCollegeBoxScore?: { date: string; stats: Array<{ key: string; value: number }> }
   /**
@@ -1476,6 +1478,25 @@ async function loadMyTeamData(
    * could be recommended to replace him. The totals below were already moved after it for the
    * same reason; the bench check was left behind.
    */
+  const rosterIdsForMetrics = [...new Set([...starterIds, ...allIds, ...reserveIds, ...taxiIds])]
+  async function priceLeaguePlayers(ids: string[], players: Map<string, LineupPlayer>) {
+    const board = await loadLeaguePlayerMetrics({ leagueId, rosterIds: ids,
+      week: sport === 'NFL' ? projectionWeek?.week : lineupPeriod?.week, includeTradeValues: false, limit: ids.length })
+    const metricById = new Map(board?.rows.map((r) => [r.rosterPlayerId, r]))
+    for (const id of ids) {
+      const p = players.get(id)
+      if (!p) continue
+      const row = metricById.get(id)
+      const total = lineupPeriod?.kind === 'day'
+        ? (p.periodGames != null && row ? Math.round(p.periodGames * row.perGame * 100) / 100 : null)
+        : row?.weekly ?? null
+      const points = board?.unit === 'fantasy points' ? total : null
+      p.afProjectedPoints = p.ruledOut ? 0 : points
+      p.afEngineProjectedPoints = p.afProjectedPoints
+      p.projectionSource = points == null ? null : 'allfantasy'
+    }
+  }
+  await priceLeaguePlayers(rosterIdsForMetrics, resolved)
   const byes = await zeroByeWeekPlayers(resolved, sport, sportsWeek)
 
   // Who has already played — started beside the two passes above (`gameDaysRead`).
@@ -1758,7 +1779,10 @@ async function loadMyTeamData(
       missing.length > 0
         ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''), league.platformLeagueId)
         : new Map<string, LineupPlayer>()
-    if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
+    if (extra.size > 0) {
+      await priceLeaguePlayers(missing, extra)
+      await zeroByeWeekPlayers(extra, sport, sportsWeek)
+    }
     // The opponent's starters get the same game-day read yours did, so the forecast knows who has played.
     if (extra.size > 0) {
       const days = await readLineupGameDay({

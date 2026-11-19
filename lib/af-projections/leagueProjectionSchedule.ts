@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { collegeLogoNameCandidates, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
+import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 import { prisma } from '@/lib/prisma'
 import { dailyTeamCode } from '@/lib/core-app/dailyNextGames'
 import { proTeamCode } from '@/lib/player-identity/proFantraxIdentityPlan'
@@ -32,6 +34,10 @@ export interface TeamProjectionSchedule {
 
 export function projectionTeamKey(sport: string, team: string | null): string | null {
   if (!team?.trim()) return null
+  if (sport === 'NCAAB' || sport === 'NCAAF') {
+    const [name] = collegeLogoNameCandidates(team)
+    return normalizeTeamToken(looseTeamKey(name)) || null
+  }
   if (sport === 'NFL') return normalizeTeamAbbrev(team)
   if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') return dailyTeamCode(sport, team)
   if (sport === 'SOCCER') return proTeamCode('SOCCER', team) ?? normalizeTeamToken(team)
@@ -117,13 +123,15 @@ export function buildProjectionSchedule(args: {
     }
   }
 
+  const hasCfbdWeek = sport === 'NCAAF' && ordered[0]?.[0] === 'cfbd' && seasonGames.some((g) => g.inWeek)
   const result = new Map<string, TeamProjectionSchedule>()
   for (const [team, count] of counts) {
     // For college schedules the available figure is a scheduled-games estimate.
     // For fixed-length sports, withhold a season total when coverage is short.
     const seasonCoverage = count.season >= (SEASON_LENGTH[sport] ?? 1)
+    const cfbdBye = hasCfbdWeek && count.week === 0
     result.set(team, {
-      weekGames: count.week > 0 ? count.week : weekGames.length > 0 && seasonCoverage && sport === 'NFL' ? 0 : null,
+      weekGames: count.week > 0 ? count.week : cfbdBye || (weekGames.length > 0 && seasonCoverage && sport === 'NFL') ? 0 : null,
       seasonGames: seasonCoverage ? count.season : null,
       remainingGames: seasonCoverage ? count.remaining : null,
     })
@@ -139,7 +147,7 @@ export async function loadProjectionSchedule(args: {
 }): Promise<Map<string, TeamProjectionSchedule>> {
   const { sport, season, now } = args
   const daily = DAILY_SPORTS.has(sport)
-  const [fixtures, teamRows, college] = await Promise.all([
+  const [fixtures, teamRows, college, cachedGames] = await Promise.all([
     prisma.sportsGame.findMany({
       where: { sport, season, startTime: { not: null } },
       select: {
@@ -151,22 +159,38 @@ export async function loadProjectionSchedule(args: {
       ? prisma.sportsTeam.findMany({ where: { sport }, select: { name: true, shortName: true } })
       : Promise.resolve([]),
     sport === 'NCAAF' ? loadCollegeTeamIndex(now.getTime()).catch(() => null) : Promise.resolve(null),
+    sport === 'SOCCER' || sport === 'NCAAB'
+      ? readRiScheduleWindow(prisma, {
+        sport, season, window: { start: new Date(Date.UTC(season, 6, 1)), end: new Date(Date.UTC(season + 1, 6, 1)) },
+      }).catch(() => null)
+      : Promise.resolve(null),
     daily ? ensureDailySportSeasonStart(sport, season, { db: prisma, now }) : Promise.resolve(null),
   ] as const)
   const aliases = new Map<string, string | null>()
+  const names = new Set<string>()
   for (const row of teamRows) {
     const code = projectionTeamKey(sport, row.shortName)
     const name = projectionTeamKey(sport, row.name)
     if (!code || !name) continue
+    names.add(name)
+    const target = sport === 'SOCCER' || sport === 'NCAAB' ? name : code
     for (const alias of [code, name]) {
-      aliases.set(alias, aliases.has(alias) && aliases.get(alias) !== code ? null : code)
+      aliases.set(alias, aliases.has(alias) && aliases.get(alias) !== target ? null : target)
     }
   }
+  if (sport === 'SOCCER' || sport === 'NCAAB') for (const name of names) aliases.set(name, name)
   const teamKey = (team: string) => {
     const key = projectionTeamKey(sport, team)
     const school = college ? resolveCollegeTeam(team, college) : null
     if (school) return `college:${school.id}`
     return key == null ? null : aliases.has(key) ? aliases.get(key)! : key
+  }
+  for (const game of cachedGames ?? []) {
+    if (game.replacedBy || /^(replaced|abandoned)$/i.test(game.status ?? '') || !game.homeTeam || !game.awayTeam || !game.startTime) continue
+    const startTime = new Date(game.startTime)
+    if (!Number.isFinite(startTime.getTime())) continue
+    fixtures.push({ startTime, homeTeam: game.homeTeam, awayTeam: game.awayTeam, week: null,
+      seasonType: game.seasonType, status: game.status, source: 'rolling_insights_schedule' })
   }
   const schedule = buildProjectionSchedule({ ...args, fixtures, teamKey })
   // Resolve the projection's team label and the schedule's team label through
@@ -179,7 +203,8 @@ export async function loadProjectionSchedule(args: {
   if (college) {
     for (const [alias, school] of college.byAlias) {
       const scheduled = schedule.get(`college:${school.id}`)
-      if (scheduled) schedule.set(alias, scheduled)
+      const key = projectionTeamKey(sport, alias)
+      if (scheduled && key) schedule.set(key, scheduled)
     }
   }
   return schedule

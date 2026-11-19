@@ -401,7 +401,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         )}
         <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
         {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
-        {league.platform.toLowerCase() === 'fantrax' && (league.sport ?? 'NFL').toUpperCase() === 'NFL' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
+        {league.platform.toLowerCase() === 'fantrax' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
         <h3>{t('Draft archive')}</h3>
         {data.history.drafts.length ? (
           data.history.drafts.map((draft) => (

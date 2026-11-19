@@ -86,6 +86,7 @@ export async function buildPlayerProjectionContext(args: {
       if (metrics.rows.length > 1) lines.push('Several players match this name. Ask which player the user meant.')
       return lines.join('\n')
     }
+    return 'AF has no matching projection for that player, sport and week in this league.'
   }
 
   const { rows, season } = await findAfProjectionsByName({

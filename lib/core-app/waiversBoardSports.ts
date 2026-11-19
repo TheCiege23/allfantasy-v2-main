@@ -36,7 +36,7 @@ import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type
 import { startingSlots } from './slotEligibility'
 import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
 import { loadSleeperWaiverSchedules, type SleeperWaiverSchedule } from '@/lib/waivers/sleeperWaiverSchedule'
-import { boardPerGame, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
+import { boardPerGame, boardRateRows, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } from './waiversBoard'
 
 /**
@@ -139,12 +139,24 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
   }
   const basis = plan.basis
 
-  const season = await newestSeasonRateSeason(prisma, sport)
+  const leagueIds = [...new Set(teams.map((c) => c.leagueId))]
+  /* Each league's own value board, for a board sport — points leagues only (see the header). */
+  const boards = new Map<string, Extract<LeagueValueBoard, { kind: 'ok' }>>()
+  if (isBoardValueSport(sport)) {
+    await Promise.all(
+      leagueIds.map(async (id) => {
+        const b = await loadLeagueValueBoard(id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
+        if (b.kind === 'ok') boards.set(id, b)
+      }),
+    )
+  }
+
+  const snapshotSeason = await newestSeasonRateSeason(prisma, sport)
+  const season = snapshotSeason ?? [...boards.values()][0]?.ctx.window.season ?? null
   if (season == null) {
     return { ...base, state: 'no_projections', reason: noSeasonProjectionsReason(sport), basis, basisLabel: waiverBasisSentence(basis, sport) }
   }
 
-  const leagueIds = [...new Set(teams.map((c) => c.leagueId))]
 
   /*
    * Sleeper leagues have no imported schedule; read the one their own claims reveal. One query for
@@ -156,7 +168,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     prisma,
     teams.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
   ).catch(() => new Map<string, SleeperWaiverSchedule>())
-  const [rosters, waiverSettings, pool] = await Promise.all([
+  const [rosters, waiverSettings, snapshots] = await Promise.all([
     prisma.roster
       .findMany({
         where: { leagueId: { in: leagueIds } },
@@ -169,8 +181,13 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
         select: { leagueId: true, waiverType: true, processingDayOfWeek: true, processingTimeUtc: true },
       })
       .catch(() => []),
-    loadSeasonRatePool(prisma, sport, season, POOL),
+    snapshotSeason ? loadSeasonRatePool(prisma, sport, season, POOL) : [],
   ])
+  const allRows = new Map(snapshots.map(row => [row.key, row]))
+  for (const board of boards.values()) {
+    for (const row of boardRateRows(board)) if (!allRows.has(row.key)) allRows.set(row.key, row)
+  }
+  const pool = [...allRows.values()]
   const rostersByLeague = new Map<string, RosterRow[]>()
   for (const r of rosters as RosterRow[]) rostersByLeague.set(r.leagueId, [...(rostersByLeague.get(r.leagueId) ?? []), r])
   const waiverByLeague = new Map(waiverSettings.map((w) => [w.leagueId, w]))
@@ -188,7 +205,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
   /* Roster ids -> projection keys: one read per identity column, every league of that column at once. */
   const idsByColumn = new Map<LeagueIdColumn, Set<string>>()
   for (const c of teams) {
-    const column = leagueIdColumn(c.league?.platform)
+    const column = leagueIdColumn(c.league?.platform, sport)
     const mine = myRosterOf.get(c.leagueId)
     if (!column || !mine) continue
     const set = idsByColumn.get(column) ?? new Set<string>()
@@ -237,17 +254,6 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     startPct: null,
   })
 
-  /* Each league's own value board, for a board sport — points leagues only (see the header). */
-  const boards = new Map<string, Extract<LeagueValueBoard, { kind: 'ok' }>>()
-  if (isBoardValueSport(sport)) {
-    await Promise.all(
-      leagueIds.map(async (id) => {
-        const b = await loadLeagueValueBoard(id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
-        if (b.kind === 'ok') boards.set(id, b)
-      }),
-    )
-  }
-
   const label = waiverSportLabel(sport)
   const seasonRatePhrase =
     basis === 'season_per_game_league' ? "under this league's own scoring" : "on AllFantasy's default scoring"
@@ -274,9 +280,13 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       continue
     }
 
-    const column = leagueIdColumn(l.platform)
+    const column = leagueIdColumn(l.platform, sport)
     const mineIds = allRosterIds(myRoster.playerData)
-    const keyOf = column ? keysByColumn.get(column) : undefined
+    const keyOf = column ? new Map(keysByColumn.get(column)) : undefined
+    for (const id of mineIds) {
+      const key = onBoard?.ctx.rosterIndex?.get(id)?.id
+      if (key) keyOf?.set(id, key)
+    }
     const resolvable = keyOf ? mineIds.filter((id) => keyOf.has(id)).length : 0
     if (!column || !keyOf || mineIds.length === 0 || resolvable / mineIds.length < SEASON_RATE_ID_FLOOR) {
       withheld.idSpace++
@@ -299,10 +309,10 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     const wire: SwapCandidate[] = []
     const rowByKey = new Map<string, SeasonRateRow>()
     const pointsByKey = new Map<string, number>()
-    for (const row of pool) {
+    for (const row of onBoard ? boardRateRows(onBoard) : snapshots) {
       if (myKeys.has(row.key)) continue
       // A player with no id in this league's space cannot be looked for on its rosters: not provably free.
-      const leagueId = leagueIdOf(identity.get(row.key), column)
+      const leagueId = onBoard?.byId.get(row.key)?.rosterAlias ?? leagueIdOf(identity.get(row.key), column)
       if (!leagueId || taken.has(leagueId)) continue
       // On a board, the board's position (a pitcher filed SP or RP, not `P` — see seasonRateWaiverBoard.ts).
       const position = onBoard?.byId.get(row.key)?.position ?? row.position
@@ -334,7 +344,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       if (!key || seen.has(key)) continue
       seen.add(key)
       if (starterIds.has(id)) starterKeys.add(key)
-      const row = myRows.get(key)
+      const row = myRows.get(key) ?? (onBoard ? allRows.get(key) : undefined)
       const pts = row && !ruledOut.has(key) ? (onBoard ? boardPerGame(onBoard, key, 'roster') : priceSeasonRate(row, basis, scoring)) : null
       if (row) rowByKey.set(key, row)
       if (pts != null) pointsByKey.set(key, pts)

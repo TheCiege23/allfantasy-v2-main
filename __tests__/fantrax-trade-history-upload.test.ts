@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * The Fantrax trade-history upload: commissioner only, Fantrax NFL leagues only, Postgres only, and the export's
+ * The Fantrax trade-history upload: commissioner only, Fantrax leagues only, Postgres only, and the export's
  * trades reach the shared `LeagueTrade` writer with the league's own ids. Prisma and the writer are mocked.
  */
 const m = vi.hoisted(() => ({
@@ -90,10 +90,10 @@ describe('POST /api/legacy/fantrax/trade-history', () => {
     expect(m.persisted).toEqual([])
   })
 
-  it('refuses a league that is not Fantrax, or not NFL, and a file that is not the export', async () => {
+  it('refuses a league that is not Fantrax, or has an unsupported sport, and a file that is not the export', async () => {
     m.league = { platform: 'sleeper', platformLeagueId: 'x', sport: 'NFL' }
     expect((await call({ leagueId: 'lg-1', file: new Blob([GOOD]) })).status).toBe(409)
-    m.league = { platform: 'fantrax', platformLeagueId: 'x', sport: 'NBA' }
+    m.league = { platform: 'fantrax', platformLeagueId: 'x', sport: 'TENNIS' }
     expect((await call({ leagueId: 'lg-1', file: new Blob([GOOD]) })).status).toBe(409)
     m.league = { platform: 'fantrax', platformLeagueId: 'x', sport: 'NFL' }
     const bad = await call({ leagueId: 'lg-1', file: new Blob(['"Player","Team"\n"A","KC"']) })
