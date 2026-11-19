@@ -21,7 +21,11 @@
  * the incoming season has a row for a player — any roster, dropped or not — that player has already
  * been carried and every later move is the incoming season's to record.
  */
+import { createHash } from 'node:crypto'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { loadPlayerPools, lockPlayerPools } from '@/lib/league/player-pools/load'
+import { poolOf, readPlayerPoolScope, type PlayerPools } from '@/lib/league/player-pools/policy'
 
 import { isDynastyFamilyLeague } from './dynastyFamily'
 
@@ -40,8 +44,26 @@ export async function carryDynastyRostersForward(
   outgoingSeasonId: string,
   incomingSeasonId: string,
 ): Promise<DynastyCarryoverResult> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (readPlayerPoolScope(league?.settings) === 'league') {
+    return copyRosters(prisma, leagueId, outgoingSeasonId, incomingSeasonId, null)
+  }
+  return prisma.$transaction(async tx => {
+    await lockPlayerPools(tx, leagueId)
+    const pools = await loadPlayerPools(leagueId, { db: tx, seasonId: incomingSeasonId })
+    return copyRosters(tx, leagueId, outgoingSeasonId, incomingSeasonId, pools)
+  }, { timeout: 120_000 })
+}
+
+async function copyRosters(
+  db: Prisma.TransactionClient,
+  leagueId: string,
+  outgoingSeasonId: string,
+  incomingSeasonId: string,
+  pools: PlayerPools,
+): Promise<DynastyCarryoverResult> {
   const [outgoing, incoming] = await Promise.all([
-    prisma.redraftRoster.findMany({
+    db.redraftRoster.findMany({
       where: { leagueId, seasonId: outgoingSeasonId },
       select: {
         id: true,
@@ -62,15 +84,19 @@ export async function carryDynastyRostersForward(
         },
       },
     }),
-    prisma.redraftRoster.findMany({
+    db.redraftRoster.findMany({
       where: { leagueId, seasonId: incomingSeasonId },
       // Dropped rows too: a player dropped in the offseason must not be carried back (see above).
-      select: { id: true, ownerId: true, players: { select: { playerId: true } } },
+      select: { id: true, ownerId: true, players: { select: { id: true, playerId: true } } },
     }),
   ])
 
   const incomingByOwner = new Map(incoming.map((r) => [r.ownerId, r]))
-  const seenIncoming = new Set(incoming.flatMap((r) => r.players.map((p) => p.playerId)))
+  const copyKey = (rosterId: string, playerId: string) => JSON.stringify([poolOf(pools, rosterId), playerId])
+  const seenIncoming = new Set(incoming.flatMap(r => r.players.map(p => copyKey(r.id, p.playerId))))
+  // A trade can move an existing copy to a different pool between the offseason and rookie-draft passes.
+  const incomingIds = new Set(incoming.flatMap(r => r.players.map(p => p.id)))
+  const batch: Prisma.RedraftRosterPlayerCreateManyInput[] = []
   const result: DynastyCarryoverResult = {
     rostersMatched: 0,
     playersCopied: 0,
@@ -86,29 +112,35 @@ export async function carryDynastyRostersForward(
     }
     result.rostersMatched += 1
     for (const p of from.players) {
-      if (seenIncoming.has(p.playerId)) {
+      const key = copyKey(to.id, p.playerId)
+      const sourceId = pools
+        ? 'c' + createHash('sha256').update(JSON.stringify([outgoingSeasonId, incomingSeasonId, from.id, p.playerId])).digest('hex').slice(0, 24)
+        : undefined
+      if (seenIncoming.has(key) || (sourceId && incomingIds.has(sourceId))) {
         result.playersAlreadyPresent += 1
         continue
       }
-      await prisma.redraftRosterPlayer.create({
-        data: {
-          rosterId: to.id,
-          playerId: p.playerId,
-          playerName: p.playerName,
-          position: p.position,
-          team: p.team,
-          sport: p.sport,
-          slotType: p.slotType,
-          injuryStatus: p.injuryStatus,
-          byeWeek: p.byeWeek,
-          acquisitionType: p.acquisitionType,
-          isKept: true,
-        },
-      })
-      seenIncoming.add(p.playerId)
+      const data = {
+        ...(sourceId ? { id: sourceId } : {}),
+        rosterId: to.id,
+        playerId: p.playerId,
+        playerName: p.playerName,
+        position: p.position,
+        team: p.team,
+        sport: p.sport,
+        slotType: p.slotType,
+        injuryStatus: p.injuryStatus,
+        byeWeek: p.byeWeek,
+        acquisitionType: p.acquisitionType,
+        isKept: true,
+      }
+      if (pools) batch.push(data)
+      else await db.redraftRosterPlayer.create({ data })
+      seenIncoming.add(key)
       result.playersCopied += 1
     }
   }
 
+  if (batch.length) await db.redraftRosterPlayer.createMany({ data: batch })
   return result
 }

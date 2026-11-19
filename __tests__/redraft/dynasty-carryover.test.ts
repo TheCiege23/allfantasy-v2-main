@@ -95,7 +95,7 @@ describe('carryDynastyRostersForward', () => {
     expect(m.playerCreate.mock.calls.map((c) => [c[0].data.rosterId, c[0].data.playerId])).toEqual([['new-a', 'p5']])
     expect(r).toMatchObject({ playersCopied: 1, playersAlreadyPresent: 3 })
     // Dropped rows are read on the incoming side, so a drop is seen.
-    expect(m.rosterFindMany.mock.calls[1]![0].select.players).toEqual({ select: { playerId: true } })
+    expect(m.rosterFindMany.mock.calls[1]![0].select.players).toEqual({ select: { id: true, playerId: true } })
   })
 
   it('recognises the dynasty family, including legacy isDynasty rows', () => {
