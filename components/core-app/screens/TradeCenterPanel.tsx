@@ -28,6 +28,9 @@ import { TradeInbox, nativeItemsToAssets, toPickedAssets, type NativeTradeItem }
 import { useMessages } from '@/components/i18n/useMessages'
 import { tradeCenterPanelMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
+import { letterRecordApplies, tradeLetterRecord } from '@/lib/chimmy-outcomes/engineRecord'
+import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
 
 type PanelAsset = Pick<LeagueTradeAsset, 'id' | 'label' | 'sublabel' | 'headshotUrl'> & { pick?: LeagueTradeAsset['pick']; idol?: boolean }
 
@@ -177,8 +180,12 @@ export function TradeCenterPanel(props: {
   onChanged?: () => void
   importedHistory?: readonly TradeRecord[]
   initialTab?: TradeCenterTab
+  /** The league's sport: a letter's graded record is shown only for NFL redraft grades (engineRecord.ts). */
+  sport?: string | null
 }) {
   const m = useMessages(tradeCenterPanelMessages)
+  const rm = useMessages(adviceRecordMessages)
+  const adviceRecord = useAdviceRecord(String(props.sport ?? '').trim().toUpperCase() === 'NFL')
   const { leagueId, reloadToken = 0, onChanged, onLoad, onCounter } = props
   const [data, setData] = useState<PanelData | null>(null)
   const [state, setState] = useState<'loading' | 'idle' | 'failed'>('loading')
@@ -423,6 +430,9 @@ export function TradeCenterPanel(props: {
     const err = actionError?.tradeId === t.id ? actionError.message : null
     const pending = String(t.status ?? '') === 'pending'
     const grade = t.leagueGrade && t.leagueGradeSide !== 'proposer' && t.leagueGrade.graded ? t.leagueGrade : null
+    /* How deals graded this letter have actually scored — only beside a grade of the kind the ledger grades. */
+    const letterRecord =
+      grade && letterRecordApplies({ sport: props.sport, leagueType: grade.leagueType?.type }) ? tradeLetterRecord(adviceRecord, grade.letter) : null
 
     /*
      * Who receives what from whom: an asset in side X's `assets` left X; the side whose `received` holds the
@@ -438,6 +448,11 @@ export function TradeCenterPanel(props: {
           {left ? <> · <span aria-hidden>⏱ </span>{m.endsIn(left)}</> : null}
         </p>
         {grade ? <p className="af-tcp-grade" data-letter={grade.letter}>{m.gradeLine(grade.letter, grade.getValue.toLocaleString(getAppIntlLocale()), grade.giveValue.toLocaleString(getAppIntlLocale()))}</p> : null}
+        {letterRecord ? (
+          <p className="af-tcp-grade-record" data-verdict={letterRecord.verdict} data-testid="tcp-grade-record">
+            {rm.tradeRecord(letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.aheadPct, letterRecord.verdict)}
+          </p>
+        ) : null}
         {sides.map((s) => {
           const standing = teamStanding(t, s.rosterId, proposerId)
           return (
