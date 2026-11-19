@@ -9,7 +9,7 @@ import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
 import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
-import { Card, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { Card, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 import { slotGameState } from '@/lib/league-media/redraftScreens'
 import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenContext } from './RedraftScreenParts'
@@ -41,22 +41,60 @@ function sideLine(rec: MatchupCenterPayload['left']['record'], remaining: number
   )
 }
 
+/** "vs NYG · Sun 1:00 PM" for a game not started; the feed's own label once it has. */
+function slotGameLine(p: MatchupPlayerSlot): string {
+  const label = p.gameLabel || (p.gameStatus === 'final' ? 'Final' : '—')
+  if (String(p.opponent ?? '').toUpperCase() === 'BYE') return 'Bye week'
+  if (!p.opponent) return label
+  const vs = `${p.outlook?.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`
+  if (p.gameStatus !== 'upcoming') return `${vs} · ${label}`
+  const k = p.outlook?.kickoffTimeIso ? new Date(p.outlook.kickoffTimeIso) : null
+  return k && Number.isFinite(k.getTime()) ? `${vs} · ${k.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : vs
+}
+
 function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'right' }) {
   // Redraft: a live / final dot from the feed's own game state (none for an unknown state).
   const rd = useRedraftScreenContext()
   if (!p) return <div className="nls-player" data-side={side}><strong className="nls-muted">Empty</strong></div>
-  const status = p.gameLabel || (p.gameStatus === 'final' ? 'Final' : '—')
+  const status = slotGameLine(p)
   const team = p.team ? <span data-long>{p.team} · </span> : null
+  const o = p.outlook ?? null
+  const media = Boolean(p.headshotUrl || o?.teamLogoUrl)
+  const meta = o && p.gameStatus !== 'final' && (o.opponentRank || o.weather) ? (
+    <span className="nls-pl-meta">
+      <OpponentRankChip id={p.playerId} opponent={p.opponent} rank={o.opponentRank} testIdPrefix="matchup" />
+      <WeatherChip id={p.playerId} weather={o.weather} testIdPrefix="matchup" />
+    </span>
+  ) : null
   return (
     <div className="nls-player" data-side={side}>
-      <strong title={p.name}>
-        <span className="nls-long">{p.name}</span>
-        <span className="nls-short">{shortPlayerName(p.name)}</span>
-      </strong>
-      <small data-live={p.gameStatus === 'live' || undefined} data-game={rd ? slotGameState(p.gameStatus) ?? undefined : undefined}>
-        {side === 'left' ? <>{team}{status}</> : <>{status}{p.team ? <span data-long> · {p.team}</span> : null}</>}
-      </small>
+      <span className="nls-pl" data-media={media || undefined}>
+        {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} /></span> : null}
+        <span className="nls-pl-text">
+          <strong title={p.name}>
+            <span className="nls-long">{p.name}</span>
+            <span className="nls-short">{shortPlayerName(p.name)}</span>
+          </strong>
+          <small data-live={p.gameStatus === 'live' || undefined} data-game={rd ? slotGameState(p.gameStatus) ?? undefined : undefined}>
+            {side === 'left' ? <>{team}{status}</> : <>{status}{p.team ? <span data-long> · {p.team}</span> : null}</>}
+          </small>
+          {meta}
+        </span>
+      </span>
     </div>
+  )
+}
+
+/** A starter's points, with his AF projection beneath until his game is final. */
+function SlotPoints({ p, other, side, show }: { p: MatchupPlayerSlot | null; other: MatchupPlayerSlot | null; side: 'left' | 'right'; show: boolean }) {
+  const mine = p?.currentPoints ?? 0
+  const theirs = other?.currentPoints ?? 0
+  const proj = p && show && p.gameStatus !== 'final' && p.afProjectedPoints != null && Number.isFinite(p.afProjectedPoints) ? p.afProjectedPoints : null
+  return (
+    <span className="nls-pts" data-side={side} data-pts={rowPointTone(mine, theirs, p?.gameStatus === 'final')}>
+      {p && show ? (p.gameStatus === 'upcoming' && proj != null ? '—' : mine.toFixed(1)) : '—'}
+      {proj != null ? <small data-testid={`matchup-proj-${p!.playerId}`} title="AF projection in this league's scoring">{proj.toFixed(1)}</small> : null}
+    </span>
   )
 }
 
@@ -374,14 +412,12 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               {rows.length ? (
                 <ul className="nls-rows">
                   {rows.map((row, i) => {
-                    const lp = row.l?.currentPoints ?? 0
-                    const rp = row.r?.currentPoints ?? 0
                     return (
                       <li key={`${row.pos}-${i}`} className="nls-mrow">
                         <SlotCell p={row.l} side="left" />
-                        <span className="nls-pts" data-side="left" data-pts={rowPointTone(lp, rp, row.l?.gameStatus === 'final')}>{row.l && showPlayerPoints ? lp.toFixed(1) : '—'}</span>
+                        <SlotPoints p={row.l} other={row.r} side="left" show={showPlayerPoints} />
                         <PosPill label={row.pos} />
-                        <span className="nls-pts" data-side="right" data-pts={rowPointTone(rp, lp, row.r?.gameStatus === 'final')}>{row.r && showPlayerPoints ? rp.toFixed(1) : '—'}</span>
+                        <SlotPoints p={row.r} other={row.l} side="right" show={showPlayerPoints} />
                         <SlotCell p={row.r} side="right" />
                       </li>
                     )

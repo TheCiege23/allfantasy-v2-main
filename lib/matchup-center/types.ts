@@ -26,6 +26,21 @@ export type MatchupPlayerSlot = {
   gameLabel: string
   /** Start/sit or edge hint — AI/decision layer; never overrides official scoring. */
   aiInsight: string | null
+  /**
+   * NFL leagues that play here: the week around the player, from stored rows
+   * (lib/redraft/nflRosterOutlook.ts). Absent for other sports and for imported leagues.
+   */
+  outlook?: MatchupSlotOutlook | null
+}
+
+export type MatchupSlotOutlook = {
+  homeAway: 'home' | 'away' | null
+  kickoffTimeIso: string | null
+  /** The opponent's rank against the player's position: 1st allows the fewest points. */
+  opponentRank: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  teamLogoUrl: string | null
+  byeWeek: number | null
+  weather: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
 }
 
 export type MatchupSidePayload = {

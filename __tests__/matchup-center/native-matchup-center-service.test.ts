@@ -43,6 +43,8 @@ vi.mock('@/lib/matchup-center/afProjections', async (orig) => ({
   ...(await orig<typeof import('@/lib/matchup-center/afProjections')>()),
   loadMatchupAfProjections: vi.fn(async () => new Map()),
 }))
+const outlookMock = vi.hoisted(() => ({ fn: vi.fn(async (..._a: unknown[]) => new Map<string, unknown>()) }))
+vi.mock('@/lib/redraft/nflRosterOutlook', () => ({ loadNflRosterOutlook: (...a: unknown[]) => outlookMock.fn(...a) }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ scoreRosterForWeek: engine.scoreRosterForWeek }))
 
 import { buildNativeMatchupCenterPayload, loadNativeScoreboard } from '@/server/services/nativeMatchupCenter'
@@ -92,6 +94,23 @@ describe('the viewer’s matchup, from the league’s own season', () => {
     expect(p.native).toMatchObject({ scoreUnit: 'points', bye: false, gameNumber: 1, gameCount: 1, playerPointsAvailable: true })
     // A game not started is never asked of the scoring engine.
     expect(engine.scoreRosterForWeek).not.toHaveBeenCalled()
+  })
+
+  it('each starter carries the week around him, asked for the week on screen', async () => {
+    const rank = { rank: 28, of: 32, position: 'PG', allowedPerGame: 20.1, games: 10 }
+    outlookMock.fn.mockResolvedValueOnce(new Map([['a-pg', { projectedPoints: 1, opponent: 'NYG', homeAway: 'away', kickoffTimeIso: '2026-11-22T18:00:00.000Z', opponentRank: rank, headshotUrl: 'h', teamLogoUrl: 't', opponentLogoUrl: 'o', byeWeek: 7, weather: null }]]))
+    const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
+    expect((outlookMock.fn.mock.calls.at(-1)![1] as { week: number; players: Array<{ id: string }> })).toMatchObject({ week: 2 })
+    const [first, second] = p.left.starters
+    expect(first).toMatchObject({ opponent: 'NYG', headshotUrl: 'h', outlook: { homeAway: 'away', kickoffTimeIso: '2026-11-22T18:00:00.000Z', opponentRank: rank, teamLogoUrl: 't', byeWeek: 7, weather: null } })
+    // A player the outlook says nothing about is as he was.
+    expect(second).toMatchObject({ opponent: null, outlook: null })
+  })
+
+  it('[control] a failed outlook leaves the matchup standing', async () => {
+    outlookMock.fn.mockRejectedValueOnce(new Error('boom'))
+    const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
+    expect(p.left.starters.map((s) => s.outlook)).toEqual([null, null])
   })
 
   it('a played week shows the score the season holds and the points each starter counted for', async () => {

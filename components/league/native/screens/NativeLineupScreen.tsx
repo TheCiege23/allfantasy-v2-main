@@ -34,12 +34,11 @@ import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, projectedTotal } from '@/lib/league/native/nativeScreenModels'
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
-import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip } from './NativeScreenParts'
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
-import { matchupTone } from '@/lib/redraft/nflRosterOutlookModel'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
 import {
@@ -217,63 +216,6 @@ function dayLabel(day: string): string {
 function RankTag({ p }: { p: DisplayPlayerRecord | undefined }) {
   if (!p?.positionRankLabel) return null
   return <span className="nls-player-pos" title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {p.positionRankLabel}</span>
-}
-
-/** Headshot with the club crest on its corner. Falls back to initials; a crest that fails to load hides itself. */
-function PlayerAvatar({ p }: { p: DisplayPlayerRecord | undefined }) {
-  const [broken, setBroken] = useState(false)
-  const src = p?.headshotUrl ?? p?.imageUrl ?? null
-  const initials = (p?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
-  return (
-    <span className="nls-pavatar" aria-hidden data-empty={!p || undefined}>
-      {src && !broken ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />
-      ) : (
-        <span>{initials}</span>
-      )}
-      {p?.teamLogoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="nls-pavatar-crest" src={p.teamLogoUrl} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-      ) : null}
-    </span>
-  )
-}
-
-/** "vs QB 28th": how the week's opponent ranks against this player's position. 1st allows the fewest points. */
-function OpponentRankChip({ p }: { p: DisplayPlayerRecord | undefined }) {
-  const r = p?.opponentRank
-  if (!p || !r) return null
-  const tone = matchupTone(r)
-  const word = tone === 'easy' ? 'a favourable matchup' : tone === 'hard' ? 'a tough matchup' : 'an average matchup'
-  const title = `${p.opponent} rank ${ordinal(r.rank)} of ${r.of} against ${r.position}: ${r.allowedPerGame} fantasy points allowed per game over ${r.games} games. 1st allows the fewest. This is ${word}.`
-  return (
-    <small className="nls-oprank" data-tone={tone ?? undefined} title={title} data-testid={`lineup-opponent-rank-${p.id}`}>
-      <span aria-hidden>vs {r.position} <b>{ordinal(r.rank)}</b></span>
-      <span className="nls-sr">{title}</span>
-    </small>
-  )
-}
-
-/** The forecast at the player's game: a glyph and the temperature, with the detail in words for a screen reader. */
-function WeatherChip({ p }: { p: DisplayPlayerRecord | undefined }) {
-  const w = p?.gameWeather
-  if (!p || !w) return null
-  const temp = w.temperatureF != null && Number.isFinite(w.temperatureF) ? `${Math.round(w.temperatureF)}°` : null
-  const detail = w.indoors
-    ? 'Indoors: weather is not a factor.'
-    : [
-        w.conditionLabel,
-        temp ? `${temp}F` : null,
-        w.windSpeedMph != null ? `wind ${Math.round(w.windSpeedMph)} mph` : null,
-        w.precipChancePct != null ? `${Math.round(w.precipChancePct)}% chance of rain or snow` : null,
-      ].filter(Boolean).join(', ') || 'Forecast'
-  return (
-    <small className="nls-wx" title={detail} data-indoors={w.indoors || undefined} data-testid={`lineup-weather-${p.id}`}>
-      <span aria-hidden>{w.symbol}{w.indoors ? ' Dome' : temp ? ` ${temp}` : ''}</span>
-      <span className="nls-sr">{detail}</span>
-    </small>
-  )
 }
 
 /** "Bye 7": the club's bye week, left off in the bye week itself (the game line already says so). */
@@ -802,7 +744,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           onTap={() => onTap(tap)}
         >
           <span className="nls-pl" data-media={showMedia || undefined}>
-            {showMedia ? <PlayerAvatar p={p} /> : null}
+            {showMedia ? <PlayerAvatar name={p?.name} headshotUrl={p?.headshotUrl ?? p?.imageUrl} teamLogoUrl={p?.teamLogoUrl} empty={!p} /> : null}
             <span className="nls-pl-text">
               <strong>
                 {p?.name ?? (id ? 'Unknown player' : 'Empty')}
@@ -815,8 +757,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLineNode(p, showMedia) || (id ? '—' : 'Open slot')}</small>
               {isPicked ? null : (
                 <span className="nls-pl-meta">
-                  <OpponentRankChip p={p} />
-                  <WeatherChip p={p} />
+                  <OpponentRankChip id={p?.id} opponent={p?.opponent} rank={p?.opponentRank} />
+                  <WeatherChip id={p?.id} weather={p?.gameWeather} />
                   <ByeTag p={p} onBye={isOnBye(p, data?.leagueWeek)} />
                 </span>
               )}
