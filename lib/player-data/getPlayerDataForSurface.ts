@@ -433,16 +433,21 @@ export async function getPlayerDataForSurface(
        * his name, position and team, with no stats or projection rather than no player.
        */
       const missingIds = ids.filter((id) => !rowById.has(id))
-      const seasonRows = missingIds.length
-        ? await prisma.redraftRosterPlayer
-            .findMany({
-              where: { playerId: { in: missingIds }, droppedAt: null, roster: { leagueId: input.leagueId } },
-              select: { playerId: true, playerName: true, position: true, team: true, injuryStatus: true },
-              orderBy: { addedAt: 'desc' },
-            })
-            .catch(() => [])
-        : []
-      const seasonRowById = new Map<string, (typeof seasonRows)[number]>()
+      type SeasonPlayerRow = { playerId: string; playerName: string; position: string; team: string | null; injuryStatus: string | null }
+      let seasonRows: SeasonPlayerRow[] = []
+      if (missingIds.length) {
+        // Best-effort: whatever goes wrong here must never cost the players that did resolve.
+        try {
+          seasonRows = await prisma.redraftRosterPlayer.findMany({
+            where: { playerId: { in: missingIds }, droppedAt: null, roster: { leagueId: input.leagueId } },
+            select: { playerId: true, playerName: true, position: true, team: true, injuryStatus: true },
+            orderBy: { addedAt: 'desc' },
+          })
+        } catch {
+          seasonRows = []
+        }
+      }
+      const seasonRowById = new Map<string, SeasonPlayerRow>()
       for (const r of seasonRows) if (!seasonRowById.has(r.playerId) && r.playerName?.trim()) seasonRowById.set(r.playerId, r)
       const mediaById = await batchLoadCanonicalPlayerMedia(
         sportKey,

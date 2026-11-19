@@ -70,5 +70,10 @@ describe('a rostered player the stats store does not hold', () => {
   it('a player nobody knows is still left out, and a failed season read changes nothing', async () => {
     seasonRows.mockRejectedValue(new Error('down'))
     expect((await run()).map((r) => r.unified.playerId)).toEqual(['rec-1'])
+    // Nor does a read that throws before it returns a promise at all.
+    seasonRows.mockImplementation(() => {
+      throw new Error('no such table')
+    })
+    expect((await run()).map((r) => r.unified.playerId)).toEqual(['rec-1'])
   })
 })
