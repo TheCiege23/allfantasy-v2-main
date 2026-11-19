@@ -837,7 +837,7 @@ function DraftBoardInner({
                   ) : null}
                   {autoDraftRosterIds.includes(entry.rosterId) ? (
                     <span
-                      className="absolute left-0.5 top-0 rounded-[3px] bg-emerald-500/90 px-1 text-[8px] font-extrabold leading-[11px] tracking-[0.06em] text-[#04130b]"
+                      className="absolute left-0.5 top-0 rounded-[3px] bg-emerald-500/90 px-1 text-[11px] font-extrabold leading-[13px] tracking-[0.04em] text-[#04130b]"
                       title="Drafting automatically"
                       data-testid={`draft-board-team-header-auto-${entry.slot}`}
                     >

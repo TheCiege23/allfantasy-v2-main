@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clearPoolFilters } from './helpers/poolFilters'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
 import { computeUpcomingOwnedPicks } from '@/lib/live-draft-engine/draftPickTradeInventory'
@@ -1545,7 +1546,7 @@ test.describe('@draft-room click audit', () => {
 
     await desktop.getByTestId('draft-player-search-input').fill('Atlas')
     await desktop.getByTestId('draft-position-filter').getByRole('radio', { name: /RB/i }).click()
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clearPoolFilters(desktop)
 
     const atlasRow = desktop.getByRole('row', { name: /Atlas Runner/i }).first()
     await expect(atlasRow).toBeVisible({ timeout: 20_000 })

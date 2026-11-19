@@ -1,13 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
-import type { Locator } from '@playwright/test'
-
-/** Clear filters sits behind the pool's Filters button on every width since 2026-11-19. */
-async function clearPoolFilters(scope: Locator) {
-  const toggle = scope.getByTestId('draft-mobile-filters-toggle')
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await clickHydrated(toggle)
-  await clickHydrated(scope.getByTestId('draft-clear-filters'))
-}
+import { clearPoolFilters } from './helpers/poolFilters'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
