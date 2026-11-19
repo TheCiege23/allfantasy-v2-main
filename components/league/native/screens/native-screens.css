@@ -166,7 +166,7 @@
 .nls-player small.nls-oprank[data-tone=easy] { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
 .nls-player small.nls-oprank[data-tone=hard] { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
 .nls-lrow .nls-proj { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.nls-lrow .nls-proj small { color: var(--muted); font: 500 10px/1 var(--nl-mono); letter-spacing: .08em; text-transform: uppercase; }
+.nls-lrow .nls-proj small { color: var(--muted); font: 500 11px/1 var(--nl-mono); letter-spacing: .08em; text-transform: uppercase; }
 .nls-tap .nls-pl { text-align: left; }
 .nls-lrow[data-cols='3'] { grid-template-columns: 52px minmax(0, 1fr) auto; }
 .nls-lrow-empty { grid-template-columns: 52px minmax(0, 1fr); color: var(--muted); font-size: 15px; }
