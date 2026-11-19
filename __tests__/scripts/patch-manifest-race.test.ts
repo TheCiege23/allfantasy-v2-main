@@ -38,7 +38,10 @@ const realPlugin = fs.readFileSync(path.join(process.cwd(), PLUGIN_REL), 'utf8')
 describe('patchManifestRace', () => {
   it('patches the installed Next.js plugin, and the result still compiles', () => {
     const root = fakeRepo(realPlugin)
-    expect(patchManifestRace(root)).toBe('patched')
+    // CI's `npm ci` runs this script in postinstall, so the installed copy may already carry the
+    // patch. Either way it must end up patched; a changed upstream shape returns
+    // 'skipped-shape-changed' and fails here.
+    expect(['patched', 'already-current']).toContain(patchManifestRace(root))
     const patched = read(root)
     expect(patched).toContain(MARKER)
     expect(() => new vm.Script(patched)).not.toThrow()
