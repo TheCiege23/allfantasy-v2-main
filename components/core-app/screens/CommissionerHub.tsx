@@ -429,9 +429,20 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
               </ol>
             </details>
           ))
-        ) : (
+        ) : data.history.importedDrafts?.length ? null : (
           <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
         )}
+        {/* An imported draft is shown pick by pick in the Draft HQ archive; here it is one line that opens it. */}
+        {data.history.importedDrafts?.length ? (
+          <ul className="af-ch-areas">
+            {data.history.importedDrafts.map((draft) => (
+              <li key={draft.key}>
+                <strong>{draft.season ?? t('Season unknown')} · {t('Imported draft')}</strong>
+                <p><Link href={draft.href}>{t('Open in the draft archive')}</Link></p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <p className="af-ch-muted">{t(data.history.draftNote)}</p>
         {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
         {data.history.lotteries?.length ? (
