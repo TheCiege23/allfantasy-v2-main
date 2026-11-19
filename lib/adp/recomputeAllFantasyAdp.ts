@@ -41,7 +41,8 @@ export async function persistAllFantasyAdpSnapshots(
 ): Promise<{ written: number; errors: string[] }> {
   let written = 0
   const errors: string[] = []
-  for (const s of snapshots) {
+  const batchSize = 16
+  async function persistOne(s: AdpSnapshot) {
     const data: Prisma.AllFantasyAdpSnapshotCreateInput = {
       playerKey: s.playerKey,
       playerName: s.playerName,
@@ -76,11 +77,16 @@ export async function persistAllFantasyAdpSnapshots(
         create: data,
         update: { ...data, lastUpdatedAt: new Date() },
       })
-      written++
+      return null
     } catch (err) {
-      errors.push(
-        `upsert ${s.playerName} (${s.draftMode}): ${err instanceof Error ? err.message : String(err)}`,
-      )
+      return `upsert ${s.playerName} (${s.draftMode}): ${err instanceof Error ? err.message : String(err)}`
+    }
+  }
+  for (let offset = 0; offset < snapshots.length; offset += batchSize) {
+    const results = await Promise.all(snapshots.slice(offset, offset + batchSize).map(persistOne))
+    for (const result of results) {
+      if (result === null) written++
+      else errors.push(result)
     }
   }
   return { written, errors }
@@ -260,9 +266,10 @@ export async function recomputeAllFantasyAdp(
    * `sport: null` (CLI "every sport") stays null and skips the filter entirely.
    */
   const sportFilter = sport ? normalizeToSupportedSport(sport) : null
+  const importedOnly = options.draftType?.toLowerCase() === 'imported'
 
   try {
-    const picksRaw = (await prisma.draftPick.findMany({
+    const picksRaw = importedOnly ? [] : (await prisma.draftPick.findMany({
       where: {
         /*
          * Ã°ÂÂÂ SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
@@ -393,7 +400,8 @@ export async function recomputeAllFantasyAdp(
           return true
         })
         report.importedPicksKept = usable.length
-        valid.push(...usable)
+        // Imported history can exceed V8's maximum argument count for a single call.
+        for (const pick of usable) valid.push(pick)
         report.picksKept = valid.length
       } catch (err) {
         report.errors.push(
