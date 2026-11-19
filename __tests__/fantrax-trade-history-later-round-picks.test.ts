@@ -117,7 +117,7 @@ describe('the upload places later-round picks', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.imported).toBe(1)
-    expect(res.laterRoundPicks).toEqual({ traded: 1, returned: 0 })
+    expect(res.laterRoundPicks).toEqual({ traded: 1, returned: 0, notSaved: 0 })
     expect(m.traded).toEqual([
       { leagueId: 'af-league', picks: [{ season: 2029, round: 5, original_roster_id: '202', current_owner_roster_id: '101' }] },
     ])
@@ -126,7 +126,7 @@ describe('the upload places later-round picks', () => {
   it('with no pick list on file, the export is the only source and both picks are placed', async () => {
     m.snapshot = { transactions: { claims: [] } }
     const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: CSV })
-    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 2, returned: 0 })
+    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 2, returned: 0, notSaved: 0 })
   })
 
   /** A Fantrax league stores every pick, own ones flagged untraded, so a pick that came home is rewritten as that. */
@@ -139,10 +139,21 @@ describe('the upload places later-round picks', () => {
       '"Quarterback One","PHI","QB","Harbor Owls","Mesa Comets","0","Mon Nov 16, 2026, 4:26PM","11"',
     ].join('\n')
     const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: BACK })
-    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 0, returned: 1 })
+    expect(res.ok && res.laterRoundPicks).toEqual({ traded: 0, returned: 1, notSaved: 0 })
     expect(m.traded).toEqual([
       { leagueId: 'af-league', picks: [{ season: 2029, round: 5, original_roster_id: '202', current_owner_roster_id: '202', traded: false }] },
     ])
+  })
+
+  it('🛑 a pick the database refused is reported as not saved, never as placed', async () => {
+    const { persistTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
+    // What the real save returns when a row fails: it does not throw, it counts the row as skipped.
+    vi.mocked(persistTradedPicks).mockResolvedValueOnce({ written: 0, skipped: 1 })
+    const res = await importFantraxTradeHistory({ leagueId: 'af-league', csvText: CSV })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.imported).toBe(1)
+    expect(res.laterRoundPicks).toEqual({ traded: 0, returned: 0, notSaved: 1 })
   })
 
   it('a failure placing picks does not fail the upload', async () => {

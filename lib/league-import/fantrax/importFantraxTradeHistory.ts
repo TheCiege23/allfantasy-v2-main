@@ -31,8 +31,11 @@ export type FantraxTradeHistoryImportResult =
       /**
        * Future picks placed from this export, in rounds Fantrax's API does not publish. `null` when
        * that step could not run; the trades above are saved either way.
+       *
+       * `traded` and `returned` count picks that were SAVED. `notSaved` counts picks the export
+       * named that the database refused, so a failed write is never reported as placed.
        */
-      laterRoundPicks: { traded: number; returned: number } | null
+      laterRoundPicks: { traded: number; returned: number; notSaved: number } | null
     }
   | { ok: false; status: 400 | 404 | 409; error: string }
 
@@ -89,7 +92,7 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
    * ⚠ FAILS SOFT. The trades are already saved; a problem placing picks must not turn a good
    * upload into an error. `laterRoundPicks: null` says the step did not run.
    */
-  let laterRoundPicks: { traded: number; returned: number } | null = null
+  let laterRoundPicks: { traded: number; returned: number; notSaved: number } | null = null
   try {
     const snapshot = await prisma.fantraxLeague.findFirst({
       where: { OR: [{ sourceLeagueId: league.platformLeagueId }, { id: league.platformLeagueId }] },
@@ -104,26 +107,39 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
       publishedRounds: published,
       afterSeason: typeof league.season === 'number' ? league.season : null,
     })
-    laterRoundPicks = { traded: ownership.traded.length, returned: ownership.returned.length }
     /*
-     * One upsert for both. A Fantrax league's stored rows are its whole inventory, own picks
-     * included, each flagged with whether it has changed hands — so a pick that ended back with
-     * its original team is written as that team's own (`traded: false`), the same way the
-     * import corrects one, rather than removed.
+     * A Fantrax league's stored rows are its whole inventory, own picks included, each flagged
+     * with whether it has changed hands — so a pick that ended back with its original team is
+     * written as that team's own (`traded: false`), the same way the import corrects one, rather
+     * than removed.
+     *
+     * 🛑 THE COUNTS COME FROM WHAT THE SAVE REPORTS, NOT FROM WHAT WAS ASKED FOR.
+     * `persistTradedPicks` does not throw when the database refuses a row — it returns it as
+     * `skipped` — so counting the picks handed to it reported a failed write as a placed pick.
+     * Moved and returned picks are saved in two calls because the save reports one total and the
+     * result has to say how many of EACH were stored. They can never collide: a pick ends either
+     * away from its original team or back with it.
      */
-    const rows = [
-      ...ownership.traded,
-      ...ownership.returned.map((pick) => ({
-        season: pick.season,
-        round: pick.round,
-        original_roster_id: pick.original_roster_id,
-        current_owner_roster_id: pick.original_roster_id,
-        traded: false,
-      })),
-    ]
-    if (rows.length > 0) {
+    const returnedRows = ownership.returned.map((pick) => ({
+      season: pick.season,
+      round: pick.round,
+      original_roster_id: pick.original_roster_id,
+      current_owner_roster_id: pick.original_roster_id,
+      traded: false,
+    }))
+    laterRoundPicks = { traded: 0, returned: 0, notSaved: 0 }
+    if (ownership.traded.length > 0 || returnedRows.length > 0) {
       const { persistTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
-      await persistTradedPicks(args.leagueId, rows)
+      if (ownership.traded.length > 0) {
+        const saved = await persistTradedPicks(args.leagueId, ownership.traded)
+        laterRoundPicks.traded = saved.written
+        laterRoundPicks.notSaved += saved.skipped
+      }
+      if (returnedRows.length > 0) {
+        const saved = await persistTradedPicks(args.leagueId, returnedRows)
+        laterRoundPicks.returned = saved.written
+        laterRoundPicks.notSaved += saved.skipped
+      }
     }
   } catch {
     laterRoundPicks = null
