@@ -10,6 +10,7 @@
  */
 
 import 'server-only'
+import { getCachedFantraxPlayerIds } from './fantraxPlayerDirectoryCache'
 import { preserveSnapshotNames } from './preserveSnapshotNames'
 import { withFantraxDisplayNames } from './fantraxPlayerName'
 
@@ -31,7 +32,6 @@ import { fantraxImportSeason, isFantraxSplitSeasonSport, usesFantraxPeriodCalend
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
-  getFantraxPlayerIds,
   getFantraxStandings,
   getFantraxTeamRosters,
   resolveRosters,
@@ -169,7 +169,21 @@ export async function importFantraxLeague(args: {
   if (refreshTarget?.sport?.toLowerCase() === 'soccer' && !soccer) {
     return { ok: false, error: 'The source no longer confirms this is a Fantrax Soccer league', kind: 'unavailable' }
   }
-  const directoryFor = (sport: FantraxSport) => soccer ? Promise.resolve(null) : getFantraxPlayerIds(sport)
+  /* Shared between imports for a short while: the directories are the same for every league, and
+     downloading all six on every import was most of this function's traffic. */
+  /*
+   * 🛑 A REFRESH ALREADY KNOWS THE SPORT, AND USED TO DOWNLOAD ALL SIX DIRECTORIES ANYWAY. The six
+   * are fetched because a Fantrax league does not say what sport it is, so the import measures
+   * which directory names its players. A snapshot being refreshed was measured when it was first
+   * imported and a league does not change sport, so its own directory is asked for first and the
+   * other five only if that one turns out not to fit (see `knownDirectoryFits` below).
+   */
+  const knownSport: FantraxSport | null = refreshTarget
+    ? (KNOWN_SPORT_DIRECTORY[String(refreshTarget.sport ?? '').trim().toLowerCase()] ?? null)
+    : null
+  const loadDirectory = (sport: FantraxSport) => soccer ? Promise.resolve(null) : getCachedFantraxPlayerIds(sport)
+  const directoryFor = (sport: FantraxSport) =>
+    knownSport && sport !== knownSport ? Promise.resolve(null) : loadDirectory(sport)
   // The live endpoint can roll into another season. Never overwrite an archive
   // or stamp its old roster as freshly fetched when that happens.
   // NBA/NHL seasons are keyed by the year they begin, so compare in that key;
@@ -210,7 +224,7 @@ export async function importFantraxLeague(args: {
    * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
    * map that fails to load fails soft below, exactly like the others.
    */
-  const [rosters, standings, cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw, schedule, draft, pickInventory] = await Promise.all([
+  const [rosters, standings, cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst, schedule, draft, pickInventory] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     directoryFor('CFB'),
@@ -225,6 +239,23 @@ export async function importFantraxLeague(args: {
        without them, and a failed read keeps the inventory already on file. */
     Promise.resolve().then(() => getFantraxDraftPicks(args.leagueId)).catch(() => null),
   ])
+  let [cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw] = [cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst]
+  /*
+   * ⚠ THE SHORTCUT IS ONLY KEPT WHEN IT IS PLAINLY RIGHT. If the known sport's directory did not
+   * load, or names fewer than half of the league's players, every directory is fetched and the
+   * sport is measured from scratch exactly as on a first import. So a wrong stored sport, a league
+   * with nothing to measure, or one failed request costs the old six downloads — never a refresh
+   * that fails, or succeeds against the wrong player list.
+   */
+  if (knownSport && !soccer) {
+    const known = { CFB: cfbRaw, NFL: nflRaw, MLB: mlbRaw, NBA: nbaRaw, NHL: nhlRaw, NCAAB: ncaabRaw }[knownSport as 'CFB']
+    if (!knownDirectoryFits(known?.ok ? known.data : null, rosters.ok ? rosters.data : null, info.data.playerInfo)) {
+      ;[cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw] = await Promise.all([
+        loadDirectory('CFB'), loadDirectory('NFL'), loadDirectory('MLB'),
+        loadDirectory('NBA'), loadDirectory('NHL'), loadDirectory('NCAAB'),
+      ])
+    }
+  }
   /*
    * Fantrax's directories name players "Last, First"; the season rosters and the draft board store
    * what is read from here on, so it is read in "First Last". The NFL identity link below takes the
@@ -755,6 +786,31 @@ function storedTeamIdFor(standings: unknown, teamName: string | null | undefined
     return typeof id === 'string' ? id.trim() : ''
   }
   return ''
+}
+
+/** Stored snapshot sport -> the Fantrax directory that names its players. Soccer has none here. */
+const KNOWN_SPORT_DIRECTORY: Record<string, FantraxSport> = {
+  cfb: 'CFB', nfl: 'NFL', mlb: 'MLB', nba: 'NBA', nhl: 'NHL', ncaab: 'NCAAB',
+}
+
+/**
+ * Whether one directory names at least half of a league's players — the same bar the import uses
+ * to accept a sport.
+ *
+ * Measured on the rostered players, or on the league's own player pool when nobody is rostered yet
+ * (a league that has not drafted). With nothing to measure the answer is no, so the caller falls
+ * back to measuring every directory.
+ */
+export function knownDirectoryFits(
+  directory: Record<string, unknown> | null,
+  rosters: Record<string, { rosterItems?: Array<{ id: string }> | null }> | null,
+  playerInfo: unknown,
+): boolean {
+  if (!directory) return false
+  let ids = [...new Set(Object.values(rosters ?? {}).flatMap((team) => (team?.rosterItems ?? []).map((item) => item.id)))]
+  if (ids.length === 0) ids = Object.keys(recordOf(playerInfo))
+  if (ids.length === 0) return false
+  return ids.filter((id) => directory[id] != null).length / ids.length >= 0.5
 }
 
 function recordOf(value: unknown): Record<string, unknown> {

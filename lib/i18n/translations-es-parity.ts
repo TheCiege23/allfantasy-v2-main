@@ -2371,6 +2371,7 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.randomizeRun": "Sortear {{n}} veces",
   "commControl.randomizeRunOnce": "Sortear una vez",
   "commControl.randomizeDone": "Listo. {{n}} sorteos publicados en el chat de la liga. El calendario desde la semana {{w}} es el último sorteo.",
+  "commControl.randomizeDoneOne": "Listo. El sorteo está publicado en el chat de la liga. El calendario desde la semana {{w}} es ese sorteo.",
   "commControl.customTitle": "Enfrentamientos personalizados",
   "commControl.customHelp": "Pon a mano los enfrentamientos de una semana. Una semana personalizada conserva sus enfrentamientos cuando el calendario se rehace o se sortea, igual que una Semana de rivalidades aplicada.",
   "commControl.customTag": "personalizada",

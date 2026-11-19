@@ -125,7 +125,9 @@ export function ScheduleToolsCard({ leagueId, onChanged }: { leagueId: string; o
       }
       setRandomMsg({
         kind: 'ok',
-        text: t('commControl.randomizeDone').replace('{{n}}', String(out.data.posted ?? times)).replace('{{w}}', String(out.data.regeneratedFromWeek ?? 1)),
+        // One draw reads as "the draw", never "1 draws".
+        text: (Number(out.data.posted ?? times) === 1 ? t('commControl.randomizeDoneOne') : t('commControl.randomizeDone').replace('{{n}}', String(out.data.posted ?? times)))
+          .replace('{{w}}', String(out.data.regeneratedFromWeek ?? 1)),
       })
       await load()
       onChanged?.()
