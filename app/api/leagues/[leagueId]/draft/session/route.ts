@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import {
   getOrCreateDraftSession,
   buildSessionSnapshot,
@@ -135,8 +136,8 @@ export async function GET(
 
   try {
     const providerStatus = getProviderStatus()
-    // Dedup key includes viewer userId because the snapshot now contains viewer-private fields (viewerAutopick).
-    const shared = await dedupeInFlight(`draft:session:${leagueId}:${userId}`, async () => {
+    // Connected managers poll the same board. Only share reads that are independent of the viewer.
+    const shared = await dedupeInFlight(`draft:session-board:${leagueId}`, async () => {
       // Phase 3b — perf: automation ticks were running sequentially (4 awaits
       // = 2-4 sec on a typical snake draft where most are no-ops). They don't
       // depend on each other, so run in parallel. Same for the snapshot/UI
@@ -152,7 +153,7 @@ export async function GET(
         syncPostDraftArtifactsIfCompletedThrottled(leagueId).catch(() => {}),
       ])
       const [snapshot, uiSettings, orphanRosterIds, orderMode] = await Promise.all([
-        buildSessionSnapshot(leagueId, new Date(), userId),
+        buildSessionSnapshot(leagueId, new Date()),
         getDraftUISettingsForLeague(leagueId),
         getOrphanRosterIdsForLeague(leagueId),
         getDraftOrderModeAndLotteryConfig(leagueId),
@@ -181,7 +182,9 @@ export async function GET(
     // Read canonical state for parity visibility only. Keep existing response
     // shape untouched until explicit route migration.
     try {
-      canonicalDraftState = await getCanonicalDraftState({ leagueId })
+      canonicalDraftState = await dedupeInFlight(`draft:session-canonical:${leagueId}`, () =>
+        getCanonicalDraftState({ leagueId })
+      )
       if (canonicalDraftState) {
         const current = paritySnapshot(shared.snapshot)
         canonicalDraftStateParity = {
@@ -222,9 +225,10 @@ export async function GET(
       })
     }
 
-    const [currentUserRosterId, poolReadiness] = await Promise.all([
+    const [currentUserRosterId, viewerAutopick, poolReadiness] = await Promise.all([
       getCurrentUserRosterIdForLeague(leagueId, userId),
-      getDraftPoolReadiness(leagueId).catch(() => ({
+      getViewerAutopickPreference(shared.snapshot.id, userId),
+      dedupeInFlight(`draft:session-pool-readiness:${leagueId}`, () => getDraftPoolReadiness(leagueId)).catch(() => ({
         warm: false,
         ready: false,
         source: 'missing' as const,
@@ -256,6 +260,7 @@ export async function GET(
       leagueId,
       session: {
         ...shared.snapshot,
+        viewerAutopick,
         currentUserRosterId: currentUserRosterId ?? undefined,
         orphanRosterIds: shared.orphanRosterIds,
         aiManagerEnabled: shared.uiSettings.orphanTeamAiManagerEnabled,
