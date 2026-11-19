@@ -13,10 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockDraftPickFindMany = vi.hoisted(() => vi.fn().mockResolvedValue([] as unknown[]))
 const mockAdpUpsert = vi.hoisted(() => vi.fn().mockResolvedValue({}))
+const mockExecuteRaw = vi.hoisted(() => vi.fn())
 const mockAdpFindMany = vi.hoisted(() => vi.fn().mockResolvedValue([] as unknown[]))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $executeRaw: mockExecuteRaw,
     draftPick: { findMany: mockDraftPickFindMany },
     allFantasyAdpSnapshot: { upsert: mockAdpUpsert, findMany: mockAdpFindMany },
   },
@@ -34,6 +36,7 @@ function read(rel: string): string {
 describe('persistAllFantasyAdpSnapshots', () => {
   beforeEach(() => {
     mockAdpUpsert.mockClear()
+    mockExecuteRaw.mockReset()
   })
 
   it('upserts prisma rows for each snapshot', async () => {
@@ -60,6 +63,25 @@ describe('persistAllFantasyAdpSnapshots', () => {
     expect(errors).toHaveLength(0)
     expect(written).toBe(1)
     expect(mockAdpUpsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes a batch in one statement and isolates row failures when a batch fails', async () => {
+    const context = {
+      sport: 'NFL', leagueType: 'redraft', draftType: 'imported',
+      scoringFormat: 'ppr', rosterFormat: 'standard', teamCount: 12, season: '2026',
+    }
+    const snapshots = aggregateAdp(['One', 'Two'].map((playerName, index) => ({
+      playerName, overall: index + 1, round: 1, position: 'WR', context, draftMode: 'real' as const,
+    })))
+    mockExecuteRaw.mockResolvedValueOnce(2)
+    expect(await persistAllFantasyAdpSnapshots(snapshots)).toEqual({ written: 2, errors: [] })
+    expect(mockExecuteRaw).toHaveBeenCalledTimes(1)
+    expect(mockAdpUpsert).not.toHaveBeenCalled()
+
+    mockExecuteRaw.mockRejectedValueOnce(new Error('batch rejected'))
+    mockAdpUpsert.mockRejectedValueOnce(new Error('invalid row'))
+    expect(await persistAllFantasyAdpSnapshots(snapshots))
+      .toEqual({ written: 1, errors: ['upsert One (real): invalid row'] })
   })
 })
 
