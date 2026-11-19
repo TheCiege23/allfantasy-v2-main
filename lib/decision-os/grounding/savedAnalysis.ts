@@ -29,7 +29,7 @@ import type { IntelligenceTool } from '../three-brain/phase2/types'
  * them into "no analysis" would be exactly the reason-losing this packet was built to stop.
  */
 
-export type SavedAnalysisOutcome =
+type SavedAnalysisOutcome =
   | { status: 'ok'; text: string; generatedAt: string | null; stale: boolean }
   /** A run exists but this user may not see it. */
   | { status: 'not_entitled' }

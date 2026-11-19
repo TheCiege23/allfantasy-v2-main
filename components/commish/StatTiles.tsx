@@ -24,7 +24,7 @@ export type StatTile = {
   help?: string
 }
 
-export function StatTiles({ tiles, columns }: { tiles: StatTile[]; columns?: number }) {
+function StatTiles({ tiles, columns }: { tiles: StatTile[]; columns?: number }) {
   return (
     <div
       className="af-cm-tiles"

@@ -1,3 +1,4 @@
+import { careerXpLevel, decideCareerJoin } from '@/lib/league-join/careerJoinGate'
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
 import { buildSurvivorSettingsSnapshotPatch, buildSurvivorLeagueColumnPatch, normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
@@ -26,6 +27,9 @@ import { getRedraftSportIntegration } from '@/lib/redraft-creation/sport-config'
 import type { SoccerPipeline } from '@/lib/redraft-creation/sport-config'
 import { soccerPipelineToPrismaVariant } from '@/lib/redraft-creation/create-redraft-league'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineCalendarFit, planGuillotineChopSchedule } from '@/lib/guillotine/calendarFit'
+import { PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
+import { ADVANCED_KEY, readAdvanced } from '@/lib/guillotine/chopSchedule'
 import type { PresetEngineOutput } from '@/lib/league-creation/canonical/types'
 import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { mapCanonicalDraftTypeToEngineCore } from '@/lib/draft-types/draftTypeRegistry'
@@ -33,6 +37,7 @@ import { mapKeeperCreationFromWizard } from '@/lib/keeper/mapKeeperCreationFromW
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { bestBallSettingsHaveNoPlayoffs } from '@/lib/bestball/noPlayoffSeason'
 import { GUILLOTINE_BEST_BALL_KEY } from '@/lib/guillotine/guillotineBestBall'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
@@ -164,7 +169,7 @@ function buildOpenTeamName(slotNumber: number): string {
   return `Open Team ${slotNumber}`
 }
 
-export type CanonicalCreateTransactionResult = {
+type CanonicalCreateTransactionResult = {
   leagueId: string
   homepageUrl: string
   inviteUrl: string
@@ -211,6 +216,19 @@ export async function createCanonicalLeagueInTransaction(
           language: body.language ?? null,
         })
       : null
+  /*
+   * 🛑 "NO PLAYOFFS" MUST SAVE NO PLAYOFFS. The normalizer keeps `playoffFormat: 'none'` beside the
+   * team count it was given (6 by default), and that 6 reached League.playoffTeams and the playoff start
+   * week below — so a season-long league was built a bracket it said it did not have. Either signal
+   * (format none, or 0 teams) is no playoffs, saved one way everywhere; the season engine then crowns
+   * the regular-season leader (lib/bestball/noPlayoffSeason.ts). A tournament's rounds are its
+   * post-season and are untouched.
+   */
+  const bestBallNoPlayoffs = bestBallSettings != null && bestBallSettingsHaveNoPlayoffs(bestBallSettings)
+  if (bestBallSettings && bestBallNoPlayoffs) {
+    bestBallSettings.playoffTeams = 0
+    bestBallSettings.playoffFormat = 'none'
+  }
   const foundationDefaults = getFoundationLeagueDefaults({
     sport,
     format: formatId,
@@ -279,7 +297,7 @@ export async function createCanonicalLeagueInTransaction(
   const [userProfile, appUser] = await Promise.all([
     tx.userProfile.findUnique({
       where: { userId: appUserId },
-      select: { displayName: true, xpLevel: true, legacyCareerLevel: true },
+      select: { displayName: true, xpLevel: true, xpTotal: true },
     }),
     tx.appUser.findUnique({
       where: { id: appUserId },
@@ -292,10 +310,8 @@ export async function createCanonicalLeagueInTransaction(
     displayName: userProfile?.displayName,
     email: appUser?.email,
   })
-  const creatorRankLevelRaw = Number(userProfile?.xpLevel ?? userProfile?.legacyCareerLevel ?? 1)
-  const creatorRankLevel = Number.isFinite(creatorRankLevelRaw) ? Math.max(1, Math.floor(creatorRankLevelRaw)) : 1
-  const minRankLevel = Math.max(1, creatorRankLevel - 3)
-  const maxRankLevel = creatorRankLevel + 3
+  const creatorRankLevel = careerXpLevel(userProfile)
+  const { band: [minRankLevel, maxRankLevel] } = decideCareerJoin(creatorRankLevel, creatorRankLevel)
 
   /*
    * 🛑 NCAAF PLAYOFFS END ON WEEK 13 — see lib/league-defaults/ncaafPlayoffWindow.ts. Every NCAAF
@@ -396,6 +412,11 @@ export async function createCanonicalLeagueInTransaction(
       minRankLevel,
       maxRankLevel,
     },
+  }
+
+  if (bestBallNoPlayoffs) {
+    mergedSettings.playoff_team_count = 0
+    mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: null, playoff_start_week: null, ...(bestBallSettings!.matchupFormat === 'cumulative' ? { seedingRule: 'points_only' } : {}) }
   }
 
   if (bestBallSettings?.contestStructure === 'tournament') {
@@ -524,7 +545,37 @@ export async function createCanonicalLeagueInTransaction(
   // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
   // never `bestBallMode`, which would make this a Best Ball league everywhere.
   if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
+  // MLB Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Anything else is
+  // refused by validateCreateLeague; the default (no key) is one week.
+  if (isGuillotine && supportsTwoWeekPeriods(sport) && body.conceptSetup?.guillotinePeriodWeeks === 2) mergedSettings[PERIOD_WEEKS_KEY] = 2
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
+  /*
+   * 🛑 A LARGE GUILLY COULD NOT FINISH. The config below is one chop a week from week 1 to the sport's
+   * last regular-season week, whatever the team count, so an NFL league of 20+ ended week 18 with
+   * several teams alive. When that schedule cannot reach the endgame, plan the fewest opening
+   * double-chop weeks that can (lib/guillotine/calendarFit.ts) — the "double-elimination weeks" the
+   * team-count limits already promise. Refuse only when even four chops every week cannot finish.
+   */
+  if (isGuillotine && guillotineProfile?.regularSeasonWeeks) {
+    const calendar = {
+      teamCount: managerCount,
+      startWeek: 1,
+      endWeek: guillotineProfile.regularSeasonWeeks,
+      baseChops: 1,
+      threshold: guillotineEndgame.threshold,
+      finalPeriods: guillotineEndgame.cumulativePeriods,
+      periodWeeks: readPeriodWeeks(mergedSettings),
+    }
+    if (!guillotineCalendarFit({ ...calendar, advanced: readAdvanced(mergedSettings) }).fits) {
+      const planned = planGuillotineChopSchedule(calendar)
+      if (!planned) {
+        throw new Error(
+          `A ${managerCount}-team Guilly league cannot reach a champion in ${calendar.endWeek} weeks, even with four chops every ${calendar.periodWeeks === 2 ? 'two-week period' : 'week'}. Choose fewer teams.`,
+        )
+      }
+      mergedSettings[ADVANCED_KEY] = planned
+    }
+  }
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings
   const playoffSettings = foundationDefaults.playoffSettings
@@ -605,7 +656,7 @@ export async function createCanonicalLeagueInTransaction(
    */
   const survivorPlanEnd = formatId === 'survivor' ? readSurvivorFullSeasonPlan(mergedSettings)?.endWeek ?? null : null
   const playoffStartWeekColumn: number | null =
-    scoringMode === 'roto' || isGuillotine
+    scoringMode === 'roto' || isGuillotine || bestBallNoPlayoffs
       ? null
       : survivorPlanEnd != null
         ? survivorPlanEnd + 1
@@ -631,6 +682,17 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
+      /*
+       * ⚠ THE LEAGUE ROW CARRIES ITS OWN COPY OF THE WAIVER TYPE, AND IT DEFAULTS TO "rolling".
+       * The engine reads `leagueWaiverSettings` (written below from `waiverDefaults`), but the
+       * commissioner's waiver panel and the league constitution read these columns. Left unset, a
+       * redraft league that runs FAAB told its commissioner "rolling" and hid the FAAB budget field.
+       * Zombie keeps its own override after this.
+       */
+      waiverType: waiverDefaults.waiver_type,
+      ...(waiverDefaults.waiver_type === 'faab' && typeof waiverDefaults.FAAB_budget_default === 'number'
+        ? { waiverBudget: waiverDefaults.FAAB_budget_default }
+        : {}),
       ...(formatId === 'zombie' ? { waiverType: 'fcfs', waiverHours: 0 } : {}),
       /*
        * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
@@ -959,6 +1021,17 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
     })
+    /*
+     * 🛑 THE LEAGUE COLUMN TOO. The taxi squad size has two stores (lib/taxi/taxiSlotsSync.ts): this
+     * config, and `League.taxiSlots`, which lineup validation, the rollover housekeeping and the rookie
+     * taxi placement read. Creation wrote only the config, so a new dynasty league said "4" in its
+     * settings and 0 on the column: no lineup save could put a player on the taxi squad, and drafted
+     * rookies stayed on the bench, until the commissioner re-saved the size (found re-walking a
+     * dynasty league, 2026-11-19). Plain dynasty only: devy and C2C size theirs on their own config.
+     */
+    if (formatId === 'dynasty') {
+      await tx.league.update({ where: { id: league.id }, data: { taxiSlots: taxiSlotsForCreate } })
+    }
   }
 
   /**

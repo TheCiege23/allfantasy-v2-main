@@ -83,4 +83,3 @@ function Value({ value, fieldKey, language, depth }: { value: unknown; fieldKey:
   return <span>{formatRecordValue(fieldKey, value, language)}</span>
 }
 
-export default DraftRecordView

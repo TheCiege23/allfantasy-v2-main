@@ -3,14 +3,7 @@
  * Uses existing sleeper-client; no duplicate fetch logic.
  */
 
-import {
-  getLeagueHistory,
-  getLeagueRosters,
-  getLeagueUsers,
-  getLeagueTransactions,
-  getPlayoffBracket,
-  type SleeperRoster,
-} from "@/lib/sleeper-client";
+import { getLeagueHistory, getLeagueRosters, getLeagueTransactions, getPlayoffBracket, type SleeperRoster } from "@/lib/sleeper-client";
 import type { HistoricalSeasonRef, NormalizedStandingRow, NormalizedTradeFact } from "./types";
 
 const DEFAULT_WEEKS = 18;
@@ -195,17 +188,3 @@ export async function fetchSleeperRosterToOwner(
   return map;
 }
 
-/**
- * Get users for a league (user_id -> display_name).
- */
-export async function fetchSleeperLeagueUsers(
-  platformLeagueId: string
-): Promise<Map<string, string>> {
-  const users = await getLeagueUsers(platformLeagueId);
-  const map = new Map<string, string>();
-  for (const u of users) {
-    const id = (u as any).user_id;
-    if (id) map.set(id, (u as any).display_name || (u as any).username || id);
-  }
-  return map;
-}

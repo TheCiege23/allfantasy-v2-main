@@ -18,7 +18,7 @@ const CHANNELS: { id: MatchupShareChannel; label: string }[] = [
   { id: 'discord', label: 'Discord' },
 ]
 
-export interface MatchupShareBarProps {
+interface MatchupShareBarProps {
   payload: MatchupSharePayload
   shareUrl: string
   captureId?: string

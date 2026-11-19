@@ -19,6 +19,8 @@ export interface ValuationContext {
   isSuperFlex: boolean;
   fantasyCalcPlayers?: FantasyCalcPlayer[];
   numTeams?: number;
+  /** Price rookie picks by overall position against the stored 12-team reference chart. */
+  largeLeagueRookiePicks?: boolean;
   rosterConfig?: LeagueRosterConfig;
   playerPositionOverrides?: Record<string, string>;
   /** League scoring; defaults to full PPR when the caller has no league context. */

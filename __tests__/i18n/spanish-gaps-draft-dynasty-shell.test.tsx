@@ -113,7 +113,7 @@ const TOP_BAR_EN = [
   'Big Screen Mode', 'Read-only board view for casting to a TV.', 'Set Draft Order', 'Set or edit the draft order',
   '2 pending trades', 'Refresh timer, queue, and board state', 'Draft Room Preferences', 'Room timer, automation, and presentation',
   'Commissioner control center', 'Commissioner Control Center', 'Start, pause, resume, picks, and automation',
-  'Resume Draft', 'Restart the draft timer', 'Run AI Pick', 'Trigger the orphan team drafter for the current pick',
+  'Resume Draft', 'Restart the draft timer', 'Run Chimmy pick', 'Trigger the orphan team drafter for the current pick',
   'Reset Timer', 'Undo Pick', 'Sync issue', 'Draft session poll failed several times in a row. The room keeps your last good snapshot; polls retry automatically.',
 ]
 

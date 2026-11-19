@@ -50,7 +50,7 @@ export const SLEEPER_PROVIDER_KEY = 'sleeper'
 // because provider data is untrusted and a missing field must produce a
 // MALFORMED refusal rather than an exception halfway through a sync.
 
-export type SleeperLeagueRaw = {
+type SleeperLeagueRaw = {
   league_id?: string
   name?: string
   season?: string
@@ -58,12 +58,12 @@ export type SleeperLeagueRaw = {
   total_rosters?: number
 }
 
-export type SleeperRosterRaw = {
+type SleeperRosterRaw = {
   roster_id?: number
   owner_id?: string | null
 }
 
-export type SleeperUserRaw = {
+type SleeperUserRaw = {
   user_id?: string
   display_name?: string
   username?: string
@@ -227,7 +227,7 @@ export type ExistingBinding = {
   readonly deletedAt: Date | null
 }
 
-export type ConnectPlan =
+type ConnectPlan =
   | { readonly kind: 'create'; readonly reason: string }
   | { readonly kind: 'reuse'; readonly bindingId: string; readonly reason: string }
   | { readonly kind: 'revive'; readonly bindingId: string; readonly reason: string }

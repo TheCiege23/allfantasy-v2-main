@@ -62,7 +62,7 @@ const SWIPE_AXIS_RATIO = 1.8
 /** A slow drag reads as reading, not as a swipe. */
 const SWIPE_MAX_MS = 700
 /** Where iOS and Android put their own back/forward edge gestures. A swipe starting here is theirs. */
-export const EDGE_GUARD_PX = 24
+const EDGE_GUARD_PX = 24
 
 /** Left swipe (finger moves left) shows what is to the right — the next league. */
 export function classifySwipe(g: { dx: number; dy: number; ms: number }): 'next' | 'prev' | null {

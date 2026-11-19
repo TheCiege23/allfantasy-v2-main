@@ -1,25 +1,25 @@
 import { resolveFallbackRoute } from "./FallbackRouteResolver"
 
-export type NoResultsContext =
+type NoResultsContext =
   | "search"
   | "dashboard_leagues"
   | "notifications"
   | "legacy_import"
 
-export interface NoResultsActionSpec {
+interface NoResultsActionSpec {
   id: string
   label: string
   href?: string
   action?: "clear_query" | "clear_filters"
 }
 
-export interface NoResultsState {
+interface NoResultsState {
   title: string
   description: string
   actions: NoResultsActionSpec[]
 }
 
-export interface ResolveNoResultsStateInput {
+interface ResolveNoResultsStateInput {
   context: NoResultsContext
   query?: string
   hasFilters?: boolean
@@ -49,7 +49,7 @@ export function resolveNoResultsState(
     return {
       title: "Search everything",
       description:
-        "Find leagues, players, tools, settings, AI actions, and bracket destinations in one place.",
+        "Find leagues, players, tools, settings, Chimmy actions, and bracket destinations in one place.",
       actions: [
         {
           id: "ask_chimmy",
@@ -81,7 +81,7 @@ export function resolveNoResultsState(
     return {
       title: "No notifications yet",
       description:
-        "When league events, mentions, and AI updates arrive, they will appear here.",
+        "When league events, mentions, and Chimmy updates arrive, they will appear here.",
       actions: [
         { id: "settings", ...resolveFallbackRoute("settings") },
         { id: "dashboard", ...resolveFallbackRoute("dashboard") },

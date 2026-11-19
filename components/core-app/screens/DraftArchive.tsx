@@ -16,8 +16,11 @@ import { DraftPhase4 } from './DraftPhase4';
 import { DraftResultsRefresh } from './DraftResultsRefresh';
 import { DraftRecordView } from './DraftRecordView';
 import '@/components/core-app/af-draft-archive.css';
+import '@/components/core-app/af-draft-hq-league-guide.css';
+import { draftHqLeagueGuideMessages } from '@/lib/core-app/messages/draftHqLeagueGuide';
+import { importedDraftHeadline } from '@/lib/core-app/draftHqLeagueGuide';
 type Choice = Omit<ArchiveChoice, 'createdAt' | 'total'>;
-export function DraftArchive({ choices, detail, leagueId, page, more, total, error, query = '', season = '', timelinePage = 1, asDraftHq = false }: {
+export function DraftArchive({ choices, detail, leagueId, page, more, total, error, query = '', season = '', timelinePage = 1, asDraftHq = false, platformName = null }: {
     choices: Choice[];
     detail: ArchiveDetail | null;
     leagueId?: string | null;
@@ -30,9 +33,27 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     timelinePage?: number;
     /** The league has no Draft HQ data of its own (its draft ran on the platform), so this archive IS the screen: it carries the title. */
     asDraftHq?: boolean;
+    /** The platform the draft runs on ("Sleeper"), for the Draft HQ headline; the page resolves it. */
+    platformName?: string | null;
 }) {
     const language = useOptionalLanguage().language, router = useRouter();
     const m = useMessages(draftScreensMessages);
+    const g = useMessages(draftHqLeagueGuideMessages);
+    /*
+     * As Draft HQ, the title says where this league's draft is (2026-11-13): "Drafting on Sleeper ·
+     * 38 picks made" rather than the word "Draft HQ" over a search form. The draft itself is made on the
+     * platform, so the intro says so; the record below is ours.
+     */
+    // The fallback name comes from the catalog — an inline language ternary here tripped __tests__/core-app/i18n-ternary-ratchet.
+    const where = platformName?.trim() || g.impPlatformFallback;
+    const hqHead = (() => {
+        if (!detail) return m.archiveHqTitle;
+        const h = importedDraftHeadline({ status: detail.choice.status, season: detail.choice.season }, detail.picks.length);
+        if (h.kind === 'drafting') return g.impDrafting(where, h.picks);
+        if (h.kind === 'done') return g.impDone(where, h.picks, h.season);
+        if (h.kind === 'before') return g.impBefore(where);
+        return g.impOther(h.status);
+    })();
     // The picker read "2026 · snake · complete · 1391441779609317376" (live /core, 2026-11-06). The provider's
     // draft id is only worth showing to tell apart two drafts that would otherwise read the same, and then
     // its last four digits do it; the full id stays in Timing and source details.
@@ -40,6 +61,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     const draftLabel = (c: { key: string; season: number | null; format: string; status: string; sourceId: string }) =>
         choices.some(o => o.key !== c.key && baseLabel(o) === baseLabel(c)) ? `${baseLabel(c)} · …${c.sourceId.slice(-4)}` : baseLabel(c);
     const [pickPage, setPickPage] = useState(0), [team, setTeam] = useState(''), [player, setPlayer] = useState('');
+    const [pickDetails, setPickDetails] = useState(false);
     useEffect(() => { setPickPage(0); setTeam(''); setPlayer(''); }, [detail?.choice.key, detail?.choice.leagueId]);
     const href = (key?: string, league = leagueId, nextPage = 1) => { const p = new URLSearchParams(); if (league)
         p.set('league', league); if (key)
@@ -62,7 +84,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     const timelineHref = (next: number) => href(detail?.choice.key, leagueId, page) + '&timelinePage=' + next;
     const sectionHelp = [m.archiveHelpSnapshot, m.archiveHelpClockTimeline, m.archiveHelpCorrections, m.archiveHelpTradePackages, m.archiveHelpExecutedTrades];
     return <section className="af-frame af-archive" aria-label={m.archiveDraftArchive}>
-  {asDraftHq && <header className="af-archive-hq"><h1 className="af-archive-hq-title">{m.archiveHqTitle}</h1>{detail && <p className="af-archive-hq-sub">{detail.choice.season ?? m.archiveUnknownSeason} · {detail.choice.sport} · {detail.choice.format} · <span className="af-archive-row-status" data-status={detail.choice.status}>{detail.choice.status}</span> · {detail.picks.length} {m.archivePicks}</p>}</header>}
+  {asDraftHq && <header className="af-archive-hq"><h1 className="af-archive-hq-title">{hqHead}</h1>{detail && <p className="af-archive-hq-sub">{detail.choice.season ?? m.archiveUnknownSeason} · {detail.choice.sport} · {detail.choice.format}</p>}{detail && <p className="af-archive-hq-intro">{g.impIntro(where)}</p>}</header>}
   <header><h2>{m.archiveDraftArchive} {help(m.archiveDraftIdentity, m.archiveHelpDraftIdentity)}</h2><p>{m.archiveDraftRecords(total)}</p></header>
   <details className="af-archive-search"><summary>{m.archiveSearchAndFilter}</summary><form action="/core/draft-hq" method="get"><input type="hidden" name="league" value={leagueId ?? ''}/><label>{m.archiveSearchLabel}<input name="archiveQuery" defaultValue={query} maxLength={120}/></label><label>{m.archiveSeason}<input name="archiveSeason" type="number" min={1900} max={2100} defaultValue={season}/></label><button>{m.archiveSearch}</button><Link href={leagueId ? '/core/draft-hq?league=' + encodeURIComponent(leagueId) : '/core/draft-hq'}>{m.archiveResetFilters}</Link></form></details>
   {leagueId && <label>{m.archiveIndividualDraft}<select aria-label={m.archiveSelectDraft} value={detail?.choice.key ?? ''} onChange={e => router.push(href(e.target.value))}><option value="">{m.archiveChooseADraft}</option>{detail && !choices.some(c => c.key === detail.choice.key) && <option value={detail.choice.key}>{draftLabel(detail.choice)}</option>}{choices.map(c => <option key={c.key} value={c.key}>{draftLabel(c)}</option>)}</select></label>}
@@ -83,8 +105,8 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
    {!detail.picks.length&&<p>{m.archiveNoSelections}</p>}
    <div className="af-archive-filters"><label>{m.archiveTeam}<select value={team} onChange={e => { setTeam(e.target.value); setPickPage(0); }}><option value="">{m.archiveAllTeams}</option>{teams.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>{m.archivePlayer}<input value={player} onChange={e => { setPlayer(e.target.value); setPickPage(0); }}/></label></div>
    <p>{m.archiveAdpComparison} {help(m.archiveAdpDifference, m.archiveHelpAdpDifference)}</p>
-   <h3>{m.archiveSelectionsAndOwnership} {help(m.archiveSelectionDetails, m.archiveHelpSelectionDetails)}</h3>
-   <div className="af-archive-table" tabIndex={0} role="region" aria-label={m.archiveArchivedPicks}><table style={{ '--af-cols': heads.filter(([, shown]) => shown).length } as CSSProperties}><thead><tr>{heads.filter(([, shown]) => shown).map(([c]) => <th key={c}>{c}</th>)}</tr></thead><tbody>{picks.slice(pickPage * 25, pickPage * 25 + 25).map(p => <tr key={p.id}><td>#{p.overall} <small>{m.archiveRound} {p.round} · {m.archiveOverall} #{p.overall}</small></td><td>{p.playerName}<small>{p.position} · {p.club ?? '—'}</small><small>{p.keeper ? m.archiveKeeper : ''}</small><details><summary>{m.archiveIdentityAndOwnerTime}</summary><p>{p.playerId ?? '—'} · {p.identityBasis}</p><p>{m.archiveOtcStarted}: {time(p.onClockAt ?? null)}</p><p>{m.archivePausedOtc}: {duration(p.pausedMs ?? null)}</p>{p.ownerTime && Object.entries(p.ownerTime).map(([owner, ms]) => <p key={owner}>{owner}: {duration(ms)}</p>)}</details></td><td>{p.teamName ?? p.rosterId ?? '—'}</td>{has.owner ? <td>{p.slot ?? '—'} / {p.originalTeamName ?? p.originalRosterId ?? '—'}</td> : has.slot && <td>{p.slot ?? '—'}</td>}{has.actor && <td>{p.actorName ?? '—'}</td>}{has.at && <td>{time(p.selectedAt)}</td>}{has.otc && <td>{duration(p.elapsedMs ?? null)} / {duration(p.activeMs)} / {p.allowanceSeconds == null ? '—' : p.allowanceSeconds + 's'}</td>}{has.price && <td>{p.amount ?? '—'} / {p.source ?? '—'}</td>}{has.adp && <td>{p.adp == null ? '—' : p.adp.toFixed(1)} / {p.adpDifference == null ? '—' : (p.adpDifference > 0 ? '+' : '') + p.adpDifference.toFixed(1)}<small>{p.adpSample == null ? '' : m.archiveSample + ': ' + p.adpSample}</small><small>{p.adpObservedAt ? time(p.adpObservedAt) : ''}</small></td>}</tr>)}</tbody></table></div>{hidden && <p className="af-archive-cols-note">{m.archiveColumnsHidden}</p>}
+   <div className="af-picks-head"><h3>{m.archiveSelectionsAndOwnership} {help(m.archiveSelectionDetails, m.archiveHelpSelectionDetails)}</h3><button type="button" className="af-pick-details-toggle" aria-pressed={pickDetails} onClick={() => setPickDetails(v => !v)}>{pickDetails ? m.archiveHidePickDetails : m.archiveShowPickDetails}</button></div>
+   <div className="af-archive-table" tabIndex={0} role="region" aria-label={m.archiveArchivedPicks}><table style={{ '--af-cols': heads.filter(([, shown]) => shown).length } as CSSProperties}><thead><tr>{heads.filter(([, shown]) => shown).map(([c]) => <th key={c}>{c}</th>)}</tr></thead><tbody>{picks.slice(pickPage * 25, pickPage * 25 + 25).map(p => <tr key={p.id}><td>#{p.overall} <small>{m.archiveRound} {p.round} · {m.archiveOverall} #{p.overall}</small></td><td>{p.playerName}<small>{p.position} · {p.club ?? '—'}</small><small>{p.keeper ? m.archiveKeeper : ''}</small>{pickDetails && <div className="af-pick-details" aria-label={m.archiveIdentityAndOwnerTime}><small>{p.playerId ?? '—'} · {p.identityBasis}</small><small>{m.archiveOtcStarted}: {time(p.onClockAt ?? null)}</small><small>{m.archivePausedOtc}: {duration(p.pausedMs ?? null)}</small>{p.ownerTime && Object.entries(p.ownerTime).map(([owner, ms]) => <small key={owner}>{owner}: {duration(ms)}</small>)}</div>}</td><td>{p.teamName ?? p.rosterId ?? '—'}</td>{has.owner ? <td>{p.slot ?? '—'} / {p.originalTeamName ?? p.originalRosterId ?? '—'}</td> : has.slot && <td>{p.slot ?? '—'}</td>}{has.actor && <td>{p.actorName ?? '—'}</td>}{has.at && <td>{time(p.selectedAt)}</td>}{has.otc && <td>{duration(p.elapsedMs ?? null)} / {duration(p.activeMs)} / {p.allowanceSeconds == null ? '—' : p.allowanceSeconds + 's'}</td>}{has.price && <td>{p.amount ?? '—'} / {p.source ?? '—'}</td>}{has.adp && <td>{p.adp == null ? '—' : p.adp.toFixed(1)} / {p.adpDifference == null ? '—' : (p.adpDifference > 0 ? '+' : '') + p.adpDifference.toFixed(1)}<small>{p.adpSample == null ? '' : m.archiveSample + ': ' + p.adpSample}</small><small>{p.adpObservedAt ? time(p.adpObservedAt) : ''}</small></td>}</tr>)}</tbody></table></div>{hidden && <p className="af-archive-cols-note">{m.archiveColumnsHidden}</p>}
    <nav><button disabled={pickPage === 0} onClick={() => setPickPage(v => v - 1)}>{m.archivePreviousPicks}</button><span>{picks.length} {m.archivePicks}</span><button disabled={(pickPage + 1) * 25 >= picks.length} onClick={() => setPickPage(v => v + 1)}>{m.archiveNextPicks}</button></nav>
    <DraftReferences references={detail.references}/>
    <DraftAnalysis report={detail.analysisReport} results={detail.resultsReport}/>
@@ -92,7 +114,6 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
        duplicate sibling keys made React append a fresh DraftPhase4 on every server refresh instead of
        reconciling — one language switch left five on Draft HQ, only the last one live (2026-10-06). */}
    <DraftPhase4 key={'phase4:' + detail.choice.key} detail={detail}/>
-   {detail.canRefreshResults && <DraftResultsRefresh key={'results:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
    {!detail.analysisReport && detail.analysis && <section aria-label={m.archiveDraftAnalysisCoverage}>
     <h3>{m.archiveDraftAnalysis} {help(m.archiveAnalysisBasis, m.archiveHelpAnalysisBasis)}</h3>
     <div className="af-archive-summary">
@@ -100,13 +121,17 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
      <p>{m.archiveResultsToDateGrade}<small>{detail.analysis.resultsToDate.coveredPicks}/{detail.analysis.totalPicks} {m.archiveVerifiedSelections}</small></p>
     </div>
    </section>}
+   <section className="af-archive-records" aria-label={m.archiveRecordsHeading}>
+   <h3>{m.archiveRecordsHeading}</h3>
+   {detail.canRefreshResults && <DraftResultsRefresh key={'results:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
    {[[m.archiveDraftTimeSnapshot, detail.snapshot], [m.archiveClockTimeline, detail.events], [m.archiveCommissionerCorrections, detail.corrections], [m.archiveTradePackages, detail.trades], [m.archiveExecutedTradesDuring, detail.playerTrades ?? []]].map(([title, data], index) => <details key={String(title)}><summary>{String(title)} {help(String(title), sectionHelp[index])}</summary><DraftRecordView value={data} language={coreLang(language)}/></details>)}
-   <nav aria-label={m.archiveTimelinePages}>
+   {(timelinePage > 1 || detail.eventsMore || detail.correctionsMore || detail.tradesMore || detail.playerTradesMore) && <nav aria-label={m.archiveTimelinePages}>
     {timelinePage > 1 && <Link href={timelineHref(timelinePage - 1)}>{m.archiveNewerRecords}</Link>}
     <span>{m.archiveTimelinePage} {timelinePage}</span>
     {(detail.eventsMore || detail.correctionsMore || detail.tradesMore || detail.playerTradesMore) && <Link href={timelineHref(timelinePage + 1)}>{m.archiveOlderRecords}</Link>}
-   </nav>
-   <p>{m.archiveTimelineNote}</p>
+   </nav>}
+   <p className="af-archive-records-note">{m.archiveTimelineNote}</p>
+   </section>
   </>}
  </section>;
 }

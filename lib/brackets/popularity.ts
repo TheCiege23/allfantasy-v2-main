@@ -1,22 +1,9 @@
 import { prisma } from "@/lib/prisma"
 
-type PopularityScope = "global" | "league"
-
 type RawPick = {
   nodeId: string
   teamName: string
   leagueId: string
-}
-
-type CountKey = {
-  nodeId: string
-  teamName: string
-}
-
-type LeagueCountKey = {
-  leagueId: string
-  nodeId: string
-  teamName: string
 }
 
 export function summarizeGlobalPopularity(picks: RawPick[]): Map<string, { total: number; perTeam: Map<string, number> }> {

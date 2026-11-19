@@ -19,6 +19,10 @@ import { resolveDraftRouteContext } from '@/lib/draft/resolve-draft-context'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { DraftBoard } from '@/components/draft/DraftBoard'
+import { loadDraftRoomLeagueFacts } from '@/lib/draft-room/loadDraftRoomLeagueFacts'
+import { normalizeLeagueConcept } from '@/lib/draft-room/leagueAccent'
+import { SeasonDraftAssistant } from '@/components/tournament/SeasonDraftAssistant'
+import { Suspense } from 'react'
 import { checkDraftPoolCacheFast, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 
 export const dynamic = 'force-dynamic'
@@ -90,7 +94,7 @@ export default async function DraftsByIdPage({
   // Run pool cache check concurrently with session snapshot build.
   // Triggers a background prewarm if cold so the pool has a head start
   // before the client fetches GET /draft/pool.
-  const [poolCacheResult, initialSnapshot] = await Promise.all([
+  const [poolCacheResult, initialSnapshot, leagueFacts] = await Promise.all([
     checkDraftPoolCacheFast(context.leagueId).catch(() => ({
       warm: false as const,
       source: 'missing' as const,
@@ -106,6 +110,14 @@ export default async function DraftsByIdPage({
       })
       return null
     }),
+    // Room v2 league note + snake salary-cap slot salaries. Never fails the page.
+    loadDraftRoomLeagueFacts({
+      leagueId: context.leagueId,
+      concept: normalizeLeagueConcept(context.leagueType, { isDynasty: context.isDynasty }),
+      draftType: context.draftType,
+      rounds: context.rounds,
+      teamCount: context.teamCount,
+    }).catch(() => null),
   ])
 
   console.warn('[drafts:snapshot]', {
@@ -140,6 +152,9 @@ export default async function DraftsByIdPage({
           : 'min-h-screen'
       }
     >
+      <Suspense fallback={null}>
+        <SeasonDraftAssistant leagueId={context.leagueId} userId={userId} />
+      </Suspense>
       <DraftBoard
         kind="live"
         draftId={context.draftId}
@@ -149,6 +164,8 @@ export default async function DraftsByIdPage({
         isDynasty={context.isDynasty}
         isCommissioner={context.isCommissioner}
         formatType={context.formatType}
+        leagueType={context.leagueType}
+        leagueFacts={leagueFacts}
         presentationVariant={
           !context.isDynasty &&
           context.routeType === 'snake' &&

@@ -5,7 +5,7 @@ import { Check, Copy, PencilLine, Plus, RefreshCcw } from 'lucide-react'
 import { CREATOR_LEAGUE_SPORTS } from '@/lib/creator-system/types'
 import type { CreatorLeagueDto, CreatorProfileDto } from '@/lib/creator-system/types'
 
-export interface CreatorToolsPanelProps {
+interface CreatorToolsPanelProps {
   creator: CreatorProfileDto
   leagues: CreatorLeagueDto[]
   baseUrl?: string
@@ -433,7 +433,7 @@ export function CreatorToolsPanel({
                       />
                     </label>
                     <label className="block lg:col-span-2">
-                      <span className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted)' }}>AI commentary</span>
+                      <span className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted)' }}>Chimmy commentary</span>
                       <textarea
                         value={editForm.latestCommentary}
                         onChange={(event) => setEditForm((current) => ({ ...current, latestCommentary: event.target.value }))}

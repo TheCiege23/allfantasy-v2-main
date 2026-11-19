@@ -5,9 +5,32 @@ import { defineMessages } from '@/lib/i18n/messages'
  * screen printed before the move, byte for byte, in both languages — this is a relocation, not a
  * rewrite. Strings the screen sends through `coreUiCopy` stay there.
  */
+const p1 = (n: number) => n.toFixed(1)
+type HeadState = 'none' | 'live' | 'final'
+
 export const yourWeekLeagueMessages = defineMessages({
   en: {
     period: 'Period',
+    /** 2026-11-14: "Week 10" for a weekly sport; other sports keep "Period". */
+    week: 'Week',
+    yourWeek: 'Your week',
+    /**
+     * The h1 (2026-11-14): your game, in words. "Your week" said where you were; the score sat in the card.
+     */
+    headline: (when: string, opp: string, state: HeadState, you: number, them: number) =>
+      state === 'none'
+        ? `${when}: you vs ${opp}`
+        : state === 'final'
+          ? you > them
+            ? `${when}: you beat ${opp} ${p1(you)} to ${p1(them)}`
+            : you < them
+              ? `${when}: you lost to ${opp} ${p1(you)} to ${p1(them)}`
+              : `${when}: you tied ${opp} at ${p1(you)}`
+          : you > them
+            ? `${when}: you lead ${opp} ${p1(you)} to ${p1(them)}`
+            : you < them
+              ? `${when}: you trail ${opp} ${p1(you)} to ${p1(them)}`
+              : `${when}: you’re tied with ${opp} at ${p1(you)}`,
     youInitials: 'YOU',
     currentScoreboard: 'Current scoreboard',
     won: 'Won',
@@ -32,11 +55,33 @@ export const yourWeekLeagueMessages = defineMessages({
     rivalryYouLead: 'You lead the series',
     rivalryTheyLead: (opponentName: string | null) => `${opponentName ?? 'They'} lead the series`,
     rivalryEven: 'Dead even',
-    rivalrySentence: (lead: string, meetings: string, margin: string) =>
-      `${lead} over ${meetings}. Your signed scoring advantage: ${margin} points per meeting.`,
+    /** 2026-11-14: the points gap in words — it was "Your signed scoring advantage: -24.0 points per meeting." */
+    rivalrySentence: (lead: string, meetings: string, points: string) => `${lead} over ${meetings}, ${points}.`,
+    rivalryPoints: (avgMargin: number) =>
+      avgMargin <= -0.05
+        ? `and they’ve outscored you by ${p1(Math.abs(avgMargin))} a game`
+        : avgMargin >= 0.05
+          ? `and you’ve outscored them by ${p1(avgMargin)} a game`
+          : 'and you’re even on points',
   },
   es: {
     period: 'Período',
+    week: 'Semana',
+    yourWeek: 'Tu semana',
+    headline: (when, opp, state, you, them) =>
+      state === 'none'
+        ? `${when}: tú contra ${opp}`
+        : state === 'final'
+          ? you > them
+            ? `${when}: le ganaste a ${opp} ${p1(you)} a ${p1(them)}`
+            : you < them
+              ? `${when}: perdiste contra ${opp} ${p1(you)} a ${p1(them)}`
+              : `${when}: empataste con ${opp} a ${p1(you)}`
+          : you > them
+            ? `${when}: le ganas a ${opp} ${p1(you)} a ${p1(them)}`
+            : you < them
+              ? `${when}: pierdes contra ${opp} ${p1(you)} a ${p1(them)}`
+              : `${when}: empatas con ${opp} a ${p1(you)}`,
     youInitials: 'TÚ',
     currentScoreboard: 'Marcador actual',
     won: 'Victoria',
@@ -62,8 +107,13 @@ export const yourWeekLeagueMessages = defineMessages({
     rivalryYouLead: 'Lideras la serie',
     rivalryTheyLead: (opponentName) => `${opponentName ?? 'Tu rival'} lidera la serie`,
     rivalryEven: 'La serie está empatada',
-    rivalrySentence: (lead, meetings, margin) =>
-      `${lead} tras ${meetings}. Tu diferencia de puntuación media: ${margin} puntos por encuentro.`,
+    rivalrySentence: (lead, meetings, points) => `${lead} tras ${meetings}, ${points}.`,
+    rivalryPoints: (avgMargin) =>
+      avgMargin <= -0.05
+        ? `y te superan por ${p1(Math.abs(avgMargin))} puntos por partido`
+        : avgMargin >= 0.05
+          ? `y los superas por ${p1(avgMargin)} puntos por partido`
+          : 'y van parejos en puntos',
   },
 })
 

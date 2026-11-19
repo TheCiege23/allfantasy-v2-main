@@ -11,8 +11,10 @@ import {
   RANK_XP_PER_IMPORT_WIN,
   RANK_XP_PER_PLAYOFF_APPEARANCE,
 } from '@/lib/rank/rank-xp-constants'
-import { SCORE_WEIGHTS } from '@/lib/core-app/rankingsEngine'
-import type { YourRank } from '@/lib/core-app/rankings'
+import type { RankingsData, YourRank } from '@/lib/core-app/rankings'
+import type { RankingsHeadline } from '@/lib/core-app/rankingsGuide'
+import { rankingsGuideMessages } from '@/lib/core-app/messages/rankingsGuide'
+import { headlineText, introText } from '@/components/core-app/rankings/RankingsGuide'
 
 /**
  * Rankings hero (redraft Rankings board, 2026-11-01): eyebrow, title and the one-sentence promise
@@ -28,18 +30,31 @@ export function RankingsHero({
   computedLine,
   actions,
   you,
-  community,
+  headline,
+  scope,
+  belowHead,
   showLevel,
 }: {
-  /** "Calculated … from N ranked managers" — formatted by the screen. */
-  computedLine: ReactNode
-  actions: ReactNode
+  /**
+   * "Calculated … from N ranked managers" — formatted by the screen. Null on the community board, whose
+   * own line under the board says when it was worked out (2026-11-14).
+   */
+  computedLine: ReactNode | null
+  actions: ReactNode | null
   you: YourRank
-  /** Your place on the Community board, when you are on it. */
-  community: { rank: number; of: number } | null
+  /**
+   * 2026-11-14: the h1 says where you stand on the tab you are on (lib/core-app/rankingsGuide.ts). It
+   * used to be "Rankings" over two sentences, with "#18 of 19 · Community" and your level as pills —
+   * the rank said again in a box, the board heading and the row below, the level again in the card.
+   */
+  headline: RankingsHeadline
+  scope: RankingsData['scope']
+  /** Under the intro: how your place has moved and what to do about it (RankingsYouRow). */
+  belowHead?: ReactNode
   showLevel: boolean
 }) {
   const m = useMessages(rankingsHeroMessages)
+  const g = useMessages(rankingsGuideMessages)
   const n = (v: number) => v.toLocaleString(getAppIntlLocale())
   const earn: Array<[string, number]> = [
     [m.earnWin, RANK_XP_PER_IMPORT_WIN],
@@ -57,34 +72,18 @@ export function RankingsHero({
           titleRowClassName="af-rk-hero-titlerow"
           titleClassName="af-rk-title"
           subClassName="af-rk-hero-intro"
-          eyebrow={m.eyebrow}
-          title="Rankings"
-          titleAside={<div className="af-rk-headact">{actions}</div>}
-          sub={
-            <>
-              {m.intro1}
-              <strong>{m.why}</strong>
-              {m.intro2}
-            </>
-          }
+          eyebrow={g.eyebrow}
+          title={headlineText(headline, g)}
+          /*
+            After the intro, not beside the title: a headline that says where you stand is long enough to
+            wrap, and the buttons then landed between it and its sentence. Absent when the row under the
+            intro (RankingsYouRow) carries them.
+          */
+          actions={actions ? <div className="af-rk-headact">{actions}</div> : undefined}
+          sub={introText(scope, g)}
         />
-        {community || you ? (
-          <ul className="af-rk-pills" aria-label={m.summaryAria} data-testid="rk-pills">
-            {community ? (
-              <li>
-                <b>#{community.rank}</b>
-                <span>{m.communityPill(n(community.of))}</span>
-              </li>
-            ) : null}
-            {you ? (
-              <li>
-                <b>{you.level}</b>
-                <span>{m.levelPill(you.levelName)}</span>
-              </li>
-            ) : null}
-          </ul>
-        ) : null}
-        <p className="af-rk-sub">{computedLine}</p>
+        {belowHead}
+        {computedLine ? <p className="af-rk-sub">{computedLine}</p> : null}
       </div>
 
       {showLevel && you ? (
@@ -122,52 +121,19 @@ export function RankingsHero({
   )
 }
 
-const LEGEND: Array<{ key: keyof typeof SCORE_WEIGHTS; tone: number }> = [
-  { key: 'winRate', tone: 1 },
-  { key: 'scoring', tone: 2 },
-  { key: 'titles', tone: 3 },
-  { key: 'playoffs', tone: 4 },
-]
-
 /**
- * The Community board's head: what the board is, how many it ranks, and — on Overall only, the one
- * board scored as a blend — the score equation with each component's published weight.
+ * The Community board's head: what the board is, in one sentence (2026-11-14). The population line and
+ * your rank moved to the line under the board and the headline; the weight legend moved into "How this
+ * board is scored" under it (RankingsBoardFoot) — each was said twice.
  */
-export function RankingsBoardHead({
-  shown,
-  population,
-  you,
-  overall,
-}: {
-  shown: number
-  population: number
-  you: { rank: number; of: number } | null
-  overall: boolean
-}) {
+export function RankingsBoardHead() {
   const m = useMessages(rankingsHeroMessages)
   return (
     <div className="af-rk-boardhead" data-testid="rk-boardhead">
       <div className="af-rk-boardhead-main">
         <h2 className="af-rk-boardhead-title">{m.boardTitle}</h2>
         <p className="af-rk-boardhead-explain">{m.boardExplain}</p>
-        <p className="af-rk-boardhead-pop">
-          <span>{m.boardPopulation(shown, population)}</span>
-          {you ? <span>{m.boardYou(you.rank, you.of)}</span> : null}
-        </p>
       </div>
-      {overall ? (
-        <div className="af-rk-legend">
-          <span className="af-rk-legend-eq">{m.scoreEq}</span>
-          <ul aria-label={m.legendAria}>
-            {LEGEND.map((l) => (
-              <li key={l.key} data-tone={l.tone}>
-                <i aria-hidden="true" />
-                {m[l.key]} <b>{Math.round(SCORE_WEIGHTS[l.key] * 100)}%</b>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </div>
   )
 }

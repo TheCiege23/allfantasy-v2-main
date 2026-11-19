@@ -74,6 +74,33 @@ describe("MlbBracketBoard", () => {
     vi.restoreAllMocks()
   })
 
+  it("shows each CFP team's live score on its own row, including zero", () => {
+    const games = buildPlayoffTemplate({ sport: "ncaaf", seasonYear: 2026, isTestMode: false }).map((game) => ({ ...game, id: `s${game.seriesNumber}` }))
+    games[0] = { ...games[0], homeTeamName: "Oregon", awayTeamName: "Georgia", status: "in_progress", liveHomeScore: 7, liveAwayScore: 0 }
+    const view = buildView({ series: games })
+    view.challenge = { ...view.challenge, sport: "ncaaf", isTestMode: false }
+    render(<MlbBracketBoard view={view} onViewChange={() => {}} />)
+    const matchup = within(card(games[0].seriesNumber))
+    expect(within(matchup.getByText("Oregon").closest("button")!).getByText("7")).toBeTruthy()
+    expect(within(matchup.getByText("Georgia").closest("button")!).getByText("0")).toBeTruthy()
+  })
+
+  it("shows a fresh reversed provider matchup beside the correct CFP teams", async () => {
+    const now = Date.now()
+    const startsAt = new Date(now - 30 * 60_000).toISOString()
+    const games = buildPlayoffTemplate({ sport: "ncaaf", seasonYear: 2026, isTestMode: false }).map((game) => ({ ...game, id: `s${game.seriesNumber}` }))
+    games[0] = { ...games[0], homeTeamName: "Oregon", awayTeamName: "Georgia", startsAt, status: "scheduled" }
+    const view = buildView({ series: games })
+    view.challenge = { ...view.challenge, sport: "ncaaf", isTestMode: false }
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ scores: [{ home: "Georgia", away: "Oregon", homeScore: 14, awayScore: 0, startsAt, fetchedAt: new Date(now).toISOString() }] }) }))
+    try {
+      render(<MlbBracketBoard view={view} onViewChange={() => {}} />)
+      const matchup = within(card(games[0].seriesNumber))
+      await waitFor(() => expect(within(matchup.getByText("Georgia").closest("button")!).getByText("14")).toBeTruthy())
+      expect(within(matchup.getByText("Oregon").closest("button")!).getByText("0")).toBeTruthy()
+    } finally { vi.unstubAllGlobals() }
+  })
+
   it("renders all eleven series, both leagues and the champion slot", () => {
     render(<MlbBracketBoard view={buildView()} onViewChange={() => {}} />)
     for (let n = 1; n <= 11; n += 1) {

@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { prisma } from "@/lib/prisma"
 import { getAiOpponentsSettings, mergeAiOpponentsSettings } from "@/lib/ai/opponents/leagueSettings"
 import type { AiOpponentsLeagueSettings } from "@/lib/ai/opponents/types"
@@ -13,11 +13,8 @@ export async function GET(_req: Request, props: { params: Promise<{ leagueId: st
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({
     where: { id: params.leagueId },
@@ -35,11 +32,8 @@ export async function PATCH(req: Request, props: { params: Promise<{ leagueId: s
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as Partial<AiOpponentsLeagueSettings>
   const league = await prisma.league.findUnique({

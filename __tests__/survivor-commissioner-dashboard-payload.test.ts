@@ -42,7 +42,7 @@ const {
     leagueTeam: { count: vi.fn() },
     redraftTradeProposal: { count: vi.fn() },
     exileIsland: { findUnique: vi.fn() },
-    survivorChallenge: { count: vi.fn() },
+    survivorChallenge: { count: vi.fn(), findMany: vi.fn() },
     survivorCommissionerAction: { findFirst: vi.fn() },
     survivorIdol: { findMany: vi.fn() },
     survivorPlayer: { findMany: vi.fn() },
@@ -113,6 +113,8 @@ vi.mock('@/lib/survivor/survivorAccessControl', () => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma }))
+const rewards = vi.hoisted(() => ({ list: vi.fn() }))
+vi.mock('@/lib/survivor/survivorRewardEngine', () => ({ listSurvivorRewards: rewards.list }))
 
 import { buildSurvivorCommissionerDashboard } from '@/lib/survivor/buildSurvivorCommissionerDashboard'
 
@@ -170,6 +172,8 @@ describe('survivor commissioner dashboard payload', () => {
     prisma.redraftTradeProposal.count.mockResolvedValue(0)
     prisma.exileIsland.findUnique.mockResolvedValue({ isActive: false })
     prisma.survivorChallenge.count.mockResolvedValue(0)
+    prisma.survivorChallenge.findMany.mockResolvedValue([])
+    rewards.list.mockResolvedValue([])
     prisma.survivorCommissionerAction.findFirst.mockResolvedValue(null)
     prisma.survivorIdol.findMany.mockResolvedValue([])
     prisma.survivorPlayer.findMany.mockResolvedValue([])
@@ -201,6 +205,22 @@ describe('survivor commissioner dashboard payload', () => {
     expect(result.todo.items[0]).toMatchObject({ tone: 'action', title: 'Fill 11 open seats' })
     expect(result.operations.readinessIssues[0]).toBe('11 manager seats still need to be claimed.')
     expect(prisma.survivorAuditEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ leagueId: 'league-1', action: 'commissioner_alert_sent' }) }))
+  })
+
+  it('a hand-scored challenge awaiting its result and a reward awaiting its winner reach the to-do list', async () => {
+    const { validateChallengeDraft } = await import('@/lib/survivor/survivorChallengeBuilderModel')
+    const draft = validateChallengeDraft({
+      title: 'T', question: 'Q?', kind: 'custom_choice', options: ['A', 'B'], scope: 'tribe', week: 9,
+      opensAt: '2026-11-01T10:00', locksAt: '2026-11-01T20:00', prizes: [{ place: 1, rewards: [{ type: 'faab_grant', amount: 20 }] }],
+    }, { now: new Date('2026-11-01T15:00:00Z'), currentWeek: 9, merged: false, lang: 'en', faabWeeklyCap: 40, otherFaabThisWeek: 0 })
+    if (!draft.ok) throw new Error(draft.error.message)
+    prisma.survivorChallenge.findMany.mockResolvedValue([{ configJson: draft.draft.config }])
+    rewards.list.mockResolvedValue([{ status: 'awaiting_choice' }, { status: 'applied' }])
+    prisma.leagueTeam.count.mockResolvedValue(12)
+    prisma.draftSession.findUnique.mockResolvedValue({ id: 'draft-1', status: 'completed', rounds: 12, teamCount: 12, timerSeconds: 90, _count: { picks: 144 } })
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'user-1', 'u@example.com')
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.todo.items.map(item => [item.id, item.tone])).toEqual([['settle_challenges', 'action'], ['rewards_awaiting_choice', 'heads_up']])
   })
 
   it('enriches tribes with extracted emoji and returns shell metadata', async () => {

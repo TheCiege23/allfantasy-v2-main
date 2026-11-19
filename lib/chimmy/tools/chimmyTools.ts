@@ -22,6 +22,7 @@ import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import type { FaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
 import type { MatchupSettleRun } from '@/lib/chimmy/matchupPreviewGrounding'
 import { SUPERSEDING_TOOLS } from '@/lib/chimmy/answerPolish'
+import { cleanSearchTerm, findStation, stationMenu } from '@/lib/chimmy/musicCards'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -62,6 +63,20 @@ export type ChimmyToolContext = {
    */
   leagueId: string | null
   userId: string | null
+  /**
+   * The user's Chimmy depth (`lib/chimmy/chimmyDepth.ts`). 'free' refuses the AF Pro tools in the
+   * executor itself, so the gate never rests on the model choosing not to call one. Absent = 'free':
+   * a caller that does not say which plan the user holds gets the free toolset, never Pro on a guess.
+   */
+  depth?: import('@/lib/chimmy/chimmyDepth').ChimmyDepthTier
+  /**
+   * The AF Pro tools this answer reached for and the executor REFUSED (free plan). The route turns it
+   * into `meta.proUpsell` — the "AF Pro adds …" line and upgrade button under the answer — so the
+   * button rests on a refusal the code made, never on what the model wrote.
+   */
+  proToolsRefused?: string[]
+  /** Set when `recall_past_chats` found earlier messages, for the "From your past chats" chip. */
+  recalledPastChats?: boolean
   currentQuestion?: string
   portfolioBlocked?: boolean
   /**
@@ -77,6 +92,15 @@ export type ChimmyToolContext = {
    * tools say so instead of promising one.
    */
   actionCards?: ChimmyActionCard[]
+  /**
+   * The /mock-draft room's board, sent by the browser with the question (stage 3 of drafts). When set,
+   * the draft tools answer from it — a practice mock has no league and no draft row on the server.
+   */
+  mockDraftBoard?: import('@/lib/mock-draft/mockChimmyBoard').MockDraftBoard | null
+  /** Queue changes proposed for that mock; the room applies one only when the user taps Confirm. */
+  mockQueueProposals?: import('@/lib/mock-draft/mockChimmyBoard').MockQueueProposal[]
+  /** The one music card for this answer (play a station or a search, or stop); the user's tap plays it. */
+  musicCards?: import('@/lib/chimmy/musicCards').MusicCard[]
   /**
    * Every trade letter the one trade engine gave during this answer, collected so the route can check
    * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
@@ -113,6 +137,10 @@ export type ChimmyToolRun = { tool: string; leagueId: string }
 
 /** More cards than this in one answer is a model looping, not a user deciding. */
 export const MAX_ACTION_CARDS_PER_ANSWER = 3
+
+/** Prefixed to a lineup answer the weekly-feed tool gave because My Team had no NFL lineup to read. */
+const FEED_FALLBACK_NOTE =
+  'NOTE: My Team could not load this lineup, so this answer uses the weekly projection feed instead. If the user compares it with the My Team screen, say the numbers come from a different source.\n'
 
 /** One engine-made start/sit call: the pick, the player it was picked over, and the week. */
 export type ChatStartCall = {
@@ -167,6 +195,21 @@ export const CHIMMY_TOOL_SPECS = [
       name: 'get_league_trade_activity',
       description: 'Read trade-block listings, your pending incoming proposals and completed trade history in the selected league. Use for trade offers, trade-block targets and whether a trade makes sense for this user. Also call get_my_roster for their team and scoring before recommending a trade. Respect missing data and historical snapshot labels. External private offers may not be available; never interpret missing offers as none existing.',
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_manager_record',
+      description:
+        "A leaguemate's record in the league in scope, as facts: how many trades they have made and which positions they took on or sent away, their waiver claims and FAAB left this season, and what they took in this league's past drafts. Use for 'what does Mike usually do in trades', 'is Sam active on waivers', 'how much FAAB does everyone have', 'who trades the most here'. Name the manager (owner or team name) for one full record; leave it out for a one-line summary of every other manager. Part of Competitive Edge: without the plan it says so, and you must not describe anyone's habits yourself. Facts only — never label a manager or predict what they will do.",
+      parameters: {
+        type: 'object',
+        properties: {
+          manager: { type: 'string', description: "The manager's name or team name, as the user said it. Omit for every manager." },
+        },
+        required: [],
+      },
     },
   },
   {
@@ -251,7 +294,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_value',
       description:
-        "What ONE named player is worth on the AllFantasy 0-10000 value scale — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. Returns long-term asset value for TRADING, not a weekly points projection and not a start/sit ranking. Only a few hundred players carry a published value; it says so plainly when there is no row, and a miss is NOT evidence the player is worthless.",
+        "What ONE named player is worth — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. In an NBA league in scope it returns that league's own value: fantasy points (or category score) over the best free agent, rest of season, plus a dynasty value in a dynasty league — the same pricing the Trade Center grades with. Otherwise it returns the player's NFL market value — the SAME number his player card shows — on this league's own chart (dynasty or redraft, one-QB or superflex), or the cross-league chart with no league in scope: 0-10000, long-term asset value for TRADING, with his rank and 7-day move. Kickers, defenders and deep reserves are often unpriced, and a miss is NOT evidence the player is worthless. Never a weekly points projection or a start/sit ranking.",
       parameters: {
         type: 'object',
         properties: {
@@ -297,7 +340,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'explain_value',
       description:
-        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league.",
+        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league. Football only on that engine: in an NBA league in scope it explains that league's own value instead (per game against the best free agent, times games left).",
       parameters: {
         type: 'object',
         properties: {
@@ -356,8 +399,33 @@ export const CHIMMY_TOOL_SPECS = [
     type: 'function' as const,
     function: {
       name: 'get_current_draft_board',
-      description: 'Read the current draft board, pick order and this manager’s draft recommendation when available. Use for who to draft next, backup picks, and who is on the clock.',
+      description: 'Read the selected league’s draft — live, paused, scheduled or finished, native or mirrored from Sleeper: the board, who is on the clock and the time left on the pick, this manager’s picks so far and open positions, their queue, their next pick, and the Draft OS recommendation. In an auction: who is on the block, the bid, every team’s money left, and this manager’s max bid. Use for who to draft next, backup picks, "how long do I have", "what do I still need", and any auction question.',
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_draft_pick_outlook',
+      description: 'AF Pro. In a live or mock snake or linear draft: which of this manager’s targets (their queue plus the Draft OS shortlist) are likely GONE before their next pick, which are a toss-up and which should still be there — judged by market ADP and the open starting slots of the teams picking first, plus those managers’ league draft history when the plan includes it. Use for "will X make it back to me", "who should I queue", "is my queue realistic".',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_draft_queue_change',
+      description: 'Prepare a CONFIRM CARD that changes this manager’s own draft queue in the selected league (or the mock draft they are asking from): add players (at the top or the bottom), move a queued player to the top (add them with position "top"), or take players off. It changes NOTHING until the user taps Confirm, and it NEVER makes a pick — say exactly that. Use only when the user asks to queue, unqueue or reorder players. Names are checked against the draft room’s player pool; already-drafted players are skipped.',
+      parameters: {
+        type: 'object',
+        properties: {
+          add: { type: 'array', items: { type: 'string' }, description: 'Players to add (or move), by name. Up to 8.' },
+          remove: { type: 'array', items: { type: 'string' }, description: 'Queued players to take off, by name. Up to 8.' },
+          position: { type: 'string', enum: ['top', 'bottom'], description: '"top" = next in line; "bottom" (default) = after everyone already queued.' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -630,6 +698,24 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'suggest_counter_offer',
+      description:
+        "Finds counter-offers for ONE trade offer waiting on the user's answer, in the league in scope: each asks the other team for one more player, re-graded as a whole package by the league's own grader (the Trade Center's counters). Use for 'what should I counter with', 'how do I make this fair', 'what else should I ask for'. offer_id is the id printed beside the offer in the pending trades. Never make up a counter yourself; if this returns none, say so.",
+      parameters: {
+        type: 'object',
+        properties: {
+          offer_id: {
+            type: 'string',
+            description: 'The id shown beside the offer in the pending incoming trades.',
+          },
+        },
+        required: ['offer_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'find_trade_ideas',
       description:
         "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. Set goal and include_picks whenever the user says so — 'win now', 'contend', 'using my picks', 'a 2nd instead of my 1st' are search terms, not flavour. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
@@ -818,6 +904,63 @@ export const CHIMMY_TOOL_SPECS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'propose_league_rule_change',
+      description:
+        "COMMISSIONERS ONLY, AllFantasy-hosted leagues only. Prepares a change to the league's settings and shows a CONFIRM CARD listing each setting before → after — nothing is saved unless the commissioner taps Confirm. Use when a commissioner asks to change: the league name, waiver type, FAAB budget, minimum FAAB bid, trade review period, trade deadline, number of playoff teams, playoff start week, or IR slots. Pass only the settings they asked to change, with the new value. One card covers one area of the settings page (general, waivers, trades, playoffs, roster); for changes in two areas, call this once per area. Scoring, roster slot layout, draft setup and league size cannot be changed here — point them to the league's Settings page. It refuses, and says why, for anyone who is not the commissioner and for imported leagues (whose settings belong to their platform).",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'New league name.' },
+          waiver_type: { type: 'string', enum: ['faab', 'rolling', 'reverse_standings'], description: 'New waiver type.' },
+          waiver_budget: { type: 'number', description: 'New FAAB budget per team, in dollars (1-10000).' },
+          waiver_min_bid: { type: 'number', description: 'New minimum FAAB bid, in dollars (0-100).' },
+          trade_review_hours: { type: 'number', description: 'New trade review period in hours (0-168; 0 = no review).' },
+          trade_deadline_week: { type: 'number', description: 'New trade deadline week (1-18), or 0 for no deadline.' },
+          playoff_teams: { type: 'number', description: 'New number of playoff teams (2 up to the league size).' },
+          playoff_start_week: { type: 'number', description: 'New week the playoffs start (10-18).' },
+          ir_slots: { type: 'number', description: 'New number of IR slots per team (0-10).' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'play_music',
+      description: `Prepares a music card for the AllFantasy music player. Use when the user asks to play, put on or stop music or a podcast ("play some hype music", "put on a football podcast", "play Drake", "stop the music"). It plays NOTHING by itself: the card plays only when the user taps it. Pass EXACTLY ONE of: station (an AllFantasy station id), search (an artist, song or album to find on YouTube), or stop=true. Prefer a station when the request is a mood or genre. Stations: ${stationMenu()}.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          station: { type: 'string', description: 'An AllFantasy station id from the list.' },
+          search: { type: 'string', description: 'An artist, song or album to search YouTube for, e.g. "Drake".' },
+          stop: { type: 'boolean', description: 'true to stop whatever is playing.' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'recall_past_chats',
+      description: 'AF Pro. Search the signed-in user\'s OWN earlier Chimmy conversations (any league, any day) for what was discussed — e.g. "what did you tell me about Bijan last week", "did we talk about trading my WR", "remind me what you recommended". Returns dated excerpts of matching messages, newest first. Use only for questions about past conversations; the current conversation is already in context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Words to look for: player, team, topic or decision (e.g. "Bijan trade").' },
+          limit: { type: 'number', description: 'How many matching messages to return, 1-12. Default 6.' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    },
+  },
 ] as const
 
 /*
@@ -856,6 +999,33 @@ export async function executeChimmyTool(
 ): Promise<string> {
   const args = (rawArgs && typeof rawArgs === 'object' ? rawArgs : {}) as Record<string, unknown>
 
+  // AF Pro tools run only for a plan that includes Chimmy — refused here, before any work, whatever
+  // the model asked for (lib/chimmy/chimmyDepth.ts).
+  {
+    const { isProOnlyChimmyTool, proOnlyToolMessage } = await import('@/lib/chimmy/chimmyDepth')
+    if (isProOnlyChimmyTool(name) && ctx.depth !== 'pro') {
+      ;(ctx.proToolsRefused ??= []).push(name)
+      return proOnlyToolMessage(name)
+    }
+  }
+
+  // A PRACTICE MOCK (stage 3 of drafts): the room sent its board, so the draft tools answer from it.
+  // After the AF Pro gate on purpose — the outlook stays AF Pro in a mock too.
+  if (ctx.mockDraftBoard && (name === 'get_current_draft_board' || name === 'get_draft_pick_outlook' || name === 'propose_draft_queue_change')) {
+    const mock = await import('@/lib/chimmy/mockDraftGrounding')
+    if (name === 'get_current_draft_board') return mock.mockDraftBoardText(ctx.mockDraftBoard)
+    if (name === 'get_draft_pick_outlook') return mock.mockPickOutlook(ctx.mockDraftBoard)
+    if (!ctx.mockQueueProposals) {
+      return 'This chat surface cannot show a confirm card, so nothing was prepared. Tell the user to change their queue in the mock room. Do not say it was changed.'
+    }
+    if (ctx.mockQueueProposals.length > 0) {
+      return 'There is already a queue card in this answer; no second one was made. Put every change in one card.'
+    }
+    const outcome = mock.proposeMockQueueChange(ctx.mockDraftBoard, args)
+    if (outcome.ok) ctx.mockQueueProposals.push(outcome.proposal)
+    return outcome.text
+  }
+
   // Only with a league bound: without one these tools answer NO_LEAGUE and computed nothing.
   if (ctx.toolRuns && ctx.leagueId && ctx.userId && (SUPERSEDING_TOOLS as readonly string[]).includes(name)) {
     ctx.toolRuns.push({ tool: name, leagueId: ctx.leagueId })
@@ -863,6 +1033,41 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      /*
+       * Music (2026-11-16): a card, never playback. No league, no plan gate, no server write — the
+       * player is in the user's browser and starts only from their tap on the card.
+       */
+      case 'play_music': {
+        if (!ctx.musicCards) {
+          return "This chat surface cannot show a music card, so nothing was prepared. Tell the user to open the Music tab in the chat panel and pick a station there. Do not say anything is playing."
+        }
+        if (ctx.musicCards.length > 0) return 'There is already a music card in this answer; no second one was made.'
+        const asks = [args.station != null && args.station !== '', args.search != null && args.search !== '', args.stop === true].filter(Boolean).length
+        if (asks !== 1) return 'Pass exactly one of: station, search, or stop=true. Nothing was prepared.'
+        if (args.stop === true) {
+          ctx.musicCards.push({ kind: 'stop' })
+          return 'A "Stop music" card is ready under your answer; the music stops when the user taps it. Say that, and never say it has stopped.'
+        }
+        if (args.station != null && args.station !== '') {
+          const station = findStation(args.station)
+          if (!station) return `There is no station "${String(args.station)}". Pick one from the list, or use search for an artist or song. Nothing was prepared.`
+          ctx.musicCards.push({ kind: 'station', stationId: station.id, label: station.label })
+          return `A "${station.label}" card is ready under your answer; it starts playing when the user taps Play. Say that in one line, and never say it is playing.`
+        }
+        const term = cleanSearchTerm(args.search)
+        if (!term) return 'The search was empty. Nothing was prepared.'
+        ctx.musicCards.push({ kind: 'search', term })
+        return `A card to play "${term}" from YouTube is ready under your answer; one tap finds it and starts playing. Say that in one line, and never say it is playing.`
+      }
+
+      case 'recall_past_chats': {
+        if (!ctx.userId) return 'No signed-in user was verified, so no past conversations were read.'
+        const { recallPastChats } = await import('@/lib/chimmy/tools/recallPastChats')
+        const recalled = await recallPastChats({ userId: ctx.userId, query: String(args.query ?? ''), limit: Number(args.limit) })
+        if (recalled.hits > 0) ctx.recalledPastChats = true
+        return recalled.text
+      }
+
       case 'get_my_brackets': {
         if (!ctx.userId) return 'No signed-in user was verified, so no private bracket entries were read. Ask the user to sign in.'
         const { buildMyBracketsContext } = await import('@/lib/chimmy/tools/bracketTool')
@@ -880,6 +1085,20 @@ export async function executeChimmyTool(
         const { buildDraftAnalysisContext } = await import('@/lib/chimmy/tools/draftAnalysisTool')
         return await buildDraftAnalysisContext(ctx, args)
       }
+      case 'get_manager_record': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildManagerRecordContext } = await import('@/lib/chimmy/managerRecordGrounding')
+        const out = await buildManagerRecordContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          manager: typeof args.manager === 'string' ? args.manager.slice(0, 80) : null,
+        })
+        // Without Competitive Edge: the chat's own AF Pro line and button (lib/chimmy/answerPolish.ts), from
+        // this refusal — the same path every AF Pro tool's refusal takes.
+        if (out.locked && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return out.text
+      }
+
       case 'get_league_trade_activity': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
@@ -1040,7 +1259,8 @@ export async function executeChimmyTool(
           : null
         const actionEvidence = lineupActionEvidence({
           platform: rules?.ok ? rules.context.platform : null,
-          bestBallMode: rules?.ok ? rules.context.lineupBehavior.bestBallMode : false,
+          // Classic Best Ball or best ball Guilly: either way there is no start/sit move to recommend.
+          bestBallMode: rules?.ok ? (rules.context.lineupBehavior.lineupSetsItself ?? rules.context.lineupBehavior.bestBallMode) : false,
           lastSyncedAt: rules?.ok ? rules.context.importHealth.lastSyncedAt : null,
         })
         return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, actionEvidence, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
@@ -1110,7 +1330,18 @@ export async function executeChimmyTool(
        */
       case 'get_player_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
-        return await buildPlayerValueContext({ playerName: asked })
+        /*
+         * An NBA league in scope (2026-11-16): the league's own value board — the same pricing the trade
+         * grade uses (lib/chimmy/sportBoardValue.ts). Null for any other sport, which keeps the NFL
+         * market values below.
+         */
+        if (ctx.leagueId) {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
+          if (board != null) return board
+        }
+        // The player card's number, on this league's chart when one is in scope (`playerMarketValue.ts`).
+        return await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId ?? null })
       }
 
       /* No league gate: the standard projection remains useful without one. When a verified
@@ -1132,6 +1363,16 @@ export async function executeChimmyTool(
       case 'explain_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
+        /*
+         * In an NBA league in scope, "why is he worth that" is answered from the league's own value board —
+         * per game against the best free agent, times games left (lib/chimmy/sportBoardValue.ts). Null for
+         * any other league sport, or when the model asked about another sport.
+         */
+        if (ctx.leagueId && (!sport || sport.trim().toUpperCase() === 'NBA')) {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
+          if (board != null) return `WHY (the league's own value, step by step):\n${board}`
+        }
         return await buildExplainValueContext({ playerName: asked, sport })
       }
 
@@ -1166,6 +1407,14 @@ export async function executeChimmyTool(
         if (!league.ok) return 'Access to the selected league could not be verified.'
         const { buildDraftContext } = await import('@/lib/chimmy/draftGrounding')
         return (await buildDraftContext(ctx.leagueId, ctx.userId)) ?? 'No current draft board could be read for the selected league.'
+      }
+
+      case 'get_draft_pick_outlook': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const league = await resolveNormalizedLeagueContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+        if (!league.ok) return 'Access to the selected league could not be verified.'
+        const { buildDraftPickOutlook } = await import('@/lib/chimmy/tools/draftPickOutlook')
+        return await buildDraftPickOutlook(ctx.leagueId, ctx.userId)
       }
 
       case 'get_selected_league_rules': {
@@ -1258,8 +1507,20 @@ export async function executeChimmyTool(
 
       case 'optimize_my_lineup': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        /*
+         * ONE START/SIT ANSWER (2026-11-16): an NFL lineup is answered from My Team's own best lineup, so chat and
+         * the screen cannot disagree. Only when My Team has no NFL lineup to read does the weekly-feed tool answer,
+         * and it says so.
+         */
+        const { buildMyTeamLineupContext } = await import('@/lib/chimmy/myTeamLineupGrounding')
+        const fromMyTeam = await buildMyTeamLineupContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
+        }).catch(() => ({ fallback: 'no_my_team' as const }))
+        if (typeof fromMyTeam === 'string') return fromMyTeam
         const { buildLineupOptimizerContext } = await import('@/lib/chimmy/lineupOptimizerGrounding')
-        return await buildLineupOptimizerContext({
+        return (fromMyTeam.fallback === 'no_my_team' ? FEED_FALLBACK_NOTE : '') + await buildLineupOptimizerContext({
           leagueId: ctx.leagueId,
           userId: ctx.userId,
           ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
@@ -1268,8 +1529,21 @@ export async function executeChimmyTool(
 
       case 'compare_start_options': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const pair = Array.isArray(args.players) ? args.players.filter((x): x is string => typeof x === 'string' && x.trim().length > 0) : []
+        let startSitNote = ''
+        if (pair.length === 2) {
+          const { buildMyTeamStartSitContext } = await import('@/lib/chimmy/myTeamLineupGrounding')
+          const fromMyTeam = await buildMyTeamStartSitContext({
+            leagueId: ctx.leagueId,
+            userId: ctx.userId,
+            players: [pair[0]!.trim(), pair[1]!.trim()],
+            ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
+          }).catch(() => ({ fallback: 'no_my_team' as const }))
+          if (typeof fromMyTeam === 'string') return fromMyTeam
+          if (fromMyTeam.fallback === 'no_my_team') startSitNote = FEED_FALLBACK_NOTE
+        }
         const { runStartSitScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runStartSitScenarioTool({
+        return startSitNote + await runStartSitScenarioTool({
           players: args.players,
           leagueId: ctx.leagueId,
           userId: ctx.userId,
@@ -1286,6 +1560,16 @@ export async function executeChimmyTool(
           leagueId: ctx.leagueId,
           userId: ctx.userId,
           ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
+      }
+
+      case 'suggest_counter_offer': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildPendingCounterOffers } = await import('@/lib/chimmy-trade/pendingCounterOffers')
+        return await buildPendingCounterOffers({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          offerId: typeof args.offer_id === 'string' ? args.offer_id.slice(0, 120) : '',
         })
       }
 
@@ -1412,6 +1696,59 @@ export async function executeChimmyTool(
           preset: args.preset,
           handoverDays: args.handover_days,
           handoverTo: args.handover_to,
+        })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      case 'propose_league_rule_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return "This chat surface cannot show a confirm card, so nothing was prepared. Tell the commissioner to change it on the league's Settings page. Do not say it was changed."
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        // The model's snake_case names → the League columns the catalog knows. Absent ones stay absent.
+        const SETTING_ARG: Record<string, string> = {
+          name: 'name',
+          waiver_type: 'waiverType',
+          waiver_budget: 'waiverBudget',
+          waiver_min_bid: 'waiverMinBid',
+          trade_review_hours: 'tradeReviewHours',
+          trade_deadline_week: 'tradeDeadlineWeek',
+          playoff_teams: 'playoffTeams',
+          playoff_start_week: 'playoffStartWeek',
+          ir_slots: 'irSlots',
+        }
+        const changes: Record<string, unknown> = {}
+        for (const [arg, value] of Object.entries(args)) {
+          if (value === undefined || value === null || value === '') continue
+          changes[SETTING_ARG[arg] ?? arg] = value
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/settingsAction')).proposeSettingsChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          changes,
+        })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      case 'propose_draft_queue_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return 'This chat surface cannot show a confirm card, so nothing was prepared. Tell the user to change their queue in the draft room. Do not say it was changed.'
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/queueAction')).proposeDraftQueueChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          add: args.add,
+          remove: args.remove,
+          position: args.position,
         })
         if (outcome.ok) ctx.actionCards.push(outcome.card)
         return outcome.text

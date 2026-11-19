@@ -1,12 +1,12 @@
 /*
  * AF Core — League Career (38a·6).
  *
- * Scoped under `.af-lc`, inside `.af-core`. Sibling to af-career.css, which
+ * Scoped under `.af-lcareer` (not `.af-lc`: the launch countdown owns that root and its inline-flex rule collapsed this page to 0px wide), inside `.af-core`. Sibling to af-career.css, which
  * styles the cross-league trophy room — different screen, different question,
  * separate sheet so no rule needs a "which career?" qualifier.
  */
 
-.af-lc {
+.af-lcareer {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -111,8 +111,8 @@
 .af-lc-story-total { display: grid; text-align: right; }
 .af-lc-story-total strong { font-size: 28px; line-height: 1; }
 .af-lc-story-total span { margin-top: 5px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; }
-.af-lc-story-total[data-tone='good'] strong, .af-lc [data-tone='good'].af-num { color: var(--good); }
-.af-lc-story-total[data-tone='bad'] strong, .af-lc [data-tone='bad'].af-num { color: var(--bad); }
+.af-lc-story-total[data-tone='good'] strong, .af-lcareer [data-tone='good'].af-num { color: var(--good); }
+.af-lc-story-total[data-tone='bad'] strong, .af-lcareer [data-tone='bad'].af-num { color: var(--bad); }
 .af-lc-journey { margin: 0; padding: 13px 13px 9px; border: 1px solid var(--line); border-radius: var(--af-radius-inner, 12px); background: var(--chip); }
 .af-lc-journey svg { display: block; width: 100%; height: 178px; overflow: visible; }
 .af-lc-journey polyline { fill: none; stroke: var(--accent); stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }

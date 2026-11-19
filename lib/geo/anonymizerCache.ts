@@ -86,10 +86,6 @@ export function __resetAnonymizerCache(): void {
   warnedNoKeys = false
 }
 
-export function anonymizerCacheStats(): { entries: number; inFlight: number; breakerOpen: boolean } {
-  return { entries: cache.size, inFlight: inFlight.size, breakerOpen: Date.now() < breakerOpenUntil }
-}
-
 function evictIfFull(): void {
   if (cache.size < MAX_ENTRIES) return
   const oldest = cache.keys().next()

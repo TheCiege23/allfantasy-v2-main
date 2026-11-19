@@ -45,7 +45,7 @@ export interface RiskInput {
   newsSentiment?: number // -100 to +100 (negative = bad news)
 }
 
-export interface RiskResult {
+interface RiskResult {
   totalRisk: number // 0–1 scale
   factors: {
     injury: number // 0–1
@@ -245,15 +245,7 @@ export function applyRiskDiscount(value: number, riskScore: number): number {
   return Math.round(value - (riskScore * 0.25 * value))
 }
 
-/**
- * Batch compute risk scores.
- */
-export function computeRiskBatch(inputs: RiskInput[]): RiskResult[] {
-  return inputs.map(computeRiskScore)
-}
-
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-export { RISK_WEIGHTS, POSITION_VOLATILITY, AGE_DECAY }

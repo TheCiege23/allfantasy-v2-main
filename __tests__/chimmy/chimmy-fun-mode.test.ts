@@ -22,7 +22,8 @@ describe('Chimmy fun mode', () => {
 
   it('the route renders the directive for tone=fun instead of a bare Tone line', () => {
     const route = readFileSync('app/api/chat/chimmy/route.ts', 'utf8')
-    expect(route).toMatch(/^\s*if \(isFunModeTone\(input\.tone\)\) \{\n\s*parts\.push\(`RESPONSE STYLE — FUN MODE:\\n\$\{FUN_MODE_DIRECTIVE\}`\)/m)
+    // \r?\n, not \n: a Windows checkout has CRLF line endings, and \n alone failed there while CI passed.
+    expect(route).toMatch(/^\s*if \(isFunModeTone\(input\.tone\)\) \{\r?\n\s*parts\.push\(`RESPONSE STYLE — FUN MODE:\\n\$\{FUN_MODE_DIRECTIVE\}`\)/m)
     expect(route).toMatch(/input\.tone && !isFunModeTone\(input\.tone\) \? `Tone: \$\{input\.tone\}`/)
   })
 

@@ -6,7 +6,7 @@
  */
 import GlobalTopNav from "@/components/shared/GlobalTopNav"
 
-export interface DesktopNavBarProps {
+interface DesktopNavBarProps {
   isAuthenticated: boolean
   isAdmin?: boolean
   userLabel?: string | null

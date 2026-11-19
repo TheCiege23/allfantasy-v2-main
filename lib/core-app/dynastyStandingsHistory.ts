@@ -36,7 +36,7 @@ export type DynastySeasonInput = {
   championTeamId: string | null
 }
 
-export type DynastyChampionshipInput = { season: number; championUserId: string; teamName: string | null }
+type DynastyChampionshipInput = { season: number; championUserId: string; teamName: string | null }
 
 export type DynastyTeamInput = {
   id: string
@@ -47,7 +47,7 @@ export type DynastyTeamInput = {
   ownerName: string | null
 }
 
-export type DynastyStandingFactInput = {
+type DynastyStandingFactInput = {
   season: number
   /** The provider's team key — `LeagueTeam.externalId` (see `loadSeasonHistory` in leagueStandings.ts). */
   teamId: string
@@ -55,6 +55,20 @@ export type DynastyStandingFactInput = {
   losses: number
   ties: number
   pointsFor: number
+}
+
+/**
+ * A Sleeper account its owner deleted keeps its history but loses its name: the platform reports it as
+ * "DELETED-" and a random id ("DELETED-RD0j0D3ZJl1k", live on AFC Dreaming! on 2026-11-14). That is not a
+ * name anyone recognises, so the record book says "Former manager" and drops it as a manager line.
+ */
+export function deletedAccount(name: string | null | undefined): boolean {
+  return typeof name === 'string' && /^DELETED-[A-Za-z0-9]+$/.test(name.trim())
+}
+
+/** A franchise name fit to print: a deleted account reads "Former manager". */
+export function shownName(name: string): string {
+  return deletedAccount(name) ? 'Former manager' : name
 }
 
 export type DynastyFranchiseRow = {
@@ -345,8 +359,8 @@ export function buildDynastyStandingsHistory(input: {
     const current = teamsByRoot.get(a.root) ?? []
     const currentName = current.map((t) => str(t.teamName)).find(Boolean) ?? null
     const latestName = a.latest ? (a.latest.teamName ?? a.latest.managerName) : null
-    const name = currentName ?? latestName ?? titleOnlyName.get(a.root) ?? current.map((t) => str(t.ownerName)).find(Boolean) ?? '—'
-    const managerRaw = a.latest?.managerName ?? current.map((t) => str(t.ownerName)).find(Boolean) ?? null
+    const name = shownName(currentName ?? latestName ?? titleOnlyName.get(a.root) ?? current.map((t) => str(t.ownerName)).find(Boolean) ?? '—')
+    const managerRaw = deletedAccount(a.latest?.managerName) ? null : (a.latest?.managerName ?? current.map((t) => str(t.ownerName)).find(Boolean) ?? null)
     const games = a.wins + a.losses + a.ties
     return {
       key: a.root,
@@ -391,7 +405,7 @@ export function buildDynastyStandingsHistory(input: {
 }
 
 /** Titles, then all-time win %, then wins, then name — the order the table opens in. */
-export function compareFranchises(a: DynastyFranchiseRow, b: DynastyFranchiseRow): number {
+function compareFranchises(a: DynastyFranchiseRow, b: DynastyFranchiseRow): number {
   return (
     b.titles - a.titles ||
     (b.winPct ?? -1) - (a.winPct ?? -1) ||

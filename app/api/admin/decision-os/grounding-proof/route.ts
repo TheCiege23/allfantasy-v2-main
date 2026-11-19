@@ -78,9 +78,9 @@ export async function GET(request: NextRequest) {
 
   /*
    * 🛑 `?want=` FORCES OPT-IN SLICES ON, AND THIS SURFACE WOULD BE USELESS WITHOUT IT. The intent
-   * router below maps `lineupDecision` (37s) and `rosterValueGrade` (4.6s) to a hard `false`
-   * because they are over the chat route's latency ceiling — so mirroring the router alone would
-   * make those slices unreachable from the one tool built to look at them. That is the wrong kind
+   * router below maps `rosterValueGrade` (4.6s) to a hard `false`
+   * because it is over the chat route's latency ceiling — so mirroring the router alone would
+   * make that slice unreachable from the one tool built to look at it. That is the wrong kind
    * of faithful: the point of a proof surface is to see what a slice DOES, including a slice a
    * chat turn cannot afford.
    *
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
           season: l.season,
           try: `/api/admin/decision-os/grounding-proof?leagueId=${l.id}`,
         })),
-        usage: '/api/admin/decision-os/grounding-proof?leagueId=<id>[&userId=<id>&sport=NFL&season=2026&week=3&q=...&want=waiverDecision,lineupDecision]',
+        usage: '/api/admin/decision-os/grounding-proof?leagueId=<id>[&userId=<id>&sport=NFL&season=2026&week=3&q=...&want=waiverDecision,rosterValueGrade]',
       },
       { status: 400 },
     )
@@ -180,6 +180,8 @@ export async function GET(request: NextRequest) {
       devy: sport.toUpperCase() === 'NCAAF',
       projections: true,
       leagueRules: true,
+      // As the chat route asks on every turn — without it this page measured a lighter packet than users get.
+      idpKicker: true,
       ...deriveWantFromIntent(classifyChimmyIntent(question ?? '').intent),
       ...forced,
     },

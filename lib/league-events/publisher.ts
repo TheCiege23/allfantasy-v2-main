@@ -4,12 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { getLeagueMemberAppUserIds } from '@/lib/draft-notifications/DraftNotificationService'
+import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
 import { invokeLeagueFanoutHandlers } from '@/lib/league-events/subscribers'
-import {
-  leagueFanoutNotificationsAllowed,
-  parseLeagueNotificationPrefs,
-} from '@/lib/league/league-notification-prefs'
 import type { LeagueEventVisibility, LeagueFanoutEventType } from '@/lib/league-events/types'
 
 async function getAllLeagueMemberUserIds(leagueId: string): Promise<string[]> {
@@ -18,7 +15,7 @@ async function getAllLeagueMemberUserIds(leagueId: string): Promise<string[]> {
     prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
   ])
   const ids = new Set<string>(rosterIds)
-  if (league?.userId) ids.add(league.userId)
+  if (league?.userId && !isSystemLeagueOwner(league.userId)) ids.add(league.userId)
   return Array.from(ids)
 }
 
@@ -28,7 +25,8 @@ async function getElevatedCommissionerUserIds(leagueId: string): Promise<string[
     select: { userId: true },
   })
   const ids = new Set<string>()
-  if (league?.userId) ids.add(league.userId)
+  // The system account owns leagues nobody proved they run; it is not a commissioner to notify.
+  if (league?.userId && !isSystemLeagueOwner(league.userId)) ids.add(league.userId)
   const co = await prisma.leagueTeam.findMany({
     where: { leagueId, isCoCommissioner: true, platformUserId: { not: null } },
     select: { platformUserId: true },
@@ -38,6 +36,24 @@ async function getElevatedCommissionerUserIds(leagueId: string): Promise<string[
       ids.add(row.platformUserId)
     }
   }
+  /*
+   * The people who CLAIMED a commissioner or co-commissioner team. `platformUserId` above is the
+   * provider's id (an ESPN SWID), which no dispatch can address; `claimedByUserId` is ours. This is
+   * how a proven commissioner of a system-owned league hears commissioner-only events at all.
+   */
+  const claimedLeaders = await Promise.resolve()
+    .then(() =>
+      prisma.leagueTeam.findMany({
+        where: {
+          leagueId,
+          claimedByUserId: { not: null },
+          OR: [{ isCommissioner: true }, { isCoCommissioner: true }],
+        },
+        select: { claimedByUserId: true },
+      }),
+    )
+    .catch(() => [] as Array<{ claimedByUserId: string | null }>)
+  for (const row of claimedLeaders ?? []) if (row.claimedByUserId) ids.add(row.claimedByUserId)
   return Array.from(ids)
 }
 

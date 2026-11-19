@@ -254,6 +254,12 @@ describe('scoreRows — the normalised score', () => {
     expect(s.totals.winRate).toBe(1)
   })
 
+  it('leaves playoff scoring unavailable when the cutoff is known but the result is missing', () => {
+    const s = scoreRows([row({ completed: true, playoffTeams: 4, playoffKnown: false })], new Map())
+    expect(s.totals.playoffRatio).toBeNull()
+    expect(s.components.find((component) => component.key === 'playoffs')?.available).toBe(false)
+  })
+
   it('ignores draft-only and unplayed rows for results but still counts them as league-seasons', () => {
     const s = scoreRows(
       [row({ specialty: 'draft_only', wins: 0, losses: 0, gamesPlayed: 0 }), row({ wins: 0, losses: 0, gamesPlayed: 0, completed: false })],
@@ -370,5 +376,23 @@ describe('calendar', () => {
   it('shifts across month ends', () => {
     expect(shiftDateKey('2026-09-02', -7)).toBe('2026-08-26')
     expect(shiftDateKey('2026-12-30', 3)).toBe('2027-01-02')
+  })
+})
+
+describe('survival and portfolio scores', () => {
+  it.each(['guillotine', 'survivor'] as const)('rewards surviving ten periods over two in %s', (specialty) => {
+    const short = row({ specialty, gamesPlayed: 0, wins: 0, losses: 0, survival: { periods: 2, totalPeriods: 14 } })
+    const long = row({ ...short, survival: { periods: 10, totalPeriods: 14 } })
+    expect(scoreRows([short], new Map()).score).toBe(14.3)
+    expect(scoreRows([long], new Map()).score).toBe(71.4)
+    expect(scoreRows([{ ...long, survival: undefined }], new Map()).score).toBeNull()
+    expect(scoreRows([row(), long], new Map()).components.find((c) => c.key === 'survival')?.appliedWeight).toBe(0.5)
+  })
+
+  it('filters league seasons by stable provider key instead of league name', () => {
+    const sameName = { leagueName: 'Office League', platform: 'espn' }
+    const filters = parseRankingFilters({ careerLeague: 'espn:11' })
+    expect(matchesFilters(row({ ...sameName, providerLeagueId: '11' }), filters)).toBe(true)
+    expect(matchesFilters(row({ ...sameName, providerLeagueId: '22' }), filters)).toBe(false)
   })
 })

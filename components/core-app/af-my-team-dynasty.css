@@ -72,3 +72,13 @@ html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
   .af-mt-dyn{margin-left:0}
   .af-mt-dyn-key{gap:6px 10px}
 }
+
+/* Above the phone layout, dynasty only: the shared grid keeps a 104px status track from when the chip read
+ * "QUESTIONABLE"; it is now a fixed 34px chip of at most three characters. With the right-hand column open the
+ * roster is 542px wide at 1440, so those 70 idle px left the name 89px: 11 of 15 names wrapped and the age chip
+ * dropped under every one. Measured with this rule: no name wraps, rows 144px -> 114px on average. It starts at
+ * 861px because af-my-team.css switches to its three-column tablet grid at 860px and below.
+ * __tests__/dynasty/dynastyMyTeamRows.test.ts */
+@media (min-width:861px){
+  .af-core.af-shell[data-dynasty-background=true] .af-mt-row{grid-template-columns:46px minmax(0,1fr) 44px auto}
+}

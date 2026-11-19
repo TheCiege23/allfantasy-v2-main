@@ -44,7 +44,7 @@ type RawDraft = { draft_id: string; status?: string; settings?: { rounds?: numbe
 type RawPick = { roster_id?: number }
 type RawBracketMatch = { w?: number | null; l?: number | null; p?: number | null }
 
-export type EvidenceFetchOptions = { maxWeeks?: number }
+type EvidenceFetchOptions = { maxWeeks?: number }
 
 // ── Pure normalizers (exported for tests) ─────────────────────────────────────
 

@@ -13,6 +13,12 @@ export type AdminSessionPayload = {
    * Absent on legacy cookies signed before this field existed. Covered by the HMAC signature.
    */
   authMethod?: string;
+  /**
+   * True only on a session minted after an authenticator code was checked
+   * (app/api/auth/admin-totp). While ADMIN_TOTP_SECRETS is set, lib/adminAuth.ts refuses
+   * any admin session without it. Covered by the HMAC signature, so it cannot be added.
+   */
+  mfa?: boolean;
   expiresAt?: number; // epoch ms
 };
 
@@ -29,10 +35,23 @@ function adminSessionSecret(): string {
   throw new Error("ADMIN_SESSION_SECRET or ADMIN_PASSWORD must be set for admin sessions");
 }
 
+/**
+ * Server-side lifetime of an admin session, matching the cookie's own `maxAge`.
+ *
+ * 🛑 THE SERVER MUST ENFORCE EXPIRY, NOT JUST THE BROWSER. The password and magic-link
+ * logins signed `{authenticated, role:"admin"}` with no `expiresAt`, and verification
+ * treated a missing `expiresAt` as valid forever — so a copied `admin_session` value
+ * worked until the signing secret was rotated, whatever its cookie maxAge said.
+ */
+export const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function signAdminSessionCookie(payload: AdminSessionPayload) {
   const secret = adminSessionSecret();
 
-  const payloadJson = JSON.stringify(payload);
+  const payloadJson = JSON.stringify({
+    ...payload,
+    expiresAt: payload.expiresAt ?? Date.now() + ADMIN_SESSION_TTL_MS,
+  });
   const payloadB64 = Buffer.from(payloadJson, "utf8").toString("base64url");
   const sigB64 = crypto.createHmac("sha256", secret).update(payloadB64).digest("base64url");
   return `${payloadB64}.${sigB64}`;
@@ -60,7 +79,8 @@ export function verifyAdminSessionCookie(rawValue: string): AdminSessionPayload 
     const payload = JSON.parse(json) as AdminSessionPayload;
 
     if (!payload?.authenticated) return null;
-    if (payload.expiresAt && Date.now() > payload.expiresAt) return null;
+    // No expiry = a cookie minted before expiry was enforced: refuse it, the admin signs in again.
+    if (typeof payload.expiresAt !== "number" || Date.now() > payload.expiresAt) return null;
 
     return payload;
   } catch {
@@ -99,6 +119,45 @@ function b64urlDecode(s: string) {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const base64 = s.replaceAll("-", "+").replaceAll("_", "/") + pad;
   return Buffer.from(base64, "base64");
+}
+
+/**
+ * "This browser proved an admin email with a magic link and still owes a code." Set by the
+ * magic-link consume route while ADMIN_TOTP_SECRETS is set, read by the code route. It
+ * grants nothing on its own: it is not an admin_session, and verifyAdminSessionCookie
+ * rejects it (it has no `authenticated`).
+ */
+export const ADMIN_MFA_PENDING_COOKIE = "admin_mfa_pending";
+export const ADMIN_MFA_PENDING_TTL_SECONDS = 10 * 60;
+
+type MfaPendingPayload = { purpose: "admin_mfa_pending"; email: string; exp: number };
+
+export function signAdminMfaPending(email: string, ttlSeconds = ADMIN_MFA_PENDING_TTL_SECONDS) {
+  const payload: MfaPendingPayload = {
+    purpose: "admin_mfa_pending",
+    email,
+    exp: Math.floor(Date.now() / 1000) + ttlSeconds,
+  };
+  const payloadB64 = b64url(Buffer.from(JSON.stringify(payload), "utf8"));
+  const sig = crypto.createHmac("sha256", adminSessionSecret()).update(payloadB64).digest();
+  return `${payloadB64}.${b64url(sig)}`;
+}
+
+export function verifyAdminMfaPending(raw: string | null | undefined): { email: string } | null {
+  try {
+    const value = safeDecodeURIComponent(String(raw ?? ""));
+    const [payloadB64, sigB64] = value.split(".");
+    if (!payloadB64 || !sigB64) return null;
+    const expected = crypto.createHmac("sha256", adminSessionSecret()).update(payloadB64).digest();
+    const got = b64urlDecode(sigB64);
+    if (expected.length !== got.length || !crypto.timingSafeEqual(expected, got)) return null;
+    const payload = JSON.parse(b64urlDecode(payloadB64).toString("utf8")) as MfaPendingPayload;
+    if (payload.purpose !== "admin_mfa_pending" || !payload.email) return null;
+    if (Math.floor(Date.now() / 1000) > payload.exp) return null;
+    return { email: payload.email };
+  } catch {
+    return null;
+  }
 }
 
 type MagicPayload = {

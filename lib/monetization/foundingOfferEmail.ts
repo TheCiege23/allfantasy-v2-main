@@ -13,7 +13,7 @@
  */
 import { PRO_DEPTH_EN, PRO_DEPTH_ES } from '@/components/launch/launchCopy'
 
-export type FoundingOfferEmailInput = {
+type FoundingOfferEmailInput = {
   lang: 'en' | 'es'
   /** `FOUNDING_OFFER_LABEL`, verbatim, or null. Ignored for Spanish. */
   label: string | null

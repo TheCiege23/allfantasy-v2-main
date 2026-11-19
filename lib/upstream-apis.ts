@@ -15,10 +15,7 @@ type UpstreamSourceKind =
   | 'newsapi'
   | 'espn'
 
-type JsonRecord = Record<string, unknown>
-
 const DEFAULT_SPORT = 'NFL'
-const UNKNOWN_SOURCE = 'unknown'
 const NEWS_TIMEOUT_MS = 5000
 const MAX_NEWS_PLAYER_NAMES = 15
 const MAX_ROLLING_PLAYER_LIVE_LOOKUPS = 5

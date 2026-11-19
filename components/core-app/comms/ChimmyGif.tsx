@@ -4,7 +4,7 @@
  * is not re-validated on the way in, and an <img> pointed anywhere is a request to anywhere.
  */
 
-export type ChimmyGifView = { url: string; title: string; width: number; height: number; provider: 'klipy' | 'giphy' | 'tenor' }
+type ChimmyGifView = { url: string; title: string; width: number; height: number; provider: 'klipy' | 'giphy' | 'tenor' }
 
 function providerOf(url: string): ChimmyGifView['provider'] | null {
   let host = ''

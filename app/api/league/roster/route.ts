@@ -283,6 +283,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // NFL: the week's projection, opponent, kickoff, opponent rank against the position, headshot and
+    // crest, from stored rows (lib/redraft/nflRosterOutlook.ts). No-op for other sports and id spaces.
+    if (String(leagueSport).toUpperCase() === 'NFL' && unifiedRoster.length > 0) {
+      try {
+        const { loadNflRosterOutlook } = await import('@/lib/redraft/nflRosterOutlook')
+        const { applyNflRosterOutlook } = await import('@/lib/redraft/nflRosterOutlookModel')
+        const outlook = await loadNflRosterOutlook(prisma, {
+          league: { id: leagueId, sport: leagueSport, season: league.season ?? null, platform: league.platform ?? null, settings: league.settings },
+          players: unifiedRoster.map((r) => ({ id: r.id, team: r.team ?? null, position: r.position ?? null })),
+        })
+        unifiedRoster = applyNflRosterOutlook(unifiedRoster, outlook)
+      } catch (e) {
+        console.warn('[league/roster] nfl outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
     // roster tab renders no section at all; a load failure also degrades to null

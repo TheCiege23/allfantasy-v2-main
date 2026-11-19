@@ -70,7 +70,7 @@ export type CommissionerControlCenterModalProps = {
   onOpenDraftRoomSettings?: () => void
   onResync: () => void
   loading?: boolean
-  /** Draft-order team names, so the Chimmy AI manager rows name teams instead of roster ids. */
+  /** Draft-order team names, so the Chimmy manager rows name teams instead of roster ids. */
   teamNameByRosterId?: Record<string, string>
   commissionerAiDraft?: {
     assignedAiTeams: Array<{ teamId: string; teamName: string; aiStyle: string; tradeAggression: string; active: boolean }>
@@ -205,8 +205,8 @@ export function CommissionerControlCenterModal({
   const orphanModeFallbackActive = requestedOrphanMode === 'ai' && effectiveOrphanMode === 'cpu'
   const runOrphanPickLabel = requestedOrphanMode === 'ai'
     ? orphanModeFallbackActive
-      ? 'Run AI pick now (CPU fallback)'
-      : 'Run AI pick now'
+      ? 'Run Chimmy pick now (CPU fallback)'
+      : 'Run Chimmy pick now'
     : 'Run CPU pick now'
 
   useEffect(() => {
@@ -760,7 +760,7 @@ export function CommissionerControlCenterModal({
           <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Draft settings</h3>
           <div className="space-y-2 text-sm">
             <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Orphan team AI manager</span>
+              <span className="text-white/90">Orphan team Chimmy manager</span>
               <button
                 type="button"
                 role="switch"
@@ -784,7 +784,7 @@ export function CommissionerControlCenterModal({
                   className="rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
                 >
                   <option value="cpu">CPU (deterministic)</option>
-                  <option value="ai">AI (deterministic + narrative)</option>
+                  <option value="ai">Chimmy (deterministic + narrative)</option>
                 </select>
               </label>
             )}
@@ -795,15 +795,15 @@ export function CommissionerControlCenterModal({
               </p>
               {ui.orphanTeamAiManagerEnabled && (
                 <p className="mt-1 text-white/60">
-                  Requested mode: <span className="text-white">{requestedOrphanMode.toUpperCase()}</span>
+                  Requested mode: <span className="text-white">{requestedOrphanMode === 'ai' ? 'Chimmy' : requestedOrphanMode.toUpperCase()}</span>
                   {' · '}Effective mode:{' '}
-                  <span className="text-white">{effectiveOrphanMode.toUpperCase()}</span>
-                  {requestedOrphanMode === 'ai' ? ` · AI providers ${orphanAiProviderAvailable ? 'available' : 'unavailable'}.` : '.'}
+                  <span className="text-white">{effectiveOrphanMode === 'ai' ? 'Chimmy' : effectiveOrphanMode.toUpperCase()}</span>
+                  {requestedOrphanMode === 'ai' ? ` · Chimmy providers ${orphanAiProviderAvailable ? 'available' : 'unavailable'}.` : '.'}
                 </p>
               )}
               {orphanModeFallbackActive && (
                 <p className="mt-1 text-amber-300" data-testid="draft-commissioner-orphan-mode-fallback-note">
-                  AI mode is selected, but providers are unavailable. Picks run via deterministic CPU fallback.
+                  Chimmy mode is selected, but providers are unavailable. Picks run via deterministic CPU fallback.
                 </p>
               )}
               {orphanStatus?.recentActions?.length ? (
@@ -830,18 +830,18 @@ export function CommissionerControlCenterModal({
                 className="rounded-lg border border-emerald-400/20 bg-emerald-500/8 px-3 py-2 text-xs"
                 data-testid="draft-commissioner-ai-managers-panel"
               >
-                <p className="font-medium text-emerald-100/95">Chimmy AI managers (up to 4 open teams)</p>
+                <p className="font-medium text-emerald-100/95">Chimmy managers (up to 4 open teams)</p>
                 <p className="mt-1 text-[11px] text-white/55">
                   Tick an open (unclaimed) team to hand it to Chimmy. Chimmy drafts for it a few seconds after it
-                  comes on the clock, using the draft style you choose. Needs the orphan AI manager setting on.
-                  AI↔AI trades respect “Block AI ↔ AI”.
+                  comes on the clock, using the draft style you choose. Needs the orphan Chimmy manager setting on.
+                  Chimmy↔Chimmy trades respect “Block Chimmy ↔ Chimmy”.
                 </p>
                 <div className="mt-2 space-y-1.5">
                   {(
                     [
-                      ['allowOutbound', 'AI outbound proposals'],
-                      ['allowInbound', 'AI auto-respond to humans'],
-                      ['blockAiToAi', 'Block AI ↔ AI trades'],
+                      ['allowOutbound', 'Chimmy outbound proposals'],
+                      ['allowInbound', 'Chimmy auto-respond to humans'],
+                      ['blockAiToAi', 'Block Chimmy ↔ Chimmy trades'],
                     ] as const
                   ).map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between gap-2 text-[11px] text-white/80">
@@ -882,7 +882,7 @@ export function CommissionerControlCenterModal({
                       }
                     />
                   </label>
-                  <label className="flex items-center gap-1" title="Minimum confidence for AI to accept a trade">
+                  <label className="flex items-center gap-1" title="Minimum confidence for Chimmy to accept a trade">
                     Min accept (0–1)
                     <input
                       type="number"
@@ -985,7 +985,7 @@ export function CommissionerControlCenterModal({
                     }
                   }}
                 >
-                  {aiMgrSaving ? 'Saving…' : 'Save AI assignments'}
+                  {aiMgrSaving ? 'Saving…' : 'Save Chimmy assignments'}
                 </button>
                 {aiMgrMessage ? <p className="mt-1 text-[11px] text-white/60">{aiMgrMessage}</p> : null}
               </div>
@@ -1019,7 +1019,7 @@ export function CommissionerControlCenterModal({
               </button>
             </label>
             <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">AI ADP</span>
+              <span className="text-white/90">Chimmy ADP</span>
               <button
                 type="button"
                 role="switch"
@@ -1033,7 +1033,7 @@ export function CommissionerControlCenterModal({
               </button>
             </label>
             <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">AI queue reorder</span>
+              <span className="text-white/90">Chimmy queue reorder</span>
               <button
                 type="button"
                 role="switch"
@@ -1110,13 +1110,13 @@ export function CommissionerControlCenterModal({
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={ui.auctionAutoNominationEnabled ?? false}
+                  aria-checked={ui.auctionAutoNominationEnabled ?? true}
                   disabled={settingsSaving}
                   data-testid="draft-commissioner-toggle-auction-auto-nomination"
-                  onClick={() => handleToggle('auctionAutoNominationEnabled', !(ui.auctionAutoNominationEnabled ?? false))}
-                  className={`rounded border px-3 py-1 text-xs ${ui.auctionAutoNominationEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+                  onClick={() => handleToggle('auctionAutoNominationEnabled', !(ui.auctionAutoNominationEnabled ?? true))}
+                  className={`rounded border px-3 py-1 text-xs ${(ui.auctionAutoNominationEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
                 >
-                  {ui.auctionAutoNominationEnabled ? 'On' : 'Off'}
+                  {(ui.auctionAutoNominationEnabled ?? true) ? 'On' : 'Off'}
                 </button>
               </label>
             )}

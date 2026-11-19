@@ -41,6 +41,18 @@ vi.mock('@/lib/decision-os/import-os', () => ({
 vi.mock('@/lib/decision-os/league-os', () => ({
   createLeagueOsLoaders: () => ({ loadRules }),
 }))
+/*
+ * The league row the chart is read from. The REAL `loadLeagueValueFormat` and `valueBookFor` run — only the
+ * database read is faked — so these tests pin the shared rule itself, not a stand-in for it.
+ */
+const leagueFindUnique = vi.fn()
+vi.mock('@/lib/decision-os/grounding/leagueValueBook', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/decision-os/grounding/leagueValueBook')>()
+  return {
+    ...actual,
+    loadLeagueValueFormat: (id: string | null | undefined) => actual.loadLeagueValueFormat(id, { league: { findUnique: leagueFindUnique } }),
+  }
+})
 vi.mock('@/lib/decision-os/value-os', () => ({
   createValueOsLoaders: () => ({ loadMarket, loadDevy }),
 }))
@@ -197,6 +209,7 @@ beforeEach(() => {
   // The healthy baseline. Each test degrades exactly one thing, so a failure names its own cause.
   loadAssertions.mockResolvedValue(assertions())
   loadRules.mockResolvedValue({ scoring: {} })
+  leagueFindUnique.mockResolvedValue({ leagueType: 'redraft', settings: { roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX'] } })
   loadMarket.mockResolvedValue([{ status: 'ok', value: { playerId: 'p1' } }])
   loadDevy.mockResolvedValue([{ status: 'ok', value: { playerId: 'p2' } }])
   loadFor.mockResolvedValue([{ playerId: 'p1', computedAt: new Date(NOW).toISOString() }])
@@ -408,34 +421,39 @@ describe('5.3 — a killed feed is SAID, not merely stopped', () => {
     expect(loadContext).not.toHaveBeenCalled()
   })
 
-  it('🛑 R1.2 — DERIVES valueFormat from the rules it already loaded', async () => {
+  it('🛑 the chart comes from the LEAGUE ROW by the same rule as every screen (valueBookFor)', async () => {
     /*
-     * The chat route passed no `valueFormat`, and `packet.ts` gated the whole market slice on it
-     * (`want.values && args.valueFormat`) — so setting `want.values: true` alone bought nothing
-     * and the entire offence/market valuation lane was silently absent from every answer.
-     *
-     * ⚠ DERIVED IN THE PACKET, NOT DEMANDED FROM THE CALLER. The packet already loads
-     * `leagueRules`; the format is `general.format` and `roster.starters` inside them. Making
-     * each caller compute it means a second read of data already in hand, and two call sites that
-     * can disagree — the exact drift `OsFactSource.scopeKey` exists to prevent.
+     * The chat route passes no `valueFormat`, so the packet resolves it — R1.2. It used to read it off the
+     * rules with its own `/dynasty|keeper/i`; it now asks `valueBookFor` with the league's row, exactly as
+     * the player card, waivers board and trade engine do (2026-11-17).
      */
-    loadRules.mockResolvedValue({
-      general: { format: 'dynasty' },
-      roster: { starters: ['QB', 'RB', 'WR', 'SUPER_FLEX'] },
-      scoring: { activeRules: [] },
+    leagueFindUnique.mockResolvedValue({ leagueType: 'dynasty', settings: { roster_positions: ['QB', 'RB', 'WR', 'SUPER_FLEX'] } })
+    await buildDecisionOsGroundingPacket({ ...ARGS, valueFormat: undefined })
+    expect(leagueFindUnique).toHaveBeenCalledWith({ where: { id: ARGS.leagueId }, select: { settings: true, leagueType: true } })
+    expect(loadMarket).toHaveBeenCalledWith(expect.objectContaining({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }))
+  })
+
+  it('🛑 a keeper league that keeps 2 of 16 prices on the REDRAFT chart, as the player card does', async () => {
+    // The case the old rule got wrong: rules that say "keeper" made it DYNASTY. By keeper share (owner,
+    // 2026-09-28) under half the roster carrying over is redraft. And ESPN's `OP` slot is superflex.
+    loadRules.mockResolvedValue({ general: { format: 'keeper' }, roster: { starters: ['QB', 'OP'] }, scoring: { activeRules: [] } })
+    leagueFindUnique.mockResolvedValue({
+      leagueType: 'keeper',
+      settings: { max_keepers: 2, roster_positions: ['QB:1', 'OP:1', 'RB:2', 'WR:3', 'TE:1', 'FLEX:1', 'BN:7'] },
     })
     await buildDecisionOsGroundingPacket({ ...ARGS, valueFormat: undefined })
-    expect(loadMarket).toHaveBeenCalledWith(
-      expect.objectContaining({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }),
-    )
+    expect(loadMarket).toHaveBeenCalledWith(expect.objectContaining({ format: 'REDRAFT', qbFormat: 'SUPERFLEX' }))
+  })
+
+  it('no league row is a named league-side gap, never a default chart', async () => {
+    leagueFindUnique.mockResolvedValue(null)
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, valueFormat: undefined })
+    expect(loadMarket).not.toHaveBeenCalled()
+    expect(p.marketValues).toMatchObject({ present: false, gap: { detail: "This league's format could not be resolved, so no market bucket could be chosen." } })
   })
 
   it('R1.2 — an explicit valueFormat still WINS over the derived one', async () => {
-    loadRules.mockResolvedValue({
-      general: { format: 'dynasty' },
-      roster: { starters: ['QB', 'SUPER_FLEX'] },
-      scoring: { activeRules: [] },
-    })
+    leagueFindUnique.mockResolvedValue({ leagueType: 'dynasty', settings: { roster_positions: ['QB', 'SUPER_FLEX'] } })
     await buildDecisionOsGroundingPacket({
       ...ARGS,
       valueFormat: { format: 'REDRAFT', qbFormat: 'ONE_QB' },
@@ -443,6 +461,7 @@ describe('5.3 — a killed feed is SAID, not merely stopped', () => {
     expect(loadMarket).toHaveBeenCalledWith(
       expect.objectContaining({ format: 'REDRAFT', qbFormat: 'ONE_QB' }),
     )
+    expect(leagueFindUnique).not.toHaveBeenCalled()
   })
 
   it('🛑 R1.2 — DERIVES leagueIdpRules, so projections arrive scored for THIS league', async () => {
@@ -795,5 +814,77 @@ describe('the league office (LeagueOfficeContextProvider) through the packet', (
     loadContext.mockResolvedValue(withOffice(null, 'db down'))
     const p = await buildDecisionOsGroundingPacket(ARGS)
     expect(p.gaps.find((g) => g.slice === 'leagueOffice')?.detail).toBe('The leagueOffice provider failed: db down')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('🛑 one late read costs ITS slice, never the packet (re-score 2026-11-17)', () => {
+  const never = () => new Promise<never>(() => undefined)
+
+  it('a read that never finishes becomes a "did not finish in time" gap, and the packet still lands with the rest', async () => {
+    const { PACKET_SLICE_DEADLINE_MS, SLICE_LATE_GAP } = await import('@/lib/decision-os/grounding/packet')
+    leagueIntel.mockImplementation(never)
+    const started = Date.now()
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    const took = Date.now() - started
+    // Bounded by the packet's own budget — under the chat route's 3,000 ms ceiling, which used to drop EVERYTHING.
+    expect(took).toBeGreaterThanOrEqual(PACKET_SLICE_DEADLINE_MS - 50)
+    expect(took).toBeLessThan(3000)
+    expect(p.leagueIntelligence.present).toBe(false)
+    expect(p.leagueIntelligence.gap).toEqual(SLICE_LATE_GAP)
+    // Everything else arrived.
+    expect(p.leagueRules.present).toBe(true)
+    expect(p.marketValues.present).toBe(true)
+    expect(p.projections.present).toBe(true)
+    expect(p.contextFacts?.roster.present).toBe(true)
+    // And the slow read is named on meta, so a timeout is diagnosable.
+    const late = p.meta.sources.find((s) => s.slice === 'leagueIntelligence')
+    expect(late?.ms).toBeGreaterThanOrEqual(PACKET_SLICE_DEADLINE_MS - 50)
+    expect(serializeDecisionOsGroundingForPrompt(p)).toMatch(/did not finish in time/)
+  }, 10_000)
+
+  it('the context engine going late labels all nine of its slices as late — not "the engine did not return"', async () => {
+    const { SLICE_LATE_GAP } = await import('@/lib/decision-os/grounding/packet')
+    loadContext.mockImplementation(never)
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    const facts = Object.entries(p.contextFacts ?? {})
+    expect(facts.length).toBe(9)
+    for (const [name, s] of facts) {
+      expect(s.present, name).toBe(false)
+      expect(s.gap, name).toEqual(SLICE_LATE_GAP)
+    }
+    expect(p.marketValues.present).toBe(true)
+  }, 10_000)
+
+  it('🛑 roster and matchup no longer wait behind the other reads: the engine starts in the first wave', async () => {
+    let marketDone = false
+    let engineStartedBeforeMarketFinished: boolean | null = null
+    loadMarket.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => { marketDone = true; resolve([{ status: 'ok', value: { playerId: 'p1' } }]) }, 150)),
+    )
+    loadContext.mockImplementation(async () => {
+      engineStartedBeforeMarketFinished = !marketDone
+      return bundle()
+    })
+    await buildDecisionOsGroundingPacket(ARGS)
+    // Before this change the engine was called only after market (and every other early read) had been awaited.
+    expect(engineStartedBeforeMarketFinished).toBe(true)
+  })
+})
+
+describe('no false "missing" or "available" lines (re-score 2026-11-17)', () => {
+  it('🛑 a sport the market never prices is not "available" with nothing in it, and is not a missing-data gap', async () => {
+    loadMarket.mockResolvedValue([{ status: 'no_producer', sport: 'NBA', basis: 'market', detail: 'No market price exists for NBA.' }])
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, sport: 'NBA' })
+    expect(p.marketValues.present).toBe(false)
+    expect(p.marketValues.gap?.reason).toBe('not_requested')
+    expect(p.gaps.find((g) => g.slice === 'marketValues')).toBeUndefined()
+    expect(serializeDecisionOsGroundingForPrompt(p)).not.toMatch(/Market values: available/i)
+  })
+
+  it('a market with at least one priced row is still present', async () => {
+    loadMarket.mockResolvedValue([{ status: 'unresolved', detail: 'x' }, { status: 'ok', value: { playerId: 'p1' } }])
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.marketValues.present).toBe(true)
   })
 })

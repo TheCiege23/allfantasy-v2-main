@@ -21,6 +21,7 @@ import { assertLeagueMember } from '@/lib/league-access';
 import { getOpenAIConfig, openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client';
 import { logAiOutput } from '@/lib/ai/output-logger';
 import { isAIAssistantEnabled, isToolWaiverAIEnabled } from '@/lib/feature-toggle';
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 const ContextScopeSchema = z.object({
   sleeper_username: z.string().optional(),
@@ -59,7 +60,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/waiver", tool: "AiWaiver" 
   try {
     if (!(await isAIAssistantEnabled()) || !(await isToolWaiverAIEnabled())) {
       return NextResponse.json(
-        { error: 'Waiver AI is temporarily disabled by platform configuration.' },
+        { error: 'Waiver Chimmy is temporarily disabled by platform configuration.' },
         { status: 503 }
       )
     }
@@ -68,6 +69,10 @@ export const POST = withApiUsage({ endpoint: "/api/ai/waiver", tool: "AiWaiver" 
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // AF Pro (`ai_waivers`, owner's decision 2026-11-16), before the rate limit and the model.
+    const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'ai_waivers' })
+    if (!plan.ok) return plan.response
 
     const limitRes = await runAiProtection(request, {
       action: 'waiver',
@@ -80,7 +85,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/waiver", tool: "AiWaiver" 
 
     if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Invalid request format', details: parseResult.error.errors },
+        { error: 'Invalid request format', details: parseResult.error.issues },
         { status: 400 }
       );
     }

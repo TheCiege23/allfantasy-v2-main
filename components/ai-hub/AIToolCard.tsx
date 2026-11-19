@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-export interface AIToolCardProps {
+interface AIToolCardProps {
   id: string
   title: string
   description: string

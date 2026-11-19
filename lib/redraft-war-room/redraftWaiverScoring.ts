@@ -90,7 +90,7 @@ export function valueScoreFor(input: { value: number | null; source: ValueSource
   return 0
 }
 
-export interface ScoreInput {
+interface ScoreInput {
   valueScore: number
   position: string
   /** Need severity for this position from the team-needs engine. */
@@ -115,7 +115,7 @@ export function recommendationScore(input: ScoreInput): number {
   return Math.round(clamp(score))
 }
 
-export interface ConfidenceInput {
+interface ConfidenceInput {
   source: ValueSource
   projectionConfidenceLevel?: 'high' | 'medium' | 'low' | 'none' | null
   /** NCAAF (or any sport) projections unavailable / limited. */

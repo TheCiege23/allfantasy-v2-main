@@ -32,9 +32,9 @@ export type RulebookConfig = {
   seasonThemeLabel?: string | null
 }
 
-export type TribalVotesDue = { day: string; timeEt: string; hoursBefore: number }
+type TribalVotesDue = { day: string; timeEt: string; hoursBefore: number }
 
-export const RULEBOOK_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
+const RULEBOOK_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 
 export type RulebookRule =
   | { id: 'tribes'; count: number; size: number | null; formation: 'random' | 'commissioner' }

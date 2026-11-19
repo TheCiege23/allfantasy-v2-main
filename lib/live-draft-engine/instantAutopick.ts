@@ -1,3 +1,4 @@
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -45,12 +46,12 @@ export async function instantAutopickReason(args: {
     args.leagueSettings !== undefined
       ? args.leagueSettings
       : (await prisma.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } }))?.settings
-  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true } })
+  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true, managerUserId: true } })
   // Only a team Chimmy PLAYS picks instantly: without the owner's plan, that is the free team alone.
   const playable = await readPlayableChimmyLineups({ id: args.leagueId, settings })
   if (isAutopilotIn(playable, args.rosterId, roster?.platformUserId ?? null)) return 'autopilot'
 
-  const userId = String(roster?.platformUserId ?? '')
+  const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
   if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return null
   const pref = await prisma.liveDraftAutopickPreference.findUnique({
     where: { draft_session_user_unique: { draftSessionId: args.draftSessionId, userId } },

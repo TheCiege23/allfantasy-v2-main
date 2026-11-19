@@ -20,9 +20,14 @@
  */
 
 import {
+  ESPN_TEAM_DEFENSE_STAT_IDS,
+  ESPN_TEAM_DEFENSE_SUMS,
+  parsePointsAllowedRangeKey,
   resolveProviderScoringStatKey,
   type YahooCapturedStatCategory,
 } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
+import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 
 /**
  * IDP naming variants — the same stat under two names.
@@ -240,6 +245,18 @@ function projectedValueFor(
 ): number | null {
   const direct = readNumber(projection[scoringKey])
   if (direct != null) return direct
+  /*
+   * A points-allowed RANGE (an ESPN bucket — see `ESPN_TEAM_DEFENSE_STAT_ID_TO_SLEEPER_KEY`) is 1 when
+   * the projected points allowed fall in it, else 0. Integer edges read as half-open on the reals,
+   * [lo, hi + 1), so a projected 17.5 is in 14–17 and 18.0 is in 18–21: every value lands in exactly
+   * one bucket. No raw `pts_allow` on the line (anyone who is not a defence) means unmatched, not 0.
+   */
+  const range = parsePointsAllowedRangeKey(scoringKey)
+  if (range) {
+    const allowed = readNumber(projection.pts_allow)
+    if (allowed == null) return null
+    return allowed >= range.lo && (range.hi == null || allowed < range.hi + 1) ? 1 : 0
+  }
   for (const alias of STAT_ALIASES[scoringKey] ?? []) {
     if (Object.prototype.hasOwnProperty.call(scoringSettings, alias)) continue
     const v = readNumber(projection[alias])
@@ -303,6 +320,26 @@ export function computeLeagueProjectedPoints(
    * latter.
    */
   if (matchedKeys === 0) return null
+
+  /*
+   * 🛑 A TEAM DEFENCE WITH AN UNTRANSLATED ESPN DEFENCE RULE IS REFUSED, NOT PRICED LOW.
+   * Everywhere else an unmatched key contributes zero and that is usually right (see above). For a
+   * D/ST it is not: an ESPN league that scores, say, fumble recoveries under unequal weights we could
+   * not translate would price the defence with those points silently missing — a confident number
+   * that is simply wrong. Only ESPN ids actually seen on D/ST rows count (an offence-only rule left
+   * untranslated says nothing about a defence), and only on a defensive line (raw points or yards
+   * allowed present). Owner's call, 2026-11-17: refuse a D/ST rather than under-price it.
+   */
+  const isDefenseLine = readNumber(projection.pts_allow) != null || readNumber(projection.yds_allow) != null
+  if (
+    isDefenseLine &&
+    unmatched.some((key) => {
+      const m = /^espn_stat_(\d+)$/.exec(key)
+      return m != null && ESPN_TEAM_DEFENSE_STAT_IDS.has(m[1])
+    })
+  ) {
+    return null
+  }
 
   const unusedProjectedStats = Object.entries(projection)
     .filter(([k, v]) => {
@@ -463,17 +500,50 @@ function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, 
    * reachable.
    */
   const mflStatNamesByKey = extractProviderStatNames(s.scoringSettings)
+  const ruleMap = rules as Record<string, unknown>
   const bridged: Record<string, unknown> = {}
   let translated = 0
-  for (const [key, value] of Object.entries(rules as Record<string, unknown>)) {
+
+  /*
+   * ESPN D/ST ids that are SUMS of Sleeper keys (`ESPN_TEAM_DEFENSE_SUMS`), applied before single ids.
+   * Only when every id in the sum carries the SAME non-zero weight is scoring the Sleeper key(s) at
+   * that weight the same thing as scoring the ESPN ids; partial or unequal weights cannot be split
+   * back apart, so they stay untranslated and the defence is refused downstream.
+   */
+  const consumedBySum = new Set<string>()
+  const keysFromSums = new Set<string>()
+  for (const sum of ESPN_TEAM_DEFENSE_SUMS) {
+    const weights = sum.espn.map((id) => readNumber(ruleMap[`espn_stat_${id}`]))
+    const scored = weights.filter((w): w is number => w != null && w !== 0)
+    if (scored.length === 0) continue
+    if (scored.length !== sum.espn.length || scored.some((w) => w !== scored[0])) continue
+    for (const key of sum.sleeper) {
+      bridged[key] = scored[0]
+      keysFromSums.add(key)
+    }
+    for (const id of sum.espn) consumedBySum.add(`espn_stat_${id}`)
+    translated++
+  }
+
+  for (const [key, value] of Object.entries(ruleMap)) {
+    if (consumedBySum.has(key)) continue
     const weight = readNumber(value)
     if (weight == null) continue
     const canonical = resolveProviderScoringStatKey(key, {
       yahooStatCategoriesById,
       mflStatName: mflStatNamesByKey.get(key) ?? null,
     })
+    if (canonical && keysFromSums.has(canonical)) {
+      /* A single id onto a key a sum already scores (ESPN 94 beside 103+104) would count those
+         touchdowns twice. A zero says nothing; a real weight stays untranslated and is refused. */
+      if (weight !== 0) bridged[key] = weight
+      continue
+    }
     if (canonical) {
       translated++
+      /* Two ids can name one key (41 and 53 are both receptions; 89 and 188 one bucket). A zero
+         must not erase the other's real weight just by coming later in the object. */
+      if (weight === 0 && readNumber(bridged[canonical]) != null && readNumber(bridged[canonical]) !== 0) continue
       bridged[canonical] = weight
     } else {
       bridged[key] = weight
@@ -518,6 +588,37 @@ export function extractScoringSettings(
 ): Record<string, unknown> | null {
   if (!leagueSettings || typeof leagueSettings !== 'object') return null
   const s = leagueSettings as Record<string, unknown>
+  const stored = storedScoringSettings(s)
+  /*
+   * 🛑 A FANTRAX LEAGUE WITH NO STORED RULES STILL HAS ITS RULES (2026-11-19). The import kept Fantrax's own
+   * `fantrax_settings.scoringSystem` while `scoringSettings.rules` came out empty, so this returned nothing usable and
+   * every projection, My Team's "0 of 16 starters priced" and the league's matchup projections with it, read as
+   * unscorable on a league whose scoring was sitting in the row. Read through `fantraxScoringRules` — the converter
+   * the import and the trade context already use — only when the stored rules give nothing, so a rulebook that
+   * exists always wins.
+   */
+  if (hasScoringRules(stored)) return stored
+  return fantraxStoredRules(s) ?? stored
+}
+
+/**
+ * The league's rules from Fantrax's own scoring system, in Sleeper's vocabulary (`fantraxScoringRules`), or null when
+ * the settings carry none. A category league converts to no rules and stays null.
+ *
+ * ⚠ BEST-EFFORT, AS THE IMPORT IS: a per-position rule Fantrax states (other than the tight-end reception premium)
+ * has no slot here and is left out, exactly as `fantraxScoringRules` reports in its gaps.
+ */
+function fantraxStoredRules(s: Record<string, unknown>): Record<string, unknown> | null {
+  const fantrax = s.fantrax_settings
+  const system = fantrax && typeof fantrax === 'object' ? (fantrax as Record<string, unknown>).scoringSystem : null
+  if (!system || typeof system !== 'object' || !Array.isArray((system as Record<string, unknown>).scoringCategorySettings)) return null
+  const { rules } = fantraxScoringRules({ scoringSystem: system } as unknown as FantraxLeagueInfo)
+  const out: Record<string, number> = {}
+  for (const r of rules) if (typeof r.points_value === 'number' && Number.isFinite(r.points_value)) out[r.stat_key] = r.points_value
+  return hasScoringRules(out) ? out : null
+}
+
+function storedScoringSettings(s: Record<string, unknown>): Record<string, unknown> | null {
   // Provider-captured rulebooks (ESPN/Yahoo) translate first; anything else
   // falls through to the original behavior untouched.
   const bridged = bridgeProviderScoringRules(s)

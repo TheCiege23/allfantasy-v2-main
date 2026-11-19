@@ -32,7 +32,7 @@ export type CategoryPlayer = {
   eligible: boolean
 }
 
-export type CategoryValue = {
+type CategoryValue = {
   /** Sum of the per-category scores, per game — the number a grade prices. */
   total: number
   /** Each category's score, keyed by category id. */

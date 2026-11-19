@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-export type WarRoomTierBoardProps = {
+type WarRoomTierBoardProps = {
   sport: string
   tierBoard?: Array<{
     tierLabel: string

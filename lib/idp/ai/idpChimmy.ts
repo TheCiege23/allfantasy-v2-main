@@ -5,6 +5,7 @@
  * never given a hash-generated stat line.
  */
 
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { prisma } from '@/lib/prisma'
 import { requireAfSubUserIdOrThrow } from '@/lib/redraft/ai/requireAfSub'
 import { isIdpLeague } from '@/lib/idp'
@@ -33,7 +34,7 @@ export type IdPlayerRow = {
   team?: string
 }
 
-export type DefenderStartSitAnalysis = {
+type DefenderStartSitAnalysis = {
   starters: string[]
   sitters: string[]
   analysis: string
@@ -55,13 +56,13 @@ export type IDPMatchupReport = {
   week: number
 }
 
-export type IDPTradeEval = {
+type IDPTradeEval = {
   fairness_rating: string
   balance_impact: string
   recommendation: string
 }
 
-export type IDPRankingEntry = {
+type IDPRankingEntry = {
   rank: number
   name: string
   position: string
@@ -70,32 +71,32 @@ export type IDPRankingEntry = {
   reasoning: string
 }
 
-export type IDPRankingList = {
+type IDPRankingList = {
   week: number
   positionFilter?: string
   entries: IDPRankingEntry[]
 }
 
-export type SleeperDefender = {
+type SleeperDefender = {
   name: string
   position: string
   team?: string
   reasoning: string
 }
 
-export type SnapShareReport = {
+type SnapShareReport = {
   concerns: Array<{ player: string; snap_share: number; trend: string; note: string }>
   positives: Array<{ player: string; snap_share: number; trend: string; note: string }>
   /** Set when the report is empty because the data source does not exist. */
   note?: string
 }
 
-export type ScarcityReport = {
+type ScarcityReport = {
   summary: string
   byPosition: Record<string, string>
 }
 
-export type PowerRankingsPost = {
+type PowerRankingsPost = {
   week: number
   lines: Array<{ rank: number; teamLabel: string; blurb: string }>
   fullText: string
@@ -121,7 +122,7 @@ function isIdpPosition(pos: string): boolean {
  * not snaps, and no defensive matchup-strength feed is ingested). Anything
  * that used them either dropped the factor or says "no matchup signal".
  */
-export type IdpAiStatProfile = {
+type IdpAiStatProfile = {
   /** Mean league-scored points across every ingested week this season. */
   seasonAvg: number
   /** League-scored points of the last ingested weeks (≤3, oldest → newest). */
@@ -136,7 +137,7 @@ export type IdpAiStatProfile = {
  * ingested stat line are ABSENT from the map — callers must treat absence as
  * "no data", never substitute an invented line.
  */
-export async function resolveIdpAiProfiles(
+async function resolveIdpAiProfiles(
   leagueId: string,
   playerIds: string[],
   week: number,
@@ -163,7 +164,7 @@ export async function resolveIdpAiProfiles(
 }
 
 /** Single-player profile — null when no ingested lines exist for the player. */
-export async function resolveIdpAiProfile(
+async function resolveIdpAiProfile(
   leagueId: string,
   playerId: string,
   week: number,
@@ -186,7 +187,7 @@ async function assertIdpLeague(leagueId: string): Promise<void> {
 
 async function getRosterForUser(leagueId: string, userId: string) {
   const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: await viewingRosterWhere(leagueId, userId),
     select: { id: true, playerData: true },
   })
   return roster
@@ -540,7 +541,7 @@ export async function getIDPMatchupAnalysis(
     temperature: 0.45,
     maxTokens: 650,
   })
-  const analysis = res.ok ? res.text : 'AI unavailable.'
+  const analysis = res.ok ? res.text : 'Chimmy unavailable.'
 
   return {
     defensiveHighlights: `Week ${week}: focus on tackle floor LBs if opponent runs often; edge rushers if pass-heavy scripts.`,
@@ -609,7 +610,7 @@ Reply with ONLY a JSON object (no markdown) with keys:
     temperature: 0.45,
     maxTokens: 600,
   })
-  const text = res.ok ? res.text : 'AI unavailable.'
+  const text = res.ok ? res.text : 'Chimmy unavailable.'
   const parsed = res.ok ? parseIdpTradeEvalJson(text) : null
   if (parsed) return parsed
   return {
@@ -773,7 +774,7 @@ export async function getIDPScarcityReport(leagueId: string, _week: number): Pro
   })
 
   return {
-    summary: res.ok ? res.text : 'AI unavailable.',
+    summary: res.ok ? res.text : 'Chimmy unavailable.',
     byPosition: {
       DL: `${byPos.DL ?? 0} unrostered DL in this league.`,
       LB: `${byPos.LB ?? 0} unrostered LB — often thinnest in IDP.`,
@@ -870,7 +871,7 @@ export function getIdpChimmyHelpText(): string {
     '• `@chimmy cut [name]` — cut dead-money preview (public)',
     '• `@chimmy extend [name]` — extension salary preview (public)',
     '• `@chimmy simulate defense cap` — IDP salary vs room snapshot (public)',
-    '• `@chimmy cap advice` — AI cap moves (AfSub)',
+    '• `@chimmy cap advice` — Chimmy cap moves (AfSub)',
     '• `@chimmy defender value [name]` — 10-pillar eval (AfSub)',
     '• `@chimmy contract eval [name] [cut|extend|tag]` — contract decision (AfSub)',
     '• `@chimmy cap efficiency` — pts/$ rankings (AfSub)',
@@ -880,7 +881,7 @@ export function getIdpChimmyHelpText(): string {
     '• `@chimmy weekly recap` — defensive recap (AfSub)',
     '• `@chimmy help idp` — this list',
     '',
-    '🔒 AI IDP features require the AF Commissioner Subscription.',
+    '🔒 Chimmy IDP features require the AF Commissioner Subscription.',
   ].join('\n')
 }
 
@@ -917,10 +918,6 @@ Incorporate contract/salary context in 2-3 sentences when relevant.`,
     temperature: 0.45,
     maxTokens: 500,
   })
-  return res.ok ? res.text : 'AI unavailable.'
+  return res.ok ? res.text : 'Chimmy unavailable.'
 }
 
-export async function assertCommissionerForPowerRankings(leagueId: string, userId: string): Promise<void> {
-  const ok = await isCommissioner(leagueId, userId)
-  if (!ok) throw new Error('Commissioner only')
-}

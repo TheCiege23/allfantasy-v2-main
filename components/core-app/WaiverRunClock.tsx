@@ -55,4 +55,3 @@ export function WaiverRunClock({
   )
 }
 
-export default WaiverRunClock

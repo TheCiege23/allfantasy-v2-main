@@ -343,8 +343,10 @@ describe('the grade is the one every surface shows', () => {
     expect(grade).toHaveBeenCalledWith({
       leagueId: 'league-1',
       userId: 'viewer-1',
-      give: { assets: [{ kind: 'player', name: 'Bijan Robinson' }], unpriceable: [] },
-      get: { assets: [{ kind: 'player', name: 'Puka Nacua' }], unpriceable: [] },
+      give: { assets: [{ kind: 'player', name: 'Bijan Robinson', rosterPlayerId: 'p-bijan',
+        providerIdentity: { provider: 'sleeper', id: 'p-bijan', position: 'RB' } }], unpriceable: [] },
+      get: { assets: [{ kind: 'player', name: 'Puka Nacua', rosterPlayerId: 'p-puka',
+        providerIdentity: { provider: 'sleeper', id: 'p-puka', position: 'WR' } }], unpriceable: [] },
     })
   })
 
@@ -418,7 +420,7 @@ describe('draft picks in a dynasty league', () => {
     expect(s.picks).toBe(1)
     // The one grade prices the pick too, by season and round.
     expect(grade.mock.calls[0]![0].give.assets).toEqual([
-      { kind: 'player', name: 'Bijan Robinson' },
+      expect.objectContaining({ kind: 'player', name: 'Bijan Robinson', rosterPlayerId: 'p-bijan' }),
       { kind: 'pick', year: 2027, round: 1 },
     ])
   })

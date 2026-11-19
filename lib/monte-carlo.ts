@@ -25,44 +25,7 @@ export interface TeamProjection {
   seed?: number
 }
 
-export interface MatchupResult {
-  winProbability: number
-  marginMean: number
-  marginStdDev: number
-}
-
-export function simulateMatchup(
-  teamA: TeamProjection,
-  teamB: TeamProjection,
-  iterations = 5000
-): MatchupResult {
-  iterations = capIterations(iterations, 'matchup')
-  let winsA = 0
-  let marginSum = 0
-  let marginSqSum = 0
-
-  for (let i = 0; i < iterations; i++) {
-    const scoreA = randomNormal(teamA.mean, teamA.stdDev)
-    const scoreB = randomNormal(teamB.mean, teamB.stdDev)
-    const margin = scoreA - scoreB
-
-    if (scoreA > scoreB) winsA++
-    marginSum += margin
-    marginSqSum += margin * margin
-  }
-
-  const marginMean = marginSum / iterations
-  const marginVariance = marginSqSum / iterations - marginMean * marginMean
-  const marginStdDev = Math.sqrt(Math.max(0, marginVariance))
-
-  return {
-    winProbability: Math.round((winsA / iterations) * 1000) / 1000,
-    marginMean: Math.round(marginMean * 10) / 10,
-    marginStdDev: Math.round(marginStdDev * 10) / 10,
-  }
-}
-
-export interface SeasonSimResult {
+interface SeasonSimResult {
   expectedWins: number
   playoffProbability: number
   byeWeekProbability: number
@@ -104,7 +67,7 @@ export function simulateSeason(
   }
 }
 
-export interface PlayoffSimResult {
+interface PlayoffSimResult {
   championshipProbability: number
   finalistProbability: number
 }
@@ -156,7 +119,7 @@ export function simulatePlayoffs(
   }
 }
 
-export interface ChampionshipDelta {
+interface ChampionshipDelta {
   oddsBefore: number
   oddsAfter: number
   delta: number

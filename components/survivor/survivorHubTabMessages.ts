@@ -16,7 +16,7 @@ export const survivorHubTabMessages = defineMessages({
     tab: (id: string, fallback: string): string => ({
       overview: 'Resumen', operations: 'Operaciones', tribes: 'Tribus', tribal: 'Consejo de eliminación', governance: 'Reglas y conducta',
       minigames: 'Minijuegos', rewards: 'Recompensas', exile: 'Isla del Exilio', jury: 'Jurado', settings: 'Ajustes',
-      chat: 'Comunicaciones', ai: 'IA y automatización', premium: 'Inteligencia premium', subscription: 'Acceso · Fichas', history: 'Historial',
+      chat: 'Comunicaciones', ai: 'Chimmy y automatización', premium: 'Inteligencia premium', subscription: 'Acceso · Fichas', history: 'Historial',
     } as Record<string, string>)[id] ?? fallback,
     text: (english: string): string => HUB_TEXT_ES[english] ?? english,
   },
@@ -52,7 +52,7 @@ const HUB_TEXT_ES: Record<string, string> = {
   'Use league settings — Survivor panels are under the specialty format.': 'Usa los ajustes de la liga: los paneles de Survivor están en el formato especial.',
   Communications: 'Comunicaciones',
   'Island chat, tribe threads, jury, and exile channels.': 'Chat de la isla, hilos de tribu, jurado y canales del Exilio.',
-  'AI & automation': 'IA y automatización',
+  'Chimmy & automation': 'Chimmy y automatización',
   '@Chimmy ingests votes, timestamps picks, and posts official results.': '@Chimmy recoge los votos, registra la hora de las elecciones y publica los resultados oficiales.',
   'History / archive': 'Historial / archivo',
   'Recent Survivor audit events.': 'Eventos de auditoría recientes de Survivor.',

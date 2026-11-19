@@ -13,14 +13,17 @@ afterEach(cleanup)
 describe('Trade Center Spanish orientation', () => {
   it('explains the cross-league starting point', () => {
     render(<TradeCenter league={null} />)
-    expect(screen.getByRole('heading', { name: 'Centro de intercambios' })).toBeTruthy()
-    expect(document.body.textContent).toContain('Elige la liga para intercambiar')
+    // The all-leagues page leads with the trades guide (2026-11-13): what it is for, in Spanish.
+    expect(screen.getByRole('heading', { level: 1, name: 'Intercambios en tus ligas' })).toBeTruthy()
+    expect(document.body.textContent).toContain('Revisa una oferta antes de aceptarla')
+    expect(screen.getByRole('heading', { name: 'Revisa un intercambio' })).toBeTruthy()
   })
 
   it('keeps the calculator, its folds and the trade handoff understandable', () => {
     const { container } = render(<TradeCenter league={{ id: 'l1', name: 'Liga Uno', format: 'Dinastía', teamCount: 12 }} />)
-    expect(screen.getByRole('heading', { name: 'Centro de intercambios' })).toBeTruthy()
-    expect(document.body.textContent).toContain('añade lo que envías y recibes')
+    // 2026-11-13: the headline is the trade deadline; with none known it says what the page is for.
+    expect(screen.getByRole('heading', { level: 1, name: 'Arma un intercambio y recibe su calificación' })).toBeTruthy()
+    expect(document.body.textContent).toContain('Añade lo que envías y lo que recibes')
     // Each side's total bar, and the empty state under it.
     expect(container.querySelector(".af-tc-team[data-side='give'] .af-tc-side-bar")!.textContent).toContain('Envías')
     expect(container.querySelector(".af-tc-team[data-side='get'] .af-tc-side-bar")!.textContent).toContain('Recibes')

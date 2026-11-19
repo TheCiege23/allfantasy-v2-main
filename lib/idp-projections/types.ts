@@ -79,9 +79,9 @@ export interface CohortPriors {
   sampleGames: number
 }
 
-export type IdpConfidenceLevel = 'high' | 'medium' | 'low'
+type IdpConfidenceLevel = 'high' | 'medium' | 'low'
 
-export interface IdpProjectionCoverage {
+interface IdpProjectionCoverage {
   /** Games actually used from the supplied history. */
   gamesUsed: number
   /**
@@ -110,7 +110,7 @@ export interface IdpProjectionCoverage {
  * The handoff's rule, and the one this module is built around: a confident wrong number is
  * worse than a labelled absence.
  */
-export interface IdpProjectionRefusal {
+interface IdpProjectionRefusal {
   ok: false
   reason: 'not_idp_position' | 'no_history' | 'insufficient_sample' | 'no_defensive_production' | 'history_unavailable'
   detail: string

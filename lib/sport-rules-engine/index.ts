@@ -13,13 +13,10 @@ export {
   getSupportedSports,
 } from './SportRulesEngine'
 export type {
-  SportKey,
   SportRules,
   RosterRules,
   RosterSlotRule,
   ScoringRules,
-  ScoringFormatOption,
   PlayerPoolRules,
   DraftOptionRules,
-  SportRulesDefaultDraftType,
 } from './types'

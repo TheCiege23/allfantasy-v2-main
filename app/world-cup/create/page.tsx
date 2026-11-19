@@ -3,18 +3,7 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import {
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Copy,
-  Flame,
-  Lock,
-  Share2,
-  Trophy,
-  Users,
-} from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle2, Flame, Lock, Share2, Trophy, Users } from "lucide-react"
 import { signupUrlWithIntent, loginUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
 import {
   trackWcGuestPoolStarted,
@@ -282,7 +271,7 @@ function PreviewAndSave({ draft, onBack }: PreviewProps) {
             "Bracket picks for all knockout rounds",
             "Group stage scoring",
             "Shareable invite link",
-            "Optional AI help (with upgrade)",
+            "Optional Chimmy help (with upgrade)",
           ].map((item) => (
             <div key={item} className="flex items-center gap-2.5">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />
@@ -381,7 +370,7 @@ export default function WorldCupGuestCreatePage() {
         </Link>
         <Link href="/" className="inline-flex items-center gap-1.5 text-sm font-black text-white">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-300 text-xs font-black text-slate-950">AF</span>
-          AllFantasy.AI
+          AllFantasy
         </Link>
       </header>
 
@@ -487,7 +476,7 @@ export default function WorldCupGuestCreatePage() {
         {/* Trust line */}
         {step < 3 && (
           <p className="mt-5 text-center text-xs text-white/30">
-            Free to start · No gambling · AI optional · Private groups
+            Free to start · No gambling · Chimmy optional · Private groups
           </p>
         )}
       </div>

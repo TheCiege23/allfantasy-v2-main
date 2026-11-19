@@ -60,6 +60,9 @@ describe("Find a League, step 3", () => {
 
   it("filters by vibe, and saves the search on screen", async () => {
     render(<FindLeagueClient />)
+    // The vibes sit in "More filters" since 2026-11-14; it starts closed when no filter is set.
+    expect(screen.queryByTestId("find-league-vibes")).toBeNull()
+    fireEvent.click(screen.getByTestId("find-league-more-toggle"))
     const vibes = await screen.findByTestId("find-league-vibes")
     expect((screen.getByTestId("find-league-save-search") as HTMLButtonElement).disabled).toBe(true)
 
@@ -114,7 +117,8 @@ describe("the card", () => {
     render(<FindLeagueCard league={league} />)
     expect(screen.getByTestId("find-league-vibes-lg1").textContent).toBe("Trash talkTrade happy")
     const commish = screen.getByTestId("find-league-commish-lg1")
-    expect(commish.textContent).toContain("Runs 3 AllFantasy leagues · since 2025")
+    expect(commish.textContent).toContain("Run by")
+    expect(commish.textContent).toContain("3 leagues since 2025")
     expect(commish.querySelector("a")?.getAttribute("href")).toBe("/profile/kenny")
   })
 })

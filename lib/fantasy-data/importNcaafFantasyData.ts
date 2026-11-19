@@ -13,37 +13,10 @@ import { prisma } from "@/lib/prisma"
 import type { FantasyImportSummary } from "./importNflFantasyData"
 import { importProviderDomainData } from "./importProviderDomainData"
 
-export type NcaafImportMode = "redraft" | "devy" | "c2c" | "all"
+type NcaafImportMode = "redraft" | "devy" | "c2c" | "all"
 
 function currentSeason(): number {
   return new Date().getFullYear()
-}
-
-function checkNcaafEnv(): { missingEnv: string[]; providerAvailable: boolean } {
-  const missingEnv: string[] = []
-  const hasCfbd =
-    Boolean(process.env.CFBD_API_KEY?.trim()) ||
-    Boolean(process.env.CFBD_KEY?.trim()) ||
-    Boolean(process.env.COLLEGE_FOOTBALL_DATA_API_KEY?.trim())
-  const hasApiSports =
-    Boolean(process.env.APISPORTS_API_KEY?.trim()) ||
-    Boolean(process.env.APISPORTS_KEY?.trim()) ||
-    Boolean(process.env.API_SPORTS_KEY?.trim()) ||
-    Boolean(process.env.SPORTS_API_KEY?.trim()) ||
-    Boolean(process.env.X_RAPIDAPI_KEY?.trim())
-
-  if (!hasCfbd) {
-    missingEnv.push("CFBD_API_KEY or CFBD_KEY or COLLEGE_FOOTBALL_DATA_API_KEY (CollegeFootballData) - required for NCAAF player data")
-  }
-
-  if (!hasApiSports) {
-    missingEnv.push("APISPORTS_API_KEY or APISPORTS_KEY or API_SPORTS_KEY or SPORTS_API_KEY - needed for NCAAF schedules/scores fallback")
-  }
-
-  return {
-    missingEnv,
-    providerAvailable: hasCfbd,
-  }
 }
 
 function checkNcaafProviderEnv(): { missingEnv: string[]; providerAvailable: boolean } {

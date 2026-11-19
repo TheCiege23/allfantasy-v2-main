@@ -15,7 +15,7 @@ import { logTournamentAudit } from './TournamentAuditService'
 import { getRoundWindow } from './tournament-sport-cutoffs'
 import type { TournamentSettings } from './types'
 
-export interface CondenseRoundResult {
+interface CondenseRoundResult {
   leagueIds: string[]
   advanced: number
   eliminated: number
@@ -33,12 +33,6 @@ function resolveNextPhase(totalAdvancing: number): 'elimination' | 'elite_eight'
   if (totalAdvancing <= 8) return 'championship'
   if (totalAdvancing <= 16) return 'elite_eight'
   return 'elimination'
-}
-
-function resolveNextLeagueSize(totalAdvancing: number, leagueCount: number): number {
-  if (leagueCount <= 0) return totalAdvancing
-  const base = Math.floor(totalAdvancing / leagueCount)
-  return Math.max(base, 4)
 }
 
 /**
@@ -416,7 +410,7 @@ export async function condenseRound(
  * Record bracket progression nodes for visualization after each advancement round.
  * Stores a snapshot of who advanced from which leagues into which new leagues.
  */
-export async function recordBracketProgression(
+async function recordBracketProgression(
   tournamentId: string,
   roundIndex: number,
   payload: Record<string, unknown>

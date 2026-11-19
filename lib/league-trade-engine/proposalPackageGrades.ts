@@ -47,7 +47,11 @@ export function composerAssetsFromPackage(
 
 export function suggestionGradeFrom(g: TradeGradeView): SuggestionGrade {
   return g.graded
-    ? { graded: true, letter: g.letter, partnerLetter: g.partnerLetter, label: g.label, giveValue: g.giveValue, getValue: g.getValue }
+    ? {
+        graded: true, letter: g.letter, partnerLetter: g.partnerLetter, label: g.label,
+        giveValue: g.giveValue, getValue: g.getValue,
+        ...(g.letterBasis === 'your_team' && g.market ? { leagueValueLetter: g.market.letter } : {}),
+      }
     : { graded: false, reason: g.reason }
 }
 

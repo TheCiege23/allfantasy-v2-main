@@ -12,7 +12,7 @@ function normalize(name: string): string {
 }
 
 /** Match conservative aliases only when one cached team fits; ambiguous names stay unavailable. */
-export function findTeamProfile(
+function findTeamProfile(
   name: string,
   rows: Array<{ data: unknown }>,
 ): BracketTeamProfile | null {

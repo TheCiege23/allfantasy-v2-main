@@ -27,6 +27,8 @@ import {
 import type { BoardPlayer, SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { nextRookieDraftYear, pickBoardAges, type SportPointsBaseResult } from '@/lib/decision-os/trade/sportPointsContext'
+import { rankFantraxProspectAdp } from '@/lib/adp/fantraxProspectAdp'
+import { rookieEvidenceFromDrafts } from '@/lib/decision-os/trade/rookieDraftEvidence'
 import { ageMultiplier, ageMultiplierAtAge } from '@/lib/dynasty-engine/AgingCurveService'
 
 const p = (id: string, name: string, position: string, perGame: number): BoardPlayer => ({ id, name, position, perGame, sampleGames: 60, aliases: [] })
@@ -78,6 +80,17 @@ describe('a player over five seasons', () => {
     expect(total).toBeCloseTo(expected, 6)
   })
 
+  it('uses stored birth dates when a projected young player has no numeric age', () => {
+    const ages = pickBoardAges([{ id: 'a', rollingInsightsId: 'ri-a', sleeperId: null, dob: '2006-01-09' }], [], new Date('2026-10-20'))
+    expect(ages.get('a')).toBe(20)
+  })
+
+  it('keeps the future pick cohort stable as regular-season games run out', () => {
+    const start = ctx()
+    expect(youngPlayerPool(start, dynasty()).length).toBeGreaterThan(0)
+    expect(youngPlayerPool({ ...start, window: { ...start.window, gamesRemaining: 0 } }, dynasty())).toEqual(youngPlayerPool(start, dynasty()))
+  })
+
   it('values the younger of two equal players above the older one', () => {
     const young = playerDynastyValue({ sport: 'NBA', player: board[0]!, age: 21, replacementPerGame: 18, gamesRemaining: 79 })
     const vet = playerDynastyValue({ sport: 'NBA', player: board[1]!, age: 33, replacementPerGame: 18, gamesRemaining: 79 })
@@ -87,6 +100,34 @@ describe('a player over five seasons', () => {
   it('never counts a season below the free agent as worth less than nothing', () => {
     const fading = playerDynastyValue({ sport: 'NHL', player: p('x', 'Old Winger', 'LW', 20), age: 36, replacementPerGame: 19, gamesRemaining: 70 })
     expect(fading).toBeGreaterThanOrEqual((20 - 19) * 70)
+  })
+})
+
+describe('recent rookie draft evidence', () => {
+  it.each(['NBA', 'NHL', 'MLB'] as const)('grades a %s prospect by the exact saved rookie draft ID', (sport) => {
+    const evidence = rookieEvidenceFromDrafts([{ teamCount: 12, picks: [{ playerId: 'fantrax:prospect', playerName: 'Prospect', overall: 1, round: 1 }] }])
+    const base = { ctx: ctx({ sport }), dynasty: dynasty({ rookieDraftEvidence: evidence }), get: [player('vet')] }
+    expect(gradeSportDynastyDeal({ ...base, give: [{ kind: 'player', rosterPlayerId: 'fantrax:prospect' }] }))
+      .toMatchObject({ graded: true, basis: expect.stringContaining('recent rookie draft') })
+    expect(gradeSportDynastyDeal({ ...base, give: [{ kind: 'player', rosterPlayerId: 'unknown', name: 'Prospect' }] }))
+      .toMatchObject({ graded: false })
+  })
+
+  it('prices only Fantrax IDs matched to the prospect directory and preserves observed ADP order', () => {
+    const pool = ['a', 'b', 'dupe'].map((id) => ({ fantraxId: id, playerId: 'fantrax:' + id, name: id }))
+    const adp = (id: string, value: number) => ({ fantraxId: id, name: id, position: 'C', adp: value })
+    const ranked = rankFantraxProspectAdp([adp('unlinked', 1), adp('b', 201), adp('a', 100), adp('dupe', 110), adp('dupe', 111)], pool)
+    expect(ranked.map((p) => [p.playerId, p.rank])).toEqual([['fantrax:a', 1], ['fantrax:b', 2]])
+    const result = gradeSportDynastyDeal({
+      ctx: ctx({ sport: 'NHL' }), dynasty: dynasty({ prospectAdp: new Map(ranked.map((p) => [p.playerId, p])) }),
+      give: [{ kind: 'player', rosterPlayerId: 'fantrax:a' }], get: [player('vet')],
+    })
+    expect(result).toMatchObject({ graded: true, basis: expect.stringContaining('Fantrax ADP rank') })
+  })
+
+  it('refuses a duplicated player claim and a pick outside its round', () => {
+    const one = { playerId: 'one', playerName: 'One', overall: 1, round: 1 }
+    expect(rookieEvidenceFromDrafts([{ teamCount: 4, picks: [one, { ...one, overall: 2 }, { ...one, playerId: 'bad', overall: 8 }] }]).size).toBe(0)
   })
 })
 
@@ -103,6 +144,18 @@ describe('draft picks', () => {
     expect(later.ok && later.value).toBeCloseTo(100 * FUTURE_DISCOUNT ** 2, 6)
     const nhl = pickDynastyValue({ sport: 'NHL', pick: pick(2027, 1, 'early'), pool, teams: 4, nextDraftYear: 2027 })
     expect(nhl.ok && nhl.value).toBeCloseTo(100 * FUTURE_DISCOUNT ** PROSPECT_WAIT_SEASONS.NHL, 6)
+  })
+
+  it.each(['NBA', 'NHL', 'MLB'] as const)('%s prices adjacent picks by overall position on a 150-team board', sport => {
+    const options = { sport, pool: [100, 80, 50], teams: 150, nextDraftYear: 2027 }
+    const endOfFirst = pickDynastyValue({ ...options, pick: { ...pick(2027, 1), overall: 150 } })
+    const startOfSecond = pickDynastyValue({ ...options, pick: { ...pick(2027, 2), overall: 151 } })
+    expect(endOfFirst).toMatchObject({ ok: true, deep: true })
+    expect(startOfSecond).toMatchObject({ ok: true, deep: true })
+    if (endOfFirst.ok && startOfSecond.ok) {
+      expect(endOfFirst.value).toBeGreaterThan(startOfSecond.value)
+      expect(startOfSecond.value).toBeGreaterThan(0)
+    }
   })
 
   it('refuses a pick for a draft already held, and any pick when no young player has a projection', () => {

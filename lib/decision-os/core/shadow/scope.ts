@@ -4,7 +4,7 @@ export interface DecisionShadowScope {
   leagueIds?: Array<string | null | undefined> | null
 }
 
-export interface DecisionShadowScopeFilters {
+interface DecisionShadowScopeFilters {
   usernames: Set<string>
   leagueIds: Set<string>
   hasScope: boolean

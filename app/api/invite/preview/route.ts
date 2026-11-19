@@ -1,3 +1,4 @@
+import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -51,6 +52,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, preview })
+  const viewerId = session?.user?.id
+  const leagueId = preview.inviteType === 'league' && preview.status === 'valid' ? preview.targetId : null
+  const gate = viewerId && leagueId ? await evaluateCareerJoinGate(viewerId, leagueId) : null
+  const existing = leagueId && viewerId && gate && !gate.canJoin
+    ? await prisma.roster.findUnique({ where: { leagueId_platformUserId: { leagueId, platformUserId: viewerId } }, select: { id: true } })
+    : null
+  const careerBlocked = leagueId && gate && !gate.canJoin && !existing ? careerJoinRefusal(gate, leagueId) : null
+  return NextResponse.json({ ok: true, preview: { ...preview, careerBlocked } }, { headers: { 'Cache-Control': 'private, no-store' } })
 }
 

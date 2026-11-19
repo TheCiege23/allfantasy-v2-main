@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma'
  */
 
 /** How many missing weeks one sync run may fetch. */
-export const BACKFILL_WEEKS_PER_RUN = 4
+const BACKFILL_WEEKS_PER_RUN = 4
 
 /**
  * PURE: the weeks to fetch, oldest first.

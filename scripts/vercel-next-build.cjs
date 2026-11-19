@@ -842,7 +842,7 @@ async function run() {
   } else if (patchStatus === 'skipped-shape-changed') {
     console.warn(
       '[vercel-next-build] Manifest race patch skipped — upstream plugin shape changed. ' +
-        'Update ORIGINAL in scripts/patch-manifest-race.cjs if concurrent build hangs occur.'
+        'Update ORIGINAL_SHAPES in scripts/patch-manifest-race.cjs if concurrent build hangs occur.'
     )
   }
   disableNonProdRoutes()

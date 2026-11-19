@@ -34,6 +34,8 @@ export type ChimmyLeagueSnapshot = {
    * every best-ball league. Read by `decisionFormatGate`, which refuses lineup moves here.
    */
   bestBallMode: boolean | null
+  /** With `settings.best_ball`, a best ball Guilly league — its lineup sets itself too (decisionFormatGate). */
+  guillotineMode?: boolean | null
 }
 
 /**
@@ -95,6 +97,7 @@ const SNAPSHOT_SELECT = {
   keeperRoundPenalty: true,
   /* Same reasoning: a format fact, read on the query that already proved membership. */
   bestBallMode: true,
+  guillotineMode: true,
 } as const
 
 /**

@@ -14,6 +14,9 @@ import { buildMatchupInsightsBlock } from '@/lib/matchup-center/matchupAiInsight
 import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbability'
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
+import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
+import { buildNativeMatchupCenterPayload } from './nativeMatchupCenter'
+import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
 
@@ -78,15 +81,16 @@ function slotAiInsight(pts: number, proj: number, injury: string | null, hasReal
   return null
 }
 
-function weekFromSettings(settings: unknown): number {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
+/** The week the league's settings state, or null when they state none (never a guessed 1). */
+function weekFromSettings(settings: unknown): number | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
   const w = (settings as Record<string, unknown>).currentWeek ?? (settings as Record<string, unknown>).current_week
   if (typeof w === 'number' && Number.isFinite(w)) return Math.max(1, Math.floor(w))
   if (typeof w === 'string') {
     const n = parseInt(w, 10)
-    return Number.isFinite(n) ? Math.max(1, n) : 1
+    return Number.isFinite(n) ? Math.max(1, n) : null
   }
-  return 1
+  return null
 }
 
 function recordWinPct(w: number, l: number, t: number): number {
@@ -122,6 +126,8 @@ export async function buildMatchupCenterPayload(params: {
   viewerUserId: string
   season?: number
   week?: number
+  /** A league that plays more than one game a week: which of the viewer's games to show (1-based). */
+  game?: number
 }): Promise<MatchupCenterPayload | { error: string; status: number; code?: string }> {
   const league = await prisma.league.findFirst({
     where: { id: params.leagueId },
@@ -132,6 +138,9 @@ export async function buildMatchupCenterPayload(params: {
       settings: true,
       leagueVariant: true,
       userId: true,
+      platform: true,
+      platformLeagueId: true,
+      playoffWeeksPerRound: true,
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
@@ -148,8 +157,33 @@ export async function buildMatchupCenterPayload(params: {
     return { error: 'Forbidden', status: 403 }
   }
 
+  /*
+   * 🛑 A LEAGUE THAT PLAYS HERE IS READ FROM ITS OWN SEASON. Its schedule and scores live in
+   * `RedraftMatchup` and its bracket in `RedraftPlayoffMatchup`; the `teamWeekResult` rows read below
+   * are never written for it on a schedule, so this tab showed "No opponent" and 0.0 for a league with
+   * a scored week (lib/matchup-center/nativeMatchupModel.ts). Null means it has no season yet.
+   */
+  const native = await buildNativeMatchupCenterPayload({
+    league,
+    viewerUserId: params.viewerUserId,
+    season: params.season,
+    week: params.week,
+    game: params.game,
+  })
+  if (native) return native
+
   const season = params.season ?? league.season
-  const week = params.week ?? weekFromSettings(league.settings)
+  /*
+   * 🛑 "NO WEEK GIVEN" WAS WEEK 1 (2026-11-19). An imported Fantrax league states no current week in its settings, so
+   * this tab opened on week 1 in week 11 while My Team showed week 11. The week the league is actually in is the one
+   * every core screen uses (`resolveCurrentWeekForLeague`: the earliest unplayed week of its schedule); 1 is the last
+   * resort, for a league with no schedule on file at all.
+   */
+  const week =
+    params.week ??
+    weekFromSettings(league.settings) ??
+    (league.platformLeagueId ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week : null) ??
+    1
 
   /*
    * ⚠ `Roster.platformUserId` IS THE PLATFORM'S ID, NOT OURS, ON AN IMPORTED
@@ -340,8 +374,22 @@ export async function buildMatchupCenterPayload(params: {
     })
   }
 
-  const leftSlots = myStarters.map((r) => toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming'))
-  const rightSlots = oppStarters.map((r) => toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming'))
+  // AF's own projection beside the provider's, in this league's scoring. Empty when the engine has
+  // nothing for the week — the UI then shows no AF line rather than a substitute.
+  const afByPlayer = await loadMatchupAfProjections({
+    playerIds: [...myStarters, ...oppStarters].map((p) => p.id),
+    season,
+    week,
+    sport: String(league.sport),
+    platform: league.platform ?? null,
+    leagueSettings: league.settings,
+  })
+  const withAf = (slot: MatchupPlayerSlot): MatchupPlayerSlot => ({ ...slot, afProjectedPoints: afByPlayer.get(slot.playerId) ?? null })
+
+  const leftSlots = myStarters.map((r) => withAf(toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming')))
+  const rightSlots = oppStarters.map((r) => withAf(toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming')))
+  const leftAf = afSideTotal(leftSlots)
+  const rightAf = afSideTotal(rightSlots)
 
   const stLeft = standings.find((s) => s.rosterId === myRoster.id)
   const stRight = standings.find((s) => s.rosterId === oppRosterId)
@@ -358,6 +406,8 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stLeft?.wins ?? 0, stLeft?.losses ?? 0, stLeft?.ties ?? 0),
     totalPoints: tw?.totalPoints ?? leftSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: leftSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    afProjectedTotal: leftAf.total,
+    afProjectedFrom: leftAf.from,
     projectedTotalIncludesFallback: leftSlots.some((s) => !s.hasRealProjection),
     starters: leftSlots,
     remainingStarters: leftSlots.filter((s) => s.gameStatus !== 'final').length,
@@ -375,6 +425,8 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stRight?.wins ?? 0, stRight?.losses ?? 0, stRight?.ties ?? 0),
     totalPoints: oppResult?.totalPoints ?? rightSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: rightSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    afProjectedTotal: rightAf.total,
+    afProjectedFrom: rightAf.from,
     projectedTotalIncludesFallback: rightSlots.some((s) => !s.hasRealProjection),
     starters: rightSlots,
     remainingStarters: rightSlots.filter((s) => s.gameStatus !== 'final').length,

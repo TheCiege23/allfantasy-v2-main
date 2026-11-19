@@ -15,7 +15,7 @@ import type { ContentFeedItem, FeedMode, FeedItemType } from "./types"
 const DEFAULT_LIMIT = 30
 const MAX_ITEMS_PER_SOURCE = 15
 
-export interface GetContentFeedOptions {
+interface GetContentFeedOptions {
   tab?: FeedMode
   sport?: string | null
   contentType?: FeedItemType | null
@@ -151,7 +151,7 @@ function buildDailyCoveragePlaceholders(
     placeholders.push({
       id: "daily_ai_insight_placeholder",
       type: "ai_insight",
-      title: "AI recommendation",
+      title: "Chimmy recommendation",
       body: "Ask Chimmy for a personalized edge on lineup, waiver, and trade decisions.",
       href: "/chimmy",
       sport: null,
@@ -287,7 +287,7 @@ function buildAiInsightPlaceholders(userId: string | null): ContentFeedItem[] {
     {
       id: "ai_trade_tip",
       type: "ai_insight",
-      title: "AI trade tip",
+      title: "Chimmy trade tip",
       body: "Use the Trade Analyzer to compare offers and get fairness scores for your league.",
       href: "/legacy?tab=trade",
       sport: null,
@@ -299,7 +299,7 @@ function buildAiInsightPlaceholders(userId: string | null): ContentFeedItem[] {
     {
       id: "ai_waiver_tip",
       type: "ai_insight",
-      title: "Waiver AI",
+      title: "Waiver Chimmy",
       body: "Get suggested adds and drops based on your roster and league settings.",
       href: "/waiver-ai",
       sport: null,

@@ -97,7 +97,7 @@ export async function POST(
   const aiType = body.type as string
   if (!aiType || !VALID_AI_TYPES.has(aiType)) {
     return NextResponse.json(
-      { error: `Invalid AI type. Valid types: ${[...VALID_AI_TYPES].join(', ')}` },
+      { error: `Invalid Chimmy type. Valid types: ${[...VALID_AI_TYPES].join(', ')}` },
       { status: 400 }
     )
   }
@@ -196,7 +196,7 @@ export async function POST(
   } catch (e) {
     console.error('[tournament/ai] Error:', e)
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'AI generation failed' },
+      { error: e instanceof Error ? e.message : 'Chimmy generation failed' },
       { status: 500 }
     )
   }

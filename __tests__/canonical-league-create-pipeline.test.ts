@@ -122,6 +122,38 @@ describe('Canonical native league creation pipeline', () => {
     })
   })
 
+  it.each([
+    ['NFL', 22, 'fb_half_ppr'], ['NFL', 32, 'fb_ppr'], ['NBA', 8, 'nba_points'], ['NBA', 30, 'nba_points'],
+  ])('accepts Survivor Guilly through the actual handler: %s %i teams', async (sport, teamCount, scoringPreset) => {
+    const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
+    const res = await postCreateLeague(new Request('http://localhost/api/leagues', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ concept: 'survivor_guillotine', sport, teamCount, scoringPreset, draftType: 'snake',
+        leagueName: 'Tribal Chop', conceptSetup: { survivorGuillotineTribeCount: 2 } }),
+    }))
+    expect(res.status, JSON.stringify(await res.json())).toBe(200)
+    expect(executeCanonicalLeagueCreationMock.mock.calls[0]?.[0]).toMatchObject({
+      body: { concept: 'survivor_guillotine', sport, teamCount, conceptSetup: { survivorGuillotineTribeCount: 2 } },
+    })
+  })
+
+  it.each([
+    ['MLB', 22, 'mlb_points', 'sport'],
+    ['NBA', 31, 'nba_points', 'teamCount'],
+    ['NFL', 7, 'fb_half_ppr', 'teamCount'],
+    ['NBA', 22, 'nba_9cat', 'scoringPreset'],
+  ])('refuses Survivor Guilly outside its catalog: %s %i teams %s', async (sport, teamCount, scoringPreset, path) => {
+    const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
+    const res = await postCreateLeague(new Request('http://localhost/api/leagues', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ concept: 'survivor_guillotine', sport, teamCount, scoringPreset, draftType: 'snake', leagueName: 'Tribal Chop' }),
+    }))
+    const json = await res.json()
+    expect(res.status, JSON.stringify(json)).toBe(400)
+    expect(json.errors?.[0]?.path).toBe(path)
+    expect(executeCanonicalLeagueCreationMock).not.toHaveBeenCalled()
+  })
+
   it('rejects premium advanced settings without AF Commissioner', async () => {
     const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
     const req = new Request('http://localhost/api/leagues', {

@@ -40,9 +40,20 @@ export function weeklyFormat(league: { leagueType?: string | null; settings?: un
   if (values.some(v => /season_points|total_points|points_table/.test(v))) return 'season-points'
   return 'head-to-head'
 }
+/**
+ * Is this league's schedule in AllFantasy's own tables (`redraft_*`) rather than a provider's?
+ *
+ * ⚠ A NATIVE LEAGUE CAN CARRY A `manual-<uuid>` PLATFORM ID. League creation stamps one, so the
+ * old "manual AND no platform id" test sent every such league to `WeeklyMatchup` — which never holds
+ * a native game — and Season Outlook reported a league five weeks into its season as "No matchups
+ * have been synced" (production, 2026-11-11). Measured the same day: of 35 `platform = 'manual'`
+ * leagues, none has a `WeeklyMatchup` row, and the only ones with native games carry `manual-`.
+ */
 export function nativeWeeklyLeague(league: { platform?: string | null; platformLeagueId?: string | null }): boolean {
-  return ['allfantasy', 'native', 'manual', ''].includes(String(league.platform ?? '').toLowerCase()) && !league.platformLeagueId
-    || ['allfantasy', 'native'].includes(String(league.platform ?? '').toLowerCase())
+  const platform = String(league.platform ?? '').toLowerCase()
+  if (['allfantasy', 'native'].includes(platform)) return true
+  if (!['manual', ''].includes(platform)) return false
+  return !league.platformLeagueId || league.platformLeagueId.startsWith('manual-')
 }
 export function weeklyScopeKey(league: { id: string; platform?: string | null; platformLeagueId?: string | null }): string {
   return nativeWeeklyLeague(league) || !league.platformLeagueId ? `native:${league.id}`

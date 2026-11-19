@@ -1,4 +1,5 @@
 import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
+import { fantraxSoccerScoringPosition } from '@/lib/league-import/fantrax/fantraxScoring'
 
 /**
  * Fantrax player id -> our `PlayerIdentityMap` row, for the pro sports a Fantrax dynasty league lives in.
@@ -18,7 +19,7 @@ import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
  * `ingestProFantraxIdentities.ts`, which only the scheduled ingestion calls.
  */
 
-export type ProFantraxSport = 'MLB' | 'NBA' | 'NHL'
+export type ProFantraxSport = 'MLB' | 'NBA' | 'NHL' | 'SOCCER'
 
 export type ProIdentityRow = {
   id: string
@@ -65,6 +66,17 @@ const NHL_TEAMS: Record<string, string[]> = {
   WSH: ['Washington Capitals', 'WAS'], WPG: ['Winnipeg Jets', 'WIN'],
 }
 
+/** Fantrax club abbreviations paired with Rolling Insights team IDs from its EPL schedule. */
+const EPL_TEAMS: Record<string, string[]> = {
+  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth'], BHA: ['3', 'Brighton & Hove Albion'],
+  CHE: ['6', 'Chelsea'], CRY: ['7', 'Crystal Palace'], EVE: ['8', 'Everton'], FUL: ['9', 'Fulham'],
+  LIV: ['12', 'Liverpool'], MCI: ['13', 'Manchester City'], MUN: ['14', 'Manchester United'],
+  NEW: ['15', 'Newcastle United'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
+  WHU: ['19', 'West Ham United', 'West Ham'],
+  BRF: ['24', 'Brentford'], NOT: ['25', 'Nottingham Forest'], IPS: ['26', 'Ipswich Town'],
+  LEE: ['67', 'Leeds United'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
+}
+
 const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
 const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'GF', 'FC', 'UT', 'UTIL']
 const NHL_SKATER = ['C', 'LW', 'RW', 'W', 'F', 'D', 'LD', 'RD']
@@ -76,6 +88,13 @@ function tokens(position: string | null): string[] {
 }
 
 const RULES: Record<ProFantraxSport, SportRules> = {
+  SOCCER: {
+    teams: EPL_TEAMS,
+    roles(position) {
+      const slot = fantraxSoccerScoringPosition(position)
+      return slot ? [slot === 'GK' ? 'keeper' : 'outfield'] : []
+    },
+  },
   MLB: {
     teams: MLB_TEAMS,
     roles(position) {
@@ -134,8 +153,12 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
     if (row.fantraxId || existingSourceIds.has(ref.fantraxId)) { conflicts++; continue }
     proposed.push({ id: row.id, fantraxId: ref.fantraxId, rollingInsightsId: row.rollingInsightsId! })
   }
-  const counts = new Map<string, number>()
-  for (const link of proposed) { const key = link.rollingInsightsId; counts.set(key, (counts.get(key) ?? 0) + 1) }
-  const links = proposed.filter(link => counts.get(link.rollingInsightsId) === 1)
+  const targetCounts = new Map<string, number>()
+  const sourceCounts = new Map<string, number>()
+  for (const link of proposed) {
+    targetCounts.set(link.rollingInsightsId, (targetCounts.get(link.rollingInsightsId) ?? 0) + 1)
+    sourceCounts.set(link.fantraxId, (sourceCounts.get(link.fantraxId) ?? 0) + 1)
+  }
+  const links = proposed.filter(link => targetCounts.get(link.rollingInsightsId) === 1 && sourceCounts.get(link.fantraxId) === 1)
   return { links, unmatched, ambiguous: ambiguous + proposed.length - links.length, unchanged, conflicts, provided: refs.length }
 }

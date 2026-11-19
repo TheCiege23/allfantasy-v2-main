@@ -112,7 +112,7 @@ describe('Chimmy push path: Claude first, alone', () => {
         failures: [expect.objectContaining({ provider: 'anthropic' }), expect.objectContaining({ provider: 'openai' })],
       }),
     )
-    expect(JSON.stringify(out)).toContain("Chimmy's AI models are unavailable right now")
+    expect(JSON.stringify(out)).toContain("Chimmy's models are unavailable right now")
   })
 
   it('without an Anthropic key, runs the legacy routing exactly as before', async () => {
@@ -126,7 +126,7 @@ describe('Chimmy push path: Claude first, alone', () => {
   })
 })
 
-describe('other AI features are not moved to Claude', () => {
+describe('other Chimmy features are not moved to Claude', () => {
   it('a non-Chimmy feature never calls Claude, even with its key configured', async () => {
     h.available = ['anthropic', 'openai']
     h.chat.mockImplementation(async (role: string) => ok(role, 'answer'))

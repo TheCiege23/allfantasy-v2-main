@@ -20,7 +20,8 @@ interface LeagueRow {
   fillStatus?: 'full' | 'partial' | 'empty'
 }
 
-interface ControlData {
+/** GET /api/tournament/[id]/control. */
+export interface ControlData {
   tournamentId: string
   tournamentName: string
   leagues: LeagueRow[]
@@ -147,10 +148,13 @@ export function TournamentControlDashboard({
               key={row.tournamentLeagueId}
               className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3"
             >
-              <div className="min-w-0 flex-1">
+              {/* The name keeps at least 14rem: at 820 the three actions beside it squeezed "Gridiron South of the
+                  Mississippi" onto three lines. Now the actions wrap below instead (tournament gaps audit item 6). */}
+              <div className="min-w-0 flex-1 basis-56">
                 <div className="font-medium text-white">{row.leagueName}</div>
                 <div className="text-xs text-white/50">
-                  {row.conferenceName} · Round {row.roundIndex}
+                  {/* roundIndex is 0-based; people count rounds from 1 ("Round 0" was the first round). */}
+                  {row.conferenceName} · Round {row.roundIndex + 1}
                   {row.rosterCount != null && row.leagueSize != null && (
                     <span className="ml-2">
                       Fill: {row.rosterCount}/{row.leagueSize}
@@ -161,7 +165,7 @@ export function TournamentControlDashboard({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {row.joinUrl ? (
                   <>
                     <button
@@ -207,14 +211,14 @@ export function TournamentControlDashboard({
           <MessageSquare className="h-5 w-5 text-amber-400" /> Announcements
         </h2>
         <p className="mb-4 text-sm text-white/60">
-          Create hub announcements. Use AI to generate copy from current standings and rules, then post.
+          Create hub announcements. Use Chimmy to generate copy from current standings and rules, then post.
         </p>
         <button
           type="button"
           onClick={() => { setAiOpen(true); setAiText('') }}
           className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-2.5 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
         >
-          <Sparkles className="h-4 w-4" /> Generate with AI
+          <Sparkles className="h-4 w-4" /> Generate with Chimmy
         </button>
         <Link
           href={`/tournament/${tournamentId}`}

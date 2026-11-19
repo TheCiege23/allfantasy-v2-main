@@ -1,3 +1,7 @@
+import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
+import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
+import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
+import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { seedNullFaabBalances } from '@/lib/waiver-wire/settings-service'
@@ -22,6 +26,8 @@ import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/Guillo
 import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
 import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
+import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
+import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -203,7 +209,7 @@ export async function ensureRedraftSeason(leagueId: string) {
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
   const playoffStartCap = maxPlayoffStartWeekFor(league)
-  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(league) ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
@@ -237,6 +243,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
       id: true,
       redraftRosterId: true,
       platformUserId: true,
+      managerUserId: true,
       playerData: true,
       faabRemaining: true,
       waiverPriority: true,
@@ -245,35 +252,49 @@ async function ensureRedraftRosterForGenericRoster(params: {
 
   if (!genericRoster) return { redraftRoster: null, created: false, genericRoster: null }
 
-  const team = await prisma.leagueTeam.findFirst({
-    where: {
-      leagueId: params.leagueId,
-      OR: [
-        { externalId: genericRoster.id },
-        { platformUserId: genericRoster.platformUserId },
-        { claimedByUserId: genericRoster.platformUserId },
-      ],
-    },
-    select: {
-      ownerName: true,
-      teamName: true,
-      avatarUrl: true,
-      claimedByUserId: true,
-      platformUserId: true,
-    },
-  })
+  const teamSelect = { ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true, platformUserId: true } as const
+  // The team that IS this roster first: a manager who runs two teams has claimed both, so a match on
+  // who claimed it could hand this roster the other team's name and face.
+  const team =
+    (await prisma.leagueTeam.findFirst({
+      where: { leagueId: params.leagueId, externalId: genericRoster.id },
+      select: teamSelect,
+    })) ??
+    (await prisma.leagueTeam.findFirst({
+      where: {
+        leagueId: params.leagueId,
+        OR: [
+          { platformUserId: genericRoster.platformUserId },
+          { claimedByUserId: genericRoster.platformUserId },
+        ],
+      },
+      select: teamSelect,
+    }))
 
-  const ownerId =
-    String(team?.claimedByUserId ?? team?.platformUserId ?? genericRoster.platformUserId ?? '').trim() ||
-    `roster:${genericRoster.id}`
+  /*
+   * 🛑 A MANAGER'S SECOND TEAM IS ITS OWN SEASON TEAM. Found on a 36-team walkthrough (2026-11-19):
+   * the season came out with 35 teams, one of them holding 26 players. A further team run by the same
+   * manager is keyed by a key of its own (lib/league/rosterManager.ts), but the season row was looked
+   * up and written under the manager's user id, which is the FIRST team's key, and
+   * `(seasonId, ownerId)` is unique: both teams landed on one row. Such a team keeps its own key as
+   * the season owner and names its manager beside it, exactly as `assignLeagueSeat` writes it.
+   */
+  const extraTeam = isExtraTeamOwnerKey(genericRoster.platformUserId)
+  const ownerId = extraTeam
+    ? genericRoster.platformUserId
+    : String(team?.claimedByUserId ?? team?.platformUserId ?? genericRoster.platformUserId ?? '').trim() ||
+      `roster:${genericRoster.id}`
+  const managerUserId = extraTeam ? genericRoster.managerUserId ?? team?.claimedByUserId ?? null : null
 
-  const ownerIdCandidates = buildRedraftOwnerIdCandidates({
-    preferredOwnerId: ownerId,
-    claimedByUserId: team?.claimedByUserId,
-    teamPlatformUserId: team?.platformUserId,
-    genericRosterPlatformUserId: genericRoster.platformUserId,
-    genericRosterId: genericRoster.id,
-  })
+  const ownerIdCandidates = extraTeam
+    ? [ownerId]
+    : buildRedraftOwnerIdCandidates({
+        preferredOwnerId: ownerId,
+        claimedByUserId: team?.claimedByUserId,
+        teamPlatformUserId: team?.platformUserId,
+        genericRosterPlatformUserId: genericRoster.platformUserId,
+        genericRosterId: genericRoster.id,
+      })
 
   const existing = await prisma.redraftRoster.findFirst({
     where: {
@@ -327,6 +348,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
       seasonId: params.seasonId,
       leagueId: params.leagueId,
       ownerId,
+      ...(managerUserId ? { managerUserId } : {}),
       ownerName: team?.ownerName ?? `Team ${genericRoster.id.slice(0, 6)}`,
       teamName: team?.teamName ?? team?.ownerName ?? `Team ${genericRoster.id.slice(0, 6)}`,
       avatarUrl: team?.avatarUrl ?? null,
@@ -407,6 +429,7 @@ export async function ensureScheduleForNewSeason(params: {
   if (rosters.length < 2) return
   // The commissioner's divisions (best-effort: a failed read schedules without them, as before).
   const divisions = await loadSeasonRosterDivisions(params.leagueId, rosters)
+  const scheduleLeague = await prisma.league.findUnique({ where: { id: params.leagueId }, select: { settings: true } }).catch(() => null)
 
   /*
    * A late start schedules only the weeks left: a full round-robin generated for that many weeks and
@@ -424,6 +447,7 @@ export async function ensureScheduleForNewSeason(params: {
       medianGame: params.medianGame,
       divisionByRoster: divisions?.byRoster ?? null,
       divisionRivalsTwice: divisions?.rivalsTwice === true,
+      gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings),
     },
   ).map((slot) => ({ ...slot, week: slot.week + startWeek - 1 }))
 
@@ -542,6 +566,8 @@ export async function syncCompletedDraftToRedraftSeason(
   let redraftPlayersCreated = 0
   let redraftPlayersAlreadyPresent = 0
   let skippedPicks = 0
+  // Rows this run created on the bench, in pick order: a rookie draft's go to the taxi squad below.
+  const draftedBenchRows: DraftedRookieRow[] = []
 
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
 
@@ -596,7 +622,12 @@ export async function syncCompletedDraftToRedraftSeason(
       }
     }
 
-    const playerId = stablePlayerId(session.id, pick)
+    // A pick saved with no player id is looked up before it gets a made-up one: a made-up id matches
+    // no stat row, so the player would never score (lib/draft/resolveMissingPickPlayerId.ts).
+    const registryId = String(pick.playerId ?? '').trim()
+      ? null
+      : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
+    const playerId = registryId ?? stablePlayerId(session.id, pick)
 
     const existingActive = await prisma.redraftRosterPlayer.findFirst({
       where: {
@@ -614,7 +645,7 @@ export async function syncCompletedDraftToRedraftSeason(
 
     const slotType = inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
 
-    await prisma.redraftRosterPlayer.create({
+    const createdRow = await prisma.redraftRosterPlayer.create({
       data: {
         rosterId: mapping.redraftRoster.id,
         playerId,
@@ -627,9 +658,29 @@ export async function syncCompletedDraftToRedraftSeason(
         acquisitionType: 'drafted',
       },
     })
+    if (slotType === 'bench' && createdRow?.id) draftedBenchRows.push({ rowId: createdRow.id, rosterId: mapping.redraftRoster.id })
 
     redraftPlayersCreated += 1
   }
+
+  /*
+   * 🛑 LINK EVERY TEAM'S LEAGUE ROSTER TO THE SEASON ROSTER IT JUST GOT, NOT ONLY SURVIVOR'S.
+   * Trades, waiver claims, free-agent adds and trade reversals reach the season roster — the one
+   * lineups and scoring read — only through `Roster.redraftRosterId` (applyRedraftRosterMoves). With
+   * the link unset that write is skipped without an error, so in a league that drafted here a traded
+   * player kept scoring for his old team. Only the Survivor branch above linked, and the reconciler's
+   * other callers are import paths: a native dynasty or redraft league was never linked at all. Found
+   * by the dynasty season simulation (0 of 12 linked when trading opened). This is the moment the
+   * reconciler's own doc names — where the correspondence first becomes knowable. Idempotent, fills
+   * only NULL links, and must not fail draft completion.
+   */
+  await reconcileRosterRedraftLinks(leagueId).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] roster season links not reconciled', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
 
   /*
    * A season drafted mid-season starts at its sport's next unplayed week (seasonStartWeek.ts) —
@@ -669,6 +720,20 @@ export async function syncCompletedDraftToRedraftSeason(
         })
       })
     }
+  }
+
+  /*
+   * A rookie draft's picks go onto the taxi squad while it has room (placeDraftedRookiesOnTaxi.ts).
+   * After the housekeeping above, so spots it freed count. Must not fail draft completion.
+   */
+  if (session.playerPool === 'rookies_only' && draftedBenchRows.length > 0) {
+    await placeDraftedRookiesOnTaxi(leagueId, draftedBenchRows).catch((err) => {
+      console.warn('[syncCompletedDraftToRedraftSeason] rookies not placed on the taxi squad', {
+        leagueId,
+        seasonId: season.id,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
   }
 
   await ensureScheduleForNewSeason({

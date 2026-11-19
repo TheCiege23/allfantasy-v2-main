@@ -244,7 +244,7 @@ async function runSingleToolAudit(
   options: { hasDownload: boolean }
 ) {
   await gotoWithRetry(page, "/media")
-  await expect(page.getByRole("heading", { name: "AI Media" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Chimmy Media" })).toBeVisible()
   const opened = await ensureToolOpen(page, tool)
   if (!opened) {
     // Rare browser/hydration flake: controls render but handlers fail to attach.

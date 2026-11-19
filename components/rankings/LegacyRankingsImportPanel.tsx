@@ -14,8 +14,9 @@ import {
 } from '@/lib/legacy-import-settings'
 import { StepHelp } from '@/components/league-creation-wizard/StepHelp'
 import { SLEEPER_IMPORT_SPORTS } from '@/lib/league-import/sleeper/import-sports'
+import { getImportPlatforms } from '@/lib/league-import/provider-ui-config'
 
-export type LegacyRankingsImportPanelProps = {
+type LegacyRankingsImportPanelProps = {
   onImportSuccess: () => void
   /** Optional compact layout for dashboard (single column on mobile, tighter grid). */
   variant?: 'default' | 'dashboard'
@@ -119,7 +120,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         <div>
           <h3 className="text-lg font-bold text-white">Build Your Legacy Profile</h3>
           <p className="mt-0.5 text-sm text-white/50">
-            Import your fantasy history to calculate your AllFantasy rank, XP progress, and AI grade.
+            Import your fantasy history to calculate your AllFantasy rank, XP progress, and Chimmy grade.
           </p>
         </div>
         {variant === 'dashboard' ? (
@@ -179,7 +180,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
                 ) : (
                   <>
                     <p className="text-[11px] leading-snug text-white/45">
-                      ESPN, Yahoo, MFL, Fantrax, and Fleaflicker use the same secure import flow as the main Import page
+                      {getImportPlatforms().filter((p) => p.status === 'live' && p.provider !== 'sleeper').map((p) => p.name).join(', ')} use the same secure import flow as the main Import page
                       (league id / key and account access).
                     </p>
                     {importError[providerId] ? (
@@ -199,7 +200,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         </div>
       )}
       <p className="mt-3 text-center text-[11px] text-white/25">
-        Career rank cache, AI report, and overview cards all refresh from this import.
+        Career rank cache, Chimmy report, and overview cards all refresh from this import.
       </p>
     </div>
   )

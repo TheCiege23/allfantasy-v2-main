@@ -15,13 +15,6 @@ vi.mock('@/lib/decision-os/commissioner-health', () => ({ runCommissionerHealthD
 vi.mock('@/lib/decision-os/commissioner-health/deps', () => ({
   buildProductionCommissionerHealthDecisionDeps: buildDeps,
 }))
-// The lineup half of the module is not under test here, but its imports must still resolve.
-vi.mock('@/lib/decision-os/lineup/loader', () => ({ loadLineupSetInputs: vi.fn() }))
-vi.mock('@/lib/decision-os/lineup', () => ({ runLineupSetDecision: vi.fn() }))
-vi.mock('@/lib/decision-os/lineup/deps', () => ({
-  productionLineupWorldDeps: () => ({}),
-  productionLineupDecisionDeps: () => ({}),
-}))
 
 import { loadCommissionerHealthDecisionSlice } from '@/lib/decision-os/grounding/decisionBridge'
 

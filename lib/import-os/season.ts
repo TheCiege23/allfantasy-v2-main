@@ -43,7 +43,7 @@ export type SeasonState = 'preseason' | 'regular_season' | 'postseason' | 'offse
  * Offseason stays at 4 hours. Nothing trades at 3am in June, and the same multiplier applied there
  * would be pure spend.
  */
-export const CADENCE_MINUTES: Record<SeasonState, number> = {
+const CADENCE_MINUTES: Record<SeasonState, number> = {
   preseason: 10,
   regular_season: 10,
   postseason: 10,
@@ -84,7 +84,7 @@ function inSegment(md: number, startMd: number, endMd: number): boolean {
   return md >= startMd || md <= endMd // wraps year boundary
 }
 
-export type SeasonInput = {
+type SeasonInput = {
   sport: string
   provider?: string
   now: Date

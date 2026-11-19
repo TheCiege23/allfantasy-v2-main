@@ -33,11 +33,10 @@ import {
   NFL_C2C_COLLEGE_DRAFT_ROUNDS,
   NFL_C2C_COLLEGE_POSITIONS,
 } from '@/lib/merged-devy-c2c/constants'
-import { getC2CAdapterForSport } from '@/lib/merged-devy-c2c/types'
 
 // ── Sport eligibility ─────────────────────────────────────────────────────────
 
-export type C2CSport = 'NFL' | 'NCAAF'
+type C2CSport = 'NFL' | 'NCAAF'
 
 export function isC2CEligibleSport(sport: unknown): sport is C2CSport {
   const s = String(sport ?? '').trim().toUpperCase()
@@ -46,7 +45,7 @@ export function isC2CEligibleSport(sport: unknown): sport is C2CSport {
 
 // ── Draft type support ────────────────────────────────────────────────────────
 
-export type C2CDraftType =
+type C2CDraftType =
   | 'c2c_snake'
   | 'c2c_linear'
   | 'c2c_auction'
@@ -63,7 +62,7 @@ export const C2C_DRAFT_TYPE_IDS: readonly C2CDraftType[] = [
   'auto',
 ] as const
 
-export type C2CEngineCore = 'snake' | 'linear' | 'auction'
+type C2CEngineCore = 'snake' | 'linear' | 'auction'
 
 export function normalizeC2CDraftType(value: unknown): C2CDraftType {
   const raw = String(value ?? '').trim().toLowerCase()
@@ -76,7 +75,7 @@ export function normalizeC2CDraftType(value: unknown): C2CDraftType {
   return 'c2c_snake'
 }
 
-export function getC2CEngineCore(draftType: C2CDraftType): C2CEngineCore {
+function getC2CEngineCore(draftType: C2CDraftType): C2CEngineCore {
   if (draftType === 'c2c_auction') return 'auction'
   if (draftType === 'c2c_linear') return 'linear'
   return 'snake'
@@ -95,16 +94,8 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.max(min, Math.min(max, Math.floor(n)))
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
-}
-
 function starterCount(slots: Record<string, number>): number {
   return Object.values(slots).reduce((t, n) => t + n, 0)
-}
-
-function pickOrderForEngine(core: C2CEngineCore): 'snake' | 'linear' | 'auction' {
-  return core
 }
 
 // ── Scoring helpers ───────────────────────────────────────────────────────────
@@ -158,7 +149,7 @@ function scoringAliasesForPreset(sport: C2CSport, presetId: string): string[] {
 
 // ── Sub-types ─────────────────────────────────────────────────────────────────
 
-export interface C2CProRosterTemplate {
+interface C2CProRosterTemplate {
   rosterMode: 'c2c'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -173,7 +164,7 @@ export interface C2CProRosterTemplate {
   defensePosition: 'DST' | null
 }
 
-export interface C2CCollegeRosterTemplate {
+interface C2CCollegeRosterTemplate {
   rosterMode: 'c2c_campus'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -182,7 +173,7 @@ export interface C2CCollegeRosterTemplate {
   collegeDraftRounds: number
 }
 
-export interface C2CDraftPhaseSettings {
+interface C2CDraftPhaseSettings {
   enabled: boolean
   lifecycle: 'startup_pro' | 'startup_college' | 'rookie' | 'college' | 'supplemental'
   draftType: C2CEngineCore
@@ -195,7 +186,7 @@ export interface C2CDraftPhaseSettings {
   phaseAwarePoolOnly?: boolean
 }
 
-export interface C2CDraftSettings {
+interface C2CDraftSettings {
   draftType: C2CEngineCore
   requestedDraftType: C2CDraftType
   engineCore: C2CEngineCore
@@ -228,7 +219,7 @@ export interface C2CDraftSettings {
   supplementalDraft: C2CDraftPhaseSettings
 }
 
-export interface C2CSettings {
+interface C2CSettings {
   enabled: true
   adapterId: 'nfl_c2c'
   dynastyOnly: true
@@ -270,7 +261,7 @@ export interface C2CSettings {
   offseasonPhase: 'setup'
 }
 
-export interface C2CDefaultContract {
+interface C2CDefaultContract {
   sport: C2CSport
   league_type: 'c2c'
   leagueType: 'c2c'

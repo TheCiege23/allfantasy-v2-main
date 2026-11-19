@@ -1,3 +1,4 @@
+import { isCanonicalLeagueRules, renderLeagueRules } from './leagueRulesText'
 import type { DecisionOsGroundingPacket, GroundedSlice } from './packet'
 
 /**
@@ -45,6 +46,10 @@ function ageLine(asOf: string | null, now: number): string | null {
  */
 const MAX_ITEMS = 8
 
+/** The roster's league-scored projections list the whole roster: a 25-man roster cut to eight reads as complete. */
+const ROSTER_PROJECTIONS_SLICE = "Your roster this week (this league's scoring)"
+const MAX_ITEMS_BY_SLICE: Readonly<Record<string, number>> = { [ROSTER_PROJECTIONS_SLICE]: 30 }
+
 /** Trim a prose slice so one long saved analysis cannot crowd out every other fact. */
 const MAX_PROSE = 1200
 
@@ -87,14 +92,21 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   }
 
   /*
-   * DecisionFact (R2.1) — a bridged decision from one of the four live engines.
+   * DecisionFact (R2.1) — a bridged decision from one of the live engines.
    *
    * 🛑 THIS BRANCH MUST PRECEDE THE ARRAY CHECK BELOW, AND ITS ABSENCE WAS G11 IN MINIATURE. A
    * DecisionFact is a plain object, so without it `!Array.isArray(value)` returns [] and a decision
-   * slice serialises to its header line and nothing else — "lineupDecision: available", which is
+   * slice serialises to its header line and nothing else — "waiverDecision: available", which is
    * precisely the failure this file was rewritten to fix for values.
    */
   if (isDecisionFact(value)) return renderDecision(value)
+
+  /*
+   * The league ruleset (`CanonicalLeagueRules`), field by field. 🛑 THIS BRANCH MUST PRECEDE `renderObject`, which
+   * prints every nested object as "present" — so the whole slice read `scoring: present`, `trades: present`, and
+   * Chimmy guessed PPR, the trade deadline and the FAAB budget (2026-11-16 re-score item 5).
+   */
+  if (isCanonicalLeagueRules(value)) return renderLeagueRules(value)
 
   /*
    * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
@@ -123,12 +135,20 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
 
   const { ordered, promoted } = orderByRosterRelevance(value, onRoster)
 
+  const cap = MAX_ITEMS_BY_SLICE[name] ?? MAX_ITEMS
   const rows: string[] = []
-  for (const item of ordered.slice(0, MAX_ITEMS)) {
+  if (name === ROSTER_PROJECTIONS_SLICE) {
+    const first = value[0] as { week?: unknown; season?: unknown } | null
+    const when = typeof first?.week === 'number' ? `Week ${first.week}${first.season ? ` ${String(first.season)}` : ''}` : 'This week'
+    rows.push(
+      `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
+    )
+  }
+  for (const item of ordered.slice(0, cap)) {
     const line = renderItem(item)
     if (line) rows.push(`    · ${line}`)
   }
-  const hidden = ordered.length - MAX_ITEMS
+  const hidden = ordered.length - cap
   if (hidden > 0) {
     /*
      * ⚠ THE MODEL MUST BE TOLD WHICH EIGHT THESE ARE. Showing the asker's own players without
@@ -272,6 +292,18 @@ function renderItem(item: unknown): string | null {
   if (item == null || typeof item !== 'object') return null
   const o = item as Record<string, unknown>
 
+  /*
+   * RosterLeagueProjection — the asker's roster under THIS league's scoring (`rosterLeagueProjections.ts`).
+   * 🛑 MUST BE THE FIRST BRANCH: it also carries `playerName` and `points`, and that branch would label
+   * the league's own number "canonical preset, NOT this league". A null is said in words, never printed as 0.
+   */
+  if (o.leagueScored === true && (o.slot === 'starter' || o.slot === 'bench')) {
+    const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : 'unidentified player'
+    const pos = o.position ? ` (${String(o.position)})` : ''
+    const pts = typeof o.points === 'number' ? `${fmt(o.points)} pts` : 'no projection line this week (NOT zero)'
+    return `${o.slot === 'starter' ? 'starter' : 'bench'}: ${who}${pos} ${pts}`
+  }
+
   // ValueLookup — only `status: 'ok'` carries a number. The other three are honest absences and
   // are already reported as gaps; repeating them per-player would drown the real values.
   if (typeof o.status === 'string') {
@@ -319,7 +351,15 @@ function renderItem(item: unknown): string | null {
     // `rescored` is surfaced because "under your league's rules" and "under our default" are
     // different claims, and a reader who cannot tell them apart will assume the first.
     const scored = o.rescored === true ? ' — rescored for this league' : ' — canonical preset, NOT this league'
-    return `${o.playerName}${pos} ${fmt(o.points)} pts${scored}`
+    /*
+     * 🛑 THE WEEK, ON EVERY ROW (Projection OS, 2026-11-16). A row printed "Name 14.2 pts" was read as "this
+     * week" whatever it was: the week-less row is a per-game season baseline, and a weekly row is one specific
+     * week. Say which, so a season number is never quoted as this week's.
+     */
+    const when = typeof o.week === 'number' && o.week > 0
+      ? `, week ${o.week}${typeof o.season === 'number' ? ` ${o.season}` : ''}`
+      : ', season baseline per game (no weekly projection on file — NOT a projection for this week)'
+    return `${o.playerName}${pos} ${fmt(o.points)} pts${when}${scored}`
   }
 
   return null
@@ -495,13 +535,18 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Market player values', packet.marketValues as GroundedSlice<unknown>],
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
+    /*
+     * The asker's roster under this league's scoring — the number My Team shows. Named so the model prefers it over
+     * the canonical rows above for anyone on this roster.
+     */
+    [ROSTER_PROJECTIONS_SLICE, packet.rosterProjections as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
     // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
     ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
     /*
-     * R2 — decisions bridged from the four live engines.
+     * R2 — decisions bridged from the live engines (waiver, commissioner health).
      *
      * ⚠ NAMED "DECISION" IN THE PROMPT ON PURPOSE. These are deterministic verdicts the engine
      * already reached, not facts for the model to reason from. Chimmy's job is to EXPLAIN one,
@@ -510,7 +555,6 @@ export function serializeDecisionOsGroundingForPrompt(
      * The `as` cast is safe against a missing slice: `sliceLine` returns [] for null/undefined,
      * which is what an optional slice is when this build did not request a decision.
      */
-    ['Lineup decision', packet.lineupDecision as GroundedSlice<unknown>],
     ['Waiver decision', packet.waiverDecision as GroundedSlice<unknown>],
     ['Commissioner health decision', packet.commissionerHealthDecision as GroundedSlice<unknown>],
     /*
@@ -599,23 +643,6 @@ export function serializeDecisionOsGroundingForPrompt(
     )
   }
 
-  /*
-   * R4b.7 (P4) — psychology frames a decision's explanation; it never changes the decision.
-   *
-   * ⚠ CONDITIONAL, NOT A STANDING RULE. Padding every prompt with an instruction about an
-   * interaction that is not even in play is the same mistake the gaps block above already avoids
-   * by checking `packet.gaps.length > 0` first. This only appears when BOTH a decision (from one
-   * of the three live engines this packet can carry) AND manager psychology are actually present
-   * — the one situation the rule exists to govern.
-   *
-   * ⚠ ONE GENERAL RULE, NOT ONE PER ENGINE. `decisionBridge.ts`'s own header already states why
-   * the four live engines are never touched by this session's work: "if a change here appears to
-   * need an engine change, that is the signal to stop and re-scope." Wiring framing into each
-   * engine's own text would mean editing the engines, or hand-writing a rule per decision type
-   * that needs updating every time one is added. A rule stated once, here, at the one place every
-   * decision and every psychology fact are already combined into one prompt, covers all three
-   * today and whatever is bridged next without touching any of them.
-   */
   if (available.length === 0 && packet.gaps.length === 0) {
     // Neither available nor missing: nothing was requested. Say so rather than emitting a header
     // with no body, which reads to a model as an empty-but-authoritative source.

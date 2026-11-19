@@ -164,7 +164,7 @@ describe('completedTradeInputs — used picks become the drafted player', () => 
 
   // The drafted player carries his Sleeper id and position (see `sleeperPlayerInput`); these fixture
   // players carry none, so they stay name-only.
-  const drafted = (name: string) => ({ kind: 'player', name, providerIdentity: { provider: 'sleeper', id: 'p', position: 'RB' } })
+  const drafted = (name: string) => ({ kind: 'player', name, rosterPlayerId: 'p', providerIdentity: { provider: 'sleeper', id: 'p', position: 'RB' } })
 
   it('a current-season pick that has been drafted is priced as the rookie, not as a pick', () => {
     const inputs = completedTradeInputs(trade([pick('2026', 1, 'Rookie Runner')]), 2026)!

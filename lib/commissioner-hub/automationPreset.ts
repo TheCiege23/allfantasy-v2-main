@@ -22,7 +22,7 @@ import { readIrAutoMoveEnabled } from '@/lib/ir-activation/irAutoMove'
 import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { readAutoHandover, type AutoHandoverTarget } from '@/lib/inactive-manager/autoHandover'
 
-export const AUTOMATION_PRESETS = ['recommended', 'run_it', 'hands_on'] as const
+const AUTOMATION_PRESETS = ['recommended', 'run_it', 'hands_on'] as const
 export type AutomationPreset = (typeof AUTOMATION_PRESETS)[number]
 
 export function isAutomationPreset(v: unknown): v is AutomationPreset {
@@ -38,7 +38,7 @@ export type PresetFacts = {
   tankingMonitorOn: boolean
 }
 
-export type PresetStep =
+type PresetStep =
   | { key: 'fill_empty_starters'; on: boolean }
   | { key: 'draft_as_me'; on: boolean }
   | { key: 'eliminated_lineups'; on: boolean }

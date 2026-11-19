@@ -1,3 +1,4 @@
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
@@ -10,12 +11,11 @@ import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
 import { sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
-import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
+import { isDraftTypeAllowedOnSettingsTab, leagueSettingsDraftTypeFor } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { validateLeagueSettings } from '@/lib/league-settings-validation'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
@@ -29,6 +29,7 @@ import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { readLeagueDraftPlaylist } from '@/lib/draft-room/draftPlaylistRead'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
@@ -36,6 +37,7 @@ import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { logAction } from '@/server/services/auditService'
 import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 
 export const dynamic = 'force-dynamic'
@@ -122,7 +124,7 @@ export async function GET(
   try {
     const [variant, commissioner, league, idpRosterSummary, orderModeAndLottery] = await Promise.all([
       getDraftVariantSettings(leagueId),
-      isCommissioner(leagueId, userId),
+      canCommissionerAct(leagueId, userId, 'view'),
       prisma.league.findUnique({
         where: { id: leagueId },
         select: {
@@ -150,7 +152,7 @@ export async function GET(
     const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
     const providerStatus = getProviderStatus()
 
-    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub] = await Promise.all([
+    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub, draftPlaylist] = await Promise.all([
       prisma.leagueSettings.findUnique({
         where: { leagueId },
         select: {
@@ -162,6 +164,9 @@ export async function GET(
       prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
       getComputedDraftRounds(leagueId).catch(() => null),
       commissioner ? hasAfCommissionerSub(userId) : Promise.resolve(false),
+      // The commissioner's draft playlist rides on this poll so a change reaches every member's room (2026-11-17).
+      // undefined on a failed read: the key is left out and the room keeps what it has.
+      readLeagueDraftPlaylist(leagueId).catch(() => undefined),
     ])
     const teams = await loadDraftOrderTeams(leagueId, lsRow?.draftOrderSlots ?? null, leagueMeta?.leagueSize ?? null).catch(() => [])
 
@@ -221,6 +226,7 @@ export async function GET(
       sessionPreDraft: variant.sessionPreDraft ?? false,
       orphanStatus,
       chimmyManagedRosterIds,
+      draftPlaylist,
       orphanAiProviderAvailable: providerStatus.anyAi,
       orphanDrafterEffectiveMode:
         variant.draftUISettings.orphanDrafterMode === 'ai' && !providerStatus.anyAi
@@ -285,7 +291,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -406,6 +412,13 @@ export async function PATCH(
     lsSyncKeys.add('cpuAutoPick')
   }
   if (typeof configPatch.rounds === 'number') lsPatch.rounds = configPatch.rounds as number
+  // One draft type: the LeagueSettings copy follows the Draft tab (lib/draft-types/draftTypeRegistry.ts).
+  if (configPatch.draft_type !== undefined || configPatch.third_round_reversal !== undefined) {
+    const current = (await currentVariant()).config
+    const type = String(configPatch.draft_type ?? current?.draft_type ?? 'snake')
+    const reversal = (configPatch.third_round_reversal ?? current?.third_round_reversal ?? false) === true
+    lsPatch.draftType = leagueSettingsDraftTypeFor(type, reversal)
+  }
   if (typeof configPatch.timer_seconds === 'number') {
     const { preset, customSeconds } = classifySeconds(configPatch.timer_seconds as number)
     lsPatch.pickTimerPreset = preset
@@ -698,6 +711,16 @@ export async function PATCH(
           ]
         : [],
     })
+    // The league log's "Changed the draft settings" (lib/league-log/leagueLog.ts): the "What changed" card above
+    // fades, and a draft change is exactly the kind of commissioner action the league must be able to look up.
+    await logAction({
+      leagueId,
+      userId,
+      actionType: 'settings_patch',
+      entityType: 'league',
+      entityId: leagueId,
+      metadata: { section: 'draft', source: 'draft-settings', updatedFields: Object.keys(body).filter((k) => k !== 'leagueId').slice(0, 40) },
+    }).catch(() => {})
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =

@@ -50,7 +50,7 @@
 import { createHash } from 'crypto'
 import { normalizePlayerName } from '@/lib/player-assets/resolvePlayerHeadshot'
 
-export interface CanonicalPlayerSeed {
+interface CanonicalPlayerSeed {
   name: string
   sport: string
   position?: string | null
@@ -61,7 +61,7 @@ export interface CanonicalPlayerSeed {
 /** How a canonical id was derived — recorded on the row so a re-match can be audited. */
 export type CanonicalMatchStrategy = 'sleeper_id' | 'name_sport_position_team'
 
-export interface CanonicalPlayerIdentity {
+interface CanonicalPlayerIdentity {
   id: string
   matchKey: string
   strategy: CanonicalMatchStrategy
@@ -119,7 +119,7 @@ export function normalizePosition(position: string | null | undefined): string {
 }
 
 /** Team codes and full school names both appear as `SportsPlayer.team`; compare case-folded. */
-export function normalizeTeam(team: string | null | undefined): string {
+function normalizeTeam(team: string | null | undefined): string {
   return String(team ?? '').trim().toUpperCase()
 }
 
@@ -147,13 +147,13 @@ export function deriveCanonicalPlayerIdentity(
   return { id, matchKey, strategy, normalizedName }
 }
 
-export interface CanonicalTeamSeed {
+interface CanonicalTeamSeed {
   name: string
   sport: string
   leagueKey?: string | null
 }
 
-export interface CanonicalTeamIdentity {
+interface CanonicalTeamIdentity {
   normalizedName: string
   sportKey: string
   leagueKey: string | null

@@ -26,7 +26,7 @@ export function DraftHelperIntelligence({
   const features = [
     { name: 'Chimmy Ready', active: aiFeatureStatus?.chimmyReady, icon: Bot },
     { name: 'Live Brain', active: aiFeatureStatus?.liveBrainReady, icon: Zap },
-    { name: 'AI ADP', active: aiFeatureStatus?.aiAdpEnabled, icon: TrendingUp },
+    { name: 'Chimmy ADP', active: aiFeatureStatus?.aiAdpEnabled, icon: TrendingUp },
     { name: 'Queue Reorder', active: aiFeatureStatus?.queueReorderEnabled, icon: TrendingUp },
   ]
 
@@ -71,7 +71,7 @@ export function DraftHelperIntelligence({
         </div>
       ) : null}
 
-      {/* AI Features Status */}
+      {/* Chimmy Features Status */}
       {activeFeatures.length > 0 && (
         <div>
           <h5 className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1">

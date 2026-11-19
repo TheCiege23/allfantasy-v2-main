@@ -43,9 +43,13 @@ export type TradeOrigin = {
   rawStatus: string
 }
 
+import type { PlayerIdSpace, ResolvedTradePlayer } from './tradePlayers'
+
+import { c2cDraftSide, parsePickLabel, type C2CDraftSide } from '@/lib/parsePickLabel'
+
 export type LoadedTradeAsset =
-  | { kind: 'player'; playerId: string; name: string; position: string | null }
-  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string }
+  | { kind: 'player'; playerId: string; name: string; position: string | null; idSpace?: PlayerIdSpace; identity?: Extract<ResolvedTradePlayer, { ok: true }> }
+  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string; draftSide?: C2CDraftSide }
   | { kind: 'faab'; amount: number }
 
 export type TradeSide = {
@@ -189,7 +193,7 @@ export function providerTradeStatus(status: string): TradeStatus {
 /** Before player resolution: a player is only an id. */
 export type RawTradeAsset =
   | { kind: 'player'; playerId: string }
-  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string }
+  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string; draftSide?: C2CDraftSide }
   | { kind: 'faab'; amount: number }
 
 export type RawMovement = { fromTeamId: string; toTeamId: string; asset: RawTradeAsset }
@@ -239,12 +243,14 @@ export function afItemAsset(item: {
   }
   if (type.includes('pick')) {
     const ref = parsePickRef(item.itemReference)
-    return pickAsset(
+    const draftSide = item.itemReference?.startsWith('fdp:') && ref ? 'canton' : c2cDraftSide(meta.pickSide) ?? parsePickLabel(str(meta.pickLabel, meta.label) ?? '')?.draftSide
+    const pick = pickAsset(
       num(meta.pickSeason, meta.season) ?? ref?.season ?? null,
       num(meta.pickRound, meta.round) ?? ref?.round ?? null,
       str(meta.originalRosterId) ?? ref?.originalTeamId ?? null,
       str(meta.pickLabel, meta.label) ?? 'a draft pick',
     )
+    return draftSide && typeof pick !== 'string' && pick.kind === 'pick' ? { ...pick, draftSide } : pick
   }
   if (type === 'player' || type === 'keeper' || type === 'devy') {
     const id = str(item.itemReference)

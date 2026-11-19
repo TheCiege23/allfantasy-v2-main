@@ -91,13 +91,23 @@ prospect counted against the roster limit). Still synthetic only — the committ
 
 ## F-05 — Future draft picks (dynasty)
 
-`getDraftPicks.futureDraftPicks` was EMPTY in the only league measured (see `fantraxApi.ts`), so its
-element shape — and whether it reflects traded ownership (original vs current team) — is unverified.
-`lib/league-trade-engine/importedFuturePicks.ts` therefore stays Sleeper/MFL only; a Fantrax league
-shows no future picks rather than listing every pick with its original team.
+**RESOLVED 2026-11-18.** Captured from three public dynasty leagues (34-team NFL, 36-team NBA,
+36-team MLB), with the owner's consent. Every `futureDraftPicks` row is exactly
+`{ year, round, originalOwnerTeamId, currentOwnerTeamId }`: one row per team per round per year for
+ten years, traded or not. A traded pick is a row whose two team ids differ (9 of 1,360 in the NFL
+league, 2 of 1,080 in the NBA league, 0 of 1,800 in the MLB league). There is no pick-in-round.
+A redraft league answers with `currentDraftPicks` only (no `futureDraftPicks` key).
 
-**Needed:** `getDraftPicks` from a public dynasty league in which at least one future pick has been
-traded.
+Committed capture: `tests/fixtures/fantrax/nfl-dynasty-future-picks-public.json` (team ids replaced
+with placeholders, trimmed to the first two seasons; pinned by `__tests__/fantrax-future-picks.test.ts`).
+
+The import stores the whole inventory on the snapshot (`fantraxFuturePicks` in
+`FantraxLeague.transactions`), the adapter carries it as `traded_picks` with a `traded` flag, and
+`lib/league-trade-engine/importedFuturePicks.ts` reads a Fantrax league's picks from those rows
+without inferring a round count.
+
+Still unknown: whether a pick's row disappears or stays once its draft is under way (the captured
+leagues' current drafts were either complete or not started).
 
 ## F-06 — No dynasty / keeper flag in `getLeagueInfo`
 
@@ -292,3 +302,41 @@ Still unknown, and assumed rather than captured:
 **Needed:** one trimmed `getPlayerIds?sport=MLB` slice with a minor leaguer, an unsigned player and a
 two-way player, committed under `tests/fixtures/fantrax/` via `contracts/fantrax/scripts/probe.sh`
 when that combination is next added — and a level/draft field before ranking or age-gating.
+
+## F-17 — Soccer roster identity and scoring coverage
+
+The committed EPL capture identifies Soccer through its `SOCCER_GOALIE` and `SOCCER_NON_GOALIE`
+scoring groups. The roster and player pool supply IDs and positions. Import retains those IDs and
+uses existing Soccer `PlayerIdentityMap.fantraxId` links for names. Grades require the same
+one-to-one Fantrax ID across the Soccer registry, including identities without match rows.
+A read-only database audit on 2026-11-09 found 4,323 Soccer identities and zero Fantrax links.
+The public EPL directory returned 771 players. A dry run against the registry proposed 635
+unique name, club, and role matches, with 135 unmatched and one ambiguous. The weekly import
+fills verified links in the existing identity registry. The dry run wrote zero links.
+
+The capture gives position maxima that sum to 14 and a total of 11 starters. The maxima alone
+cannot define a fixed lineup. The capture also has different goalie and outfield weights for
+shared stats such as assists. The points scorer honors default weights for each group and explicit
+goalkeeper, defender, midfielder, and forward overrides for supported stats. It leaves an
+unsupported or conflicting position rule out of the projection and records the gap.
+
+The same audit found 44,271 Soccer match rows for 2,121 players, all from Rolling Insights. The
+stored fields cover 17 of the 60 rules in the captured league. TheSportsDB EPL timelines can
+supply own goals when every match in the pricing sample has a final-score-verified receipt and
+each own-goal scorer matches a unique participant. Secondary assists, clean-sheet eligibility,
+and result eligibility still need compatible events or verified scoring definitions.
+The season view reads published Fantrax team totals. Projections report partial scoring when
+source rules are omitted.
+
+A production backfill on 2026-11-09 applied 635 one-to-one links and left the 135 unmatched
+and one ambiguous player alone. No Fantrax Soccer league was present for a live grade check.
+
+The points grader can also use a complete Fantrax league player board without recreating each
+category. Run the operator script under tsx with the audit preload and target DB configured.
+Pass the AllFantasy league ID alone to get the source league ID, season, and scoring-rule digest.
+Prepare JSON with source set to fantrax-player-export, those three fields, a UTC through timestamp,
+fullPool set to true, and a players array. Each player needs fantraxId, name, position (GK, DEF,
+MID or FWD), fantasyPoints, appearances, and clubMatches over the same period. Include all
+rostered players and free agents. Pass the league ID and file for a dry run, then append --apply
+to save. The grader checks the current scoring digest, season and roster coverage on every read.
+The ordinary partial projection remains the fallback while a matching export is unavailable.

@@ -35,7 +35,7 @@ declare global {
   }
 }
 
-export type SignupMethod = 'email' | 'google' | 'apple'
+type SignupMethod = 'email' | 'phone' | 'google' | 'apple'
 
 /**
  * ⚠ WIDENED FROM THE SPEC'S `sleeper | espn | yahoo`, AND DERIVED RATHER THAN
@@ -44,7 +44,7 @@ export type SignupMethod = 'email' | 'google' | 'apple'
  * ImportV4, so the three-value union rejected real code. Aliasing the source of
  * truth means a seventh provider cannot silently fall out of the funnel.
  */
-export type LeaguePlatform = ImportProvider
+type LeaguePlatform = ImportProvider
 
 export type Sport = 'nfl' | 'nba' | 'nhl' | 'mlb'
 
@@ -55,9 +55,9 @@ export type Sport = 'nfl' | 'nba' | 'nhl' | 'mlb'
  * monthly and yearly. `MonetizationPlanTier` is what the purchase path already
  * resolves a SKU down to, so it is what the event can actually carry.
  */
-export type Plan = MonetizationPlanTier
+type Plan = MonetizationPlanTier
 
-export type AnalyticsEvent =
+type AnalyticsEvent =
   | { event: 'sign_up'; method: SignupMethod }
   | {
       event: 'league_connected'
@@ -70,6 +70,16 @@ export type AnalyticsEvent =
       first_connection: boolean
     }
   | { event: 'view_pricing' }
+  /**
+   * A CTA click on /commissioners. `cta` is what was clicked, `placement` where on the page, so
+   * "which block converts" is answerable without a second event. Not a conversion on its own —
+   * the conversion is still `sign_up` / `league_connected` downstream.
+   */
+  | {
+      event: 'commissioner_page_cta'
+      cta: 'import' | 'pricing'
+      placement: 'nav' | 'mobile_nav' | 'hero' | 'how_it_works' | 'bottom'
+    }
   | { event: 'begin_checkout'; plan: Plan }
   | {
       event: 'purchase'

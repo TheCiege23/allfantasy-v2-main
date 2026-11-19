@@ -6,6 +6,7 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { logAction } from '@/server/services/auditService'
 import { loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 import {
   choosePickToForfeit,
   describePenalty,
@@ -40,17 +41,53 @@ function penaltiesApply(platform: string | null): boolean {
   return resolveWriteAuthority(platform) === 'NATIVE'
 }
 
-/** The manager of a roster, when the seat belongs to a person (an abandoned team's `orphan-…` seat does not). */
-async function managerUserId(rosterId: string): Promise<string | null> {
-  const roster = await prisma.roster.findUnique({ where: { id: rosterId }, select: { platformUserId: true } })
-  const id = roster?.platformUserId ?? ''
-  if (!id || id.startsWith('orphan-') || id.startsWith('ai-manager-')) return null
-  const user = await prisma.appUser.findUnique({ where: { id }, select: { id: true } }).catch(() => null)
+export type TankingTeam = {
+  /** The league's `Roster` row: what the pick inventory, the rookie lottery and native FAAB key on. */
+  rosterId: string | null
+  /** The manager to tell, when the seat belongs to a person. */
+  userId: string | null
+}
+
+/**
+ * 🛑 A TANKING FLAG NAMES A `RedraftRoster`, AND EVERY PENALTY KEYS ON A `Roster`. The native scan
+ * files flags against `RedraftRoster.id` (its matchups and lineup cards are redraft rows), while the
+ * pick inventory (`loadNativeFuturePicks`), the rookie lottery (`getStandingsForLottery`) and native
+ * FAAB (`Roster.faabRemaining`, mirrored onto the redraft row) all use `Roster.id`. The two are
+ * different rows with different ids, linked by `Roster.redraftRosterId`. This service used the flag's
+ * id directly, so the manager's warning found no seat and was never sent, the pick search found no
+ * picks, and FAAB found no budget — every confirmed strike reported "nothing to take". Its test mocked
+ * a roster for ANY id, which is why it passed.
+ *
+ * Either id is accepted, so a flag that already names a `Roster` resolves too.
+ */
+export async function resolveTankingTeam(leagueId: string, flagRosterId: string): Promise<TankingTeam> {
+  const roster = await prisma.roster.findFirst({
+    where: { leagueId, OR: [{ id: flagRosterId }, { redraftRosterId: flagRosterId }] },
+    select: { id: true, platformUserId: true },
+  })
+  let seat = roster?.platformUserId ?? ''
+  if (!seat) {
+    const redraft = await prisma.redraftRoster.findFirst({ where: { id: flagRosterId, leagueId }, select: { ownerId: true } })
+    seat = redraft?.ownerId ?? ''
+  }
+  return { rosterId: roster?.id ?? null, userId: await personAt(seat) }
+}
+
+/** The person in a seat — never an abandoned team's `orphan-…` seat or an AI manager. */
+async function personAt(seat: string): Promise<string | null> {
+  if (!seat || seat.startsWith('orphan-') || seat.startsWith('ai-manager-')) return null
+  const user = await prisma.appUser.findUnique({ where: { id: seat }, select: { id: true } }).catch(() => null)
   return user?.id ?? null
 }
 
-async function tellManager(leagueId: string, rosterId: string, title: string, body: string): Promise<void> {
-  const userId = await managerUserId(rosterId)
+async function tellManager(
+  leagueId: string,
+  rosterId: string,
+  title: string,
+  body: string,
+  link: { href: string; label: string } = { href: `/league/${leagueId}`, label: 'Open league' },
+): Promise<void> {
+  const { userId } = await resolveTankingTeam(leagueId, rosterId)
   if (!userId) return
   await dispatchNotification({
     userIds: [userId],
@@ -60,8 +97,8 @@ async function tellManager(leagueId: string, rosterId: string, title: string, bo
     body,
     severity: 'high',
     leagueId,
-    actionHref: `/league/${leagueId}`,
-    actionLabel: 'Open league',
+    actionHref: link.href,
+    actionLabel: link.label,
     meta: { leagueId, rosterId },
   }).catch((err) => console.error('[tankingPenalty] notify manager failed', err))
 }
@@ -88,7 +125,9 @@ export async function onTankingFlagOpened(flagId: string): Promise<void> {
       'Your lineup was flagged for review',
       `The league's integrity monitor flagged your lineup as possible tanking: starters who could not play, or a much stronger bench. Your commissioner will review it. ${
         left <= 1 ? `If it is confirmed, your team loses ${describePenalty(policy)}.` : `Confirmed cases count as strikes; ${left} more costs your team ${describePenalty(policy)}.`
-      }`,
+      } You can explain your lineup to your commissioner before they decide.`,
+      // Straight to the case, where the manager can see what was flagged and reply (lib/integrity/managerReply.ts).
+      { href: `/league/${flag.leagueId}/tanking-flag/${encodeURIComponent(flagId)}`, label: 'Review and reply' },
     )
     await logAction({ leagueId: flag.leagueId, userId: null, actionType: TANKING_WARNING_ACTION, entityType: 'roster', entityId: rosterId, metadata: { flagId, confirmedStrikes: confirmed } })
   }
@@ -140,34 +179,41 @@ export async function onTankingFlagConfirmed(flagId: string, commissionerUserId:
     }
     await logAction({ leagueId: flag.leagueId, userId: commissionerUserId, actionType: TANKING_STRIKE_ACTION, entityType: 'roster', entityId: rosterId, metadata: { flagId, strike: strikes } })
     if (step.kind === 'warning') {
+      // Names the league's actual penalty — this said "a draft pick" even where it was FAAB or lottery odds.
+      const cost = describePenalty(policy)
       await tellManager(
         flag.leagueId,
         rosterId,
         'Official warning: tanking',
         `Your commissioner confirmed the tanking flag on your team. This is strike ${strikes}. ${
-          step.strikesLeft === 1 ? 'The next confirmed case costs your team a draft pick.' : `${step.strikesLeft} more confirmed cases cost your team a draft pick.`
+          step.strikesLeft === 1 ? `The next confirmed case costs your team ${cost}.` : `${step.strikesLeft} more confirmed cases cost your team ${cost}.`
         }`,
       )
       out.push({ rosterId, step })
       continue
     }
+    // Every penalty below acts on the league's `Roster` row, never the flag's redraft id (see resolveTankingTeam).
+    const team = await resolveTankingTeam(flag.leagueId, rosterId)
     if (step.kind === 'lottery_odds' || step.kind === 'faab') {
-      const taken =
-        step.kind === 'lottery_odds'
-          ? await cutLotteryOddsForTanking(flag.leagueId, rosterId, policy, flagId, commissionerUserId)
-          : await takeFaabForTanking(flag.leagueId, rosterId, policy, flagId, commissionerUserId)
+      const taken = !team.rosterId
+        ? null
+        : step.kind === 'lottery_odds'
+          ? await cutLotteryOddsForTanking(flag.leagueId, team.rosterId, policy, flagId, commissionerUserId)
+          : await takeFaabForTanking(flag.leagueId, team.rosterId, policy, flagId, commissionerUserId)
       await tellManager(
         flag.leagueId,
         rosterId,
         taken ? 'Tanking penalty applied' : 'Tanking strike confirmed',
         taken
           ? `Your commissioner confirmed another tanking case (strike ${strikes}). Your team loses ${taken.label}.`
-          : `Your commissioner confirmed another tanking case (strike ${strikes}). There is no FAAB to take from your team, so the commissioner will decide the penalty.`,
+          : `Your commissioner confirmed another tanking case (strike ${strikes}). There is nothing of that kind to take from your team, so the commissioner will decide the penalty.`,
       )
       out.push({ rosterId, step, penalty: taken })
       continue
     }
-    const forfeited = await forfeitPickForTanking(flag.leagueId, rosterId, policy.pickRound, flagId, commissionerUserId)
+    const forfeited = team.rosterId
+      ? await forfeitPickForTanking(flag.leagueId, team.rosterId, policy.pickRound, flagId, commissionerUserId)
+      : null
     await tellManager(
       flag.leagueId,
       rosterId,
@@ -265,6 +311,8 @@ export async function takeFaabForTanking(
     const amount = faabPenaltyAmount(waivers.faabBudget, roster?.faabRemaining, policy.faabPercent)
     if (amount <= 0) return null
     await tx.roster.update({ where: { id: rosterId }, data: { faabRemaining: { decrement: amount } } })
+    // Native FAAB is held twice; redraft waivers, standings and Chimmy read the redraft copy (lib/league/faabMirror.ts).
+    await copyGenericFaabToRedraft(tx, [rosterId])
     return { amount, before: roster!.faabRemaining! }
   })
   if (!taken) return null

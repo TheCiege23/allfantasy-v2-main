@@ -93,20 +93,10 @@ describe('My Team uses it where something needs explaining', () => {
     expect(container.querySelectorAll('.af-mt-row button.af-info-tip').length).toBe(0)
   })
 
-  it('explains the matchup card’s two numbers once, in its heading', () => {
+  it('has no matchup card to explain (2026-11-14): the projection is the top number, which opens Matchup', () => {
     const { container } = render(<MyTeam data={page()} />)
-    const tips = container.querySelectorAll('.af-mt-matchup button.af-info-tip')
-    expect(tips.length).toBe(1)
-    expect(tips[0].closest('.af-mt-mu-head')).not.toBeNull()
-    const pop = container.querySelector('.af-mt-matchup .af-info-pop')!.textContent!
-    expect(pop).toContain('Sleeper’s projection')
-    expect(pop).toContain('from 5 of 9')
-  })
-
-  it('says nothing about numbers that are not there', () => {
-    const { container } = render(<MyTeam data={page({ projected: null, afProjected: null, projectedFrom: 0 })} />)
-    expect(container.querySelector('.af-mt-matchup')).not.toBeNull()
-    expect(container.querySelector('.af-mt-matchup button.af-info-tip')).toBeNull()
+    expect(container.querySelector('.af-mt-matchup')).toBeNull()
+    expect(container.querySelector('[data-chip=projected]')?.getAttribute('href')).toMatch(/^\/core\/matchup\?league=/)
   })
 
   it('⚠ never sits under a `title` — it would pop a hover-only copy over the open popover', () => {

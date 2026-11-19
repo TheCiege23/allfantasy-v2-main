@@ -3,6 +3,7 @@ import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceSeasonPlan'
+import { noPlayoffBestBallSeasonWeeks } from '@/lib/bestball/noPlayoffSeason'
 import { readChampionshipLength, weeksForPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { playoffBracketWeeks } from '@/lib/playoff-runtime/playoffFit'
 import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
@@ -31,6 +32,9 @@ export function resolveCreatedSeasonWeeks(league: {
     const settings = (league.settings as { best_ball_settings?: { regularSeasonLength: number; tournamentAdvancementRounds: number; roundEndWeeks?: number[] } } | null)?.best_ball_settings
     if (settings) return tournamentRoundEnds(settings).at(-1)!
   }
+  // A best ball league with no playoffs plays its own regular season and nothing after it.
+  const noPlayoffWeeks = noPlayoffBestBallSeasonWeeks(league)
+  if (noPlayoffWeeks != null) return noPlayoffWeeks
   const regularWeeks = league.dynastyConfig?.regularSeasonWeeks
   if (!Number.isInteger(regularWeeks) || Number(regularWeeks) < 1) {
     // A capped league whose 24 regular weeks plus its bracket end before the sport's last week (an NHL

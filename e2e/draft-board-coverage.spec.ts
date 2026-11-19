@@ -18,7 +18,9 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
         await expect(cell).toContainText('Example Player 1')
         const cellBounds = await cell.boundingBox()
         expect(cellBounds).not.toBeNull()
-        expect(Math.abs(cellBounds!.width - cellBounds!.height)).toBeLessThanOrEqual(1)
+        // Room v2 (2026-11): tiles are full-width rectangles at a fixed 68px, never taller than wide.
+        expect(Math.abs(cellBounds!.height - 68)).toBeLessThanOrEqual(1)
+        expect(cellBounds!.width).toBeGreaterThanOrEqual(cellBounds!.height)
         expect(await cell.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
         const bounds = await board.boundingBox()
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)

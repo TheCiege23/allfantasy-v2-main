@@ -3,7 +3,7 @@ vi.mock('@/lib/chimmy/requestReceipts', async original => ({
   ...await original<typeof import('@/lib/chimmy/requestReceipts')>(),
   ...(await import('@/__tests__/helpers/quotedChimmyRequest')).receiptStorageFixture,
 }))
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest"
 const getServerSessionMock = vi.fn()
@@ -193,6 +193,13 @@ async function buildMultipartRequest(formData?: FormData) {
 // league-create-defaults-api. File-level rather than on the one slow test, because the cost lands
 // on whichever test runs FIRST and that is an ordering detail no annotation should depend on.
 vi.setConfig({ testTimeout: 60000 })
+
+// Warm the route's module graph once, before any test. Its first import compiles a large graph — over
+// 10s on an idle machine — and with the other chat and Chimmy suites running alongside it passed 30s,
+// so the FIRST test timed out (and its call, still running, could take the next test's mocks).
+// Paid here, the 30s test limit measures only the test. The warm-up's own limit is generous because this is
+// compile time, not a hang: on a box busy with other type-checks, this one import has taken over 2 minutes.
+beforeAll(async () => { await import("@/app/api/chat/chimmy/route") }, 300_000)
 
 describe("POST /api/chat/chimmy contract", () => {
   beforeEach(() => {

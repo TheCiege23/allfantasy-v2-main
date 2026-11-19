@@ -12,13 +12,13 @@ import {
   type TimezonePreferenceSyncResult,
 } from "@/lib/preferences/TimezonePreferenceSyncService"
 
-export interface SharedSessionBootstrapInput {
+interface SharedSessionBootstrapInput {
   profile: Record<string, unknown> | null
   storedLanguagePreference: string | null
   storedThemePreference: string | null
 }
 
-export interface SharedSessionBootstrapResult {
+interface SharedSessionBootstrapResult {
   language: LanguagePreferenceSyncResult["language"]
   theme: ThemePreferenceSyncResult["theme"]
   timezone: TimezonePreferenceSyncResult["timezone"]

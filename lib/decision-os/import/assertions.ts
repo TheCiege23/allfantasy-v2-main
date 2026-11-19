@@ -36,21 +36,20 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 /** The scopes a Sleeper sync fills. Mirrors `SLEEPER_SYNC_SCOPES` — kept as data, not imported,
  *  so this read layer does not drag the collector's server-only graph in behind it. */
 export const IMPORT_SCOPES = ['league_state', 'teams_rosters', 'traded_picks'] as const
-export type ImportScope = (typeof IMPORT_SCOPES)[number]
 
 /** The scopes the five-minute lane fills. Mirrors `ACTIVE_SYNC_SCOPES` in
  *  `lib/import-os/collector/activeSyncLane.ts` — data, not an import, for the same reason as
  *  `IMPORT_SCOPES`; a test pins the two equal. */
 export const ACTIVE_LANE_SCOPES = ['league_state', 'transactions', 'teams_rosters'] as const
 
-export interface ActiveLaneFreshness {
+interface ActiveLaneFreshness {
   /** Certified: advances only when EVERY scope in `scopes` completed on one run (runner-enforced). */
   lastSuccessfulSyncAt: string | null
   staleMs: number | null
   scopes: readonly string[]
 }
 
-export interface ScopeFreshness {
+interface ScopeFreshness {
   scope: string
   /** Completed on the LAST run. Not the same as "ever completed". */
   completedLastRun: boolean
@@ -59,7 +58,7 @@ export interface ScopeFreshness {
   hasCheckpoint: boolean
 }
 
-export type ParityVerdict = 'matched' | 'diverged' | 'unchecked' | 'failed'
+type ParityVerdict = 'matched' | 'diverged' | 'unchecked' | 'failed'
 
 export interface ImportAssertions {
   leagueId: string

@@ -40,7 +40,7 @@ const CONF_CLASS: Record<ConfidenceLevel, string> = {
   Low: 'border-subtle bg-surface-muted text-muted',
 }
 
-export function ConfidenceBadge({ level, rationale }: { level: ConfidenceLevel; rationale?: string }) {
+function ConfidenceBadge({ level, rationale }: { level: ConfidenceLevel; rationale?: string }) {
   return (
     <span
       title={rationale}
@@ -116,7 +116,7 @@ export function WorkspaceSectionHeader({ eyebrow, title, subtitle, right }: { ey
   )
 }
 
-export function MetricDefinitionTooltip({ label, definition }: { label: string; definition: string }) {
+function MetricDefinitionTooltip({ label, definition }: { label: string; definition: string }) {
   return (
     <span title={definition} className="cursor-help border-b border-dotted border-line-strong text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
       {label}
@@ -143,7 +143,7 @@ export function ExecutiveKpiRow({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{children}</div>
 }
 
-export function EvidenceList({ items }: { items: EvidenceItem[] }) {
+function EvidenceList({ items }: { items: EvidenceItem[] }) {
   return (
     <ul className="flex flex-wrap gap-2" aria-label="Evidence">
       {items.map((e, i) => (

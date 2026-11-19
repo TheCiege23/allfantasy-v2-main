@@ -1,7 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import {
   ImportedLeagueConflictError,
@@ -21,7 +20,7 @@ function mapImportErrorStatus(code: string): number {
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport" })(async (req: NextRequest) => {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) {
     return auth.response
   }

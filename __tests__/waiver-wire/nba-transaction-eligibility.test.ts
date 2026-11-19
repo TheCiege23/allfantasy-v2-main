@@ -37,3 +37,24 @@ describe('authoritative NBA waiver transaction gate', () => {
     expect(h.pool).not.toHaveBeenCalled()
   })
 })
+
+describe('an empty starting slot never blocks a claim', () => {
+  const legality = (codes: string[]) => ({
+    result: {
+      blockingReasons: codes.map((code) => ({ code, message: code === 'STARTER_SLOT_EMPTY_WHEN_REQUIRED' ? 'Not enough starters (22/23).' : 'Bench is over its limit.' })),
+      irViolations: [], taxiViolations: [], devyViolations: [],
+    },
+  })
+  it('a roster already one starter short can still claim — the gap is reported, not enforced', async () => {
+    h.league.mockResolvedValue({ ...(await h.league()), sport: 'NFL' })
+    h.legality.mockResolvedValue(legality(['STARTER_SLOT_EMPTY_WHEN_REQUIRED']))
+    const notices: string[] = []
+    await expect(assertWaiverClaimEligibility({ leagueId: 'nba', rosterId: 'r1', addPlayerId: 'football-player', onNotice: (n: string) => notices.push(n) } as never)).resolves.toBeUndefined()
+    expect(notices).toContain('Not enough starters (22/23).')
+  })
+  it('every other legality problem still blocks', async () => {
+    h.league.mockResolvedValue({ ...(await h.league()), sport: 'NFL' })
+    h.legality.mockResolvedValue(legality(['STARTER_SLOT_EMPTY_WHEN_REQUIRED', 'BENCH_OVER_LIMIT']))
+    await expect(assertWaiverClaimEligibility({ leagueId: 'nba', rosterId: 'r1', addPlayerId: 'football-player' })).rejects.toThrow('Bench is over its limit.')
+  })
+})

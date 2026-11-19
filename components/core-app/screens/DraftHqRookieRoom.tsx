@@ -194,4 +194,3 @@ export function DraftHqRookieRoom({ room, leagueId }: { room: RookieDraftRoom; l
   )
 }
 
-export default DraftHqRookieRoom

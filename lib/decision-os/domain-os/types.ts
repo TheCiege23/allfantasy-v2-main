@@ -77,29 +77,6 @@ export interface OsFactEnvelope<T> {
   ageMs: number
 }
 
-/**
- * How long a captured fact stays servable, per domain and kind.
- *
- * Deliberately per-kind rather than one global number. Injury and bye decide whether a player can
- * be started at all and decay in minutes; league scoring settings change a few times a season.
- * A single TTL would have to be tuned to the fastest-moving input and would throw away nearly all
- * of the benefit for the slowest.
- */
-export type OsTtlTable = Record<string, number>
-
 export const MINUTES = 60 * 1000
 export const HOURS = 60 * MINUTES
 
-/**
- * A fact family a domain gathers. Domains declare these; the kernel stores and serves them.
- *
- * `scopeKey` is how a fact is addressed WITHIN its level — a sport at app level, a league id at
- * league level, a user id at user level (optionally compounded, e.g. a week). Producer and consumer
- * must derive it the same way, so each domain exports its own builders rather than formatting
- * strings at call sites.
- */
-export interface OsFactKindSpec {
-  kind: string
-  level: OsScopeLevel
-  ttlMs: number
-}

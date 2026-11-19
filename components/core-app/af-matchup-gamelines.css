@@ -1,0 +1,43 @@
+/*
+ * Matchup — the lines under a starter whose game is final (2026-11-09):
+ *   "W 19–11 @ PHI" (`.af-mu-half-result`) and "12/19 CMP, 127 YD" (`.af-mu-half-statline`).
+ * Data and rules: lib/core-app/matchupGameLine.ts. Colours come from the theme tokens only.
+ */
+.af-mu-half-result {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.af-mu-half-result [data-outcome] {
+  font-weight: 800;
+}
+.af-mu-half-result [data-outcome='W'] {
+  color: var(--good);
+}
+.af-mu-half-result [data-outcome='L'] {
+  color: var(--bad);
+}
+
+/* The box score wraps rather than truncates: a cut-off "274 Y…" is worse than a second line. */
+.af-mu-half-statline {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--faint);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A phone half is ~125px wide and already drops the position line (af-matchup.css, the same
+ * `(max-width: 760px)` query). The result stays — it is short and it is the story — the box score goes.
+ */
+@container af-mu (max-width: 760px) {
+  .af-mu-half-statline {
+    display: none;
+  }
+}

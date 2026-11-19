@@ -12,7 +12,7 @@ type Game = {
 }
 type Pool = { id: string; series: Game[] }
 type Resolved = { id: string; challengeId: string; home: string; away: string; game: Game }
-export type SeasonGameRead =
+type SeasonGameRead =
   | { ok: true; home: string; away: string; games: Resolved[]; scheduledAt: string }
   | { ok: false; error: string }
 

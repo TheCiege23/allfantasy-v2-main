@@ -25,6 +25,7 @@
  * Every step is idempotent: the shell and carryover are (see their headers), activation is guarded
  * on `status = 'setup'`, and housekeeping re-runs to the same result.
  */
+import { nativeLeagueStatusPatch } from '@/lib/league/nativeLeagueStatus'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
@@ -119,7 +120,7 @@ export async function activateDynastySeasonWithoutDraft(input: {
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { lifecycleState: true, lifecycleMetadata: true },
+    select: { lifecycleState: true, lifecycleMetadata: true, platform: true },
   })
   const fromState = String(league?.lifecycleState ?? '')
   if (league && STARTABLE_LIFECYCLE_STATES.has(fromState)) {
@@ -131,6 +132,7 @@ export async function activateDynastySeasonWithoutDraft(input: {
       where: { id: leagueId },
       data: {
         lifecycleState: 'post_draft',
+        ...nativeLeagueStatusPatch(league.platform, 'post_draft'),
         lifecycleMetadata: {
           ...meta,
           lastTransitionAt: now.toISOString(),

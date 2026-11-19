@@ -6,5 +6,4 @@
 
 export * from './schema'
 export * from './contracts'
-export * from './adapters/trade-context-to-envelope'
 export * from './adapters/waiver-to-envelope'

@@ -12,6 +12,7 @@ import {
   startsAtScheduledTimeRegardlessOfAutostart,
   type ScheduledStartLeague,
 } from '@/lib/draft/redraftScheduledStart'
+import { DraftSchedulePoll } from '@/components/draft-schedule/DraftSchedulePoll'
 
 const DRAFT_TYPES: { value: string; label: string }[] = [
   { value: 'snake', label: 'Snake' },
@@ -58,16 +59,48 @@ function draftDateToLocalInput(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/**
+ * Turn the slow-draft overnight pause on or off through the draft settings save, which sets the window the draft
+ * clock reads. Resolves with what the server applied: it keeps the pause off unless the pick clock is a slow one.
+ */
+export async function saveSlowDraftPause(
+  leagueId: string,
+  enabled: boolean,
+  window: { from: string | null; to: string | null },
+): Promise<{ enabled: boolean; note: string | null }> {
+  try {
+    const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slowDraftPauseEnabled: enabled,
+        ...(window.from ? { slowDraftPauseFrom: window.from } : {}),
+        ...(window.to ? { slowDraftPauseTo: window.to } : {}),
+      }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string; draftUISettings?: { timerMode?: string } }
+    if (!res.ok) return { enabled: !enabled, note: data.error ?? 'The pause could not be saved.' }
+    const applied = data.draftUISettings?.timerMode === 'overnight_pause'
+    if (enabled && !applied) return { enabled: false, note: 'The overnight pause is only for slow drafts (30 minutes or more per pick).' }
+    return { enabled: applied, note: null }
+  } catch {
+    return { enabled: !enabled, note: 'The pause could not be saved.' }
+  }
+}
+
 export function DraftSettingsPanel({
   draftRow,
   canEdit,
   save,
   debouncedSave,
   league,
+  leagueId,
 }: {
   draftRow: Record<string, unknown> | null
   /** From `/api/league/settings`'s `league`; hides the Autostart toggle where it does nothing. */
   league?: ScheduledStartLeague | null
+  /** Enables "Find a draft time" (components/draft-schedule/DraftSchedulePoll.tsx). */
+  leagueId?: string
   canEdit: boolean
   save: (partial: Record<string, unknown>) => Promise<void>
   debouncedSave: (partial: Record<string, unknown>) => void
@@ -90,6 +123,7 @@ export function DraftSettingsPanel({
   const [playerPool, setPlayerPool] = useState(String(r.playerPool ?? 'all'))
   const [autostart, setAutostart] = useState(Boolean(r.autostart))
   const [slowDraftPause, setSlowDraftPause] = useState(Boolean(r.slowDraftPause))
+  const [slowPauseNote, setSlowPauseNote] = useState<string | null>(null)
   const [cpuAutoPick, setCpuAutoPick] = useState(r.cpuAutoPick !== false)
   const [aiAutoPick, setAiAutoPick] = useState(Boolean(r.aiAutoPick))
   const [alphabeticalSort, setAlphabeticalSort] = useState(Boolean(r.alphabeticalSort))
@@ -125,7 +159,7 @@ export function DraftSettingsPanel({
     <div className="min-h-0 flex-1 space-y-8 px-6 py-6 text-[13px] text-white/85" data-testid="settings-draft-panel">
       <SettingsPanelHeading
         title="Draft settings"
-        subtitle="Draft type, clock, rounds, and draft-room AI. Syncs to the live draft session when applicable."
+        subtitle="Draft type, clock, rounds, and draft-room Chimmy. Syncs to the live draft session when applicable."
       />
 
       <div>
@@ -275,6 +309,11 @@ export function DraftSettingsPanel({
           }}
         />
         <SettingsHelper>Stored in UTC; shown in your browser local time.</SettingsHelper>
+        {leagueId ? (
+          <div className="mt-3">
+            <DraftSchedulePoll leagueId={leagueId} disabled={disabled} />
+          </div>
+        ) : null}
       </div>
 
       <div>
@@ -312,15 +351,31 @@ export function DraftSettingsPanel({
             }}
           />
         )}
+        {/*
+          🛑 THIS TOGGLE NEVER PAUSED A CLOCK (2026-11-15). It saved `LeagueSettings.slowDraftPause`; the draft clock reads
+          the draft's overnight-pause window, which only the draft settings save sets. It now saves there, with the
+          league's quiet hours, and shows the server's answer — the pause exists only for a slow draft.
+        */}
         <SettingsToggleRow
           label="Slow draft pause (scheduled quiet hours)"
           checked={slowDraftPause}
-          disabled={disabled}
+          disabled={disabled || !leagueId}
           onChange={(v) => {
             setSlowDraftPause(v)
-            void save({ slowDraftPause: v })
+            setSlowPauseNote(null)
+            if (!leagueId) return
+            void saveSlowDraftPause(leagueId, v, {
+              from: typeof r.slowPauseFrom === 'string' ? r.slowPauseFrom : null,
+              to: typeof r.slowPauseUntil === 'string' ? r.slowPauseUntil : null,
+            }).then((outcome) => {
+              setSlowDraftPause(outcome.enabled)
+              setSlowPauseNote(outcome.note)
+            })
           }}
         />
+        {slowPauseNote ? (
+          <p className="text-[11px] text-amber-300/80" data-testid="slow-draft-pause-note">{slowPauseNote}</p>
+        ) : null}
         <SettingsToggleRow
           label="Lock draft order"
           checked={draftOrderLocked}
@@ -340,7 +395,7 @@ export function DraftSettingsPanel({
           }}
         />
         <SettingsToggleRow
-          label="AI autopick"
+          label="Chimmy autopick"
           checked={aiAutoPick}
           disabled={disabled}
           onChange={(v) => {
@@ -360,7 +415,7 @@ export function DraftSettingsPanel({
       </div>
 
       <div>
-        <SettingsSectionLabel>Draft AI scope</SettingsSectionLabel>
+        <SettingsSectionLabel>Draft Chimmy scope</SettingsSectionLabel>
         <select
           className={controlClass}
           disabled={disabled}
@@ -379,7 +434,7 @@ export function DraftSettingsPanel({
       </div>
 
       <div className="space-y-2">
-        <SettingsSectionLabel>In-draft AI assists</SettingsSectionLabel>
+        <SettingsSectionLabel>In-draft Chimmy assists</SettingsSectionLabel>
         <SettingsToggleRow
           label="Queue suggestions"
           checked={aiQueueSuggestions}

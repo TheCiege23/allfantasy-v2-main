@@ -44,7 +44,7 @@ const CONFERENCE_FROM_GROUP: Array<{ match: RegExp; conference: string }> = [
 // `CFP<n>` is the College Football Playoff's national seed slot (buildCfpTemplate).
 const SEED_PLACEHOLDER = /^(AL|NL|EAST|WEST|CFP|AFC|NFC)(\d+)$/i
 
-export type PlayoffSeedField = {
+type PlayoffSeedField = {
   sport: PlayoffSport
   season: string
   /** conference -> seed -> club name. */
@@ -361,7 +361,7 @@ export async function applyPlayoffSeedsToChallenges(challengeIds: string[]): Pro
   return sweep
 }
 
-export type ApplyPlayoffSeedsResult = {
+type ApplyPlayoffSeedsResult = {
   challengeId: string
   sport: string
   season: string

@@ -57,6 +57,7 @@ import {
   type RecipeFacts,
 } from '@/lib/core-app/commissioner/recipes'
 import { Prisma } from '@prisma/client'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 const SEEN_PREFIX = 'commissioner-recipe:v1:'
 const SEEN_TTL_MS = 400 * 24 * 60 * 60 * 1000
@@ -65,7 +66,7 @@ function utcDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildRecipesIdempotencyKey(leagueId: string, now: Date): string {
+function buildRecipesIdempotencyKey(leagueId: string, now: Date): string {
   return hashIdempotencyKey(buildIdempotencyKey([RECIPES_JOB_TYPE, leagueId, utcDay(now)]))
 }
 
@@ -97,6 +98,9 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       settings: true,
       starters: true,
       lastSyncedAt: true,
+      bestBallMode: true,
+      leagueVariant: true,
+      leagueType: true,
     },
   })
   if (!league?.userId) return null
@@ -215,6 +219,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       leagueName: league.name?.trim() || 'League',
       sport,
       platform: String(league.platform ?? '').toLowerCase(),
+      bestBall: isBestBallLeagueRow(league),
       status: league.status,
       season: league.season,
       currentWeek: leagueWeekFromSettings(league.settings),
@@ -244,7 +249,7 @@ async function markSent(key: string, message: DueMessage): Promise<void> {
   })
 }
 
-export async function runCommissionerRecipesForLeague(input: {
+async function runCommissionerRecipesForLeague(input: {
   leagueId: string
   now?: Date
 }): Promise<AutomationResult & { jobId: string; runId: string }> {
@@ -311,7 +316,7 @@ export async function runCommissionerRecipesForLeague(input: {
   )
 }
 
-export type CommissionerRecipesBatchResult = {
+type CommissionerRecipesBatchResult = {
   enabled: boolean
   discovered: number
   completed: number

@@ -2,7 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-export interface StackedBarSeries {
+interface StackedBarSeries {
   /** Key into each row's `values`. */
   id: string
   label: string
@@ -10,12 +10,12 @@ export interface StackedBarSeries {
   color: string
 }
 
-export interface StackedBarRow {
+interface StackedBarRow {
   label: string
   values: Record<string, number>
 }
 
-export interface StackedBarChartProps {
+interface StackedBarChartProps {
   rows: StackedBarRow[]
   series: StackedBarSeries[]
   height?: number

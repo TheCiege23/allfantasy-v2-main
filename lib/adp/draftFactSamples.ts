@@ -43,7 +43,7 @@ interface ResolvedPlayer {
   position: string
 }
 
-export interface DraftFactSampleOptions {
+interface DraftFactSampleOptions {
   /** Prisma `LeagueSport` value. Required — these facts are never scanned across all sports. */
   sport: string
   /** Restrict to one season. Null scans every season the import captured. */
@@ -52,7 +52,7 @@ export interface DraftFactSampleOptions {
   maxFacts?: number
 }
 
-export interface DraftFactSampleResult {
+interface DraftFactSampleResult {
   picks: AggregatablePick[]
   factsScanned: number
   /** Player ids with no canonical identity row. Reported, never silently dropped. */
@@ -70,7 +70,7 @@ export interface DraftFactSampleResult {
   draftsCovered: number
 }
 
-const DEFAULT_MAX_FACTS = 200_000
+const FACT_PAGE_SIZE = 50_000
 
 /**
  * The `PlayerIdentityMap` column holding each import platform's own player id.
@@ -204,20 +204,42 @@ export async function collectDraftFactSamples(
   }
 
   const seasonNum = options.season ? Number(options.season) : null
-  const facts = await prisma.draftFact.findMany({
-    where: {
-      sport: options.sport,
-      ...(seasonNum != null && Number.isFinite(seasonNum) ? { season: seasonNum } : {}),
-    },
-    select: {
-      leagueId: true,
-      season: true,
-      round: true,
-      pickNumber: true,
-      playerId: true,
-    },
-    take: Math.min(Math.max(options.maxFacts ?? DEFAULT_MAX_FACTS, 1), DEFAULT_MAX_FACTS),
-  })
+  const limit = options.maxFacts == null ? Infinity : Math.max(1, Math.floor(options.maxFacts))
+  const factScope = {
+    sport: options.sport,
+    ...(seasonNum != null && Number.isFinite(seasonNum) ? { season: seasonNum } : {}),
+  }
+  const select = {
+    draftId: true,
+    leagueId: true,
+    season: true,
+    round: true,
+    pickNumber: true,
+    playerId: true,
+  } as const
+  const facts: Array<{
+    draftId: string
+    leagueId: string
+    season: number | null
+    round: number
+    pickNumber: number
+    playerId: string
+  }> = []
+  // Read a complete scope before building draft groups. A cap can cut a draft in
+  // half and bias both its team count and the picks that contribute to ADP.
+  let after: string | undefined
+  while (facts.length < limit) {
+    const take = Math.min(FACT_PAGE_SIZE, limit - facts.length)
+    const page = await prisma.draftFact.findMany({
+      where: { ...factScope, ...(after ? { draftId: { gt: after } } : {}) },
+      orderBy: { draftId: 'asc' },
+      select,
+      take,
+    })
+    for (const fact of page) facts.push(fact)
+    if (page.length < take) break
+    after = page[page.length - 1]!.draftId
+  }
   result.factsScanned = facts.length
   if (facts.length === 0) return result
 

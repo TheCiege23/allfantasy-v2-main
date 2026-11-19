@@ -3,7 +3,7 @@ import { planUniverseMovement, type MovementLevel, type MovementPolicy } from '.
 import { renewalFingerprint, type RenewalManager, type RenewalPool } from './universeRenewalPlan'
 
 const key=z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
-export const universeRenewalProposalSchema=z.object({
+const universeRenewalProposalSchema=z.object({
   version:z.literal(1), reason:z.string().trim().min(10).max(1000),
   replaceRecordedMovement:z.boolean(),
   pools:z.array(z.object({key,templateLeagueId:key,levelId:key,name:z.string().trim().min(1).max(80),

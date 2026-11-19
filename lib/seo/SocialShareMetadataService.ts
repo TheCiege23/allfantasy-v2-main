@@ -5,7 +5,7 @@
 
 import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
-export interface SocialShareConfig {
+interface SocialShareConfig {
   url: string
   title: string
   description: string
@@ -14,7 +14,7 @@ export interface SocialShareConfig {
 }
 
 /** Default OG image path. */
-export const DEFAULT_OG_IMAGE_PATH = "/og-image.jpg"
+const DEFAULT_OG_IMAGE_PATH = "/og-image.jpg"
 
 /** Build full image URL for OG/twitter. */
 export function getOgImageUrl(path?: string | null): string {

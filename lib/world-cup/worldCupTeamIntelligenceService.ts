@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TeamFormResult = {
+type TeamFormResult = {
   opponent: string
   result: "W" | "D" | "L"
   score: string
@@ -11,7 +11,7 @@ export type TeamFormResult = {
   startsAt: string | null
 }
 
-export type TeamGroupStanding = {
+type TeamGroupStanding = {
   groupName: string
   rank: number | null
   played: number
@@ -60,8 +60,6 @@ export type WorldCupTeamIntelligenceReport = {
   dataSourceLabel: string
   lastUpdatedAt: string | null
 }
-
-const FINAL_STATUSES = new Set(["FT", "AET", "PEN", "final"])
 
 // ── Main function ─────────────────────────────────────────────────────────────
 
@@ -278,20 +276,3 @@ export async function getWorldCupTeamIntelligence(
   }
 }
 
-/** Look up a team by name (case-insensitive partial match). */
-export async function findWorldCupTeamByName(
-  nameQuery: string
-): Promise<{ id: string; name: string } | null> {
-  const rows = await (prisma as any).worldCupTeam.findMany({
-    where: {
-      name: { contains: nameQuery, mode: "insensitive" },
-      NOT: [
-        { qualificationStatus: "test" },
-        { qualificationStatus: "test_placeholder" },
-      ],
-    },
-    select: { id: true, name: true },
-    take: 1,
-  })
-  return (rows as any[])[0] ?? null
-}

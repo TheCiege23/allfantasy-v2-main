@@ -36,7 +36,7 @@ import type { LeagueHubProvider, SyncFreshness, SyncFreshnessState } from './typ
 
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000
 
-export interface DeriveSyncFreshnessInput {
+interface DeriveSyncFreshnessInput {
   provider: LeagueHubProvider
   syncStatus: string | null | undefined
   lastSyncedAt: Date | string | null | undefined

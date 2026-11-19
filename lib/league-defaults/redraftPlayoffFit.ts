@@ -34,9 +34,9 @@ import {
 } from '@/lib/playoff-runtime/playoffFit'
 import { cappedSeasonWeeks, maxPlayoffStartWeekForSport, maxRegularSeasonWeeksForSport } from '@/lib/redraft/regularSeasonCap'
 
-export const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB', 'SOCCER'])
+const REDRAFT_PLAYOFF_FIT_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB', 'SOCCER'])
 /** League types whose default bracket is fitted to the season. */
-export const PLAYOFF_FIT_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'keeper'])
+const PLAYOFF_FIT_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'keeper'])
 
 function isKeeper(leagueType: string | null | undefined): boolean {
   return String(leagueType ?? '').toLowerCase() === 'keeper'
@@ -128,7 +128,7 @@ export function redraftPlayoffShapeFor(input: {
  * daily-sport flat 6, both clamped to the league, and the sport's fixed default start week). A keeper
  * league was created with the registry's 6, clamped, in every sport, from the fixed default start week.
  */
-export function untouchedRedraftPlayoffDefaults(input: {
+function untouchedRedraftPlayoffDefaults(input: {
   sport: string
   leagueSize: number
   leagueType?: string | null

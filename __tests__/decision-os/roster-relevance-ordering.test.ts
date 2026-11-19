@@ -43,7 +43,6 @@ function packetWithRoster(
     leagueIntelligence: absent,
     portfolio: absent,
     savedAnalysis: absent,
-    managerPsychology: absent,
     gaps: [],
     meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },
   } as unknown as DecisionOsGroundingPacket

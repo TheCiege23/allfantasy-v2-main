@@ -91,7 +91,8 @@ function pageData(over: Partial<LivePageData> = {}): LivePageData {
 describe('LiveScores rendered in Spanish', () => {
   it('shows the Spanish title, controls and empty slate', () => {
     render(<LiveScores data={pageData()} />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Marcadores en vivo')
+    // No claimed team on this payload, so the guide headline says what the page is (2026-11-13).
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Marcadores en vivo de tus ligas')
     expect(screen.getByRole('button', { name: 'Mis partidos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Todos los partidos' })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Busca equipo, partido o tu jugador')).toBeInTheDocument()

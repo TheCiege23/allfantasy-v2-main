@@ -80,11 +80,6 @@ function formatMatchDate(iso: string | null, t: T): string {
   }
 }
 
-function formatScore(home: number | null, away: number | null): string {
-  if (home === null || away === null) return ""
-  return `${home} – ${away}`
-}
-
 /** Align saved picks with projected effective sides (slot key or `team:${id}` fallback). */
 function worldCupPickMatchesProjectedSide(
   pick: WorldCupPickView | null,

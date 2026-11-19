@@ -30,9 +30,9 @@ export type ScoreRow = {
   points: number
 }
 
-export type PairingRow = { rosterId: string; matchupId: number | null }
+type PairingRow = { rosterId: string; matchupId: number | null }
 
-export type RosterState = {
+type RosterState = {
   rosterId: string
   /** Sum of starters' platform points. 0 when the roster has no scoring yet. */
   total: number
@@ -139,7 +139,7 @@ export function buildLeagueWeekState(input: {
 }
 
 /** A league-week's starter rows, exactly as the platform scored them. */
-export async function snapshotLeagueWeekScores(
+async function snapshotLeagueWeekScores(
   platformLeagueId: string,
   season: number,
   week: number,

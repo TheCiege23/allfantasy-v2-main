@@ -16,6 +16,7 @@ import { collegeFixturesByPlayerTeam } from './collegeNextGame'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
 import { getRosteredMarket } from './rosteredMarket'
+import { boardPlayerValue, isBoardValueSport, loadLeagueValueBoard, type BoardPlayerValue } from '@/lib/sport-values/leagueValueBoard'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
@@ -31,6 +32,7 @@ import {
 import { LIVE_SCORE_SOURCES } from '@/lib/scores/liveSourceSelection'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
+import { isUnpriced, loadPlayerMarketValue, type PlayerMarketValue } from './playerMarketValue'
 import type { CoreDepthAccess } from './coreDepthAccess'
 import { gradeArchivedTradeRows, type ArchivedTradeGrade } from './archivedTradeGrade'
 import { mirrorTradeGrade, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -121,17 +123,7 @@ export type PlayerCardBio = {
  * redraft. A card that drops the basis turns a conditional reading into a claim
  * nobody can support. `valueBook.ts` says which book and why.
  */
-export type PlayerCardMarket = {
-  value: number
-  overallRank: number | null
-  positionRank: number | null
-  /** Change against the closest snapshot to `deltaDays` before the newest one. Null when history is too short. */
-  delta: { change: number; days: number } | null
-  format: string
-  qbFormat: string
-  source: string
-  capturedAt: string
-}
+export type PlayerCardMarket = PlayerMarketValue
 
 export type PlayerCardOwnership = {
   ownPct: number
@@ -362,6 +354,9 @@ export type PlayerCardInjuryFeed = {
   skipped: number
 }
 
+/** One player on a league's own value board — `priceBoardPlayer`, the trade grade's own price. */
+export type PlayerCardBoardValue = BoardPlayerValue
+
 /** Everything only a league can answer. Null on the universal card. */
 export type PlayerCardLeague = {
   leagueId: string
@@ -375,8 +370,14 @@ export type PlayerCardLeague = {
   slot: string
   isYours: boolean
   owner: { teamName: string | null; ownerName: string | null } | null
-  /** Priced under THIS league's variant/scoring/teams, via the DB-first market value service. */
+  /** Priced under THIS league's variant/scoring/teams, via the DB-first market value service. NFL only. */
   price: SectionState<{ value: number; mode: string; numQbs: 1 | 2; teams: number }>
+  /**
+   * A league-value-board sport (NBA first, 2026-11-16): his value on THIS league's own board — the one
+   * its trade grades price, under its points or categories (lib/sport-values/leagueValueBoard.ts).
+   * Absent for the NFL and for a sport not on a board.
+   */
+  boardValue?: SectionState<PlayerCardBoardValue>
   /**
    * Your own players at his position in this league, richest first.
    *
@@ -505,7 +506,6 @@ const SCHEDULE_WEEKS = 5
  * weeks the design draws.
  */
 const PLAYOFF_WEEKS = 3
-const DELTA_DAYS = 7
 const COMP_COUNT = 3
 const NEWS_COUNT = 3
 
@@ -553,83 +553,11 @@ function unavailable(reason: string): { available: false; reason: string } {
   return { available: false, reason }
 }
 
-/** Positions FantasyCalc does not publish. Named so the card can say WHY, not just fail. */
-const UNPRICED_POSITIONS = new Set(['K', 'DEF', 'DST', 'D/ST', 'DL', 'LB', 'DB', 'DE', 'DT', 'CB', 'S', 'EDGE'])
-
-function isUnpriced(position: string | null): boolean {
-  return position != null && UNPRICED_POSITIONS.has(position.toUpperCase())
-}
 
 /* ── market: price, ranks, and a real delta ──────────────────────────────── */
 
-/**
- * Price + ranks + the 7-day move, from `PlayerValueSnapshot`.
- *
- * The delta is computed against the snapshot CLOSEST to `DELTA_DAYS` before the
- * newest one, not against "the row 7 rows back" — captures are not evenly
- * spaced (16 distinct days across 18,955 rows), so counting rows would silently
- * compare a 4-day move against an 11-day one and label both "7d".
- */
-async function loadMarket(
-  sleeperId: string | null,
-  position: string | null,
-  book: ValueBook
-): Promise<SectionState<PlayerCardMarket>> {
-  const { format, qbFormat } = book
-  if (!sleeperId) {
-    return unavailable('No Sleeper id on file for this player, so no market row can be matched.')
-  }
-
-  const rows = await prisma.playerValueSnapshot
-    .findMany({
-      where: { sleeperId, source: book.source, format, qbFormat },
-      orderBy: { capturedAt: 'desc' },
-      take: 40,
-      select: { value: true, overallRank: true, positionRank: true, capturedAt: true, source: true },
-    })
-    .catch(() => [])
-
-  if (rows.length === 0) {
-    return unavailable(
-      isUnpriced(position)
-        ? 'FantasyCalc publishes no value for kickers or defenders, so this player has no market price.'
-        : 'No market snapshot on file for this player.'
-    )
-  }
-
-  const newest = rows[0]!
-  const target = newest.capturedAt.getTime() - DELTA_DAYS * 86_400_000
-
-  let prior: (typeof rows)[number] | null = null
-  let bestGap = Number.POSITIVE_INFINITY
-  for (const r of rows.slice(1)) {
-    const gap = Math.abs(r.capturedAt.getTime() - target)
-    if (gap < bestGap) {
-      bestGap = gap
-      prior = r
-    }
-  }
-
-  // A "7d" label on a 2-day comparison is a small lie that compounds; only
-  // claim the delta when a snapshot actually sits near the window.
-  const priorDays = prior ? Math.round((newest.capturedAt.getTime() - prior.capturedAt.getTime()) / 86_400_000) : 0
-  const delta =
-    prior && priorDays >= 3 ? { change: newest.value - prior.value, days: priorDays } : null
-
-  return {
-    available: true,
-    data: {
-      value: newest.value,
-      overallRank: newest.overallRank,
-      positionRank: newest.positionRank,
-      delta,
-      format,
-      qbFormat,
-      source: newest.source,
-      capturedAt: newest.capturedAt.toISOString(),
-    },
-  }
-}
+// The read lives in ./playerMarketValue so Chimmy's value tool quotes the SAME number this card shows.
+const loadMarket = loadPlayerMarketValue
 
 /* ── comps: who else costs about this much ───────────────────────────────── */
 
@@ -930,6 +858,9 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
         picksReceived: true,
         // For the drafted-pick match the grade makes — see `archivedTradeGrade.ts`.
         partnerRosterId: true,
+        // Waiver budget each way, priced by the grade — see `archivedRowFaab`.
+        budgetGiven: true,
+        budgetReceived: true,
         history: { select: { sleeperLeagueId: true } },
         // Each trade's ids are named from its own sport's pool — Sleeper reuses ids across sports.
         sport: true,
@@ -1625,8 +1556,22 @@ async function loadLeague(
   // League-context price. `marketContextFor` lives in playerTradeVisual, which
   // also pulls the trade ENGINE — imported lazily so opening a card never drags
   // the grading path in behind it.
-  let price: PlayerCardLeague['price'] = unavailable('No market values for this league configuration.')
-  if (sleeperId) {
+  /*
+   * 🛑 THE MARKET CHART IS NFL, KEYED BY SLEEPER ID — AND SLEEPER REUSES ITS NUMBERS ACROSS SPORTS.
+   * Read for an NBA league, an NBA id equal to some NFL id priced him as that football player
+   * (2026-11-16). Outside the NFL nothing here reads the chart; a league-value-board sport is valued on
+   * the league's own board instead (`boardValue`, attached by `getPlayerCard`).
+   */
+  const leagueSport = String(league.sport ?? 'NFL').trim().toUpperCase() || 'NFL'
+  const nflValues = leagueSport === 'NFL'
+  let price: PlayerCardLeague['price'] = nflValues
+    ? unavailable('No market values for this league configuration.')
+    : unavailable(
+        isBoardValueSport(leagueSport)
+          ? 'This league values its players on its own value board, not on the NFL market chart.'
+          : 'Market prices are published for NFL players only.',
+      )
+  if (sleeperId && nflValues) {
     try {
       const [{ marketContextFor }, { getMarketValues, playerValue }] = await Promise.all([
         import('./playerTradeVisual'),
@@ -1682,7 +1627,8 @@ async function loadLeague(
           })
           .catch(() => [])
 
-        const prices = samePos.length
+        // NFL only — see `nflValues` above. Another sport's rows keep no price rather than a stranger's.
+        const prices = samePos.length && nflValues
           ? await prisma.playerValueSnapshot
               .findMany({
                 where: {
@@ -1953,6 +1899,13 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
    *
    * One extra small query when a league is in context; nothing when it is not.
    */
+  /*
+   * 🛑 NFL-ONLY READS BY SLEEPER ID (2026-11-16): the market chart and the ownership board count NFL
+   * players, and Sleeper's NBA numbers overlap its NFL ones. Another sport's card reads neither.
+   */
+  const sportKey = String(player.sport ?? 'NFL').trim().toUpperCase() || 'NFL'
+  const nflCard = sportKey === 'NFL'
+
   const leagueBookRow = req.leagueId
     ? await prisma.league
         .findUnique({
@@ -1966,10 +1919,30 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     ? valueBookFor(leagueBookRow.settings, leagueBookRow.leagueType)
     : UNIVERSAL_BOOK
 
+  /*
+   * A league-value-board sport in a league of that sport: his value on the league's own board, read
+   * beside everything else. The id tried first is the one the league's rosters speak (Sleeper's NBA id,
+   * or a native league's Rolling Insights id); the board falls back to his name only when no id matches.
+   */
+  const boardValuePromise: Promise<SectionState<PlayerCardBoardValue> | null> =
+    req.leagueId && isBoardValueSport(sportKey) && String(leagueBookRow?.sport ?? '').trim().toUpperCase() === sportKey
+      ? loadLeagueValueBoard(req.leagueId)
+          .then((b) =>
+            boardPlayerValue(b, {
+              playerId: player.sleeperId ?? (player.source === 'rolling_insights' ? player.externalId : null),
+              rosterPlayerId: lookup.rosterId ?? null,
+              name: player.name,
+            }),
+          )
+          .catch(() => unavailable('This league’s value board could not be read just now.'))
+      : Promise.resolve(null)
+
   // prettier-ignore
   const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league, future, afEngine] = await Promise.all([
-    loadMarket(player.sleeperId, player.position, book),
-    getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
+    nflCard
+      ? loadMarket(player.sleeperId, player.position, book)
+      : Promise.resolve(unavailable('Market prices are published for NFL players only.') as SectionState<PlayerCardMarket>),
+    nflCard ? getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null) : Promise.resolve(null),
     player.sleeperId && projWeek
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
@@ -2024,8 +1997,12 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       : Promise.resolve(new Map()),
   ])
 
+  const boardValue = await boardValuePromise
+
   const own = ownershipBoard && player.sleeperId ? ownershipBoard.byPlayerId.get(player.sleeperId) : undefined
-  const ownership: SectionState<PlayerCardOwnership> = !ownershipBoard
+  const ownership: SectionState<PlayerCardOwnership> = !nflCard
+    ? unavailable('Ownership rates are counted across NFL leagues only.')
+    : !ownershipBoard
     ? unavailable('Ownership could not be read.')
     : ownershipBoard.leaguesCounted < MIN_LEAGUES_FOR_OWNERSHIP
       ? unavailable(
@@ -2165,7 +2142,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
          */
         unavailable('No record of when this sport was last checked.'),
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
-    league,
+    league: league && boardValue ? { ...league, boardValue } : league,
     ...(follow ? { follow } : {}),
     ...(dynastyMarker ? { dynastyMarker } : {}),
   }

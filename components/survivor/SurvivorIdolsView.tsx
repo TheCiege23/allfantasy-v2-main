@@ -22,7 +22,7 @@ import { survivorIdolPlayEngine } from '@/lib/survivor/survivorIdolEngines'
 import { SurvivorIdolCard, survivorIdolGlowStyle } from './SurvivorIdolCard'
 import './survivorIdols.css'
 
-export interface SurvivorIdolsViewProps {
+interface SurvivorIdolsViewProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

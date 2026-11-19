@@ -21,10 +21,7 @@ import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { kickoffClock } from '@/lib/core-app/lineupLock'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
-import { MyTeamBoard } from '@/components/core-app/MyTeamBoard'
-import { MyTeamLockClock } from '@/components/core-app/MyTeamLockClock'
 import { MyTeam } from '@/components/core-app/screens/MyTeam'
-import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import type { LineupPlayer, MyTeamData } from '@/lib/core-app/myTeam'
 
 const EN_DAY = /\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/
@@ -93,33 +90,6 @@ describe('kickoffText, on the formatters’ real output', () => {
   })
 })
 
-const row = (over: Partial<MyTeamRow> = {}): MyTeamRow => ({
-  leagueId: 'l1', leagueName: 'KBFL', platform: 'sleeper', logoUrl: null, leagueBadge: 'KB',
-  teamName: 'Mine', starters: 9, empty: 0, out: 0, bye: 0, questionable: 0, unresolved: 0,
-  lockAt: '2026-10-04T17:00:00Z', locked: false, season: 2026, week: 4, severity: 0,
-  href: '/core/my-team?league=l1', platformLeagueId: '1', leagueSeason: 2026, teamId: '4', ...over,
-})
-const pulse = (rows: MyTeamRow[]) =>
-  ({ needs: [], set: rows, needsTotal: 0, setTotal: rows.length, considered: rows.length, checked: rows.length, byeChecked: true, notChecked: { noRoster: 0, noLineup: 0 } }) as unknown as MyTeamPulse
-
-describe('the board, in Spanish', () => {
-  it('the lock title and the next-deadline line', () => {
-    lang.language = 'es'
-    const c = render(<MyTeamBoard pulse={pulse([row()])} now={Date.UTC(2026, 9, 3, 12)} allHref="/x" />).container
-    expect(c.querySelector('.af-mt-board-row .af-bd-stat[title]')!.getAttribute('title')).toContain('dom 1:00p ET (4 oct)')
-    expect(c.querySelector('.af-mt-board-actions')!.textContent).toContain('dom 1:00p ET')
-    expect(c.querySelector('.af-mt-board-row')!.textContent).not.toMatch(EN_DAY)
-    lang.language = 'en'
-  })
-
-  it('a distant lock’s date', () => {
-    lang.language = 'es'
-    const c = render(<MyTeamBoard pulse={pulse([row({ lockAt: '2026-10-20T17:00:00Z' })])} now={Date.UTC(2026, 9, 3, 12)} allHref="/x" />).container
-    expect(c.querySelector('.af-mt-board-row .af-bd-stat')!.textContent).toBe('20 oct')
-    lang.language = 'en'
-  })
-})
-
 const player = (over: Partial<LineupPlayer> = {}): LineupPlayer => ({
   sleeperId: 'p1', name: 'Bo Nix', position: 'QB', team: 'DEN', sport: 'NFL', imageUrl: null,
   gameContext: 'DEN vs MIA · Thu 10/1 8:15p ET', kickoff: new Date('2099-10-01T00:15:00Z'),
@@ -137,20 +107,6 @@ const data = {
   nextMatchup: { available: false, reason: 'n/a' }, upcomingByes: [],
   rosterGrade: { available: false, reason: 'n/a' }, liveScore: { available: false, reason: 'n/a' },
 } as unknown as MyTeamData
-
-describe('the ticking lock clock, in Spanish', () => {
-  it('shows a distant lock as a Spanish date once it takes over from the server string', () => {
-    lang.language = 'es'
-    const atMs = Date.now() + 20 * 86_400_000
-    const english = formatLockLabel(atMs, Date.now()).text
-    expect(english).toMatch(EN_MONTH)
-    // The effect sets `now` on mount, so the clock re-renders from its own formatLockLabel call.
-    const c = render(<MyTeamLockClock atMs={atMs} initial={english} />).container
-    expect(c.textContent).toBe(kickoffText(english, 'es'))
-    expect(c.textContent).not.toMatch(EN_MONTH)
-    lang.language = 'en'
-  })
-})
 
 describe('My Team rows, in Spanish', () => {
   it('the server-built kickoff, and the no-game fallback — and back to English live', () => {

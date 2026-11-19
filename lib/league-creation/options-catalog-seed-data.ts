@@ -1,13 +1,15 @@
+import { DYNASTY_TEAM_COUNTS, REDRAFT_TEAM_COUNTS } from '@/lib/league/teamCountLimits'
 import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
 import { KEEPER_EVEN_TEAM_COUNTS, KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
+import { sgCreateTeamCounts } from '@/lib/survivor-guillotine/createFit'
 
-export type CreateMode = 'quick' | 'advanced'
+type CreateMode = 'quick' | 'advanced'
 
-export interface LeagueCreateConceptSeed {
+interface LeagueCreateConceptSeed {
   id: string
   title: string
   subtitle: string
@@ -31,7 +33,8 @@ const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAA
 
 const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
-const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
+const UNIVERSAL_CREATE_TEAM_COUNTS = [...REDRAFT_TEAM_COUNTS]
+const DYNASTY_CREATE_TEAM_COUNTS = [...DYNASTY_TEAM_COUNTS]
 
 const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
@@ -111,6 +114,14 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       introPosterUrl: '/league-type-guillotine.png',
     },
     {
+      // A redraft shell with tribes, hidden powers and a scheduled chop (lib/survivor-guillotine/).
+      id: 'survivor_guillotine',
+      title: 'Survivor Guilly',
+      subtitle: 'Tribes, idols and weekly chops',
+      introVideoUrl: '/league-type-guillotine-intro.mp4',
+      introPosterUrl: '/league-type-guillotine.png',
+    },
+    {
       id: 'zombie',
       title: 'Zombie',
       subtitle: 'Infection-style survival',
@@ -152,6 +163,8 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
      * before it can eliminate a roster. This list controls both the wizard and create API.
      */
     guillotine: ['NFL', 'NBA', 'NHL', 'MLB'],
+    // The Survivor Guilly engine schedules NFL weeks and NBA scoring periods only.
+    survivor_guillotine: ['NFL', 'NBA'],
     zombie: [...ALL_SPORTS],
     survivor: SURVIVOR_ALLOWED_SPORTS,
     tournament: ALL_SPORTS,
@@ -169,6 +182,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     devy: ['snake', 'linear', 'auction', 'offline', 'auto'],
     c2c: ['snake', 'linear', 'auction', 'offline', 'auto'],
     guillotine: ['snake', 'linear', 'auction', 'offline', 'auto'],
+    survivor_guillotine: ['snake', 'linear', 'auction', 'offline', 'auto'],
     zombie: ['snake', 'offline', 'auto'],
     survivor: ['snake', 'linear', 'auction', 'offline', 'auto'],
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
@@ -247,6 +261,11 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
       MLB: ['mlb_points'],
     },
+    // Weekly totals decide every chop, so NBA is points only (categories have no single total).
+    survivor_guillotine: {
+      NFL: ['fb_half_ppr', 'fb_ppr', 'fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard'],
+      NBA: ['nba_points'],
+    },
     zombie: {
       NFL: ['fb_half_ppr'],
       NBA: ['nba_points'],
@@ -299,13 +318,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: [4, 6, 8, 10, 12, 14, 16],
     },
     dynasty: {
-      NFL: [4, 6, 8, 10, 12, 14, 16],
-      NBA: [4, 6, 8, 10, 12, 14, 16],
-      MLB: [4, 6, 8, 10, 12, 14, 16],
-      NHL: [4, 6, 8, 10, 12, 14, 16],
-      NCAAF: [4, 6, 8, 10, 12, 14, 16],
-      NCAAB: [4, 6, 8, 10, 12, 14, 16],
-      SOCCER: [4, 6, 8, 10, 12, 14, 16],
+      NFL: DYNASTY_CREATE_TEAM_COUNTS,
+      NBA: DYNASTY_CREATE_TEAM_COUNTS,
+      MLB: DYNASTY_CREATE_TEAM_COUNTS,
+      NHL: DYNASTY_CREATE_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
+      NCAAB: DYNASTY_CREATE_TEAM_COUNTS,
+      SOCCER: DYNASTY_CREATE_TEAM_COUNTS,
     },
     // Keeper runs 4–20 for these four sports. Even sizes are free; odd sizes (5–19) are an AF
     // Commissioner option: listed so the server accepts them,
@@ -355,6 +374,9 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short
     // schedule adds double-chop weeks in league settings to finish a large league in time.
     guillotine: Object.fromEntries(ALL_SPORTS.map((sport) => [sport, guillotineTeamCountOptions()])),
+    // Every size whose season the create transaction can fit to exactly three finalists — the
+    // same function that fits it, so the catalog cannot offer a size the server then refuses.
+    survivor_guillotine: { NFL: sgCreateTeamCounts('NFL'), NBA: sgCreateTeamCounts('NBA') },
     zombie: Object.fromEntries(ALL_SPORTS.map(sport => [sport, getZombieCreationTeamCounts(sport)])),
     // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
     // size to, so anything this catalog offers that is not in that list gets silently rewritten

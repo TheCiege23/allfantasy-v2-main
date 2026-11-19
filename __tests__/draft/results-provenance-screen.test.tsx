@@ -1,5 +1,5 @@
 import {describe,it,expect,vi,beforeEach} from 'vitest';
-import {render,screen} from '@testing-library/react';
+import {render,screen,cleanup} from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {DraftAnalysis,weekRanges} from '@/components/core-app/screens/DraftAnalysis';
 import {DraftResultsRefresh} from '@/components/core-app/screens/DraftResultsRefresh';
@@ -54,5 +54,23 @@ describe('the analysis block reads top to bottom',()=>{
     expect(weekRanges([])).toBe('');
     render(<DraftAnalysis results={{...results,state:'ready',teams:[team('a',1,9,[1,2,3,4,5,6,7])]}}/>);
     expect(screen.getByRole('cell',{name:'1–7'})).toBeInTheDocument();
+  });
+});
+describe('readable provenance',()=>{
+  it('shows when results were last read as a date, never the raw ISO instant',()=>{
+    const {container}=render(<DraftResultsRefresh leagueId="l" archiveKey="imported:222" observedAt="2026-11-01T12:01:54.055Z"/>);
+    expect(container.textContent).toMatch(/Results last read: Nov 1, 2026/);
+    expect(container.textContent).not.toContain('2026-11-01T12:01:54.055Z');
+  });
+  it('names the reference format and dates in words',async()=>{
+    const {DraftReferences}=await import('@/components/core-app/screens/DraftReferences');
+    const ref={version:'draft-reference-v1',kind:'market_value',provider:'Stats Guy Fantasy',attributionUrl:null,observedAt:'2026-09-03T00:00:00Z',effectiveAt:'2026-08-31T23:59:59.999Z',historical:true,season:2026,identitySpace:'sleeper',format:'non_sf_redraft',entries:[]} as never;
+    const {container}=render(<DraftReferences references={[ref]}/>);
+    expect(container.querySelector('summary')?.textContent).toContain('1-QB redraft');
+    expect(container.textContent).not.toContain('non_sf_redraft');
+    expect(container.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+    language.language='es';cleanup();
+    const es=render(<DraftReferences references={[ref]}/>);
+    expect(es.container.querySelector('summary')?.textContent).toContain('Redraft 1-QB');
   });
 });

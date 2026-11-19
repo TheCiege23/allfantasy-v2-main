@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server"
 import { getMonetizationCatalogItemBySku, type MonetizationSku } from "@/lib/monetization/catalog"
-import { ApplePurchaseError, applyApplePurchase, expireAppleSubscription } from "@/lib/monetization/applePurchases"
-import { appleIapConfigured, getCurrentAppleTransaction, verifyAppleNotification, verifyAppleTransaction } from "@/lib/monetization/appleStore"
+import { ApplePurchaseError, applyApplePurchase, expireAppleSubscription, markAppleBillingRetry } from "@/lib/monetization/applePurchases"
+import {
+  appleIapConfigured,
+  getCurrentAppleTransaction,
+  verifyAppleNotification,
+  verifyAppleRenewalInfo,
+  verifyAppleTransaction,
+} from "@/lib/monetization/appleStore"
 import { TokenSpendService } from "@/lib/tokens/TokenSpendService"
 
 export const runtime = "nodejs"
@@ -50,6 +56,19 @@ export async function POST(request: Request) {
           } else if (current.expiresDate && current.expiresDate > Date.now()) {
             await applyApplePurchase(current, current.appAccountToken || transaction.appAccountToken)
           }
+        }
+        break
+      case "DID_FAIL_TO_RENEW":
+        // Billing retry (lib/monetization/applePurchases.ts markAppleBillingRetry). With a grace period,
+        // its end date is only in the signed renewal info.
+        if (item.type === "subscription") {
+          let graceEnd: Date | null = null
+          const signedRenewal = payload.data?.signedRenewalInfo
+          if (payload.subtype === "GRACE_PERIOD" && signedRenewal) {
+            const renewal = await verifyAppleRenewalInfo(signedRenewal, environment)
+            graceEnd = typeof renewal.gracePeriodExpiresDate === "number" ? new Date(renewal.gracePeriodExpiresDate) : null
+          }
+          await markAppleBillingRetry(transaction, graceEnd)
         }
         break
       case "EXPIRED":

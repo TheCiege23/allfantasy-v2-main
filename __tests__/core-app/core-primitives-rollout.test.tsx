@@ -78,9 +78,9 @@ describe('migrated screens draw their title through PageHeader', () => {
     expect(src).not.toMatch(/<h1\b/)
   })
 
-  it('Matchup’s league name is banner text now, not a second heading', () => {
+  it('Matchup’s league name is neither a second heading nor repeated in the week bar (2026-11-14)', () => {
     const src = read('components/core-app/screens/Matchup.tsx')
-    expect(src).toMatch(/<p className="af-mu-league-name">/)
+    expect(src).not.toMatch(/className="af-mu-league-name"/)
     expect(src).not.toMatch(/<h1 className="af-mu-league-name">/)
   })
 })
@@ -176,9 +176,9 @@ describe('rendered: the page header is the shared one', () => {
     expect(link?.getAttribute('href')).toBe('/core/my-team?league=l1')
     expect(link?.getAttribute('data-prefetch')).toBe('false')
     // The page title is the shared header's; with no week on file there is no eyebrow.
-    expect(pageTitle(container).textContent).toBe('Matchup')
+    expect(pageTitle(container).textContent).toBe('This week’s matchup')
     expect(container.querySelector('.af-pg-eyebrow')).toBeNull()
-    expect(container.querySelector('p.af-mu-league-name')?.textContent).toBe('L')
+    expect(container.querySelector('.af-mu-league-name')).toBeNull()
   })
 })
 

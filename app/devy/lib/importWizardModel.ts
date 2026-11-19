@@ -106,7 +106,7 @@ export function countByConfidence(players: PlayerMappingRow[]): Record<string, n
   return out
 }
 
-export type MergePreview = {
+type MergePreview = {
   nflPlayers: number
   devyPlayers: number
   skippedPlayers: number

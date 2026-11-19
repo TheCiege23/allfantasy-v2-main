@@ -70,7 +70,7 @@ export function isGuillotineBasisGrade(grade: { lines?: ReadonlyArray<{ valueSou
 export type GuillotineSeat = { slot: string; eligible: readonly string[] }
 
 /** A free agent good enough to set a slot's replacement level must have played this many games (NFL). */
-export const MIN_REPLACEMENT_GAMES = 3
+const MIN_REPLACEMENT_GAMES = 3
 
 /** The replacement-level games bar per sport: NFL three games, daily sports ten. */
 export function minReplacementGamesFor(sport: GuillotineTradeSport): number {
@@ -89,6 +89,7 @@ export type GuillotineContext = {
   sport?: GuillotineTradeSport
   /** Points per scoring WEEK, in `perGame` (see the header). */
   board: readonly BoardPlayer[]
+  espnRosterIndex?: ReadonlyMap<string, BoardPlayer>
   seats: readonly GuillotineSeat[]
   /** Best free agent each starting slot could take, by slot token. */
   replacementBySlot: ReadonlyMap<string, { name: string; perGame: number }>
@@ -261,7 +262,7 @@ export function faabWorth(amount: number, ctx: Pick<GuillotineContext, 'liveFaab
   return (Math.min(amount, ctx.liveFaab) / ctx.liveFaab) * (ctx.wireValue + ctx.releaseValue)
 }
 
-export function guillotineBasis(ctx: GuillotineContext): string {
+function guillotineBasis(ctx: GuillotineContext): string {
   const weeks = ctx.survival[0] ?? 0
   const perWeek =
     ctx.sport != null && ctx.sport !== 'NFL' && ctx.gamesPerWeek != null
@@ -303,7 +304,12 @@ export function gradeGuillotineDeal(args: {
         lines.push({ side, name: `$${asset.amount} FAAB`, marketValue: round1(value), leagueValue: round1(value), source: 'guillotine-faab', valueSource: 'guillotine_faab', valueAsOf: null })
         continue
       }
-      const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
+      const espnId = asset.rosterPlayerId?.trim()
+      const espnPlayer = espnId ? ctx.espnRosterIndex?.get(espnId) : undefined
+      const found = ctx.espnRosterIndex
+        ? espnPlayer ? { ok: true as const, player: espnPlayer }
+          : { ok: false as const, reason: `${asset.name ?? 'This player'} has no verified ESPN projection link.` }
+        : resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
       if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
       // Daily-sport boards can carry thin early-season lines; a thin one is not a price.
       if (ctx.sport != null && ctx.sport !== 'NFL' && !meetsSampleBar(found.player)) {

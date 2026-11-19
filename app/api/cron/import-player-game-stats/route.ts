@@ -41,6 +41,7 @@ import {
 } from "@/lib/sports-data/rollingInsightsGameLogs"
 import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImportService"
 import { RI_LIVE_GAME_LOG_SPORTS } from "@/lib/sports-reporting/riLiveGameLogAdapter"
+import { pendingStatCorrectionDates } from "@/lib/sports-data/statCoverage"
 import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/riSeasonSchedule"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
@@ -190,10 +191,13 @@ async function handle(req: NextRequest) {
       const dates =
         fromDate && toDate ? dateRange(fromDate, toDate) : recentDates(days)
       try {
+        const correctionDates = s === "NBA" && !fromDate && !toDate && !dryRun
+          ? await pendingStatCorrectionDates(prisma, s)
+          : []
         perSport[s] = await ingestRollingInsightsGameLogs({
           sport: s,
-          dates,
-          persistSchedule: s === "NHL",
+          dates: [...new Set([...dates, ...correctionDates])],
+          persistSchedule: s === "NHL" || s === "NBA",
           shouldStop: () => budget.exhausted(),
         })
       } catch (err) {

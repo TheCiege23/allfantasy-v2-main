@@ -52,6 +52,7 @@ export const leagueHomeMessages = defineMessages({
     kpiFaabNote: 'Free-agent budget for this season',
     kpiDeadline: 'Trade deadline',
     kpiDeadlineWeek: (week: number) => `Week ${week}`,
+    kpiWeeksLeft: (n: number) => (n <= 0 ? 'Last week to trade' : n === 1 ? '1 week left' : `${n} weeks left`),
 
     // Needs your attention
     attentionTitle: 'Needs your attention',
@@ -92,6 +93,7 @@ export const leagueHomeMessages = defineMessages({
     kpiFaabNote: 'Presupuesto para agentes libres de esta temporada',
     kpiDeadline: 'Límite de intercambios',
     kpiDeadlineWeek: (week) => `Semana ${week}`,
+    kpiWeeksLeft: (n) => (n <= 0 ? 'Última semana para intercambiar' : n === 1 ? 'Queda 1 semana' : `Quedan ${n} semanas`),
 
     attentionTitle: 'Requiere tu atención',
 

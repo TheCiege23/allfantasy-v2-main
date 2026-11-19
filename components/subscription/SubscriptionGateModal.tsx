@@ -3,6 +3,10 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { getGateDef } from '@/lib/subscription/featureGating'
+import { buildFeatureUpgradePath } from '@/lib/subscription/feature-access'
+import { monthlyUpgradeHref } from '@/lib/monetization/upgradeDestination'
+import { withQueryParam } from '@/lib/monetization/checkout-urls'
+import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
 export function SubscriptionGateModal({
@@ -39,12 +43,15 @@ export function SubscriptionGateModal({
     }
   }, [isOpen])
 
-  if (!isOpen) return null
-
   const def = getGateDef(featureId)
-  const hash = highlightParamOverride ?? def.highlightParam
-  const upgradeUrl =
-    def.upgradeUrl + (hash ? `?highlight=${encodeURIComponent(hash)}` : '')
+  const highlight = highlightParamOverride ?? def.highlightParam
+  const planUrl = buildFeatureUpgradePath(featureId) || def.upgradeUrl
+  const upgradeUrl = useLockUpgradeHref(
+    monthlyUpgradeHref(highlight ? withQueryParam(planUrl, 'highlight', highlight) : planUrl),
+    `lock_${featureId}`,
+  )
+
+  if (!isOpen) return null
 
   const planNames = def.requiredPlanDisplay
 
@@ -103,6 +110,7 @@ export function SubscriptionGateModal({
 
           <Link
             href={upgradeUrl}
+            data-ios-purchase
             onClick={onClose}
             className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2.5 text-sm font-bold text-[#030b14] transition hover:from-cyan-400 hover:to-sky-400"
           >
@@ -120,6 +128,7 @@ export function SubscriptionGateModal({
 
           <Link
             href="/pricing"
+            data-ios-purchase
             onClick={onClose}
             className="mt-2 flex min-h-[36px] w-full items-center justify-center rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/60 transition hover:border-white/20 hover:text-white/80"
           >

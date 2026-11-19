@@ -22,12 +22,12 @@ export interface CommissionerAuditLogRow {
   createdAt: string
 }
 
-export interface CommissionerAuditLogPage {
+interface CommissionerAuditLogPage {
   items: CommissionerAuditLogRow[]
   nextCursor: string | null
 }
 
-export interface FetchCommissionerAuditLogParams {
+interface FetchCommissionerAuditLogParams {
   leagueId: string
   limit?: number
   cursor?: string | null

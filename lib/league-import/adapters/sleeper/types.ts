@@ -67,7 +67,7 @@ export interface SleeperRosterRaw {
   }
 }
 
-export interface SleeperMatchupRaw {
+interface SleeperMatchupRaw {
   roster_id: number
   matchup_id: number
   points: number
@@ -127,7 +127,7 @@ export interface SleeperDraftPickRaw {
  * These are all Sleeper integer roster IDs (1..total_rosters), NOT user IDs.
  * `season` is a string like "2026".
  */
-export interface SleeperTradedPickRaw {
+interface SleeperTradedPickRaw {
   round: number
   season: string
   roster_id: number
@@ -143,6 +143,7 @@ export interface SleeperImportPayload {
   matchupsByWeek?: { week: number; matchups: SleeperMatchupRaw[] }[]
   transactions?: SleeperTransactionRaw[]
   draftPicks?: SleeperDraftPickRaw[]
+  drafts?: Array<{ draft_id: string; status?: string; start_time?: number }>
   /** Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`). */
   tradedPicks?: SleeperTradedPickRaw[]
   playerMap?: Record<string, { name: string; position: string; team: string }>

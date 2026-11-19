@@ -28,7 +28,7 @@
 export const LEAGUE_GONE_RECHECK_MS = 24 * 60 * 60_000
 export const LEAGUE_GONE_ERROR_PREFIX = 'league gone at provider: '
 
-export type LeagueGoneStateRow = {
+type LeagueGoneStateRow = {
   syncStatus?: string | null
   lastError?: string | null
   lastAttemptedSyncAt?: Date | null

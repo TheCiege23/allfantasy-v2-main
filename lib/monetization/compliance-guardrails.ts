@@ -1,4 +1,4 @@
-export type MonetizationComplianceCode =
+type MonetizationComplianceCode =
   | "in_app_dues_not_allowed"
   | "in_app_payout_not_allowed"
   | "in_app_prize_pool_not_allowed"
@@ -36,10 +36,6 @@ export class MonetizationComplianceError extends Error {
 
 export function isMonetizationComplianceError(error: unknown): error is MonetizationComplianceError {
   return error instanceof MonetizationComplianceError
-}
-
-export function getMonetizationComplianceMessage(code: MonetizationComplianceCode): string {
-  return COMPLIANCE_MESSAGES[code]
 }
 
 function stringifyMetadataValue(value: unknown): string {

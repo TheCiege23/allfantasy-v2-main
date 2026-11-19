@@ -13,7 +13,7 @@ function resolveSleeperAvatarUrl(value: string | null): string | null {
 }
 
 /** First two letters for initials circle (spec: first 2 letters of display name). */
-export function chatSenderInitials(displayName: string): string {
+function chatSenderInitials(displayName: string): string {
   const n = displayName.trim()
   if (!n) return "?"
   if (n.length >= 2) return n.slice(0, 2).toUpperCase()

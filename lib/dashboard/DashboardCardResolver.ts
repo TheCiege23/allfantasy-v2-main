@@ -3,7 +3,7 @@
  * Single source of truth for card id, title, href, product, and display order.
  */
 
-export interface DashboardCardConfig {
+interface DashboardCardConfig {
   id: string
   title: string
   href: string
@@ -13,14 +13,14 @@ export interface DashboardCardConfig {
 }
 
 /** Product launcher cards shown at top of dashboard (Bracket, WebApp, Legacy). */
-export const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
+const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
   {
     id: "bracket",
     title: "Bracket",
     href: "/brackets",
     product: "bracket",
     description: "Pools and bracket entries.",
-    highlight: "AI highlight: undervalued upset spots.",
+    highlight: "Chimmy highlight: undervalued upset spots.",
   },
   {
     id: "webapp",
@@ -28,7 +28,7 @@ export const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
     href: "/dashboard",
     product: "webapp",
     description: "League management, roster, waivers, trades, and draft.",
-    highlight: "AI highlight: waiver adds with immediate lineup impact.",
+    highlight: "Chimmy highlight: waiver adds with immediate lineup impact.",
   },
   {
     id: "legacy",
@@ -36,7 +36,7 @@ export const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
     href: "/af-legacy",
     product: "legacy",
     description: "Team scan, draft war room, trade center.",
-    highlight: "AI highlight: trade market and draft strategy.",
+    highlight: "Chimmy highlight: trade market and draft strategy.",
   },
 ]
 
@@ -70,9 +70,3 @@ export type DashboardSectionCardType =
   | "ai_activity"
   | "legacy_highlights"
 
-export interface DashboardSectionConfig {
-  id: DashboardSectionCardType
-  title: string
-  viewAllHref?: string
-  visible: boolean
-}

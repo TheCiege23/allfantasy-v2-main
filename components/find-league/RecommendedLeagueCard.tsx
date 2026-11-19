@@ -1,100 +1,11 @@
 /**
- * Phase 6F — RecommendedLeagueCard.
+ * Phase 6F — the loading skeleton the discovery rail shows while recommendations load.
  *
- * Compact, mobile-first card for a single `LeagueRecommendation`.
- * Renders exclusively from public DTOs — never reaches into private
- * resume fields. Honors theme via CSS vars.
+ * The card it stood in for is gone: nothing rendered it.
  */
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { explainFit, type LeagueRecommendation } from "@/lib/matchmaking"
-import { CompatibilityBadge, CommissionerTrustChip, FitTagChip, OpenSeatsTag } from "./chips"
-import { LeagueTierChip, LongRunningLeagueChip } from "@/components/reputation"
-import type { LeaguePrestigeTier } from "@/lib/reputation/types"
-
-export function RecommendedLeagueCard({
-  rec,
-  className,
-  href,
-}: {
-  rec: LeagueRecommendation
-  className?: string
-  /** Optional click-through target (e.g. league join page). */
-  href?: string
-}) {
-  const explanation = explainFit(rec.score, rec.league)
-  const title = rec.league.name ?? "Unnamed league"
-
-  const body = (
-    <article
-      data-testid="recommended-league-card"
-      className={cn(
-        "rounded-2xl p-3 sm:p-4 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400",
-        href && "hover:translate-y-[-1px]",
-        className
-      )}
-      style={{ background: "var(--panel)", border: "1px solid var(--border)" }}
-      aria-label={`Recommended league ${title}`}
-    >
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            className="truncate text-sm sm:text-base font-semibold"
-            style={{ color: "var(--text)" }}
-          >
-            {title}
-          </h3>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]" style={{ color: "var(--muted2)" }}>
-            <span className="font-semibold uppercase tracking-wider">{rec.league.sport}</span>
-            <span>·</span>
-            <span className="capitalize">{rec.league.leagueType.replace(/_/g, " ")}</span>
-            <span>·</span>
-            <span>{rec.league.format}</span>
-          </div>
-        </div>
-        <CompatibilityBadge score={rec.score.score} />
-      </header>
-
-      <p
-        className="mt-2 text-xs sm:text-sm"
-        style={{ color: "var(--text)" }}
-      >
-        {explanation.headline}
-      </p>
-
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {explanation.tags.map((t) => (
-          <FitTagChip key={t.key} label={t.label} tier={t.tier} />
-        ))}
-        <CommissionerTrustChip
-          trust={rec.league.commissionerCredibility}
-          verified={rec.league.commissionerVerified}
-        />
-        {rec.league.leaguePrestigeTier && (
-          <LeagueTierChip tier={rec.league.leaguePrestigeTier as LeaguePrestigeTier} />
-        )}
-        {rec.league.leagueTotalSeasons != null && (
-          <LongRunningLeagueChip totalSeasons={rec.league.leagueTotalSeasons} />
-        )}
-        <OpenSeatsTag seats={rec.league.openSeats} />
-      </div>
-
-      {explanation.caveat && (
-        <p className="mt-2 text-[11px] italic" style={{ color: "var(--muted2)" }}>
-          {explanation.caveat}
-        </p>
-      )}
-    </article>
-  )
-
-  if (!href) return body
-  return (
-    <a href={href} className="block">
-      {body}
-    </a>
-  )
-}
 
 export function RecommendedLeagueCardSkeleton({ className }: { className?: string }) {
   return (

@@ -30,7 +30,7 @@ export type WorldCupBracketGradeInsight = {
   recommendation: string
 }
 
-export type WorldCupLeaderboardAiInsight = {
+type WorldCupLeaderboardAiInsight = {
   entryId: string
   aiWinProbability: number
   bracketHealth: "Excellent" | "Alive" | "Risky" | "Busted"

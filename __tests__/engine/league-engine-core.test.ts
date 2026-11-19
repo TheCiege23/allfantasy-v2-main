@@ -27,7 +27,6 @@ import { runAllFixtures, runLeagueSimulationScenario } from '@/lib/engine-testin
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { runPresetEngine } from '@/lib/league-creation/preset-engine/runPresetEngine'
-import { calculateFantasyPoints, normalizeSleeperNflStats } from '@/lib/scoring-engine/ScoringCalculator'
 import { getStandingsTiebreakerOrder } from '@/lib/scoring-engine/scoringSettingsResolved'
 import { validateConceptRulesShape } from '@/lib/specialty-automation/validation'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
@@ -40,21 +39,6 @@ function slotOrder(n: number): SlotOrderEntry[] {
     displayName: `T${i + 1}`,
   }))
 }
-
-describe('calculateFantasyPoints', () => {
-  it('sums stat keys by rules (NFL)', () => {
-    const rules = { passing_yards: 0.04, passing_td: 4 }
-    const pts = calculateFantasyPoints('NFL', { passing_yards: 300, passing_td: 2 }, rules)
-    expect(pts).toBe(300 * 0.04 + 2 * 4)
-  })
-
-  it('normalizes Sleeper NFL stats then scores', () => {
-    const raw = { pass_yd: 250, pass_td: 2, rec: 5, rec_yd: 40 }
-    const norm = normalizeSleeperNflStats(raw)
-    const rules = { passing_yards: 0.04, passing_td: 4, reception: 0.5, receiving_yards: 0.1 }
-    expect(calculateFantasyPoints('NFL', norm, rules)).toBeGreaterThan(0)
-  })
-})
 
 describe('getStandingsTiebreakerOrder', () => {
   it('returns default order when missing', () => {

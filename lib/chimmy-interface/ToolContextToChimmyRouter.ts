@@ -48,7 +48,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   matchup_simulator: 'Matchup Simulator',
   mock_draft: 'Draft Helper',
   trade_analyzer: 'Trade Analyzer',
-  waiver_ai: 'Waiver AI',
+  waiver_ai: 'Waiver Chimmy',
   league_forecast: 'League Forecast',
   rankings: 'Rankings',
   devy_league: 'Devy',

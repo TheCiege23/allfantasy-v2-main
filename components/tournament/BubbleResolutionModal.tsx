@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Check, X, Trophy, ArrowRight } from 'lucide-react'
+import { AlertTriangle, Check, X, ArrowRight } from 'lucide-react'
 
 interface BubbleRow {
   userId: string

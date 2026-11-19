@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const leagueId = typeof body?.leagueId === 'string' ? body.leagueId.trim() : ''
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const existing = await prisma.c2CLeague.findUnique({ where: { leagueId } })

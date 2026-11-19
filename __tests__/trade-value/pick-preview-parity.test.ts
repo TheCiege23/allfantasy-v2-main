@@ -54,6 +54,41 @@ it('[control] a pick the chart DOES carry is still priced from it', async () => 
   expect({ dataSource, value: priced.value, unpriced: priced.unpriced }).toEqual({ dataSource: 'fantasycalc_pick', value: 4000, unpriced: undefined })
 })
 
+describe('150-team rookie pick pricing', () => {
+  const large = { ...pricing, nflCtx: { ...pricing.nflCtx, numTeams: 150, largeLeagueRookiePicks: true } }
+
+  it('prices rookie picks by overall position across the round boundary', async () => {
+    const picks = [{ year: 2027, round: 1, overall: 1 }, { year: 2027, round: 1, overall: 150 },
+      { year: 2027, round: 2, overall: 151 }]
+    const quotes = await Promise.all(picks.map(pick => priceLeagueTradePick(pick, large)))
+    expect(quotes.map(quote => quote.dataSource)).toEqual(Array(3).fill('fantasycalc_pick_overall_estimate'))
+    const [first, lastInFirst, firstInSecond] = quotes.map(quote => quote.priced.value)
+    expect(first).toBeGreaterThan(4000)
+    expect(first).toBeGreaterThan(lastInFirst)
+    expect(lastInFirst).toBeGreaterThan(firstInSecond)
+    expect(firstInSecond).toBeGreaterThan(0)
+    const evaluated = await resolveAssets(picks.map(pick => ({ kind: 'pick', ...pick })), {
+      ...large, effectiveSport: 'NFL', waiverBudget: 100, dataGaps: [],
+    })
+    expect(evaluated.priced).toEqual(quotes.map(quote => quote.priced))
+  })
+
+  it('uses the middle of the round when the draft position is unknown', async () => {
+    const unknown = await priceLeagueTradePick({ year: 2027, round: 1 }, large)
+    const early = await priceLeagueTradePick({ year: 2027, round: 1, tier: 'early' }, large)
+    const late = await priceLeagueTradePick({ year: 2027, round: 1, tier: 'late' }, large)
+    expect(early.priced.value).toBeGreaterThan(unknown.priced.value)
+    expect(unknown.priced.value).toBeGreaterThan(late.priced.value)
+  })
+
+  it.each([{ year: 2028, round: 1, overall: 150 }, { year: 2029, round: 1, overall: 1 },
+    { year: 2027, round: 2, overall: 150 }])('withholds a pick without usable evidence (%j)', async (pick) => {
+    const result = await priceLeagueTradePick(pick, large)
+    expect(result.dataSource).toBe('no_pick_market')
+    expect(result.priced.unpriced).toBe(true)
+  })
+})
+
 describe('league quote isolation', () => {
   const book = { leagueId: 'L1', values: { '2027:2': 1585, '2028:2': 1200 } }
   it('reads the quote by season and round', () => {

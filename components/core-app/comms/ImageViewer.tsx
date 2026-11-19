@@ -48,4 +48,3 @@ export function ImageViewer({ src, onClose }: { src: string; onClose: () => void
   )
 }
 
-export default ImageViewer

@@ -309,11 +309,11 @@ describe('No-redirect contract — draft-mechanics surfaces are free of client-n
   it('PlayerPanel: the only client-navigation use is the documented player-compare fallback', () => {
     const src = read('components/app/draft-room/PlayerPanel.tsx')
     // Exactly one `window.location.href = …` line, and it points at
-    // `/player-compare`. The comparison-UI provider (`compareUi`) is the
+    // `/player-comparison-lab` (2026-11-12; `/player-compare` redirects there). The comparison-UI provider (`compareUi`) is the
     // primary path; this fallback only fires when it's not mounted.
     const matches = src.match(/window\.location\.href\s*=/g) ?? []
     expect(matches.length).toBe(1)
-    expect(src).toMatch(/window\.location\.href = `\/player-compare\?/)
+    expect(src).toMatch(/window\.location\.href = `\/player-comparison-lab\?/)
     // No router.push / router.replace anywhere
     expect(src).not.toMatch(/router\.push\(/)
     expect(src).not.toMatch(/router\.replace\(/)
@@ -399,7 +399,7 @@ describe('Commit L / M / N / O / P / Q / R / S / T / U locks all still hold afte
 
   it('Commit S — DraftTeamPanel still computes teamNeeds + byeClusters', () => {
     const dtp = read('components/app/draft-room/DraftTeamPanel.tsx')
-    expect(dtp).toMatch(/computeTeamNeeds\(\{ picks: myPicks, starterSlots \}\)/)
+    expect(dtp).toMatch(/computeStarterNeedsForDisplay\(\{ picks: myPicks, starterSlots \}\)/)
     expect(dtp).toMatch(/detectByeWeekClusters\(myPicks\)/)
   })
 

@@ -1,21 +1,26 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { generateUserInsights, getUnreadInsights, markInsightRead, dismissInsight } from '@/lib/insights-engine'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { prisma } from '@/lib/prisma'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/insights", tool: "LegacyInsights" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
-
+  /*
+   * All three handlers were gated by `requireAuthOrOrigin`, which passes any anonymous caller
+   * sending a matching `Origin` header: GET read anyone's insights by username, POST generated
+   * them for anyone, and PATCH marked any insight read/dismissed by id. The username is now
+   * only compared; data is selected by the caller's own linked Sleeper identity. allowGuest:
+   * InsightsPanel renders on the af-legacy surface a guest reaches after importing.
+   */
   const { searchParams } = new URL(request.url)
-  const username = searchParams?.get('username')
-
-  if (!username) {
-    return NextResponse.json({ error: 'Username required' }, { status: 400 })
-  }
+  const gate = await requireLegacySleeperIdentity(request, {
+    allowGuest: true,
+    requestedUsername: searchParams?.get('username'),
+  })
+  if (!gate.ok) return gate.response
+  const username = gate.identity.sleeperUsername
 
   try {
     const insights = await getUnreadInsights(username, 20)
@@ -27,10 +32,8 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/insights", tool: "Legac
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/insights", tool: "LegacyInsights" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
+  // CSRF protection for a state-changing call -- legitimate, but NOT authentication.
+  if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
   const ip = getClientIp(request)
   const rateLimitResult = consumeRateLimit({
@@ -50,11 +53,14 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/insights", tool: "Lega
 
   try {
     const body = await request.json()
-    const { username, leagueId } = body
+    const { leagueId } = body
 
-    if (!username) {
-      return NextResponse.json({ error: 'Username required' }, { status: 400 })
-    }
+    const gate = await requireLegacySleeperIdentity(request, {
+      allowGuest: true,
+      requestedUsername: typeof body?.username === 'string' ? body.username : null,
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
 
     const result = await generateUserInsights(username, username, leagueId)
     return NextResponse.json({
@@ -69,10 +75,11 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/insights", tool: "Lega
 })
 
 export const PATCH = withApiUsage({ endpoint: "/api/legacy/insights", tool: "LegacyInsights" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
+  // CSRF protection for a state-changing call -- legitimate, but NOT authentication.
+  if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
+
+  const gate = await requireLegacySleeperIdentity(request, { allowGuest: true })
+  if (!gate.ok) return gate.response
 
   try {
     const body = await request.json()
@@ -80,6 +87,15 @@ export const PATCH = withApiUsage({ endpoint: "/api/legacy/insights", tool: "Leg
 
     if (!insightId || !action) {
       return NextResponse.json({ error: 'insightId and action required' }, { status: 400 })
+    }
+
+    // The insight must be the caller's. Someone else's reads exactly like a missing one.
+    const owned = await prisma.aIInsight.findUnique({
+      where: { id: String(insightId) },
+      select: { userId: true },
+    })
+    if (!owned || owned.userId.trim().toLowerCase() !== gate.identity.sleeperUsername.toLowerCase()) {
+      return NextResponse.json({ error: 'Insight not found' }, { status: 404 })
     }
 
     if (action === 'read') {

@@ -204,7 +204,7 @@ const paidToolPost = withApiUsage({
       tokenRuleCode: 'ai_waiver_engine_run',
       tokenSourceType: 'waiver_ai_engine',
       tokenSourceId: `${input.leagueId ?? 'waiver'}:${Date.now()}`,
-      tokenDescription: 'Waiver AI engine run',
+      tokenDescription: 'Waiver Chimmy engine run',
       tokenMetadata: {
         leagueId: input.leagueId ?? null,
         sport: input.sport ?? null,
@@ -323,7 +323,7 @@ const paidToolPost = withApiUsage({
           sourceType: 'waiver_ai_engine_refund',
           sourceId: tokenFallbackLedgerId,
           idempotencyKey: `refund:waiver_ai_engine:${tokenFallbackLedgerId}`,
-          description: 'Auto refund after failed waiver AI request.',
+          description: 'Auto refund after failed waiver Chimmy request.',
           metadata: {},
         })
         .catch(() => null)

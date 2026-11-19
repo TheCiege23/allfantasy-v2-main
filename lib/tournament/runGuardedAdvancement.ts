@@ -21,7 +21,7 @@ import {
   type Blocker,
 } from '@/lib/tournament/advancementPreview'
 
-export type RunOutcome =
+type RunOutcome =
   | {
       ok: true
       preview: AdvancementPreview

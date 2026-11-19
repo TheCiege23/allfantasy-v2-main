@@ -43,10 +43,10 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
  */
 
 const VISIBLE_ASSETS = 4
-export const TRADE_BAND_WINDOW_MS = 24 * 60 * 60 * 1000
+const TRADE_BAND_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /** The league's Trades tab on /core — where every older trade lives. */
-export function leagueTradesHref(leagueId: string): string {
+function leagueTradesHref(leagueId: string): string {
   return `/core/trades?league=${encodeURIComponent(leagueId)}`
 }
 

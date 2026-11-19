@@ -18,6 +18,17 @@ function Tally({ count }: { count: number }) {
   )
 }
 
+/**
+ * ⚠ WHILE THE VOTE IS SEALED THERE IS NO COUNT TO SHOW. The server sends no vote data until every juror has
+ * voted, so the tally used to print "0" beside every finalist — read as "nobody has voted for you" before
+ * anyone could know (2026-11-07 Survivor audit). Say it is sealed instead.
+ */
+function SealedTally() {
+  return (
+    <span className="svl-lbl" style={{ color: '#a7aecd' }} aria-label="Jury votes are sealed">Sealed</span>
+  )
+}
+
 function formatDeadline(iso: string | null): string | null {
   if (!iso) return null
   const d = new Date(iso)
@@ -154,7 +165,7 @@ export function JuryFinaleView({ view, onVote, voting, voteError }: {
                         </p>
                       ) : <p className="svl-t3">Finalist</p>}
                     </div>
-                    {phone ? <Tally count={count} /> : <img src="/survivor/weekly/torch-lit-icon.svg" alt="" width={28} height={28} />}
+                    {phone ? (view.reveal ? <Tally count={count} /> : <SealedTally />) : <img src="/survivor/weekly/torch-lit-icon.svg" alt="" width={28} height={28} />}
                   </div>
                   {!phone ? (
                     <>
@@ -166,7 +177,7 @@ export function JuryFinaleView({ view, onVote, voting, voteError }: {
                       </div>
                       <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span className="svl-lbl">Jury votes</span>
-                        <Tally count={count} />
+                        {view.reveal ? <Tally count={count} /> : <SealedTally />}
                       </div>
                     </>
                   ) : null}

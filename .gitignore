@@ -112,6 +112,22 @@ test-summary.txt
 spotify-test-results.txt
 spotify-test-results-*.txt
 spotify-final-results.txt
+# Untracked 2026-11-13: same kind, found committed. Listing a file here does not
+# untrack it (build-latest.txt above was committed anyway); `git rm --cached` does.
+build-output.txt
+build-output2.txt
+build-raw.txt
+chimmy-test-out.txt
+engine-test-out.txt
+lint-full.txt
+slice4-vitest.txt
+test-results.txt
+tsc-errors.txt
+typecheck-output.txt
+vitest-results.txt
+vitest-results-latest.txt
+# Written and read back by prisma/fix-baseline-from-db.ps1 on every run.
+prisma/schema.prisma.bak
 .tmp/
 
 # Scratch files named by their own prefix. 38 of these were tracked -- one-off

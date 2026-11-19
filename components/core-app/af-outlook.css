@@ -90,6 +90,15 @@
   background: var(--bad-soft);
   border-color: transparent;
 }
+/* Season Outlook's survival rows (guillotine / survivor / tournament). */
+.af-olk-pill[data-status='alive'] {
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: transparent;
+}
+.af-so-statusrow .af-so-statusline {
+  max-width: none;
+}
 .af-olk-pill[data-status='risk'] {
   color: var(--warn);
   background: var(--warn-soft);

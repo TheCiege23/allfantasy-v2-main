@@ -8,7 +8,7 @@
  * own report-export logic both build on these; neither re-implements
  * escaping.
  */
-export function escapeCsvValue(value: string | number): string {
+function escapeCsvValue(value: string | number): string {
   const str = String(value)
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`

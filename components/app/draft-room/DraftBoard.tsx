@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel, Lock } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
@@ -14,7 +14,14 @@ import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
+import type { TileSignatureChip } from '@/lib/draft-room/leagueSignature'
+import type { SlotSalary } from '@/lib/draft-room/leagueNote'
+import { keeperPlayerKeys } from '@/lib/keeper/keeperPlayerKey'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
+import { useStickyBoardHeader } from './useStickyBoardHeader'
+import { seatDisplayName } from '@/lib/draft-room/seatLabel'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -24,7 +31,17 @@ const BOARD_COLUMN = 'minmax(84px, var(--af-board-col-max, 1fr))'
 /** Narrow round-label column: Sleeper shows the snake direction on the tiles themselves. */
 const ROUND_COLUMN = '28px'
 
-export type DraftBoardProps = {
+/**
+ * Survivor signature: a seat's tribe colour, or null. Tribes reach the board on `slotOrder[].tribe`
+ * only once the commissioner locks the pre-draft tribe plan (`attachSurvivorTribeBadges`), so a
+ * room without locked tribes draws nothing.
+ */
+function tribeColorHex(tribe: SlotOrderEntry['tribe'] | null | undefined): string | null {
+  const hex = tribe?.colorHex?.trim()
+  return hex && /^#[0-9a-f]{6}$/i.test(hex) ? hex : null
+}
+
+type DraftBoardProps = {
   picks: DraftPickSnapshot[]
   slotOrder: SlotOrderEntry[]
   tradedPicks?: TradedPickRecord[]
@@ -63,10 +80,20 @@ export type DraftBoardProps = {
   canCommissionerEditPicks?: boolean
   /** Click handler for the commissioner edit affordance on a cell. */
   onCommissionerEditPick?: (overall: number) => void
+  /** Tap a filled tile to open that player's card. */
+  onOpenPlayer?: (overall: number) => void
   /** Live draft pool rows by player id — enriches tiles only; does not change stored picks */
   poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
   /** overall → (overall − market ADP), only for picks worth a steal/reach badge. See lib/draft-room/draftPulse. */
   adpDeltaByOverall?: Record<number, number>
+  /** League signature chip per made pick (`tileSignatureChipsByOverall`): age or class year. */
+  signatureByOverall?: Record<number, TileSignatureChip>
+  /** Snake salary-cap slot salaries by overall pick (`loadDraftRoomLeagueFacts`); empty and made tiles. */
+  slotSalaryByOverall?: Record<number, SlotSalary>
+  /** Stage 2/3 tournament: each seat's previous-stage seed (`loadDraftRoomLeagueFacts`). */
+  seedByRosterId?: Record<string, number> | null
+  /** Keeper league: a kept player's year as a keeper (`loadDraftRoomLeagueFacts`), 2+ only. */
+  keeperYearsByPlayer?: Record<string, number> | null
   /**
    * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
    * boards have no separate team strip, so the header is where this lives.
@@ -172,16 +199,27 @@ function DraftBoardInner({
   onViewCellTradeHistory,
   canCommissionerEditPicks = false,
   onCommissionerEditPick,
+  onOpenPlayer,
   presentationVariant = 'default',
   poolPlayerById,
   adpDeltaByOverall,
+  signatureByOverall,
+  slotSalaryByOverall,
+  seedByRosterId,
+  keeperYearsByPlayer,
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const { t } = useOptionalLanguage()
+  const headerCopy = useMessages(draftRoomHeaderMessages)
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
   const boardRef = useRef<HTMLElement | null>(null)
+  const teamGridRef = useRef<HTMLDivElement | null>(null)
+  const teamHeaderRef = useRef<HTMLDivElement | null>(null)
+  // Manager names stay visible while scrolling down the rounds — see useStickyBoardHeader for why
+  // `position: sticky` cannot do this here.
+  useStickyBoardHeader(teamGridRef, teamHeaderRef, draftType !== 'auction')
   const lastFollowedOverallRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -256,6 +294,12 @@ function DraftBoardInner({
     return map
   }, [keeperLocks])
 
+  const keeperCountByRoster = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const lock of keeperLocks) counts.set(lock.rosterId, (counts.get(lock.rosterId) ?? 0) + 1)
+    return counts
+  }, [keeperLocks])
+
   /** Per-round map of draft slot (column) → cell data. Columns match `orderedSlots` (slot 1…N left to right). */
   const boardRowsByRoundAndSlot = useMemo(() => {
     const totalPicks = rounds * teamCount
@@ -317,7 +361,9 @@ function DraftBoardInner({
         tradedPickMeta: resolvedTradedMeta,
         managerTintColor: ownerColor.tintHex,
         amount: existing?.amount ?? null,
-        isKeeper: useLock ?? undefined,
+        isKeeper: useLock ? true : undefined,
+        isViewerKeeper:
+          useLock && currentUserRosterId && lock?.rosterId === currentUserRosterId ? true : undefined,
         isDevyPick: isDevyPick || undefined,
         isCollegePick: isCollegePick || undefined,
         isProPick: isProPick || undefined,
@@ -325,6 +371,12 @@ function DraftBoardInner({
         source: source || undefined,
         ownerRosterId,
         adpDelta: existing?.playerName ? adpDeltaByOverall?.[overall] ?? null : null,
+        signatureChip: existing?.playerName ? signatureByOverall?.[overall] ?? null : null,
+        // A kept player is not a draft-slot contract; every other tile shows its slot's salary.
+        slotSalary: useLock ? null : slotSalaryByOverall?.[overall] ?? null,
+        keeperYear: useLock && lock && keeperYearsByPlayer
+          ? keeperPlayerKeys(lock).map((key) => keeperYearsByPlayer[key]).find((n) => typeof n === 'number') ?? null
+          : null,
       }
       const pid = existing?.playerId ? String(existing.playerId).trim() : ''
       const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
@@ -347,6 +399,7 @@ function DraftBoardInner({
     thirdRoundReversal,
     pickByKey,
     keeperByKey,
+    currentUserRosterId,
     slotOrder,
     tradedPicks,
     slotOrderBySlot,
@@ -356,6 +409,9 @@ function DraftBoardInner({
     sport,
     poolPlayerById,
     adpDeltaByOverall,
+    signatureByOverall,
+    slotSalaryByOverall,
+    keeperYearsByPlayer,
   ])
 
   const auctionColumns = useMemo(() => {
@@ -393,6 +449,17 @@ function DraftBoardInner({
     () => slotOrder.slice().sort((a, b) => a.slot - b.slot),
     [slotOrder],
   )
+  /** One legend entry per tribe on the board, in seat order. */
+  const tribeLegend = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; color: string }>()
+    for (const entry of orderedSlots) {
+      const color = tribeColorHex(entry.tribe)
+      if (entry.tribe && color && !seen.has(entry.tribe.id)) {
+        seen.set(entry.tribe.id, { id: entry.tribe.id, name: entry.tribe.name, color })
+      }
+    }
+    return [...seen.values()]
+  }, [orderedSlots])
   const visibleRounds =
     viewMode === 'single'
       ? [navigation.round]
@@ -462,7 +529,7 @@ function DraftBoardInner({
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-[2px] bg-[#f6c445]" aria-hidden />
+                <span className="h-2 w-2 rounded-[2px] border border-[color:var(--af-league-accent,#67e8f9)] bg-[#0d1020] shadow-[0_0_6px_var(--af-league-accent,#22d3ee)]" aria-hidden data-testid="draft-board-legend-on-clock" />
                 on the clock
               </span>
               <span className="inline-flex items-center gap-1">
@@ -475,6 +542,16 @@ function DraftBoardInner({
                   your picks
                 </span>
               ) : null}
+              {tribeLegend.map((tribe) => (
+                <span
+                  key={tribe.id}
+                  className="inline-flex items-center gap-1 normal-case tracking-normal"
+                  data-testid={`draft-board-legend-tribe-${tribe.id}`}
+                >
+                  <span className="h-[3px] w-3 rounded-full" style={{ backgroundColor: tribe.color }} aria-hidden />
+                  <span className="font-semibold" style={{ color: tribe.color }}>{tribe.name}</span>
+                </span>
+              ))}
             </span>
             {tradedPicks.length > 0 ? (
               onOpenTradeHistory ? (
@@ -564,7 +641,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : 'max-md:hidden'} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : `max-md:hidden ${viewMode === 'all' ? 'md:hidden' : ''}`} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
@@ -628,6 +705,7 @@ function DraftBoardInner({
                         key={pick.overall}
                         pick={pick}
                         isEmpty={false}
+                        tribeColor={tribeColorHex(column.tribe)}
                         presentationVariant={presentationVariant}
                         sport={sport}
                         isRecentPick={Boolean(pick.playerName?.trim() && pick.overall === lastFilledPickOverall)}
@@ -659,6 +737,7 @@ function DraftBoardInner({
                             ? () => onCommissionerEditPick(pick.overall)
                             : undefined
                         }
+                        onOpenPlayer={onOpenPlayer ? () => onOpenPlayer(pick.overall) : undefined}
                       />
                     )
                   })}
@@ -676,9 +755,10 @@ function DraftBoardInner({
             to 84px (names truncate; the header cell's `title` keeps the full name). md+ leaves it
             unset, so BOARD_COLUMN resolves to its plain `minmax(84px, 1fr)`.
           */}
-          <div className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
+          <div ref={teamGridRef} className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
-              className={`sticky top-0 z-10 grid gap-[2px] border-b pb-0.5 backdrop-blur-md ${
+              ref={teamHeaderRef}
+              className={`relative z-10 grid will-change-transform gap-[4px] border-b pb-0.5 backdrop-blur-md ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
@@ -696,7 +776,7 @@ function DraftBoardInner({
               {orderedSlots.map((entry) => {
                 const meta = teamMetaByRoster?.[entry.rosterId] ?? null
                 const isUser = Boolean(currentUserRosterId) && entry.rosterId === currentUserRosterId
-                const headerName = meta?.teamName?.trim() || entry.displayName
+                const headerName = seatDisplayName(meta?.teamName, entry.displayName)
                 return (
                 <div
                   key={entry.rosterId}
@@ -746,8 +826,36 @@ function DraftBoardInner({
                   >
                     {headerName}
                   </span>
+                  {tribeColorHex(entry.tribe) ? (
+                    <span
+                      className="absolute inset-x-1 top-0 h-[3px] rounded-full"
+                      style={{ backgroundColor: tribeColorHex(entry.tribe) ?? undefined }}
+                      aria-hidden
+                      data-testid={`draft-board-team-header-tribe-bar-${entry.slot}`}
+                    />
+                  ) : null}
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
+                  ) : null}
+                  {seedByRosterId?.[entry.rosterId] ? (
+                    <span
+                      className="absolute left-0.5 top-0 rounded-full bg-white/10 px-1 text-[11px] font-bold leading-[14px] tabular-nums text-white/75"
+                      title={headerCopy.seed(seedByRosterId[entry.rosterId]!)}
+                      aria-label={headerCopy.seed(seedByRosterId[entry.rosterId]!)}
+                      data-testid={`draft-board-team-header-seed-${entry.slot}`}
+                    >
+                      #{seedByRosterId[entry.rosterId]}
+                    </span>
+                  ) : null}
+                  {keeperCountByRoster.get(entry.rosterId) ? (
+                    <span
+                      className="absolute right-0.5 top-0 inline-flex items-center gap-0.5 rounded-full bg-amber-400/15 px-1 text-[11px] font-bold leading-[14px] text-amber-300"
+                      title={`${keeperCountByRoster.get(entry.rosterId)} kept`}
+                      data-testid={`draft-board-team-header-keepers-${entry.slot}`}
+                    >
+                      <Lock className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+                      {keeperCountByRoster.get(entry.rosterId)}
+                    </span>
                   ) : null}
                 </div>
                 )
@@ -758,7 +866,7 @@ function DraftBoardInner({
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
-                      className="grid gap-[2px]"
+                      className="grid gap-[4px]"
                       style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
                     >
                     {(() => {
@@ -793,7 +901,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="aspect-square w-full max-w-[144px] rounded-[4px] bg-red-500/15"
+                            className="h-[68px] w-full rounded-lg bg-red-500/15"
                             title="Missing cell data for this slot"
                           />
                         )
@@ -826,6 +934,7 @@ function DraftBoardInner({
                             pick={pick}
                             isEmpty={isPickDisplayEmpty}
                             isCurrentPick={isCurrentPick}
+                            tribeColor={tribeColorHex(slotEntry.tribe)}
                             presentationVariant={presentationVariant}
                             sport={sport}
                             isRecentPick={Boolean(!isPickDisplayEmpty && overall === lastFilledPickOverall)}
@@ -860,6 +969,7 @@ function DraftBoardInner({
                                 ? () => onCommissionerEditPick(pick.overall)
                                 : undefined
                             }
+                            onOpenPlayer={onOpenPlayer ? () => onOpenPlayer(pick.overall) : undefined}
                           />
                         </div>
                       )

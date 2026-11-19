@@ -22,15 +22,16 @@
  * Pure: no database, no provider. The import decides what to pass in.
  */
 import { createHash } from 'node:crypto'
-import type { FantraxDraftResults, FantraxPlayerRef, ResolvedRoster } from './fantraxApi'
+import type { FantraxDraftResults, FantraxFuturePick, FantraxPlayerRef, ResolvedRoster } from './fantraxApi'
 import { deriveFantraxTransactions, type PeriodRoster } from './deriveFantraxTransactions'
 
-export const FANTRAX_DRAFT_KEY = 'fantraxDraft'
-export const FANTRAX_DERIVED_KEY = 'fantraxDerived'
+const FANTRAX_DRAFT_KEY = 'fantraxDraft'
+const FANTRAX_DERIVED_KEY = 'fantraxDerived'
+const FANTRAX_FUTURE_PICKS_KEY = 'fantraxFuturePicks'
 /** Bound on stored inferred rows, so a long-lived dynasty snapshot cannot grow without limit. */
-export const FANTRAX_DERIVED_CAP = 2000
+const FANTRAX_DERIVED_CAP = 2000
 
-export type StoredFantraxDraftPick = {
+type StoredFantraxDraftPick = {
   round: number
   /** OVERALL pick number (see `fantraxDraft.ts` — `pick` is overall, `pickInRound` is not). */
   pick: number
@@ -46,7 +47,7 @@ export type StoredFantraxDraftPick = {
   team: string | null
 }
 
-export type StoredFantraxDraft = {
+type StoredFantraxDraft = {
   draftState: string | null
   /** Slots on the board, made or not. */
   slots: number
@@ -54,7 +55,27 @@ export type StoredFantraxDraft = {
   picks: StoredFantraxDraftPick[]
 }
 
-export type StoredFantraxMove = {
+/**
+ * One future-season pick and who holds it. Fantrax lists EVERY pick, traded or not, so this is the
+ * league's whole inventory for the seasons it covers, not a list of trades.
+ */
+type StoredFantraxFuturePick = {
+  season: number
+  round: number
+  /** Fantrax's own team ids. */
+  originalTeamId: string
+  ownerTeamId: string
+  /** Team names at import time: how the fetch service maps the pick onto its team ids. */
+  originalTeamName: string | null
+  ownerTeamName: string | null
+}
+
+type StoredFantraxFuturePicks = {
+  observedAt: string
+  picks: StoredFantraxFuturePick[]
+}
+
+type StoredFantraxMove = {
   id: string
   /** The scoring period current when the change was observed, when known. */
   period: number | null
@@ -65,7 +86,7 @@ export type StoredFantraxMove = {
   drops: string[]
 }
 
-export type StoredFantraxSuspectedTrade = {
+type StoredFantraxSuspectedTrade = {
   id: string
   period: number | null
   observedAt: string
@@ -107,6 +128,64 @@ export function buildStoredFantraxDraft(
     })
   }
   return { draftState: board.draftState ?? null, slots: board.picks?.length ?? 0, picks }
+}
+
+/** The future-pick inventory as stored, each pick with the names its two teams had at import time. */
+export function buildStoredFantraxFuturePicks(
+  future: FantraxFuturePick[],
+  teamNames: Record<string, string>,
+  observedAt: string,
+): StoredFantraxFuturePicks {
+  const name = (id: string) => teamNames[id]?.trim() || null
+  return {
+    observedAt,
+    picks: future.map((p) => ({
+      season: p.year,
+      round: p.round,
+      originalTeamId: p.originalOwnerTeamId,
+      ownerTeamId: p.currentOwnerTeamId,
+      originalTeamName: name(p.originalOwnerTeamId),
+      ownerTeamName: name(p.currentOwnerTeamId),
+    })),
+  }
+}
+
+/** The stored future-pick inventory, or null when none is on file. */
+export function readStoredFantraxFuturePicks(json: unknown): StoredFantraxFuturePicks | null {
+  const held = rec(rec(json)[FANTRAX_FUTURE_PICKS_KEY])
+  if (!Array.isArray(held.picks)) return null
+  const picks: StoredFantraxFuturePick[] = []
+  for (const raw of held.picks) {
+    const p = rec(raw)
+    const season = num(p.season), round = num(p.round)
+    const originalTeamId = str(p.originalTeamId), ownerTeamId = str(p.ownerTeamId)
+    if (season == null || round == null || !originalTeamId || !ownerTeamId) continue
+    picks.push({
+      season, round, originalTeamId, ownerTeamId,
+      originalTeamName: strOrNull(p.originalTeamName), ownerTeamName: strOrNull(p.ownerTeamName),
+    })
+  }
+  return { observedAt: str(held.observedAt), picks }
+}
+
+/**
+ * The stored inventory in the import payload's own team ids.
+ *
+ * `teamIdFor` places a team by the name stored with the pick, then by Fantrax's team id. A pick
+ * whose original team or holder cannot be placed is dropped rather than handed to a guessed team.
+ */
+export function rekeyFantraxFuturePicks(
+  stored: StoredFantraxFuturePicks,
+  teamIdFor: (teamName: string | null, fantraxTeamId: string) => string | null,
+): Array<{ season: number; round: number; originalTeamId: string; ownerTeamId: string }> {
+  const out: Array<{ season: number; round: number; originalTeamId: string; ownerTeamId: string }> = []
+  for (const pick of stored.picks) {
+    const originalTeamId = teamIdFor(pick.originalTeamName, pick.originalTeamId)
+    const ownerTeamId = teamIdFor(pick.ownerTeamName, pick.ownerTeamId)
+    if (!originalTeamId || !ownerTeamId) continue
+    out.push({ season: pick.season, round: pick.round, originalTeamId, ownerTeamId })
+  }
+  return out
 }
 
 const hashId = (prefix: string, parts: unknown[]): string =>
@@ -247,6 +326,12 @@ export function mergeFantraxSnapshotHistory(
   existing: unknown,
   update: {
     draft: StoredFantraxDraft | null
+    /**
+     * `null` or absent means "not read this time" and keeps the inventory on file. A read that
+     * succeeded REPLACES it, empty included: Fantrax lists every pick, so an empty answer is a
+     * league with no future picks, not a failed read.
+     */
+    futurePicks?: StoredFantraxFuturePicks | null
     moves: StoredFantraxMove[]
     suspectedTrades: StoredFantraxSuspectedTrade[]
     period: number | null
@@ -259,6 +344,7 @@ export function mergeFantraxSnapshotHistory(
     ? (existing.length > 0 ? { legacyEntries: existing } : {})
     : { ...rec(existing) }
   if (update.draft) base[FANTRAX_DRAFT_KEY] = update.draft
+  if (update.futurePicks) base[FANTRAX_FUTURE_PICKS_KEY] = update.futurePicks
 
   const held = readStoredFantraxDerived(base)
   const appendUnique = <T extends { id: string }>(current: T[], extra: T[]) => {

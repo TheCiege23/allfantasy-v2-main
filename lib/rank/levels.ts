@@ -28,7 +28,7 @@ export const RANK_LEVELS = [
 
 export type RankLevelRow = (typeof RANK_LEVELS)[number]
 
-export type LevelFromXpResult = RankLevelRow & {
+type LevelFromXpResult = RankLevelRow & {
   xpIntoLevel: number
   xpForLevel: number
   progressPct: number

@@ -48,6 +48,8 @@ export function generateSchedule(
     divisionByRoster?: ReadonlyMap<string, { key: string; name: string }> | null
     /** `division_config.rivalsTwice`: every division rival is played a second time. */
     divisionRivalsTwice?: boolean
+    /** `settings.games_per_week`: head-to-head games each team plays per week. Default 1. */
+    gamesPerWeek?: number | null
   },
 ): { week: number; home: string; away: string | null; type: string; sport: string }[] {
   const medianGame = options?.medianGame ?? false
@@ -63,11 +65,13 @@ export function generateSchedule(
       return division ? { rosterId: roster.id, divisionId: division.key, divisionName: division.name } : { rosterId: roster.id }
     }),
     divisionRivalsTwice: options?.divisionRivalsTwice === true,
+    gamesPerWeek: options?.gamesPerWeek ?? 1,
     totalWeeks,
     playoffStartWeek,
     regularSeasonWeeks: regularEnd,
   })
 
+  const medianSlots = new Set<string>()
   for (const matchup of generated.matchups) {
     out.push({
       week: matchup.week,
@@ -76,7 +80,10 @@ export function generateSchedule(
       type: 'regular',
       sport,
     })
-    if (medianGame && !matchup.bye) {
+    // One median slot per home team per week, however many games it plays that week.
+    const medianKey = `${matchup.week}|${matchup.homeRosterId}`
+    if (medianGame && !matchup.bye && !medianSlots.has(medianKey)) {
+      medianSlots.add(medianKey)
       out.push({ week: matchup.week, home: matchup.homeRosterId, away: null, type: 'median', sport })
     }
   }

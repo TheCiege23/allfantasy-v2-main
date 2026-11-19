@@ -162,6 +162,13 @@ export async function persistTradesForSeason(
       const playersGiven = Object.entries(drops).filter(([, r]) => r === rosterId).map(([pid]) => pid);
       const picksReceived = picks.filter((p) => p.ownerId === rosterId).map((p) => ({ season: p.season, round: p.round }));
       const picksGiven = picks.filter((p) => p.previousOwnerId === rosterId).map((p) => ({ season: p.season, round: p.round }));
+      // Budget each way, only when the source read it (see `NormalizedTradeFact.waiverBudget`).
+      const budgetColumns = Array.isArray(t.waiverBudget)
+        ? {
+            budgetGiven: t.waiverBudget.filter((w) => w.sender === rosterId).reduce((n, w) => n + w.amount, 0),
+            budgetReceived: t.waiverBudget.filter((w) => w.receiver === rosterId).reduce((n, w) => n + w.amount, 0),
+          }
+        : {};
       await prisma.leagueTrade.upsert({
         where: {
           historyId_transactionId: { historyId, transactionId: t.transactionId },
@@ -175,6 +182,7 @@ export async function persistTradesForSeason(
           picksReceived: picksReceived as any,
           partnerRosterId: toPartnerRosterColumn(partnerRosterId),
           tradeDate: t.created ? new Date(t.created) : null,
+          ...budgetColumns,
           ...(sportColumn ? { sport: sportColumn } : {}),
         },
         create: {
@@ -191,6 +199,7 @@ export async function persistTradesForSeason(
           tradeDate: t.created ? new Date(t.created) : null,
           platform,
           sport: sportColumn ?? "nfl",
+          ...budgetColumns,
         },
       });
       inserted++;

@@ -23,6 +23,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { mergeKnownYearsExp } from '@/lib/draft-room/nonNflRookieFields'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { rowsDescribeSamePlayer, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import { isSleeperPlaceholderName } from '@/lib/sleeper/placeholderPlayers'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -538,7 +539,7 @@ async function buildPlayerPoolRecords(
   // revisited at the same time: make that writer transactional, or have it
   // invalidate this key, or the pool it half-deletes gets frozen here for a full
   // TTL. The empty guard below does not cover that case and is not meant to.
-  const rows = await cachedFetch(
+  const cachedRows = await cachedFetch(
     cacheKey('sportsPlayerPoolV2', where),
     dbFirstMode.draftPoolCacheTtlSeconds,
     () => prisma.sportsPlayer.findMany({
@@ -548,6 +549,9 @@ async function buildPlayerPoolRecords(
     }),
     (result) => result.length > 0,
   )
+  // Sleeper's placeholder entries ("Duplicate Player", "Player Invalid") are not players; they
+  // never reach a draft pool or waiver wire. After the cache, so the cached set stays the table.
+  const rows = cachedRows.filter((row) => !isSleeperPlaceholderName(row.name))
 
   // De-dupe by (name, position, team), preferring rows that have real image URLs
   // and explicit sleeper IDs. Some imports write duplicate players across sources,

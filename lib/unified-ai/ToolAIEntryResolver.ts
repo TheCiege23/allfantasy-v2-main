@@ -5,7 +5,7 @@
 
 import type { ToolAIEntryKey } from "./types"
 
-export interface ToolAIEntry {
+interface ToolAIEntry {
   key: ToolAIEntryKey
   label: string
   apiPath: string
@@ -36,7 +36,7 @@ const TOOL_ENTRIES: Partial<Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">>> = 
     typicalIntent: "explain",
   },
   waiver_ai: {
-    label: "Waiver AI",
+    label: "Waiver Chimmy",
     apiPath: "/api/waiver-ai",
     featureType: "waiver_ai",
     typicalIntent: "recommend",
@@ -144,13 +144,13 @@ const TOOL_ENTRIES: Partial<Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">>> = 
     typicalIntent: "explain",
   },
   league_matchup_ai: {
-    label: "League Matchup Command AI",
+    label: "League Matchup Command Chimmy",
     apiPath: "/api/leagues/[leagueId]/ai/matchup",
     featureType: "league_matchup_ai",
     typicalIntent: "recommend",
   },
   league_start_sit_ai: {
-    label: "League Start/Sit AI",
+    label: "League Start/Sit Chimmy",
     apiPath: "/api/leagues/[leagueId]/ai/start-sit",
     featureType: "league_start_sit_ai",
     typicalIntent: "recommend",

@@ -45,7 +45,7 @@ export type DraftWarRoomInput = {
   groundedContext?: DraftAdvisorContext
 }
 
-export type DraftWarRoomOutput = {
+type DraftWarRoomOutput = {
   bestPick: WarRoomPlayer
   confidence: number
   reasoning: string[]
@@ -66,7 +66,7 @@ export type DraftWarRoomOutput = {
   fieldSources?: Record<string, 'deterministic' | 'deterministic_ranked' | 'ai'>
 }
 
-export type DraftCompareInput = {
+type DraftCompareInput = {
   sport: string
   playerA: WarRoomPlayer
   playerB: WarRoomPlayer
@@ -74,7 +74,7 @@ export type DraftCompareInput = {
   rosterContext?: string
 }
 
-export type DraftCompareOutput = {
+type DraftCompareOutput = {
   winner: 'A' | 'B'
   confidence: number
   breakdown: {
@@ -440,7 +440,7 @@ export async function runDraftPlayerCompare(input: DraftCompareInput): Promise<D
       winner: aWins ? 'A' : 'B',
       confidence: 58,
       breakdown: {
-        projection: 'ADP-based tiebreak (AI unavailable).',
+        projection: 'ADP-based tiebreak (Chimmy unavailable).',
         matchup: 'Compare schedules post-draft.',
         usage: 'Verify camp depth charts.',
         risk: 'Injury and role volatility apply to both.',

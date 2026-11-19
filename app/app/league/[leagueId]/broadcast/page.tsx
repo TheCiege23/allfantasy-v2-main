@@ -19,7 +19,6 @@ import { StorylineOverlay } from '@/components/broadcast/StorylineOverlay'
 import { RivalriesPanel } from '@/components/broadcast/RivalriesPanel'
 
 const VIEWS = ['matchups', 'standings', 'storylines', 'rivalries'] as const
-type ViewKey = (typeof VIEWS)[number]
 
 export default function LeagueBroadcastPage() {
   const params = useParams<{ leagueId: string }>() ?? ({} as { leagueId: string })
@@ -117,7 +116,9 @@ export default function LeagueBroadcastPage() {
           cache: 'no-store',
         })
         const data = await res.json().catch(() => ({}))
-        if (active) setIsCommissioner(!!data?.isCommissioner)
+        // Announcements are the chat area: a co-commissioner needs it (lib/league/commissionerAccess.ts).
+        const scopes = Array.isArray(data?.scopes) ? (data.scopes as string[]) : null
+        if (active) setIsCommissioner(!!data?.isCommissioner && (scopes == null || scopes.includes('chat')))
       } catch {
         if (active) setIsCommissioner(false)
       }

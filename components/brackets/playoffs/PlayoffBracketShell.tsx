@@ -28,6 +28,7 @@ import BracketCoachPanel from "./BracketCoachPanel"
 
 type Props = {
   initialView: PlayoffChallengeView
+  initialInviteCode?: string | null
 }
 
 type PlayoffDashboardSyncMode = "teams_schedule_only" | "results_only" | "official_bracket" | "autofill_results"
@@ -50,7 +51,7 @@ const SYNC_SUCCESS_MESSAGES: Record<PlayoffDashboardSyncMode, string> = {
  * Commissioner sync tools stay English on purpose: they are staff and
  * commissioner diagnostics, and their messages are asserted verbatim.
  */
-export default function PlayoffBracketShell({ initialView }: Props) {
+export default function PlayoffBracketShell({ initialView, initialInviteCode }: Props) {
   const router = useRouter()
   const { data: session } = useSession()
   const { language } = useOptionalLanguage()
@@ -176,7 +177,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   function handleRefresh() {
     startRefreshing(async () => {
-      const latest = await getPlayoffBracketViewClient(safeChallenge.id)
+      const latest = await getPlayoffBracketViewClient(safeChallenge.id, undefined, initialInviteCode)
       setView(latest)
     })
   }
@@ -187,7 +188,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   function handleCreateEntry() {
     if (!view.viewerUserId) {
-      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}`)}`)
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}${initialInviteCode ? `?code=${encodeURIComponent(initialInviteCode)}` : ""}`)}`)
       return
     }
     startCreatingEntry(async () => {
@@ -200,6 +201,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
         const created = await createPlayoffBracketEntryClient({
           challengeId: safeChallenge.id,
+          inviteCode: initialInviteCode,
         })
 
         toast.success(copy.created(nextEntryIndex))
@@ -254,9 +256,15 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     })
   }
 
+  // The link the box shows is the link the button copies. The canonical host first (so server and client render
+  // the same text), then this page's own origin once mounted — which is what bracketInviteUrl keeps on staging.
+  const [inviteOrigin, setInviteOrigin] = useState("https://www.allfantasy.ai")
+  useEffect(() => { setInviteOrigin(window.location.origin) }, [])
+  const inviteLink = bracketInviteUrl(inviteOrigin, safeChallenge.id, safeChallenge.inviteCode)
+
   async function copyInvite() {
     try {
-      await navigator.clipboard.writeText(bracketInviteUrl(window.location.origin, safeChallenge.id, safeChallenge.inviteCode))
+      await navigator.clipboard.writeText(inviteLink)
       toast.success(copy.inviteCopied)
     } catch {
       toast.error(copy.inviteCopyFailed)
@@ -405,7 +413,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               <h2 className="af-pd-h2">{copy.invitePanel}</h2>
               <p className="af-pd-muted">{copy.shareLink}</p>
               <div className="af-bx-invite af-pd-invite">
-                <code>{safeChallenge.inviteUrl}?code={safeChallenge.inviteCode}</code>
+                <code data-testid="playoff-invite-link">{inviteLink}</code>
               </div>
               <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-link-btn" className="af-bx-btn af-bx-wide af-pd-gap">
                 <Link2 className="h-4 w-4" aria-hidden />
@@ -436,7 +444,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 <p className="af-pd-muted">
                   Provider sync updates official NBA/NHL playoff data. User picks are not created unless the testing-only auto-fill action is used.
                 </p>
-                <p data-testid="playoff-sync-tools-visibility-debug" className="af-pd-debug">
+                {/* Kept in the DOM for the visibility tests, never shown: it is a diagnostic, not copy. */}
+                <p data-testid="playoff-sync-tools-visibility-debug" className="af-pd-debug" hidden>
                   syncToolsVisible=true; isOwner={String(isOwner)}; isAdmin={String(hasAdminAccess)}; hasPoolAdminAccess={String(hasAdminAccess)}
                 </p>
               </div>

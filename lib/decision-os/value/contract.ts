@@ -45,7 +45,7 @@ import { devyPointsToMarketUnits, DEVY_BRIDGE_CAVEAT } from '@/lib/devy/devyMark
  * union to be revisited, which is the point — a third currency that slips in as a string would
  * be summed against the other two on its first day.
  */
-export type ValueUnit = 'market_units' | 'devy_points'
+type ValueUnit = 'market_units' | 'devy_points'
 
 /** How the number was arrived at. Determines which unit is legitimate, and how to read it. */
 export type ValueBasis =
@@ -66,7 +66,7 @@ export type ValueBasis =
  * league-scoped BY CONSTRUCTION (`resolveLeagueIdpScoring`, `resolveLeagueKickerValue`), which is
  * why D4 stores canonical and rescores at read rather than storing a row per league.
  */
-export type ValueScope = 'global' | 'league'
+type ValueScope = 'global' | 'league'
 
 /** Which unit each basis is allowed to produce. Enforced by {@link isCoherentValue}. */
 export const BASIS_UNIT: Readonly<Record<ValueBasis, ValueUnit>> = {
@@ -176,7 +176,7 @@ export type ValueLookup =
 // Arithmetic — the only place a unit mix can be reconciled, and it refuses by default.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-export type SumResult =
+type SumResult =
   | {
       ok: true
       total: number

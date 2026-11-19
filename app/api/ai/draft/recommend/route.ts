@@ -5,6 +5,7 @@ import { runDraftWarRoomRecommendation, type DraftWarRoomInput, type WarRoomPlay
 import { assertLeagueAccess } from '@/lib/ai/league-settings-ai/access'
 import { getDraftEligiblePositionsFromPayload, getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { getDraftAdvisorContext } from '@/lib/sports-reporting/DraftAdvisorContextService'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,10 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
+
+  // AF Pro (`pro_draft_ai`, the key the AI cost gate's draft help already uses), before any league read or model call.
+  const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'pro_draft_ai' })
+  if (!plan.ok) return plan.response
 
   let body: Record<string, unknown>
   try {

@@ -236,4 +236,3 @@ export function DynastyStandingsHistory({ history }: { history: History }) {
   )
 }
 
-export default DynastyStandingsHistory

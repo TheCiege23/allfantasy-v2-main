@@ -1,6 +1,6 @@
 'use client'
 
-export type SimulationConfidenceIndicatorProps = {
+type SimulationConfidenceIndicatorProps = {
   /** 0–100 model confidence */
   confidenceScore: number
   /** low | medium | high */

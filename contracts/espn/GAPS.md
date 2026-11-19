@@ -13,6 +13,16 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `R-05` | `headshot` is **omitted**, not null, when ESPN has no photo; the derived CDN URL then **404s** | 40/49 athletes carry it; all 40 load; all 9 without it 404 at `.../mens-college-basketball/players/full/{id}.png`. So the field is authoritative — no point constructing URLs for athletes that lack it. |
 | `R-06` | `jersey` is a **string** | `"5"`, `"55"`. `SportsPlayer.number` is an int. |
 
+## Resolved by probe, 2026-11-19 — NBA, NHL and MLB team lists, do NOT re-test
+
+| ID | Finding | Evidence |
+|---|---|---|
+| `R-07` | `teams?limit=1000` returns every club: NBA **30**, NHL **32**, MLB **30**, all `isActive`, none `isAllStar` | `fixtures/teams.{NBA,NHL,MLB}.json`, committed untrimmed; counts in `ENDPOINTS.yaml` `teams.measured_2026_11_19` |
+| `R-08` | The list is current: NHL has **Utah Mammoth** (`UTAH`) and no Arizona; MLB has **Athletics** (`ATH`, no city) and no Oakland | Same fixtures. `lib/sport-teams/SportTeamMetadataRegistry.ts` listed NHL `ARI` and MLB `OAK` until 2026-11-19; it now builds its NBA, MLB and NHL lists from these captures (via `lib/league/copyLeagueTeamTables.ts`), keeping the codes providers send (`CWS`), and `__tests__/sport-teams/team-registry-current.test.ts` pins it |
+| `R-09` | Each team's default 500px crest is `teamlogos/<sport>/500/<abbreviation lower-case>.png`; the White Sox are `CHW`/`chw.png` (Rolling Insights and the registry say `CWS`) | `logos[]` with `rel` `default`, for all 92 teams. Crests from this CDN were already in use for every sport's team logo; no new image-rights question (compare `E-05`, which is about player headshots) |
+| `R-10` | NFL `teams?limit=1000` returns all **32** clubs; Washington is `WSH`/`wsh.png`, and `lib/sport-teams/SportTeamMetadataRegistry.ts` built `was.png`. Both files load from the CDN (checked 2026-11-19), so nothing was broken; the key is now `wsh` to match the capture | `fixtures/teams.NFL.json`, committed untrimmed; `__tests__/league/copy-league-team-tables.test.ts` checks every NFL crest the app builds against it |
+| `R-11` | Every team in the four captures has a dark-background crest, `rel` `["full","dark"]`, at the default crest's path with `/500/` → `/500-dark/` | `fixtures/teams.{NFL,NBA,NHL,MLB}.json`; `darkCrestUrl` in `lib/league/copyLeague.ts` |
+
 ## Measured against our data, 2026-10-01 (read-only, no provider calls)
 
 | ID | Finding |
@@ -103,6 +113,35 @@ covers it; neither an empty scoreboard nor the previous season proves a future s
   completed multi-player trade, via `scripts/probe.sh`, from a league the owner chooses (cookies
   if private), committed with the grouping fix.
 
+## NFL fantasy league capture, 2026-11-08
+
+Owner-chosen public league, 10 teams, week 9 of 14, read without cookies; redacted and trimmed into
+`fixtures/fantasy-league.NFL.2026.json` (see `fantasy_nfl` in ENDPOINTS.yaml). Do not re-probe for shape.
+
+- `R-01` FOUND BY THE FIXTURE, FIXED: every team imported with rank 0. `rankCalculatedFinal` is 0
+  until the season ends and `??` took it; the next fallback was `currentProjectedRank`, a projection.
+  Rank now reads a positive final rank, else `playoffSeed`. Pinned by `__tests__/league-import/espn-nfl-fixture.test.ts`.
+- `U-01` FOUND BY THE FIXTURE, FIXED: every unplayed week imported as a 0–0 TIE (`winner: UNDECIDED`
+  carries `totalPoints: 0`; the bootstrap derives 'T' from equal points). Undecided matchups now import
+  their pairing with no points. The live-scoring path is unchanged. Pinned by the same test.
+- `M-01` RECORDED: without cookies `members[]` carries no names, so owner names fall back to team names.
+- `D-01` FIXED WITHOUT A PROBE: a draft pick carries only `playerId`; the 17 of 160 drafted players since
+  dropped have no name or position in this response. The importer now fills them without calling ESPN
+  (`lib/league-import/espn/espnPlayerDirectoryFill.ts`): the 4 team defenses from the id itself
+  (`-16000 - proTeamId`), the rest from `PlayerIdentityMap.espnId` (NFL, unambiguous ids only). Measured
+  2026-11-08 on production: 13 of those 13 ids resolve, but only 928 of 9,567 NFL identity rows carry an
+  `espnId`, so a league drafting deeper players can still leave some unnamed.
+- `T-01` UPDATED: `kona_league_communication` answers **401 `AUTH_COMMUNICATION_NOT_VISIBLE` without
+  cookies even for a public league**. Its shape is still uncaptured.
+- `T-02` STILL OPEN: this league has no trade (`transactionCounter.trades` 0 for every team, and
+  `mTransactions2` returned 8 recent roster moves only). Needs a league with a completed multi-player trade,
+  read with cookies.
+- `K-01` OPEN: keepers — `keeperCount` is 0 here, so keeper fields are unverified.
+- `L-01` STILL OPEN: slot 24 (EDR) has count 0 here.
+- `L-03` OPEN: IDP `defaultPositionId`s have never been seen. Unknown ids now import as N/A and are
+  logged once per import with counts and no names (`[espn-import] unmapped defaultPositionId(s): …`),
+  so the first real IDP import names the ids to add to `ESPN_POSITION_LABELS`.
+
 ## NFL fantasy lineup slots, 2026-10-30 — recorded without probing
 
 - `L-01` UNVERIFIED: ESPN lineup slot `24` (`EDR`, `ESPN_SLOT_LABELS` in
@@ -124,3 +163,46 @@ real teams, dates and venue fields are verified; tournament seeds are not.
 The six-week date-range request returned HTTP 400. Runtime uses individual days.
 The alternate NBA CDN `scheduleLeagueV2.json` returned HTTP 403 through its probe;
 no spoofed headers or bypass retry was attempted. It is not a runtime source.
+
+## Weekly starters for Lineup Integrity, 2026-11-09 — recorded without probing
+
+- `S-01` OPEN, AND WORKED AROUND RATHER THAN PROBED: no request in this repo asks ESPN for a PAST week's
+  lineup. `fetchEspnLeagueJson` sends no query, so neither `scoringPeriodId` nor `matchupPeriodId` is ever
+  set, and `rosterForMatchupPeriod` appears in `fixtures/fantasy-league.NFL.2026.json` only on the CURRENT
+  week's schedule sides. Whether `view=mMatchupScore&scoringPeriodId=N` returns week N's lineup for a past
+  N is unverified. The owner declined the probe on 2026-11-09, so nothing calls it.
+- What runs instead (`lib/integrity/espnLineupSnapshots.ts`, rules in `espnStartersCapture.ts`): ESPN locks a
+  player's slot at his kickoff, so the synced `Roster.playerData.starters` from any fetch AFTER that kickoff,
+  inside the week, is the slot he was played in. Each player is frozen from the first such fetch. No ESPN call.
+  The fetch time is the earlier of `Roster.updatedAt` (advanced on every successful read, changed or not)
+  and `League.lastSyncedAt`.
+  - Measured on production 2026-11-09, read-only: 10 ESPN NFL leagues, 120 rosters, median roster age
+    8 minutes, and 114 of 120 rosters re-read inside the week-9 game window. So the capture has data to work from.
+  - It records nothing while the ESPN sync is off (`FANTASY_OS_EXEC_SYNC_LIVE`). A week with a player who
+    had a game but was never read after kickoff is reported incomplete and must not be scored.
+  - A player on bye has no lock; he keeps the last in-week read.
+  - It cannot recover weeks played before it ran. That needs `S-01` resolved.
+- `S-02` FOUND WHILE BUILDING IT, NOT FIXED HERE: several `SportsGame` sources store NFL preseason games with
+  `seasonType` null and reused week numbers. In 2026 those are `espn` week 2 (Aug 13–16) and `espn_live`
+  weeks 3–4 (Aug 21–29). `buildWeekKickoffMap` (lib/redraft/lineupLock.ts) does not filter on season type,
+  so for those regular-season week numbers a team's "earliest kickoff that week" is an August preseason
+  game. The ESPN writer reads `seasonType: 'regular'` rows only for this reason.
+
+
+## Team-defense (D/ST) scoring, 2026-11-17 — resolved from committed fixtures and season stats, no probe
+
+- `D-02` RESOLVED, FIXTURE ONLY: every NFL team-defense scoring rule is `points: 0` with its real weight in
+  `pointsOverrides["16"]` (lineup slot 16 = D/ST). Measured in `fixtures/fantasy-league.NFL.2026.json`: 27 of
+  46 `scoringItems` carry an override, every override is keyed `"16"`, and wherever an item has both a non-zero
+  `points` and an override (93, 101–104, 206, 209) the two are equal. The importer read `points` only, so every
+  imported ESPN league stored its D/ST rules as 0. It now reads the slot-16 override when `points` is 0.
+- `D-03` RESOLVED, NO ESPN PROBE: ESPN D/ST stat ids → Sleeper keys, derived by the hand-run
+  `scripts/compare-espn-sleeper-stat-ids.mjs` (its season-total ESPN read predates this note; Sleeper's
+  public weekly DEF stats supplied per-game points allowed). Proof is the `teamDefense` section of
+  `lib/scoring-defaults/espn-stat-id-evidence.json`; the mapping is in `ScoringKeyAliasResolver.ts`.
+  `S-01` (past-week ESPN lineups) is NOT touched by this and stays declined.
+  - Points-allowed bucket edges were SEARCHED against Sleeper's per-game points allowed, not recalled:
+    0 | 1–6 | 7–13 | 14–17 | 18–21 | 22–27 | 28–34 | 35–45 | 46+.
+  - Fumble recoveries (96) = Sleeper `fum_rec` + `def_st_fum_rec`; return TDs score as sums at equal weight.
+  - ⚠ A shutout has NO `pts_allow` key in Sleeper's weekly rows (zeros are omitted). Reading only rows that
+    carry the key dropped exactly the 10 shutouts of 2024–25 and failed the 0-points bucket for no real reason.

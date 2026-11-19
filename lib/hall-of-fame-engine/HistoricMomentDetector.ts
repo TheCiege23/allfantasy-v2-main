@@ -9,7 +9,7 @@ import type { HallOfFameMomentInput } from './types'
 
 const clamp01 = (x: number) => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0)
 
-export interface MomentCandidate {
+interface MomentCandidate {
   leagueId: string
   sport: string
   season: string
@@ -24,7 +24,7 @@ export interface MomentCandidate {
 /**
  * Detect championship moments from SeasonResult (champion = true).
  */
-export async function detectChampionshipMoments(
+async function detectChampionshipMoments(
   leagueId: string,
   sport: string,
   options?: { maxSeasons?: number }
@@ -62,7 +62,7 @@ export async function detectChampionshipMoments(
 /**
  * Detect high-dominance (record wins/points) seasons as record-breaking moments.
  */
-export async function detectRecordSeasonMoments(
+async function detectRecordSeasonMoments(
   leagueId: string,
   sport: string,
   options?: { maxSeasons?: number }

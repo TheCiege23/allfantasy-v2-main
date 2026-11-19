@@ -92,7 +92,7 @@ export async function GET(
         : null,
       message:
         af.entries.length === 0
-          ? 'No AllFantasy AI ADP snapshot for this context yet. Run `npm run recompute:allfantasy-adp -- --apply` after seeding/collecting drafts.'
+          ? 'No AllFantasy Chimmy ADP snapshot for this context yet. Run `npm run recompute:allfantasy-adp -- --apply` after seeding/collecting drafts.'
           : null,
     })
   }
@@ -122,7 +122,7 @@ export async function GET(
       stale: true,
       ageHours: null,
       message: enabled
-        ? 'AI ADP is enabled but no snapshot for this segment yet. Run the daily AI ADP job or use standard ADP until then.'
+        ? 'Chimmy ADP is enabled but no snapshot for this segment yet. Run the daily Chimmy ADP job or use standard ADP until then.'
         : null,
     })
   }
@@ -139,7 +139,7 @@ export async function GET(
     stale: result.stale,
     ageHours: result.ageHours,
     message: result.stale
-      ? 'AI ADP snapshot is stale. Order still uses latest available AI ADP and refreshes after the next daily job.'
+      ? 'Chimmy ADP snapshot is stale. Order still uses latest available Chimmy ADP and refreshes after the next daily job.'
       : null,
   })
 }

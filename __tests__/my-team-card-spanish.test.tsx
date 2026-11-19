@@ -141,15 +141,12 @@ describe('the header line', () => {
 })
 
 describe('the card, rendered', () => {
-  it('says all three lines in Spanish', () => {
+  it('says why there is no projection, in Spanish (the note left where the matchup card was, 2026-11-14)', () => {
     lang.language = 'es'
     const a = render(<MyTeam data={unpriced} />).container
-    const win = a.querySelector('.af-mt-mu-win[data-available="false"]')!.textContent!
-    expect(win).toContain('Sin probabilidad de victoria')
-    expect(win).not.toMatch(ENGLISH)
-    const edge = [...a.querySelectorAll('.af-mt-mu-edge')].map((e) => e.textContent!).find((t) => t.includes('Sin totales proyectados'))!
-    expect(edge).toBeTruthy()
-    expect(edge).not.toMatch(ENGLISH)
+    const note = a.querySelector('[data-testid=my-team-matchup-note]')!.textContent!
+    expect(note).toContain('Sin totales proyectados')
+    expect(note).not.toMatch(ENGLISH)
     const b = render(<MyTeam data={noMatchup} />).container
     expect(b.textContent).toContain('aún no hay enfrentamiento de la semana 4 registrado para tu equipo')
     expect(b.textContent).not.toContain('matchup recorded')

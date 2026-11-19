@@ -32,14 +32,14 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 /** Only what pricing a pick needs — `lib/core-app/tradePicks.ts` consumes this shape. */
-export type LatestPickValueSnapshot = {
+type LatestPickValueSnapshot = {
   name: string
   value: number
   overallRank: number | null
 }
 
 /** Only what this helper needs, so a caller or a test can hand in its own client. */
-export type LatestPickValueClient = {
+type LatestPickValueClient = {
   $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>
 }
 

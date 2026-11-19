@@ -1,0 +1,283 @@
+From: LeagueSafe <noreply@leaguesafe.com>
+To: recipient@example.invalid
+Date: Thu, 01 Jan 2026 12:00:00 +0000
+Message-ID: <allocation-vote-request@example.invalid>
+Subject: LeagueSafe Alert: Vote required to approve payouts
+Authentication-Results: mx.google.com; dkim=pass header.d=leaguesafe.com
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html>
+<body>
+    <div>
+        <table>
+            <tr>
+                <td>
+                    <table>
+                        <tr>
+                            <td>
+                                =C2=A0
+                            </td>
+
+                        </tr>
+                        <tr>
+                            <td>
+                                <table>
+                                    <tr>
+                                        <td>
+                                            =C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0
+                                        </td>
+                                        <td>
+
+                                            =C2=A0=C2=A0
+                                        </td>
+                                        <td>
+                                            <span>
+                                               =20
+                                                Payouts have been allocated!
+                                            </span>=C2=A0=C2=A0
+                                        </td>
+                                        <td>
+                                           =20
+                                            <a href=3D"https://example.invali=
+d/redacted">Action required - cast your vote below</a>=C2=A0=C2=A0
+                                        </td>
+
+                                        <td>
+                                           =20
+                                            <a href=3D"https://example.invali=
+d/redacted"></a>
+                                        </td>
+                                    </tr>
+                                </table>
+                                =C2=A0
+                            </td>
+                        </tr>
+                        <tr>
+
+                            <td>
+                                <table>
+                                    <tr>
+                                        <td>
+                                           =20
+                                            Hi Sample Recipient,
+
+                                            <p>
+                                                The commissioner of Sample Le=
+ague has <strong>allocated end of season payouts</strong> which requires a vo=
+te with majority approval to take effect. If approved, the listed payouts wil=
+l be distributed immediately. Please click one of the buttons below to cast y=
+our vote.
+                                            </p>
+                                        </td>
+
+                                    </tr>
+                                    <tr>
+                                        <td>=C2=A0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                           =20
+ <table>
+
+<tr>
+<td>OWNER</td>
+<td>WINNINGS</td>
+<td>ADDITIONAL FEES</td>
+<td>WINS/OWES</td>
+<td>STATUS</td>
+</tr>
+
+
+<tr>
+<td>Sample Owner 1</td>
+<td>$100.00</td>
+<td>$0.00</td>
+<td>Wins $100.00</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 2</td>
+<td>$35.00</td>
+<td>$0.00</td>
+<td>Wins $35.00</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 3</td>
+<td>$20.00</td>
+<td>$0.00</td>
+<td>Wins $20.00</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 4</td>
+<td>$12.50</td>
+<td>$0.00</td>
+<td>Wins $12.50</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 5</td>
+<td>$12.50</td>
+<td>$0.00</td>
+<td>Wins $12.50</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 6</td>
+<td>$5.50</td>
+<td>$0.00</td>
+<td>Wins $5.50</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 7</td>
+<td>$5.50</td>
+<td>$0.00</td>
+<td>Wins $5.50</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 8</td>
+<td>$3.00</td>
+<td>$0.00</td>
+<td>Wins $3.00</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 9</td>
+<td>$3.00</td>
+<td>$0.00</td>
+<td>Wins $3.00</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 10</td>
+<td>$1.00</td>
+<td>$0.00</td>
+<td>Wins $1.00</td>
+<td>PENDING</td>
+</tr>
+<tr>
+<td>Sample Owner 11</td>
+<td>$1.00</td>
+<td>$0.00</td>
+<td>Wins $1.00</td>
+<td>PENDING</td>
+</tr>
+
+</table>
+
+
+
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>=C2=A0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+
+                                            <table>
+                                                <tr>
+                                                    <td>
+                                                        =C2=A0
+                                                        <br><a href=3D"https:=
+//example.invalid/redacted">=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0=C2=A0=C2=A0APPROVE=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0=C2=A0=C2=A0=C2=A0=C2=A0</a>
+                                                        <br>=C2=A0
+                                                    </td>
+                                                    <td>
+                                                        =C2=A0
+                                                        <br><a href=3D"https:=
+//example.invalid/redacted">=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0=C2=A0=C2=A0REJECT=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0=C2=A0=C2=A0=C2=A0=C2=A0</a>
+                                                        <br>=C2=A0
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+
+
+                                    <tr>
+                                        <td>
+                                            This poll will expire on <strong>=
+Thursday, April 9, 2026</strong> at <strong>11:43:22=E2=80=AFAM</strong>.
+                                            <br>
+                                            <br>
+                                        </td>
+                                    </tr>
+
+                                    <tr>
+                                        <td>
+                                            Please contact your league commis=
+sioner if you have any questions.
+                                            <br>
+                                            <br>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+
+                                            <p>
+                                                Thanks,
+                                                <br> The LeagueSafe Team
+                                            </p>
+                                        </td>
+                                        <td>
+                                           =20
+                                        </td>
+                                    </tr>
+
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                =C2=A0
+                            </td>
+                        </tr>
+                        <span></span><span></span>
+                    </table>
+            </tr>
+
+        </table>
+
+        <br>
+
+    </div>
+
+
+
+    <div>
+        You are receiving this email because <span>recipient@example.invalid<=
+/span> is associated with a LeagueSafe account.
+        <br>If you have received this email in error please use the unsubscri=
+be link below.
+    </div>
+    <div>
+        <div>
+            <a href=3D"https://example.invalid/redacted">Update LeagueSafe Pr=
+ofile</a>=C2=A0=C2=A0|=C2=A0=C2=A0
+
+            <a href=3D"https://example.invalid/redacted">Privacy Policy</a>=
+=C2=A0=C2=A0|=C2=A0=C2=A0
+            <a href=3D"https://example.invalid/redacted">Manage Email Setting=
+s</a>=C2=A0=C2=A0|=C2=A0=C2=A0
+            <a href=3D"https://example.invalid/redacted">Unsubscribe</a>
+        </div>
+        <div>
+            =C2=A92011 LeagueSafe, LLC. All rights reserved. Patent pending.
+        </div>
+
+    </div>
+    <div></div>
+</body>
+
+</html>

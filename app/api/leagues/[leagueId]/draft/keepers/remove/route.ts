@@ -1,3 +1,4 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * POST: Remove a keeper selection. Body: { rosterId, playerName } or { rosterId, roundCost }. Commissioner can remove any.
@@ -7,7 +8,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
@@ -45,7 +45,7 @@ export async function POST(
   }
 
   const currentUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  const isCommissioner = await assertCommissioner(leagueId, userId).then(() => true).catch(() => false)
+  const isCommissioner = await assertCommissionerAccess(leagueId, userId, 'rosters').then(() => true).catch(() => false)
   if (rosterId !== currentUserRosterId && !isCommissioner) {
     return NextResponse.json({ error: 'You can only remove keepers from your own roster' }, { status: 403 })
   }

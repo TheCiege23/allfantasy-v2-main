@@ -33,6 +33,11 @@ import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
+import { chimmyDepthForPlan } from '@/lib/chimmy/chimmyDepth'
+import { mockDraftBoardText, parseMockDraftBoard } from '@/lib/chimmy/mockDraftGrounding'
+import { loadLeagueMockBoard, parseClientQueueIds } from '@/lib/chimmy/leagueMockBoard'
+import type { MockQueueProposal } from '@/lib/mock-draft/mockChimmyBoard'
+import { isMusicRequest, type MusicCard } from '@/lib/chimmy/musicCards'
 import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
@@ -196,7 +201,7 @@ import { answerReadLeague } from '@/lib/chimmy/tools/answerReadLeague'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import { answerKeysFrom, eliminationSettleVerdict, faabCardFromPlan, faabPlanVerdict, tradeTargetVerdict } from '@/lib/chimmy/answerPolishBuild'
-import { readAnswerKeys, readChimmyFaabCard, readChimmyVerdict } from '@/lib/chimmy/answerPolish'
+import { readAnswerKeys, readChimmyFaabCard, readChimmyVerdict, readProUpsell } from '@/lib/chimmy/answerPolish'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
@@ -234,30 +239,6 @@ import { renderConnectedFranchiseGrounding } from '@/lib/chimmy/connectedFranchi
 type ConversationTurn = {
   role: 'user' | 'assistant'
   content: string
-}
-
-type ChimmyPECRExecutionOutput = {
-  responseContract: AIToolResponseContract
-  modelOutputs?: Array<{
-    model?: string
-    modelName?: string
-    skipped?: boolean
-    /** What the model returned — read by `judgeChimmyDelivery` to decide whether the charge stands. */
-    raw?: string
-    error?: string
-    tokensPrompt?: number
-    tokensCompletion?: number
-  }>
-  sanitizedAiExplanation: string
-  sanitizedActionPlan: string
-  sanitizedUncertainty: string
-  providerStatus: Record<string, string>
-  quantData?: Record<string, unknown>
-  trendData?: Record<string, unknown>
-  recommendedTool: string
-  toolLinks: string[]
-  responseStructure: ReturnType<typeof buildResponseStructure>
-  processingMs: number
 }
 
 type ChimmyPECRPlanContext = {
@@ -299,6 +280,7 @@ function isAllowedChimmyToolLink(link: string): boolean {
     '/matchup-simulator',
     '/social-clips',
     '/player-compare',
+    '/player-comparison-lab',
     '/chimmy/',
     '/ai/',
     '/app/matchup-simulation',
@@ -448,7 +430,6 @@ const ChimmyFormSchema = z.object({
 
 /** A question about the trade block itself, whatever its intent classifies as. */
 const TRADE_BLOCK_WORDS = /\b(?:trade|trading)\s+block\b|\bon\s+the\s+block\b|\btrade\s+bait\b/i
-
 
 const SPORTS_KEYWORDS = [
   'trade', 'waiver', 'draft', 'player', 'pick', 'roster', 'lineup',
@@ -823,38 +804,6 @@ function buildResponseStructure(
   }
 }
 
-function resolveUsageLogModel(args: {
-  providerUsed?: string | null
-  modelOutputs?: Array<{
-    model?: string
-    modelName?: string
-    skipped?: boolean
-  }>
-}): string {
-  const outputs = Array.isArray(args.modelOutputs) ? args.modelOutputs : []
-  const selectedOutput =
-    (args.providerUsed
-      ? outputs.find((output) => output.model === args.providerUsed && output.skipped !== true)
-      : undefined) ??
-    outputs.find((output) => output.skipped !== true) ??
-    outputs[0]
-
-  return selectedOutput?.modelName || selectedOutput?.model || args.providerUsed || 'unknown'
-}
-
-function resolveUsageLogTokensUsed(modelOutputs?: Array<{
-  tokensPrompt?: number
-  tokensCompletion?: number
-}>): number {
-  if (!Array.isArray(modelOutputs) || modelOutputs.length === 0) {
-    return 0
-  }
-
-  return modelOutputs.reduce((sum, output) => {
-    return sum + Math.max(0, output.tokensPrompt ?? 0) + Math.max(0, output.tokensCompletion ?? 0)
-  }, 0)
-}
-
 function buildUserMessage(input: {
   message: string
   conversation: ConversationTurn[]
@@ -870,6 +819,8 @@ function buildUserMessage(input: {
   riskMode?: string
   privateMode: boolean
   targetUsername?: string
+  /** How much of the conversation this user's plan remembers (lib/chimmy/chimmyDepth.ts). Default 8. */
+  conversationTurns?: number
 }): string {
   const parts: string[] = []
   parts.push(CHIMMY_CURRENT_REQUEST_POLICY)
@@ -920,7 +871,7 @@ function buildUserMessage(input: {
 
   if (input.conversation.length > 0) {
     const convo = input.conversation
-      .slice(-8)
+      .slice(-(input.conversationTurns ?? 8))
       .map((turn) => `${turn.role === 'user' ? 'User' : 'Chimmy'}: ${turn.content}`)
       .join('\n')
     parts.push(`RECENT CONVERSATION (memory only; not additional requests):\n${convo}`)
@@ -1215,6 +1166,7 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
   if (faabPlan) out.faabPlan = faabPlan
   const answerKeys = readAnswerKeys(source.answerKeys)
   if (answerKeys.length > 0) out.answerKeys = answerKeys
+  if (source.recalledPastChats === true) out.recalledPastChats = true
   return out
 }
 
@@ -1404,6 +1356,24 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  /*
+   * ASKED FROM THE /mock-draft ROOM (stage 3 of drafts, 2026-11-16). That room runs in the browser, so
+   * it sends its board with the question; nothing on the server holds a practice mock in progress.
+   * Re-validated and capped here (lib/chimmy/mockDraftGrounding.ts) — it is a form field like any other.
+   * ASKED FROM A LEAGUE MOCK ROOM (/draft/mock/[id], stage 4): that room runs on the server, so its board
+   * is READ here from the room's own rows — only the user's own queue order comes from the browser.
+   */
+  const mockDraftBoard =
+    source === 'mock-draft'
+      ? parseMockDraftBoard(formData.get('mockDraftBoard'))
+      : source === 'mock-draft-room'
+        ? await loadLeagueMockBoard({
+            sessionId: formData.get('mockSessionId'),
+            userId,
+            clientQueueIds: parseClientQueueIds(formData.get('mockQueueIds')),
+          })
+        : null
+  const mockDraftBoardBlock = mockDraftBoard ? mockDraftBoardText(mockDraftBoard) : null
   let message = submittedMessage
   if (requestedLeagueId && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
     const access = await resolveLeagueAccess(requestedLeagueId, userId)
@@ -1715,7 +1685,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   })
 
   const domainInput = [message, ...conversation.map((turn) => turn.content)].join(' ')
-  if (!portfolioReport && !hasSportsContent(domainInput, hasImage)) {
+  /*
+   * ⚠ A QUESTION ASKED FROM INSIDE A MOCK DRAFT ROOM IS A FANTASY QUESTION. With a mock board in hand
+   * (a /mock-draft room or a league mock room), "Put Bijan Robinson at the top of my queue" was turned
+   * away (2026-11-16): no keyword matched, and only the /mock-draft room's opening line ("…every
+   * non-user pick") had been rescuing it there. The league mock room has no such line, so its first
+   * question failed every time.
+   */
+  // A music request ("play some hype music") has no sports words; the music tool answers it.
+  if (!portfolioReport && !mockDraftBoard && !isMusicRequest(message) && !hasSportsContent(domainInput, hasImage)) {
     /*
      * ⚠ THIS DEFLECTION USED TO BE INDISTINGUISHABLE FROM AN ANSWER. It replied
      * "I'm Chimmy, your fantasy sports assistant. I can help with trades,
@@ -2224,10 +2202,10 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * exactly like `getInsightBundle`, `buildLeagueSportsGroundingPacket` and the sixteen specialty
    * builders before them. `buildDecisionOsGroundingPacket` performs no membership check of its own:
    * `resolveLeagueMembership` appears nowhere in `lib/decision-os/grounding/`, and its `userId` is
-   * used only to scope slices WITHIN the league (`loadLineupDecisionSlice({ userId, leagueId })`),
+   * used only to scope slices WITHIN the league (`loadWaiverDecisionSlice({ userId, leagueId, … })`),
    * never to decide whether the caller may see it. It is also the WIDEST of the four — it fans out
-   * to league rules, values, projections, lineup, waiver, roster-value, commissioner-health,
-   * psychology-consistency, saved analysis, league intelligence and league context.
+   * to league rules, values, projections, waiver, roster-value, commissioner-health,
+   * saved analysis, league intelligence and league context.
    *
    * ⚠ THE FLAG IS WHY THIS ONE IS SCOPED CONDITIONALLY, NOT WHY IT IS SAFE. A flag being off in
    * tests says nothing about production.
@@ -2274,6 +2252,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           userId,
           sport: normalizeToSupportedSport(sport),
           season: effectiveSeason ?? new Date().getFullYear(),
+          /*
+           * The week the asker named, when the request carries one. Absent, the projection read takes the
+           * current projection week itself (`currentProjectionWeek`) — one week, printed on every row — rather
+           * than every week on file mixed together.
+           */
+          week: week ?? null,
           question: message,
           /*
            * ⚠ `values` WAS MISSING, AND THAT SILENTLY REMOVED THE WHOLE VALUATION LANE (R1.2).
@@ -2296,6 +2280,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
             devy: normalizeToSupportedSport(sport) === 'NCAAF',
             projections: true,
             leagueRules: true,
+            /*
+             * IDP and kicker values under THIS league's scoring (re-score item 8, 2026-11-16). The slice's own exit
+             * returns before any query in a league that rosters neither, and it is bounded by the packet's clock
+             * (`IDP_KICKER_DEADLINE_MS`), so a slow read costs this slice, never the packet.
+             */
+            idpKicker: true,
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
           },
@@ -2318,6 +2308,22 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         })
           .then((packet) => {
             grounding.buildMs = packet.meta.durationMs
+            if (grounding.outcome === 'timeout') {
+              /*
+               * The packet arrived after the ceiling had already dropped it. Say which reads were slow — slice
+               * names and milliseconds only — so the next fix is a named slice, not a guess. The warning further
+               * down cannot: it fires before the packet exists.
+               */
+              const slowest = [...packet.meta.sources]
+                .filter((x): x is typeof x & { ms: number } => typeof x.ms === 'number')
+                .sort((a, b) => b.ms - a.ms)
+                .slice(0, 5)
+                .map((x) => `${x.slice} ${x.ms}ms`)
+                .join(', ')
+              console.warn(
+                `[chimmy] Decision OS grounding finished late: ${packet.meta.durationMs}ms (engine ${packet.meta.engineMs ?? '?'}ms). Slowest: ${slowest || 'none timed'}.`,
+              )
+            }
             const text = serializeDecisionOsGroundingForPrompt(packet)
             // ⚠ Never overwrite a verdict the ceiling has already reached. The race abandons this
             // promise but does not stop it, so this callback still runs AFTER a timeout — and
@@ -2542,6 +2548,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     : null
   const combinedMemorySection = [
     selectedLeagueRules,
+    mockDraftBoardBlock ? `## MOCK DRAFT BOARD\n${mockDraftBoardBlock}` : undefined,
     savedStrategyPrompt,
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
@@ -2620,9 +2627,17 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   if (staleness.warning) dataSources.push('stale_data_warning')
   dataSources.push('chimmy_orchestration')
 
+  /*
+   * AF Pro depth (lib/chimmy/chimmyDepth.ts): more research turns, longer answers, more memory, the
+   * Pro analyst tools and past-chat recall. Read through the same memoised plan read the spend gate
+   * uses below; a failed read is FREE depth here and still throws exactly where it always did.
+   */
+  const chimmyDepth = chimmyDepthForPlan(await readPlanAllowance().catch(() => null))
+
   const baseUserMessageBody = buildUserMessage({
     message,
     conversation,
+    conversationTurns: chimmyDepth.fallbackConversationTurns,
     screenshotSummary,
     insightSummary,
     memorySection: combinedMemorySection || undefined,
@@ -3228,7 +3243,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
+    /*
+     * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
+     * handed to the loop, instead of costing the model a tool round trip first — which is several
+     * seconds the user does not have when they are on the clock. Only for the membership-proven league
+     * (`leagueSnapshot`), and a failed read just leaves the tool to do it as before.
+     */
+    const draftRoomBoard = insightType === 'draft' && leagueSnapshot && userId
+      ? await buildDraftContext(leagueSnapshot.id, userId).catch(() => null)
+      : null
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -3248,6 +3272,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
       groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot
         ? `DECISION OS EVIDENCE for ${leagueSnapshot.name ?? leagueSnapshot.id} (${leagueSnapshot.id}). Respect its missing-data and authority limits. This snapshot applies only to this league; if you select another league, read that league's tools instead.\n${decisionOsGrounding}`
+        : null, mockDraftBoardBlock, draftRoomBoard
+        ? `THE USER IS ASKING FROM INSIDE THEIR DRAFT ROOM. This is the current board (the same read as get_current_draft_board, so do not call it again unless they ask to refresh). To queue, unqueue or reorder players use propose_draft_queue_change — a confirm card; never say a player was queued or drafted.\n${draftRoomBoard}`
         : null].filter(Boolean).join('\n\n') || null,
       clockLine: userTemporalContext.promptLine,
       /*
@@ -3268,7 +3294,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       ]
         .filter(Boolean)
         .join('\n\n'),
-      conversation: conversation.slice(-6).map((turn) => ({
+      conversation: conversation.slice(-chimmyDepth.loopConversationTurns).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
       })),
@@ -3284,6 +3310,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        */
       context: toolContext,
       enabled: true,
+      depth: chimmyDepth,
     }
     let loop = await runChimmyToolLoop(loopArgs).catch(() => null)
     /*
@@ -3437,6 +3464,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       const loopSettleVerdict = lastSettle && boundLeague && lastSettle.leagueId === boundLeague.id ? eliminationSettleVerdict(lastSettle.settle) : null
       const loopVerdict = (lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null) ?? loopSettleVerdict
       const loopAnswerKeys = loopDelivery.delivered ? answerKeysFrom(toolContext.toolRuns) : []
+      /*
+       * AF Pro depth (lib/chimmy/chimmyDepth.ts): the upgrade button under a free answer comes ONLY
+       * from the executor's refusals, and the "From your past chats" chip only from a recall that found
+       * something. Both read through the drawer's own reader, so the two can never disagree.
+       */
+      const loopProUpsell = loopDelivery.delivered && chimmyDepth.tier === 'free' ? readProUpsell(toolContext.proToolsRefused) : []
+      const loopRecalledPastChats = loopDelivery.delivered && toolContext.recalledPastChats === true
       const uniqueBracketReads = [...new Map(toolContext.bracketEvidence.map((entry) => [entry.href, entry])).values()]
       const singleBracketRead = uniqueBracketReads.length === 1 ? uniqueBracketReads[0] : null
       /* Stored like every other path's, so the history row can show the image the question came with. */
@@ -3498,10 +3532,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            * ten-minute token bound to this user, so a card cannot be edited or replayed.
            */
           ...(toolContext.actionCards.length > 0 ? { actionCards: toolContext.actionCards } : {}),
+          /* A mock draft's queue card: applied in the mock room, in the browser, only when they tap Confirm. */
+          ...(toolContext.mockQueueProposals.length > 0 ? { mockQueueProposals: toolContext.mockQueueProposals } : {}),
+          // The music card (play a station or a search, or stop); the user's tap on it plays it.
+          ...(toolContext.musicCards.length > 0 ? { musicCard: toolContext.musicCards[0] } : {}),
           /* Chip, bid card and supersede keys — see `lib/chimmy/answerPolish.ts`. */
           ...(loopVerdict ? { verdict: loopVerdict } : {}),
           ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
           ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
+          ...(loopProUpsell.length > 0 ? { proUpsell: loopProUpsell } : {}),
+          ...(loopRecalledPastChats ? { recalledPastChats: true } : {}),
           ...(loopScreenshot ? { screenshotAttachment: loopScreenshot } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
@@ -3542,6 +3582,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                 ...(loopVerdict ? { verdict: loopVerdict } : {}),
                 ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
                 ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
+                /*
+                 * The chip is kept — it says where THAT answer came from. The upgrade button is not:
+                 * replayed on a reload after the user subscribes, it would sell them what they bought.
+                 */
+                ...(loopRecalledPastChats ? { recalledPastChats: true } : {}),
               },
             } }),
         ])

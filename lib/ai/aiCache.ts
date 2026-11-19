@@ -21,7 +21,7 @@ import { getAiCacheTtls } from '@/lib/ai/aiConfig'
 //           AI_CACHE_TTL_COMMISSIONER_BRAIN_MINUTES, AI_CACHE_TTL_SPORTS_SCHEDULE_MINUTES
 
 export const AI_CACHE_TTL = getAiCacheTtls()
-export type AiCacheFeature = keyof typeof AI_CACHE_TTL
+type AiCacheFeature = keyof typeof AI_CACHE_TTL
 
 // ── Key helpers ───────────────────────────────────────────────────────────────
 

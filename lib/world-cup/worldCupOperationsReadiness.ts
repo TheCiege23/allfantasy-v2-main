@@ -2,7 +2,7 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import { getWorldCupOfficialGroupsReadiness } from "./worldCupDataSyncService"
 
-export type WorldCupOperationsReadiness = {
+type WorldCupOperationsReadiness = {
   provider: {
     name: string
     configured: boolean

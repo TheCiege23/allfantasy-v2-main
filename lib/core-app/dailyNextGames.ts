@@ -26,7 +26,7 @@ import type { PlayerCardDailySchedule } from './playerCard'
  * over a complete one that missed a refresh.
  */
 
-export const DAILY_NEXT_GAMES = 5
+const DAILY_NEXT_GAMES = 5
 /** How far ahead the card reads. Five games is about ten days; three weeks clears an All-Star break. */
 export const DAILY_LOOKAHEAD_DAYS = 21
 /** How far back, so the current fantasy week's earlier games can be counted. A week is seven days. */

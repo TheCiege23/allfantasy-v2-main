@@ -26,13 +26,6 @@ const checks = [
     expected: [200, 400, 401, 403],
   },
   {
-    name: 'Dynasty trade analyzer endpoint responds without server error',
-    method: 'POST',
-    path: '/api/dynasty-trade-analyzer',
-    body: { give: ['2026 1st'], get: ['Player X'] },
-    expected: [200, 400, 401, 403],
-  },
-  {
     name: 'Waiver AI endpoint responds without server error',
     method: 'POST',
     path: '/api/waiver-ai/grok',

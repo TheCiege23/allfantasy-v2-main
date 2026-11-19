@@ -7,7 +7,7 @@ import { getSeverityStyle, SEVERITY_LABELS } from './severityStyles'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface SummaryCardProps {
+interface SummaryCardProps {
   title: string
   status: SeverityTier
   summary: string

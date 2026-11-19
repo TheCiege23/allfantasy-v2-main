@@ -27,7 +27,7 @@ import type { WaiverWorldFacts, WaiverLeagueFacts } from '../waiver/loader'
  * placeholder that reads as populated.
  */
 
-export type WaiverOsArgs = { userId: string; leagueId: string }
+type WaiverOsArgs = { userId: string; leagueId: string }
 
 /** One derive per pass, shared by both sources, so a single read cannot cost two loads. */
 async function deriveWorldFacts(args: WaiverOsArgs): Promise<WaiverWorldFacts | null> {
@@ -35,7 +35,7 @@ async function deriveWorldFacts(args: WaiverOsArgs): Promise<WaiverWorldFacts | 
 }
 
 /** Args for the league-level source. No user, deliberately — see below. */
-export type WaiverLeagueOsArgs = { leagueId: string }
+type WaiverLeagueOsArgs = { leagueId: string }
 
 /**
  * League RULES: slow-moving, shared by every manager in the league.

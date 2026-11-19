@@ -5,7 +5,7 @@
 import { capConfidenceByDataQuality, type FactGuardInput, type FactGuardResult } from './AIFactGuard';
 import type { ProviderResultMeta } from './types';
 
-export interface ConfidenceInput {
+interface ConfidenceInput {
   deterministicConfidence: number;
   llmConfidence?: number;
   dataCoveragePercent?: number;
@@ -16,7 +16,7 @@ export interface ConfidenceInput {
   providerResults?: ProviderResultMeta[];
 }
 
-export interface ConfidenceResult {
+interface ConfidenceResult {
   finalConfidence: number;
   source: 'deterministic' | 'llm' | 'capped';
   factGuard: FactGuardResult;

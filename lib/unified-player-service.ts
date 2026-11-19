@@ -3,7 +3,7 @@ import { normalizeTeamAbbrev, normalizePosition, normalizePlayerName, playerName
 import { type FantasyCalcPlayer } from './fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { findLiveAdp } from './adp/liveAdpFallback'
-import { findMultiADP, getConsensusADP, type ADPConsensus } from './multi-platform-adp'
+import { findMultiADP, getConsensusADP } from './multi-platform-adp'
 import { getTeamLogoUrl as resolveTeamLogoUrl } from './player-media-urls'
 
 export interface UnifiedPlayer {

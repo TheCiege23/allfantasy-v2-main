@@ -8,7 +8,6 @@
  * shown candidate is graded from the viewer's side with Sleeper ids qualified as Sleeper's.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { toFinderInsights, toFinderTrades } from '@/lib/trade-finder/pageModel'
 import { gradeFinderCandidates, type GradedFinderCandidate } from '@/lib/trade-finder/candidateGrades'
 
 const asset = (over: Record<string, unknown> = {}) => ({
@@ -22,37 +21,6 @@ const candidate = (over: Record<string, unknown> = {}): GradedFinderCandidate =>
   scoreBreakdown: { starterUpgrade: 0, objectiveAlignment: 0, valueFairness: 0, rosterFit: 0, scarcityBonus: 0 },
   ...over,
 }) as never
-
-describe('toFinderTrades — trades are the candidates, never the notes', () => {
-  it('builds a card from a candidate, with the AI summary matched by tradeId and THE grade carried', () => {
-    const graded = { ...candidate(), partnerName: 'Nicolodeon', leagueGrade: { graded: true, letter: 'D', partnerLetter: 'B', label: 'Slightly favors opponent', giveValue: 5900, getValue: 6000 } }
-    const [t] = toFinderTrades({ candidates: [graded], recommendations: [{ tradeId: 'consol_1_2_4034', summary: 'Consolidate into a true RB1.' }] })
-    expect(t).toEqual({
-      id: 'consol_1_2_4034',
-      give: [{ name: 'Bijan Robinson', position: 'RB', team: '', value: 5000 }, { name: '2027 2nd', position: 'PICK', team: '', value: 900 }],
-      get: [{ name: 'Christian McCaffrey', position: 'RB', team: '', value: 6000 }],
-      partnerName: 'Nicolodeon',
-      partnerObjective: 'consolidation',
-      aiSummary: 'Consolidate into a true RB1.',
-      grade: graded.leagueGrade,
-    })
-  })
-
-  it('🛑 invents nothing: no grade stays null, a missing summary falls back to the finder’s own reasons', () => {
-    const [t] = toFinderTrades({ candidates: [candidate()] })
-    expect(t!.grade).toBeNull()
-    expect(t!.aiSummary).toBe('You have RB depth. They need a starter.')
-    expect(t!.partnerName).toBe('Another manager')
-    expect(JSON.stringify(t)).not.toMatch(/fairness|verdict|FAIR|\b80\b/)
-  })
-
-  it('🛑 an opportunity note is NEVER a trade — only candidates with both sides become cards', () => {
-    const note = { type: 'NEED_FIT', title: 'WR need', description: 'Look for a WR2.', relevantPlayers: [], confidence: 0.6, actionable: true }
-    expect(toFinderTrades({ opportunities: [note] } as never)).toEqual([])
-    expect(toFinderTrades({ candidates: [candidate({ teamA: { teamId: '1', gives: [], receives: [asset()] } })] })).toEqual([])
-    expect(toFinderInsights({ opportunities: [note, { title: '', description: '' }] })).toEqual([{ title: 'WR need', description: 'Look for a WR2.' }])
-  })
-})
 
 describe('gradeFinderCandidates — THE grade from the viewer’s side', () => {
   it('prices team A’s sides, Sleeper ids qualified, picks by year and round', async () => {

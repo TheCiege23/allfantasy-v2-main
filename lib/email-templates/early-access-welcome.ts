@@ -25,7 +25,7 @@ export function getEarlyAccessWelcomeEmailV2(args: {
           </div>
           <div style="font-size:14px;line-height:1.55;margin-top:10px;color:rgba(255,255,255,0.80)">
             We'll send your invite in waves. When your access opens, you'll be able to import your Sleeper history,
-            unlock AI legacy analysis, and start building leagues.
+            unlock Chimmy legacy analysis, and start building leagues.
           </div>
         </td>
       </tr>
@@ -82,7 +82,7 @@ AllFantasy - Early Access
 You're in. Welcome to the list
 
 We'll send your invite in waves. When your access opens, you'll be able to import your Sleeper history,
-unlock AI legacy analysis, and start building leagues.
+unlock Chimmy legacy analysis, and start building leagues.
 
 Signed up as: ${email}
 

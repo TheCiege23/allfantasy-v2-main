@@ -36,7 +36,7 @@ export interface DynastyTradeAnalysis {
   missingDataFlags: string[]
 }
 
-export interface DynastyTradeTarget {
+interface DynastyTradeTarget {
   rosterId: string
   teamName: string | null
   fitScore: number
@@ -77,7 +77,7 @@ function pickLabel(pk: DynastyFuturePick): string {
   return `${pk.season} R${pk.round}`
 }
 
-export interface AnalyzeDynastyTradeInput {
+interface AnalyzeDynastyTradeInput {
   rosterId: string
   outgoingPlayerIds: string[]
   incomingPlayerIds: string[]

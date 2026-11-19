@@ -83,7 +83,7 @@ test('renders NBA player pool with AI ADP enabled', async ({ page }) => {
   // Smoke: AI ADP toggle visible and player name + value render.
   await expect(playerPanel).toBeVisible()
   await playerPanel.getByTestId('draft-player-search-input').fill('Hoops Floor General')
-  await expect(playerPanel.getByText('AI ADP').first()).toBeVisible()
+  await expect(playerPanel.getByText('Chimmy ADP').first()).toBeVisible()
   await expect(playerPanel.getByText('Hoops Floor General').first()).toBeVisible()
   await expect(playerPanel.getByTestId('sleeper-pool-row-0-ai-adp')).toContainText('5.2')
 
@@ -126,10 +126,10 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
     await expect(desktop.getByTestId('draft-player-panel')).toBeVisible()
     const list = desktop.getByTestId('draft-player-list-scroll')
     const previous = await list.boundingBox()
-    await desktop.getByTestId('draft-board-size').selectOption('hidden')
+    await desktop.getByTestId('draft-board-hide').click()
     await expect(desktop.getByTestId('draft-premium-board-zone')).toBeHidden()
     await expect.poll(async () => (await list.boundingBox())!.height).toBeGreaterThan(previous!.height)
-    await desktop.getByTestId('draft-board-size').selectOption('balanced')
+    await desktop.getByTestId('draft-dock-size-half').click()
     await expect(desktop.getByTestId('draft-premium-board-zone')).toBeVisible()
     const name = desktop.locator('[data-testid$="-name"]').filter({ hasText: /Atlas Runner|Hoops Floor General|Test Player/ }).first()
     await expect(name).toBeVisible()

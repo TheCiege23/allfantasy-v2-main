@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { PublicLeagueDiscoveryPage } from "@/components/discovery"
-import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export const dynamic = "force-dynamic"
 
@@ -12,6 +12,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
+  alternates: { canonical: `${getPublicSiteOrigin()}/discover/leagues` },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,

@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
   const [pulse, rules] = await Promise.allSettled([
-    getMyTeamPulse(userId, new Date(), undefined, null, leagueId),
+    getMyTeamPulse(userId, new Date(), undefined, leagueId),
     resolveWaiverRules(leagueId, String(league.platform ?? '')),
   ])
 

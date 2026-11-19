@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
@@ -10,7 +11,8 @@ import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationSe
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcValuesDbFirst, readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
+import { fantasyCalcSettingsForChart, LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
@@ -20,6 +22,8 @@ import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/p
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
+import { gradeRebuildPackages, loadRebuildPlan } from '@/lib/trade-intel/rebuildPlanLoader'
+import type { RebuildPlan } from '@/lib/trade-intel/rebuildAdvisor'
 import { gradeProposalPackages } from '@/lib/league-trade-engine/proposalPackageGrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
@@ -302,7 +306,7 @@ export async function GET(
     await Promise.all([
       prisma.roster.findMany({
         where: { leagueId },
-        select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+        select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true },
       }),
       /*
        * The league's own season decides rookie-vs-future on every pick below.
@@ -426,12 +430,14 @@ export async function GET(
     : {}
   const chartTeams = Number(league?.leagueSize) || 12
   const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
-  const chartSettings = {
-    isDynasty: pricesOnDynastyChart(marketContext.variant),
-    numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
-    numTeams: chartTeams,
-    ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
-  }
+  const chartIsDynasty = pricesOnDynastyChart(marketContext.variant)
+  const largeLeagueRookiePicks = league?.sport === 'NFL' && chartIsDynasty && chartTeams > LARGE_LEAGUE_PICK_THRESHOLD
+  const chartSettings = fantasyCalcSettingsForChart({
+    chartIsDynasty,
+    isSuperFlex: marketContext.variant.superflex,
+    leagueSize: chartTeams,
+    pprNfl: marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0,
+  })
 
   /*
    * Who among these rosters is an actual AllFantasy account, and what to call
@@ -708,7 +714,7 @@ export async function GET(
    * counterparty list on imports or breaks the propose gate on natives.
    */
   const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  const viewerRosterId = rosters.find((r) => r.platformUserId === userId || r.id === coOwnerRosterId) ?? null
+  const viewerRosterId = rosters.find((r) => isRosterManagedBy(r, userId) || r.id === coOwnerRosterId) ?? null
 
   // `identityIds` (claimed team + linked Sleeper id) was read in wave one.
   const viewerTeamRosterId =
@@ -780,7 +786,9 @@ export async function GET(
       ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
       : Promise.resolve(new Map()),
     // One chart read supplies both players and picks, using the evaluator's profile and freshness.
-    league ? getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 }).catch(() => null)
+    league ? (largeLeagueRookiePicks
+      ? readFantasyCalcValuesFromDb(chartSettings, { allowStale: false }).then(row => row.players)
+      : getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 })).catch(() => null)
       : Promise.resolve(null),
     loadLeagueTradeValues({
       prisma,
@@ -822,7 +830,8 @@ export async function GET(
   const pickPricing = {
     fcPlayers: marketRows,
     nflCtx: { asOfDate: new Date().toISOString().slice(0, 10),
-      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows },
+      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows,
+      largeLeagueRookiePicks },
   }
   // The pricer's own reason for a pick it refuses (no market in this format), so the preview does not
   // call a pick with no market "could not be loaded".
@@ -984,6 +993,40 @@ export async function GET(
     }
   }
 
+  /*
+   * ── THE REBUILD PLAN (owner decision 2026-11-06, lib/trade-intel/rebuildAdvisor.ts) ────────────
+   *
+   * The healthy alternative to tanking: for a viewer out of the race, or one who saved "rebuild" as
+   * their strategy, in a dynasty or keeper league — what to sell and to whom, what to keep, what to
+   * ask contenders for. Built from the rosters already priced above; its packages are graded by the
+   * same grader as the partner suggestions. AF Pro, withheld at the response like them (`depthOpen`).
+   * Failure-contained: a plan that throws costs the plan, never the builder.
+   */
+  let rebuildPlan: RebuildPlan | null = null
+  if (viewerTeamRosterId) {
+    try {
+      rebuildPlan = await loadRebuildPlan({
+        viewerRosterId: viewerTeamRosterId,
+        rosters: result,
+        leagueMode: proposalMode,
+        settings: league?.settings ?? null,
+        starterSlots: league?.starters ?? null,
+        savedStrategy: savedStrategy?.active ?? null,
+        qbFormat: valueBook.qbFormat,
+      })
+      if (rebuildPlan && rebuildPlan.packages.length > 0 && tradeDepth.unlocked) {
+        const grader = await leagueGrader()
+        await gradeRebuildPackages(
+          rebuildPlan,
+          new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
+          (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+        )
+      }
+    } catch {
+      rebuildPlan = null
+    }
+  }
+
   // `historicalTrades` was read in wave one.
   const partnerBehavior = derivePartnerBehaviorProfiles(historicalTrades, result.map((roster) => roster.rosterId))
   const rawSuggestions = generateTradePartnerSuggestions({
@@ -1135,6 +1178,9 @@ export async function GET(
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,
     partnerRanking: depthOpen ? partnerRanking : null,
+    // The plan when the viewer has AF Pro; otherwise only that one exists, so the screen can say so.
+    rebuildPlan: depthOpen ? rebuildPlan : null,
+    rebuildPlanLocked: !depthOpen && rebuildPlan != null,
     suggestions: depthOpen ? suggestions : [],
     multiTeamSuggestions: depthOpen ? multiTeamSuggestions : [],
     depth: tradeDepth,

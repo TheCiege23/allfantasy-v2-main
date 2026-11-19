@@ -6,7 +6,7 @@ import { AICoachingWorkspace } from '@/components/league-ai-coaching/AICoachingW
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import './redraft-tailwind-tabs.css'
 
-export type AICoachingTabProps = {
+type AICoachingTabProps = {
   league: UserLeague
   userTeam: LeagueTeam | null
   sport: string

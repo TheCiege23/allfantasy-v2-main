@@ -10,6 +10,11 @@ import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJo
 import { runActivationReminder, type ActivationReminderRun } from '@/lib/onboarding-retention/runActivationReminder'
 import { runConfirmEmailReminder } from '@/lib/onboarding-retention/runConfirmEmailReminder'
 import { runSavedSearchAlerts, type SavedSearchAlertsRun } from '@/lib/public-discovery/runSavedSearchAlerts'
+import {
+  parseDailyDraftMode,
+  runDailyBlogDrafts,
+  type DailyDraftReport,
+} from '@/lib/automated-blog/daily/runDailyBlogDrafts'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -74,6 +79,42 @@ async function savedSearchPhase(mode: string): Promise<SavedSearchAlertsRun | { 
     // Never allowed to fail the briefing it rides on.
     const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
     console.error('[cron/morning-briefing] saved-search alerts failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
+/*
+ * FIFTH: DAILY BLOG DRAFTS (2026-11-15).
+ * lib/automated-blog/daily/runDailyBlogDrafts.ts — up to two "fantasy standouts" DRAFTS a day from
+ * last night's NBA/NHL box scores, each game checked against its final score and each draft checked
+ * so it names no number or player outside those facts. Drafts only: a person publishes from the blog
+ * admin. 12:00 UTC is after the 07:00 UTC stat-lines import. `BLOG_DAILY_DRAFTS=off` stops it;
+ * `?blogDrafts=dry` reports what it would write without calling the model, `=off` skips one fire.
+ * Its own `cron-blog-daily-drafts` heartbeat, written whenever it ran.
+ */
+async function blogDraftPhase(mode: string): Promise<DailyDraftReport | { ran: false; reason: 'error'; error: string }> {
+  const started = Date.now()
+  try {
+    const report = await runDailyBlogDrafts({ mode: parseDailyDraftMode(mode) })
+    if (!report.ran) return report
+    const failures = report.skipped.filter((s) => s.reason === 'generation_failed' || s.reason === 'save_failed')
+    await recordSyncJobRun(
+      { jobName: 'cron-blog-daily-drafts', trigger: 'cron' },
+      {
+        rowsRead: report.created.length + report.wouldCreate.length + report.skipped.length,
+        rowsWritten: report.created.length,
+        rowsSkipped: report.skipped.length,
+        errors: failures.map((s) => `${s.sport}: ${s.reason}${s.detail ? ` (${s.detail})` : ''}`),
+        status: failures.length > 0 ? 'partial' : 'success',
+        metadata: { date: report.date, created: report.created, wouldCreate: report.wouldCreate, skipped: report.skipped },
+      },
+      Date.now() - started,
+    )
+    return report
+  } catch (err) {
+    // Never allowed to fail the briefing it rides on.
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/morning-briefing] daily blog drafts failed:', message)
     return { ran: false, reason: 'error', error: message }
   }
 }
@@ -290,6 +331,7 @@ export async function GET(req: NextRequest) {
     const confirmEmailReminder = await reminderPhase(reminderMode, 'cron-confirm-email-reminder', runConfirmEmailReminder)
     const savedSearchMode = (new URL(req.url).searchParams.get('savedSearches') ?? '').trim().toLowerCase()
     const savedSearches = await savedSearchPhase(savedSearchMode)
+    const blogDrafts = await blogDraftPhase(new URL(req.url).searchParams.get('blogDrafts') ?? '')
 
     // Response bodies are unchanged from before the wrap moved — callers see exactly what they did.
     // A reminder's report is added only once it does something: while they are disabled (the
@@ -300,6 +342,8 @@ export async function GET(req: NextRequest) {
       ...(isDisabled(confirmEmailReminder) ? {} : { confirmEmailReminder }),
       // Only once there is something to say, so a day with no saved searches leaves the body as it was.
       ...('due' in savedSearches && savedSearches.due === 0 ? {} : { savedSearches }),
+      // Same rule: switched off, it leaves the body as it was.
+      ...(!blogDrafts.ran && blogDrafts.reason !== 'error' ? {} : { blogDrafts }),
     }
     if (!outcome.enabled) {
       return NextResponse.json({

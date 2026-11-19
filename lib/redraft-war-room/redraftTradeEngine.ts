@@ -38,7 +38,7 @@ export interface TradeAnalysis {
   missingDataFlags: string[]
 }
 
-export interface TradeTarget {
+interface TradeTarget {
   rosterId: string
   teamName: string | null
   fitScore: number
@@ -65,7 +65,7 @@ function findPlayers(context: RedraftWarRoomContext, ids: string[]): RedraftPlay
   return ids.map((id) => all.find((p) => p.playerId === id)).filter((p): p is RedraftPlayerFact => Boolean(p))
 }
 
-export interface AnalyzeTradeInput {
+interface AnalyzeTradeInput {
   /** The roster doing the analysis (the user's team). */
   rosterId: string
   /** Players leaving the user's roster. */

@@ -408,4 +408,3 @@ export function ManagerH2H({ leagueId }: { leagueId: string }) {
   )
 }
 
-export default ManagerH2H

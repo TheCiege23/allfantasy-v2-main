@@ -10,7 +10,7 @@
 export const SLEEPER_POOL_TABLE_ROW_HEIGHT = 60
 export const SLEEPER_POOL_TABLE_HEADER_HEIGHT = 40
 
-export interface ColumnSpec {
+interface ColumnSpec {
   key: string
   label: string
   /** Width in px; sum should be roughly SLEEPER_POOL_TABLE_MIN_WIDTH. */

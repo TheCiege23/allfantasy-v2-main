@@ -48,7 +48,7 @@ const FATIGUE_ELIGIBLE_EVENT_TYPES: ReadonlySet<string> = new Set([
 ])
 
 /** Rolling window the cap is measured over. */
-export const FATIGUE_WINDOW_MS = 24 * 60 * 60 * 1000
+const FATIGUE_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
  * Maximum bulk notifications per user per window.
@@ -66,7 +66,7 @@ export function isFatigueEligible(eventType: string | null | undefined): boolean
   return FATIGUE_ELIGIBLE_EVENT_TYPES.has(eventType.trim())
 }
 
-export interface FatigueDecision {
+interface FatigueDecision {
   /** True when this row must NOT be delivered now. */
   suppress: boolean
   /** Populated only when suppressing — goes into the row's `lastError` so it is auditable. */

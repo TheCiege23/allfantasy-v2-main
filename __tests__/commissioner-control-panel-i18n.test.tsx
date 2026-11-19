@@ -174,8 +174,10 @@ describe('🛑 the panel’s own hard-coded English is gone in Spanish', () => {
     stubRich()
     const r = render(<CommissionerControlPanel leagueId="l1" />)
     fireEvent.click((await r.findAllByText('Editar Matchups del Calendario')).at(-1)!)
-    await r.findByText(/La edición del calendario está disponible/)
-    expect(r.getAllByText('Editar Matchups del Calendario').length).toBeGreaterThanOrEqual(2)
+    // The button rebuilds the weeks that have not started (2026-11-15); its note says what it keeps.
+    await r.findByText(/Las semanas que ya empezaron no cambian/)
+    expect(r.getByText('Rehacer las semanas restantes')).toBeTruthy()
+    expect(r.getAllByText('Editar Matchups del Calendario').length).toBeGreaterThanOrEqual(1)
     expect(englishIn(r.container)).toEqual([])
   })
 

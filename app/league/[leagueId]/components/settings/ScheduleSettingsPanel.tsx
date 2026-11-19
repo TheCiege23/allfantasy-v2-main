@@ -8,29 +8,42 @@ function readScheduleSlice(snapshot: Record<string, unknown>) {
   return raw && typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
 }
 
+/**
+ * 🛑 "REGULAR SEASON WEEKS" CHANGED NO SCHEDULE (2026-11-15). It wrote `settings.scheduleSettings.regularSeasonWeeks`,
+ * and every schedule generator reads the season's playoff start instead. The regular season is the weeks before the
+ * playoffs, so this control now sets the playoff start week (length + 1) — the same value the Playoffs tab sets — and
+ * that change reaches the running season and rebuilds its unstarted weeks (lib/schedule-runtime/seasonPlayoffStartSync.ts),
+ * asking for confirmation mid-season. The settings copy is kept in step for the readers that still use it.
+ */
+export function regularSeasonWeeksFrom(playoffStartWeek: number | null | undefined, stored: unknown): number {
+  if (typeof playoffStartWeek === 'number' && Number.isInteger(playoffStartWeek) && playoffStartWeek > 1) return playoffStartWeek - 1
+  return typeof stored === 'number' && stored > 0 ? stored : 14
+}
+
 export function ScheduleSettingsPanel({
   settingsSnapshot,
+  playoffStartWeek,
   canEdit,
   debouncedSave,
 }: {
   settingsSnapshot: Record<string, unknown>
+  /** `League.playoffStartWeek`: the regular season is every week before it. */
+  playoffStartWeek?: number | null
   canEdit: boolean
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
   const disabled = !canEdit
   const slice = readScheduleSlice(settingsSnapshot)
-  const [regularSeasonWeeks, setRegularSeasonWeeks] = useState<number>(
-    typeof slice.regularSeasonWeeks === 'number' ? slice.regularSeasonWeeks : 14,
-  )
+  const [regularSeasonWeeks, setRegularSeasonWeeks] = useState<number>(regularSeasonWeeksFrom(playoffStartWeek, slice.regularSeasonWeeks))
   const [byeWeeksNote, setByeWeeksNote] = useState<string>(
     typeof slice.byeWeeksNote === 'string' ? slice.byeWeeksNote : '',
   )
 
   useEffect(() => {
     const s = readScheduleSlice(settingsSnapshot)
-    setRegularSeasonWeeks(typeof s.regularSeasonWeeks === 'number' ? s.regularSeasonWeeks : 14)
+    setRegularSeasonWeeks(regularSeasonWeeksFrom(playoffStartWeek, s.regularSeasonWeeks))
     setByeWeeksNote(typeof s.byeWeeksNote === 'string' ? s.byeWeeksNote : '')
-  }, [settingsSnapshot])
+  }, [settingsSnapshot, playoffStartWeek])
 
   const mergeSchedule = (next: Record<string, unknown>) => {
     const prev = readScheduleSlice(settingsSnapshot)
@@ -60,17 +73,19 @@ export function ScheduleSettingsPanel({
           onChange={(e) => {
             const n = Number(e.target.value)
             setRegularSeasonWeeks(n)
-            debouncedSave(mergeSchedule({ regularSeasonWeeks: n }))
+            debouncedSave({ playoffStartWeek: n + 1, ...mergeSchedule({ regularSeasonWeeks: n }) })
           }}
         >
-          {Array.from({ length: 9 }, (_, i) => i + 10).map((n) => (
+          {/* 4–24: a regular season is capped at 24 weeks (lib/redraft/regularSeasonCap.ts); the server refuses past it. */}
+          {Array.from(new Set([...Array.from({ length: 21 }, (_, i) => i + 4), regularSeasonWeeks])).sort((a, b) => a - b).map((n) => (
             <option key={n} value={n}>
               {n} weeks
             </option>
           ))}
         </select>
         <SettingsHelper>
-          Drives regular-season length in schedule/matchup cadence resolvers (merged with sport defaults when unset).
+          Playoffs start the week after ({`week ${regularSeasonWeeks + 1}`}). Changing it rebuilds the matchups for weeks that
+          have not started; weeks already played stay as they are.
         </SettingsHelper>
       </div>
 

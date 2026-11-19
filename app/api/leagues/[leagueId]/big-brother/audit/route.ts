@@ -6,7 +6,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
+import { getBigBrotherConfig, isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
+import { redactBigBrotherAuditForViewer } from '@/lib/big-brother/auditVisibility'
+import { prisma } from '@/lib/prisma'
 import { getBigBrotherAuditLog } from '@/lib/big-brother/BigBrotherAuditLog'
 
 export const dynamic = 'force-dynamic'
@@ -29,9 +31,18 @@ export async function GET(
   if (!isBB) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })
 
   const limit = Math.min(parseInt(req.nextUrl.searchParams?.get('limit') ?? '50', 10) || 50, 100)
-  const rows = await getBigBrotherAuditLog(leagueId, { limit })
+  const [rows, league, config] = await Promise.all([
+    getBigBrotherAuditLog(leagueId, { limit }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
+    getBigBrotherConfig(leagueId),
+  ])
+  // Vote totals follow the league's own visibility setting; see lib/big-brother/auditVisibility.ts.
+  const visible = redactBigBrotherAuditForViewer(rows, {
+    isCommissioner: league?.userId === userId,
+    showExactTotals: config?.publicVoteTotalsVisibility === 'exact',
+  })
 
-  const log = rows.map((r) => ({
+  const log = visible.map((r) => ({
     eventType: r.eventType,
     metadata: r.metadata,
     createdAt: r.createdAt.toISOString(),

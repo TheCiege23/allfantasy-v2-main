@@ -36,16 +36,16 @@ export const INTELLIGENCE_UNSUPPORTED = {
  * player identities within it may be `unresolved` (no cross-provider athlete map yet), and it is NOT yet a
  * scoring input (the scoring engine still uses PlayerWeeklyScore / PlayerGameLogCache).
  */
-export const CERTIFIED_CAPABILITY_TRUTH = {
+const CERTIFIED_CAPABILITY_TRUTH = {
   certified: ['players', 'rosters', 'transactions', 'games', 'draft_data', 'statistics'],
   notCertified: ['injuries', 'projections', 'live_scores', 'play_by_play', 'depth_charts', 'news', 'weather'],
 } as const
 
-export type SnapshotFreshnessEntry = { capability: string; available: boolean; freshnessStatus: string; snapshotVersion: string | null; provider: string | null; generatedAt: string | null }
-export type ProviderHealthEntry = { provider: string; sports: string[]; status: string; capabilities: string[]; lastVerifiedAt: string | null }
-export type EvidenceAvailability = { certifiedCapabilities: string[]; notCertifiedCapabilities: string[]; unsupported: typeof INTELLIGENCE_UNSUPPORTED }
+type SnapshotFreshnessEntry = { capability: string; available: boolean; freshnessStatus: string; snapshotVersion: string | null; provider: string | null; generatedAt: string | null }
+type ProviderHealthEntry = { provider: string; sports: string[]; status: string; capabilities: string[]; lastVerifiedAt: string | null }
+type EvidenceAvailability = { certifiedCapabilities: string[]; notCertifiedCapabilities: string[]; unsupported: typeof INTELLIGENCE_UNSUPPORTED }
 
-export type IntelligenceSportsContext = {
+type IntelligenceSportsContext = {
   subsystem: string
   generatedAt: string
   gameContext: CertifiedMatchupContext | null

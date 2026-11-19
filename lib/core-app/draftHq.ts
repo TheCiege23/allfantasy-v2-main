@@ -1,3 +1,4 @@
+import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -16,8 +17,6 @@ import {
   normalizeDraftedNameSet,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine/queue-utils'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -239,7 +238,6 @@ export type DraftHqData = {
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
 
-
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
   espn: 'ESPN',
@@ -336,7 +334,7 @@ async function loadPreparedQueue(sessionId: string, userId: string): Promise<Sec
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const row = await prisma.draftQueue.findUnique({
-    where: { sessionId_userId: { sessionId, userId } },
+    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
     select: { order: true },
   })
   const order = row?.order
