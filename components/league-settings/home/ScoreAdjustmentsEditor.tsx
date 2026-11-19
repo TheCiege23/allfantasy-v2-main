@@ -75,7 +75,10 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
   if (loadError) return <p className="lsh-error" role="alert">{loadError}</p>
   if (!view) return <p className="lsh-help" role="status">Loading matchups…</p>
 
-  if (view.scoringMode !== 'points') {
+  // Adjustments are points only. A head-to-head category league still has games to mark final; a
+  // rotisserie league has no games at all.
+  const pointsLeague = view.scoringMode === 'points'
+  if (!pointsLeague && view.scoringMode !== 'h2h_category') {
     return <p className="lsh-help">Score adjustments are for points leagues. In a category league the score is categories won.</p>
   }
 
@@ -93,9 +96,15 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
         <select id="score-adj-week" value={week ?? ''} onChange={(e) => { setDraft(null); setOk(null); setError(null); void load(Number(e.target.value)) }}>
           {view.weeks.map((w) => <option key={w} value={w}>Week {w}</option>)}
         </select>
-        <p className="lsh-help">
-          Add or take away points for a stat-correction dispute, a penalty or a ruling. Standings use the adjusted score, and a later stat sync keeps it. Every change, with its reason, goes to the league audit log.
-        </p>
+        {pointsLeague ? (
+          <p className="lsh-help">
+            Add or take away points for a stat-correction dispute, a penalty or a ruling. Standings use the adjusted score, and a later stat sync keeps it. Every change, with its reason, goes to the league audit log.
+          </p>
+        ) : (
+          <p className="lsh-help">
+            Score adjustments are for points leagues. In a category league the score is categories won. You can still mark a game final here.
+          </p>
+        )}
       </div>
 
       {view.matchups.length === 0 && <p className="lsh-help">No head-to-head matchups this week.</p>}
@@ -106,16 +115,18 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
               <div key={t.rosterId} className="flex items-center justify-between gap-3 py-1">
                 <span className="min-w-0 truncate text-[14px]">{t.name}</span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-[14px] font-semibold tabular-nums">{t.score.toFixed(2)}</span>
+                  <span className="text-[14px] font-semibold tabular-nums">{pointsLeague ? t.score.toFixed(2) : String(t.score)}</span>
                   {t.adjustment !== 0 && <span className="text-[12px] tabular-nums" aria-label={`includes ${formatAdjustment(t.adjustment)} adjustment`}>({formatAdjustment(t.adjustment)})</span>}
-                  <button type="button" className="lsh-secondary" disabled={busy}
-                    onClick={() => { setOk(null); setError(null); setDraft({ matchupId: m.matchupId, rosterId: t.rosterId, name: t.name, points: '', reason: '' }) }}>
-                    Adjust
-                  </button>
+                  {pointsLeague && (
+                    <button type="button" className="lsh-secondary" disabled={busy}
+                      onClick={() => { setOk(null); setError(null); setDraft({ matchupId: m.matchupId, rosterId: t.rosterId, name: t.name, points: '', reason: '' }) }}>
+                      Adjust
+                    </button>
+                  )}
                 </span>
               </div>
             ))}
-            {m.status !== 'final' && <p className="lsh-help">In progress: the adjustment stays on top as the score updates.</p>}
+            {pointsLeague && m.status !== 'final' && <p className="lsh-help">In progress: the adjustment stays on top as the score updates.</p>}
             {m.manualFinal && <p className="lsh-help" data-testid="score-adj-manual-final">Marked final by the commissioner: {m.manualFinal.reason}</p>}
             <div className="flex justify-end pt-1">
               {m.manualFinal ? (
@@ -160,7 +171,7 @@ export function ScoreAdjustmentsEditor({ leagueId }: { leagueId: string }) {
         <div className="lsh-field-card" data-testid="score-final-form">
           <p className="lsh-field-label">Mark final: {finalDraft.label}</p>
           <p className="lsh-help">
-            The game closes at the score shown now and counts in the standings. Later stat updates will not change it. To change the score afterwards, add an adjustment or reopen the game.
+            The game closes at the score shown now and counts in the standings. Later stat updates will not change it. To change the score afterwards, {pointsLeague ? 'add an adjustment or reopen the game' : 'reopen the game'}.
           </p>
           <label className="lsh-help" htmlFor="score-final-reason">Reason (shows in the audit log)</label>
           <input id="score-final-reason" type="text" maxLength={REASON_MAX} value={finalDraft.reason}

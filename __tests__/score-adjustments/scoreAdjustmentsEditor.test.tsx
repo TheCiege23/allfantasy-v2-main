@@ -69,10 +69,28 @@ describe('score adjustments editor', () => {
     expect(posted()[1]).toEqual({ action: 'matchup_reopen', matchupId: 'm2' })
   })
 
-  it('explains why a category league has no adjustments', async () => {
-    stub(week({ scoringMode: 'h2h_category' }))
+  it('a category league has no adjustments but can still mark a game final and reopen one', async () => {
+    const open = { matchupId: 'm1', status: 'active', manualFinal: null, teams: [{ rosterId: 'h', name: 'Hawks', score: 6, adjustment: 0 }, { rosterId: 'a', name: 'Owls', score: 3, adjustment: 0 }] }
+    const fetchMock = stub(week({ scoringMode: 'h2h_category', matchups: [open], adjustments: [] }))
     render(<ScoreAdjustmentsEditor leagueId="L" />)
     expect(await screen.findByText(/Score adjustments are for points leagues/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Adjust' })).toBeNull()
+    // Categories won, not a points total with decimals.
+    expect(screen.getByText('6')).toBeTruthy()
+    expect(screen.queryByText('6.00')).toBeNull()
+    fireEvent.click(screen.getByTestId('score-adj-mark-final'))
+    fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: 'ruling on the tie' } })
+    fireEvent.click(within(screen.getByTestId('score-final-form')).getByRole('button', { name: 'Mark final' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit | undefined)?.method === 'POST')).toBe(true))
+    const body = JSON.parse(String((fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST')![1] as RequestInit).body))
+    expect(body).toEqual({ action: 'matchup_finalize', matchupId: 'm1', reason: 'ruling on the tie' })
+  })
+
+  it('a rotisserie league has no games: the card only explains', async () => {
+    stub(week({ scoringMode: 'roto' }))
+    render(<ScoreAdjustmentsEditor leagueId="L" />)
+    expect(await screen.findByText(/Score adjustments are for points leagues/)).toBeTruthy()
+    expect(screen.queryByTestId('score-adj-mark-final')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Adjust' })).toBeNull()
   })
 })
