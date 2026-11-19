@@ -1,6 +1,7 @@
 import { ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
 import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
 import { nflDraftSeasonLine } from './nflDraftSeasonLine'
+import { byeWeekForTeam, loadDraftPoolByeWeekMap } from './draftPoolByeWeeks'
 import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
@@ -1821,9 +1822,21 @@ async function buildResolvedDraftPoolForLeague(
   if (sport === 'NFL' && identityByPoolKey.size > 0) {
     const riIds = [...new Set([...identityByPoolKey.values()].map((v) => v.rollingInsightsPlayerId))]
     const perfRiDetail = perfStart(`9. loadRollingInsightsStatsDetailByPlayerIds (n=${riIds.length})`)
-    riDetailByPlayerId = await loadRollingInsightsStatsDetailByPlayerIds(riIds)
+    const statsYear = Number(defaultNflPlayerStatsSeason())
+    riDetailByPlayerId = await loadRollingInsightsStatsDetailByPlayerIds(riIds, {
+      candidateSeasons: [String(statsYear), String(statsYear - 1)],
+    })
     perfRiDetail()
   }
+  const nflByeWeeks =
+    sport === 'NFL'
+      ? await loadDraftPoolByeWeekMap(sport, Number.isInteger(league?.season) ? Number(league?.season) : null)
+      : {}
+  /** The one season every NFL stat column shows (see pickPoolStatSeason). */
+  const nflPoolStatSeason: string | null =
+    sport === 'NFL'
+      ? ([...riDetailByPlayerId.values()].find((d) => d.season)?.season ?? defaultNflPlayerStatsSeason())
+      : null
 
   // F.1: Fallback PlayerSeasonStats loader for rows without RI identity
   let fallbackSeasonByPoolKey = new Map<string, RollingInsightsSeasonSlice>()
@@ -2387,10 +2400,24 @@ async function buildResolvedDraftPoolForLeague(
           })
         : null
 
+    // The box AND its games-played come from the same pool-season row. The season slice above
+    // may be a different season (it is chosen for a usable PPG), so it must not supply the
+    // games divisor for this box.
+    const poolSeasonDetail = idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId) ?? null : null
+    const seasonLineRow = poolSeasonDetail
+      ? {
+          stats: poolSeasonDetail.stats,
+          fantasyPointsPerGame: poolSeasonDetail.fantasyPointsPerGame,
+          fantasyPointsSeason: poolSeasonDetail.fantasyPoints,
+          gamesPlayed: poolSeasonDetail.gamesPlayed ?? null,
+          season: poolSeasonDetail.season ?? null,
+          updatedAt: poolSeasonDetail.updatedAt ?? new Date(0),
+        }
+      : idn ? null : fallbackRiSlice
     const observedNfl = sport === 'NFL' ? nflDraftSeasonLine(
-      effectiveRiSlice,
-      idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId)?.stats : undefined,
-      position, Number(nflStatsSeason), nflStatScorer,
+      seasonLineRow,
+      seasonLineRow?.stats,
+      position, Number(nflPoolStatSeason ?? nflStatsSeason), nflStatScorer,
     ) : null
     const nflDraftProjectionSplits =
       observedNfl?.splits ?? (sport === 'NFL'
@@ -2621,6 +2648,10 @@ async function buildResolvedDraftPoolForLeague(
     return {
       ...base,
       draftIdProvenance: resolveDraftIdProvenance(sport, selectedDraftId, poolMatch),
+      byeWeek:
+        (row as RawRow).byeWeek ??
+        (row as RawRow).bye ??
+        (sport === 'NFL' ? byeWeekForTeam(nflByeWeeks, team) : null),
       graduatedToNFL: row.graduatedToNFL ?? (promoted ? true : undefined),
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
