@@ -34,8 +34,10 @@ export type FantraxTradeHistoryImportResult =
        *
        * `traded` and `returned` count picks that were SAVED. `notSaved` counts picks the export
        * named that the database refused, so a failed write is never reported as placed.
+       * `leftAlone` counts picks the export named that were not touched because AllFantasy
+       * already knows better: an in-app trade moved the pick, or it has been used or forfeited.
        */
-      laterRoundPicks: { traded: number; returned: number; notSaved: number } | null
+      laterRoundPicks: { traded: number; returned: number; notSaved: number; leftAlone: number } | null
     }
   | { ok: false; status: 400 | 404 | 409; error: string }
 
@@ -92,7 +94,7 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
    * ⚠ FAILS SOFT. The trades are already saved; a problem placing picks must not turn a good
    * upload into an error. `laterRoundPicks: null` says the step did not run.
    */
-  let laterRoundPicks: { traded: number; returned: number; notSaved: number } | null = null
+  let laterRoundPicks: { traded: number; returned: number; notSaved: number; leftAlone: number } | null = null
   try {
     const snapshot = await prisma.fantraxLeague.findFirst({
       where: { OR: [{ sourceLeagueId: league.platformLeagueId }, { id: league.platformLeagueId }] },
@@ -127,16 +129,52 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
       current_owner_roster_id: pick.original_roster_id,
       traded: false,
     }))
-    laterRoundPicks = { traded: 0, returned: 0, notSaved: 0 }
-    if (ownership.traded.length > 0 || returnedRows.length > 0) {
+    /*
+     * 🛑 AN EXPORT NEVER OVERRULES WHAT HAPPENED IN THE APP. The save is a plain upsert on
+     * (league, season, round, original team): it would reset the holder of a pick that an
+     * AllFantasy trade moved (`sourceTradeId` set), and it would rewrite a pick already used in a
+     * draft or forfeited. An export is a point in time on Fantrax; it knows nothing about either.
+     * The path this replaced deleted a row only when `sourceTradeId` was null and the pick was
+     * active — the same two conditions, kept here by leaving those picks out of the save.
+     *
+     * ⚠ READ FIRST, THEN FILTER — NOT A CONDITION ON THE UPSERT. A row the upsert declined to
+     * update would still be counted as written, which is the wrong-count bug this result
+     * already had once. If this read fails the whole step fails soft (nothing is written).
+     */
+    const candidates = [...ownership.traded, ...returnedRows]
+    const keyOf = (season: number, round: number, original: string) => `${season}:${round}:${original}`
+    const untouchable = new Set<string>()
+    if (candidates.length > 0) {
+      const settled = await prisma.futureDraftPick.findMany({
+        where: {
+          leagueId: args.leagueId,
+          pickSeason: { in: [...new Set(candidates.map((pick) => pick.season))] },
+          OR: [{ sourceTradeId: { not: null } }, { status: { not: 'active' } }],
+        },
+        select: { pickSeason: true, round: true, originalRosterId: true },
+      })
+      for (const row of settled) untouchable.add(keyOf(row.pickSeason, row.round, row.originalRosterId))
+    }
+    const open = <T extends { season: number; round: number; original_roster_id: string }>(rows: T[]): T[] =>
+      rows.filter((pick) => !untouchable.has(keyOf(pick.season, pick.round, pick.original_roster_id)))
+    const tradedToSave = open(ownership.traded)
+    const returnedToSave = open(returnedRows)
+
+    laterRoundPicks = {
+      traded: 0,
+      returned: 0,
+      notSaved: 0,
+      leftAlone: candidates.length - tradedToSave.length - returnedToSave.length,
+    }
+    if (tradedToSave.length > 0 || returnedToSave.length > 0) {
       const { persistTradedPicks } = await import('@/lib/league-import/ImportedLeagueCommitService')
-      if (ownership.traded.length > 0) {
-        const saved = await persistTradedPicks(args.leagueId, ownership.traded)
+      if (tradedToSave.length > 0) {
+        const saved = await persistTradedPicks(args.leagueId, tradedToSave)
         laterRoundPicks.traded = saved.written
         laterRoundPicks.notSaved += saved.skipped
       }
-      if (returnedRows.length > 0) {
-        const saved = await persistTradedPicks(args.leagueId, returnedRows)
+      if (returnedToSave.length > 0) {
+        const saved = await persistTradedPicks(args.leagueId, returnedToSave)
         laterRoundPicks.returned = saved.written
         laterRoundPicks.notSaved += saved.skipped
       }
