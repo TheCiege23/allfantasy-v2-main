@@ -526,7 +526,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
               updatedAt: new Date(),
             },
       }
-      if (seasonContext) {
+      if (seasonContext || pools) {
         const claim = await tx.draftSession.updateMany({ ...sessionMutation, where: { id: session.id, version: session.version, status: session.status, timerEndAt: session.timerEndAt } })
         if (claim.count !== 1) throw new Error('Draft state changed; please retry')
       } else await (tx as any).draftSession.update(sessionMutation)

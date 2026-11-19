@@ -206,24 +206,35 @@ export async function PUT(
     return NextResponse.json({error:poolError ?? 'Assign every team to a division.'},{status:400})
   }
   const patch = {[DIVISION_CONFIG_KEY]:updatedConfig,num_divisions:count,player_pool_scope:poolScope,division_conferences:conferences}
-  if (poolScope === 'league' && readPlayerPoolScope(currentSettings) === 'league') {
-    await prisma.league.update({where:{id:leagueId},data:{settings:toPrismaJsonInput({...currentSettings,...patch})}})
-  } else {
-    try {
-      await prisma.$transaction(async tx=>{
-        await lockPlayerPools(tx,leagueId)
-        const fresh = await tx.league.findUniqueOrThrow({where:{id:leagueId},select:{settings:true}})
-        const next = {...fresh.settings as Record<string,unknown>,...patch}
-        await validateCurrentPoolOwnership(tx,leagueId,next)
-        await tx.league.update({where:{id:leagueId},data:{settings:toPrismaJsonInput(next)}})
-      },{timeout:30000})
-    } catch (error) {
-      return NextResponse.json({error:error instanceof Error ? error.message : 'Unable to change player pools.'},{status:409})
-    }
+  try {
+    await prisma.$transaction(async tx => {
+      await lockPlayerPools(tx, leagueId)
+      const fresh = await tx.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true } })
+      const settings = (fresh.settings as Record<string, unknown> | null) ?? {}
+      if (readPlayerPoolScope(settings) !== readPlayerPoolScope(currentSettings)
+        || JSON.stringify(readDivisionConfig(settings)) !== JSON.stringify(existing)
+        || JSON.stringify(settings.division_conferences ?? []) !== JSON.stringify(currentSettings.division_conferences ?? [])) {
+        throw new Error('Another commissioner changed the division settings. Reload and retry.')
+      }
+      const next = { ...settings, ...patch }
+      if (poolScope !== 'league' || readPlayerPoolScope(settings) !== 'league') {
+        await validateCurrentPoolOwnership(tx, leagueId, next)
+      }
+      await tx.league.update({ where: { id: leagueId }, data: { settings: toPrismaJsonInput(next) } })
+    }, { timeout: 30_000 })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to change player pools.' }, { status: 409 })
   }
 
   // Notify league chat of division changes
   const changes: { field: string; oldValue: string; newValue: string }[] = []
+  const previousScope = readPlayerPoolScope(currentSettings)
+  if (previousScope !== poolScope) {
+    changes.push({ field: 'Player ownership', oldValue: previousScope, newValue: poolScope })
+  }
+  if (poolScope === 'conference' && JSON.stringify(currentSettings.division_conferences ?? []) !== JSON.stringify(conferences)) {
+    changes.push({ field: 'Conference assignments', oldValue: JSON.stringify(currentSettings.division_conferences ?? []), newValue: JSON.stringify(conferences) })
+  }
   if (existing.count !== updatedConfig.count) {
     const label = isSurvivor ? 'Tribes' : 'Divisions'
     changes.push({ field: `Number of ${label}`, oldValue: String(existing.count || 'None'), newValue: String(updatedConfig.count || 'None') })

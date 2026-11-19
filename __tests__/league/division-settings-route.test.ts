@@ -9,7 +9,11 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/league/settingsLockService', () => ({ lockedGroups: h.locked, lockedGroupsForPatch: vi.fn(async () => []) }))
 vi.mock('@/server/services/auditService', () => ({ logAction: h.log }))
 
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.findUnique, update: h.update } } }))
+vi.mock('@/lib/prisma', () => {
+  const league = { findUnique: h.findUnique, findUniqueOrThrow: h.findUnique, update: h.update }
+  const tx = { league, $queryRaw: vi.fn() }
+  return { prisma: { league, $transaction: (run: (db: typeof tx) => unknown) => run(tx) } }
+})
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'commish' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: vi.fn(async () => ({ ok: true })) }))

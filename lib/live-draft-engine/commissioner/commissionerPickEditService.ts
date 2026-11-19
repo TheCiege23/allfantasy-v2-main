@@ -821,7 +821,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
     })
 
     await tx.draftSession.update({
-      where: { id: session.id },
+      where: { id: session.id, ...(pools ? { version: session.version } : {}) },
       data: {
         ...(tradedPicksOut
           ? { tradedPicks: tradedPicksOut as unknown as Prisma.InputJsonValue }
@@ -836,6 +836,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
 
   if (!audit || typeof audit !== 'object' || !('ok' in audit) || (audit as { ok?: unknown }).ok !== true) {
     const err = audit as Error & { status?: number; code?: string; warnings?: Array<{ message: string }> }
+    if (err.code === 'P2025') return { ok: false, status: 409, error: 'The draft changed while editing. Reload and retry.' }
     const status = typeof err.status === 'number' ? err.status : 500
     if (status === 409 && err.code === 'ROSTER_ELIGIBILITY') {
       return {

@@ -128,6 +128,14 @@ describe('soccer can be created', () => {
     vi.restoreAllMocks()
   })
 
+  it.each([['redraft','conference'],['dynasty','division']] as const)('sends the %s commissioner’s %s pool choice to the create API', async (leagueType,playerPoolScope) => {
+    await submitCreateLeagueV2(state({ leagueType, teamCount:250, playerPoolScope, poolDivisionCount:25, poolConferenceCount:10 }))
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))
+    expect(body.conceptSetup).toMatchObject({ playerPoolScope, poolDivisionCount:25 })
+    if (playerPoolScope === 'conference') expect(body.conceptSetup.poolConferenceCount).toBe(10)
+    expect(validateCreatePayload(body).ok).toBe(true)
+  })
+
   it('sends a hockey commissioner’s third-round reversal choice to the create API', async () => {
     await submitCreateLeagueV2(state({ sport: 'NHL', thirdRoundReversal: true, allowMultiTeamManagers: true, scoringPresetId: 'nhl_points' }))
     const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))
