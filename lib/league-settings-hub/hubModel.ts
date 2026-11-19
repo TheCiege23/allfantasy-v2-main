@@ -513,7 +513,7 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
     out.push({
       key: 'rookieOrder',
       label: 'Rookie draft order',
-      description: ro?.enabled === true
+      description: ro?.enabled !== false
         ? 'Set automatically when the regular season ends. Playoff teams go by seed; the champion picks last.'
         : 'Not set automatically. The commissioner sets next season’s order.',
       value: reverseMaxPf ? 'Reverse max points for' : 'Worst to first',

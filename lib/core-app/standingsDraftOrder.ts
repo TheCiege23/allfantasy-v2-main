@@ -16,9 +16,10 @@ import { formatRecord, type StandingsBoard } from './standingsModel'
  *   1. `settings.draft_order_mode === 'weighted_lottery'` — the lottery's own config and odds;
  *   2. `settings.rookie_draft_order.enabled` — worst record first, or fewest points first.
  *
- * Anything else is null and the section is not drawn. A `DynastyLeagueConfig` method alone is NOT a
- * standings rule any more: standings seat the rookie draft only under the automatic order, an AF
- * Commissioner setting that is off by default (lib/rookie-order/automaticRookieOrder.ts).
+ * Anything else is null and the section is not drawn. This reader is handed every kind of league and
+ * cannot tell a dynasty league from a redraft or imported one, so the free default (a dynasty league that
+ * saved nothing is seated worst record first, lib/rookie-order/automaticRookieOrder.ts) is NOT previewed
+ * here: only an order the league saved is.
  *
  * ⚠ THE LOTTERY ODDS ARE THE LOTTERY'S OWN ARITHMETIC (`buildEligibleTeamsWithOdds`), fed this table's
  * order instead of `LeagueTeam`'s stored rank — so the preview and a real run weigh the same way. A

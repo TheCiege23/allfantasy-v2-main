@@ -323,13 +323,18 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
     }
 
-    // Standings seat the draft only under the automatic order — an AF Commissioner setting, off by
-    // default. A configured weighted lottery must have produced a complete draw above.
+    // Standings seat the draft unless the league switched the automatic order off: worst record
+    // first by default, lowest max PF for an AF Commissioner league that chose it
+    // (lib/rookie-order/automaticRookieOrder.ts). A configured weighted lottery must have produced
+    // a complete draw above.
     const method = lotteryLeague
       ? 'weighted_lottery'
       : slotOrder
         ? null
-        : await automaticRookieOrderMethod({ userId: league.userId ?? null, settings: league.settings })
+        : await automaticRookieOrderMethod(
+            { userId: league.userId ?? null, settings: league.settings },
+            { configMethod: dynasty?.rookiePickOrderMethod ?? null },
+          )
     if (!slotOrder && outgoingId && method) {
       const standings = await prisma.redraftRoster.findMany({
         where: { leagueId, seasonId: outgoingId },
