@@ -84,6 +84,11 @@ export type CommissionerLeagueHealthSnapshot = {
   generatedAt: string
   source: CommissionerHealthDataSource
   dataConfidence: CommissionerHealthDataConfidence
+  /**
+   * A league AllFantasy runs. Its "inactive" reads the manager's own last action — the clock the inactive flag is
+   * graded on — so only here does the flag's graded record describe this league's flag (2026-11-20).
+   */
+  nativeLeague?: boolean
   healthScore: number
   /**
    * Passed through verbatim from `monitorLeagueHealth` — this file computes none of it.
@@ -731,6 +736,7 @@ export function buildCommissionerHealthSnapshot(
     generatedAt: now.toISOString(),
     source,
     dataConfidence,
+    nativeLeague,
     healthScore: health.leagueHealthScore,
     engagementScore: health.engagementScore,
     /*

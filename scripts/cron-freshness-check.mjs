@@ -583,6 +583,7 @@ export const PROBES = {
    * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
    * keeps the strong claim in season and self-suppresses out of it.
    */
+  '/api/cron/college-weekly-projections': { heartbeat: 'cron-college-weekly-projections' },
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 
   /*

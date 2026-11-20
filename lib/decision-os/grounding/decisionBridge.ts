@@ -11,6 +11,14 @@ import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
 import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
 import { createCommissionerOsLoaders } from '../commissioner-os'
+import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
+import { inactiveFlagView, type InactiveFlagView } from '@/lib/commissioner-hub/inactiveFlagView'
+
+/** The inactive flag's graded record from the outcome snapshot (memoised by its store). Null on any failure. */
+async function loadInactiveFlagRecord(): Promise<InactiveFlagView | null> {
+  const snapshot = await readAdviceLearningSnapshot().catch(() => null)
+  return inactiveFlagView(snapshot?.inactiveFlags)
+}
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice } from './packet'
@@ -212,7 +220,8 @@ export async function loadCommissionerHealthDecisionSlice(
 
     const result = await runCommissionerHealthDecision(
       { snapshot, userId },
-      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot) },
+      // The inactive flag's graded record (the learning loop, 2026-11-20); the rules use it only in a native league.
+      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot, { inactiveFlags: await loadInactiveFlagRecord() }) },
       // No `shadow` — see the header.
     )
 

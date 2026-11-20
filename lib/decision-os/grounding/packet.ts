@@ -893,6 +893,12 @@ export async function buildDecisionOsGroundingPacket(
   const idpKickerKill = killed('idpKickerValues')
   const rosterValueGradeKill = killed('rosterValueGrade')
   const waiverDecisionKill = killed('waiverDecision')
+  // The +10% push's slices (2026-11-20), each sheddable on its own — see `flags.ts`.
+  const myTeamLineupKill = killed('myTeamLineup')
+  const rosterBoardValuesKill = killed('rosterBoardValues')
+  const pendingTradesKill = killed('pendingTrades')
+  const draftBoardKill = killed('draftBoard')
+  const managerRecordsKill = killed('managerRecords')
 
   const pAssertions =
     leagueId && !importKill
@@ -1043,7 +1049,7 @@ export async function buildDecisionOsGroundingPacket(
    * recorded from here: the lineup tool records it when it answers, and recording twice would grade one call twice.
    */
   const pMyTeamLineup =
-    want.myTeamLineup && leagueId && args.userId
+    want.myTeamLineup && !myTeamLineupKill && leagueId && args.userId
       ? kick(
           'myTeamLineup',
           import('@/lib/chimmy/myTeamLineupGrounding')
@@ -1057,7 +1063,7 @@ export async function buildDecisionOsGroundingPacket(
    * gives goes to `onTradeGrade` as it is given, so the answer check knows it whether or not the model also calls the tool.
    */
   const pPendingTrades =
-    want.pendingTrades && leagueId && args.userId
+    want.pendingTrades && !pendingTradesKill && leagueId && args.userId
       ? kick(
           'pendingTrades',
           import('@/lib/chimmy-trade/pendingTradeDecisionGrounding')
@@ -1075,7 +1081,7 @@ export async function buildDecisionOsGroundingPacket(
    * shorter budget so a slow decision costs the pick line, not the whole board.
    */
   const pDraftBoard =
-    want.draftBoard && leagueId && args.userId
+    want.draftBoard && !draftBoardKill && leagueId && args.userId
       ? kick(
           'draftBoard',
           import('@/lib/chimmy/draftGrounding')
@@ -1091,7 +1097,7 @@ export async function buildDecisionOsGroundingPacket(
    * builder, the same check the tool makes; a locked plan returns no history at all.
    */
   const pManagerRecords =
-    want.managerRecords && leagueId && args.userId
+    want.managerRecords && !managerRecordsKill && leagueId && args.userId
       ? kick(
           'managerRecords',
           import('@/lib/chimmy/managerRecordGrounding')
@@ -1102,7 +1108,7 @@ export async function buildDecisionOsGroundingPacket(
 
   /* The league's value board for a board sport (NBA/MLB/NHL). It needs no roster, so it loads in the first wave. */
   const pBoard =
-    want.values && !marketKill && leagueId && args.userId && isBoardValueSport(args.sport)
+    want.values && !marketKill && !rosterBoardValuesKill && leagueId && args.userId && isBoardValueSport(args.sport)
       ? kick(
           'rosterBoardValues',
           // A board read that throws is a stated gap, never a rejected packet.
@@ -1704,6 +1710,7 @@ export async function buildDecisionOsGroundingPacket(
   /* The roster on the league's value board: the board loaded in the first wave; pricing it is pure and instant. */
   let rosterBoardValues: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
   if (want.values && marketKill && isBoardValueSport(args.sport)) rosterBoardValues = absent<string>(marketKill)
+  else if (want.values && rosterBoardValuesKill && isBoardValueSport(args.sport)) rosterBoardValues = absent<string>(rosterBoardValuesKill)
   else if (want.values && leagueId && args.userId && isBoardValueSport(args.sport)) {
     const board = await pBoard
     if (board) {
@@ -1722,7 +1729,8 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   let myTeamLineup: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
-  if (want.myTeamLineup && leagueId && args.userId) {
+  if (want.myTeamLineup && myTeamLineupKill) myTeamLineup = absent<string>(myTeamLineupKill)
+  else if (want.myTeamLineup && leagueId && args.userId) {
     const out = await pMyTeamLineup
     if (typeof out === 'string') {
       myTeamLineup = present(out, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
@@ -1753,7 +1761,8 @@ export async function buildDecisionOsGroundingPacket(
   importSlice = stamp('importAssertions', importSlice)
   leagueRules = stamp('leagueRules', leagueRules)
   let pendingTrades: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
-  if (want.pendingTrades && leagueId && args.userId) {
+  if (want.pendingTrades && pendingTradesKill) pendingTrades = absent<string>(pendingTradesKill)
+  else if (want.pendingTrades && leagueId && args.userId) {
     const out = await pPendingTrades
     if (out === PENDING_TRADES_FAILED) {
       pendingTrades = absent<string>({
@@ -1771,7 +1780,8 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   let draftBoard: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
-  if (want.draftBoard && leagueId && args.userId) {
+  if (want.draftBoard && draftBoardKill) draftBoard = absent<string>(draftBoardKill)
+  else if (want.draftBoard && leagueId && args.userId) {
     const out = await pDraftBoard
     if (out === DRAFT_BOARD_FAILED) {
       draftBoard = absent<string>({
@@ -1789,7 +1799,8 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   let managerRecords: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
-  if (want.managerRecords && leagueId && args.userId) {
+  if (want.managerRecords && managerRecordsKill) managerRecords = absent<string>(managerRecordsKill)
+  else if (want.managerRecords && leagueId && args.userId) {
     const out = await pManagerRecords
     if (out === MANAGER_RECORDS_FAILED) {
       managerRecords = absent<string>({

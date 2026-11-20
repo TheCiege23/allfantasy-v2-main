@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { EXCLUDE_STORE_TEST_SUBSCRIPTIONS } from "@/lib/monetization/storeTestSubscriptions"
 
 /**
  * Growth over time for the Command Center: signups, entries, pools, active
@@ -287,7 +288,7 @@ export async function getAdminGrowthSeries(now: Date = new Date()): Promise<Admi
     prisma.appUser.findMany({ where: { createdAt: { gte: since } }, select: ts }),
     prisma.worldCupBracketEntry.findMany({ where: { createdAt: { gte: since } }, select: ts }),
     prisma.worldCupBracketChallenge.findMany({ where: { createdAt: { gte: since } }, select: ts }),
-    prisma.userSubscription.findMany({ where: { createdAt: { gte: since } }, select: ts }),
+    prisma.userSubscription.findMany({ where: { createdAt: { gte: since }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS }, select: ts }),
     prisma.bracketPayment.findMany({
       where: { createdAt: { gte: since }, status: { in: COMPLETED_PAYMENT_STATUSES } },
       select: ts,
