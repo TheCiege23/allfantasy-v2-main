@@ -525,11 +525,11 @@ export async function executeSGLiveChop(leagueId: string, periodNumber: number) 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true, userId: true, settings: true } })
   if (!league) throw new Error('League not found.')
   const [rosters, scores, priorScores, pastChops, sealed] = await Promise.all([
-    prisma.roster.findMany({ where: { leagueId }, select: { id: true, playerData: true, redraftRosterId: true, updatedAt: true } }),
-    prisma.teamWeekResult.findMany({ where: { leagueId, season: league.season, week: periodNumber, status: 'final' }, select: { rosterId: true, totalPoints: true } }),
-    prisma.teamWeekResult.findMany({ where: { leagueId, season: league.season, week: periodNumber - 1, status: 'final' }, select: { rosterId: true, totalPoints: true } }),
+    prisma.roster.findMany({ where: { leagueId }, orderBy: { id: 'asc' }, select: { id: true, playerData: true, redraftRosterId: true, updatedAt: true } }),
+    prisma.teamWeekResult.findMany({ where: { leagueId, season: league.season, week: periodNumber, status: 'final' }, orderBy: { rosterId: 'asc' }, select: { rosterId: true, totalPoints: true } }),
+    prisma.teamWeekResult.findMany({ where: { leagueId, season: league.season, week: periodNumber - 1, status: 'final' }, orderBy: { rosterId: 'asc' }, select: { rosterId: true, totalPoints: true } }),
     prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null }, select: { rosterId: true } }),
-    prisma.survivorGuillotinePower.findMany({ where: { leagueId, status: 'sealed' } }),
+    prisma.survivorGuillotinePower.findMany({ where: { leagueId, status: 'sealed' }, orderBy: { id: 'asc' } }),
   ])
   const eliminated = new Set(pastChops.map(c => c.rosterId))
   const active = rosters.filter(r => !eliminated.has(r.id))
