@@ -95,7 +95,7 @@ export function analyzeCreateLeagueCompletion(
   } else {
     const allowedTeams = teamCountOptionsWithImported(
       getTeamCountOptions(state.sport, lt, state.soccerPipeline),
-      state.idpSelected ? 'idp' : lt,
+      lt,
       options.importedTeamCount,
     )
     if (!allowedTeams.includes(state.teamCount)) {

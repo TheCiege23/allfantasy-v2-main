@@ -376,7 +376,7 @@ export function validateCreatePayload(
   const importedCountAccepted =
     options.importedTeamCount != null &&
     options.importedTeamCount === data.teamCount &&
-    isImportedTeamCountAllowed(idpRequested ? 'idp' : formatId, data.teamCount, teamOpts)
+    isImportedTeamCountAllowed(formatId, data.teamCount, teamOpts)
 
   if (!teamOpts.includes(data.teamCount) && !importedCountAccepted) {
     return {

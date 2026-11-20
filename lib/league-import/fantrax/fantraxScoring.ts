@@ -275,7 +275,7 @@ export function parseFantraxSoccerScoring(
  * tight ends 2.5 a catch. The default is subtracted to get the 0.5 that is
  * actually the premium.
  */
-export function fantraxScoringRules(info: FantraxLeagueInfo, sport?: string): FantraxScoringResult {
+export function fantraxScoringRules(info: Pick<FantraxLeagueInfo, 'scoringSystem'>, sport?: string): FantraxScoringResult {
   const configs = readConfigs(info)
   const rules: FantraxScoringRule[] = []
   const gaps: string[] = []

@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { FantraxLeagueMapper } from '@/lib/league-import/adapters/fantrax/FantraxLeagueMapper'
 import type { FantraxImportPayload } from '@/lib/league-import/adapters/fantrax/types'
 import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
-import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
+
+import { createStateFromImportedLeague } from '@/lib/create-league-v2/import-template'
+import { getEffectiveLeagueType } from '@/lib/create-league-v2/state'
+import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
+import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
 import { fantraxStarterSlot } from '@/lib/league-import/fantrax/fantraxProSports'
 import { projectFantraxStandings } from '@/lib/redraft/fantraxNativePresentation'
 import { fantraxCategoryTieWinner, parseFantraxPublicRules } from '@/lib/league-import/fantrax/fantraxPublicRules'
@@ -54,6 +58,21 @@ describe('published Fantrax first-season calendars', () => {
     expect(row).toMatchObject({twos:5,two_missed:3,three_missed:4,ft_missed:2,personal_fouls:2,quad_dbl:1})
     expect(normalizeNbaGameStats({stats:{three_points_made:3}}).stats.three_missed).toBeUndefined()
   })
+  it.each(['dynasty', 'keeper'] as const)('submits a 34-team %s IDP import with its retention rules', async type => {
+    const state = createStateFromImportedLeague({ name: 'Football', sport: 'NFL', leagueType: type,
+      leagueVariant: 'IDP', leagueSize: 34, scoringPresetId: null, draftType: 'snake' })
+    expect(getEffectiveLeagueType(state)).toBe(type)
+    let body: Record<string, unknown> = {}
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      body = JSON.parse(String(init?.body))
+      return Response.json({ success: true, leagueId: 'native' })
+    })
+    try {
+      await submitCreateLeagueV2(state, 'imported', false)
+      expect(body.teamCount).toBe(34)
+      expect(normalizeConceptToFormat(String(body.concept))).toEqual({ formatId: type, aliasTags: ['idp'] })
+    } finally { fetch.mockRestore() }
+  })
   it('preserves an explicit no-playoffs league', () => {
     const input = source('MLB',12,23,26)
     input.settings!.raw.playoffs = { used: false, numPlayoffTeams: 12, firstPlayoffPeriod: 23 }
@@ -76,7 +95,7 @@ describe('published Fantrax first-season calendars', () => {
     const config=(group:string,code:string,points:number) => ({group:{code:group},configs:[{scoringCategory:{code},points}]})
     const rules=fantraxScoringRules({scoringSystem:{type:'HEAD_TO_HEAD_POINTS_BASED',scoringCategorySettings:[
       config('FOOTBALL_OFFENSE','INDIVIDUAL_KICKOFF_RETURN_YARDS',0.05),config('FOOTBALL_DEFENSE','INDIVIDUAL_PUNT_RETURN_YARDS',0.1),
-    ]}} as FantraxLeagueInfo)
+    ]}})
     expect(rules).toEqual({ rules: [{stat_key:'kr_yd',points_value:0.05},{stat_key:'pr_yd',points_value:0.1}],gaps:[] })
   })
   it('keeps the occupied NFL flex slot when an eligible athlete plays several positions', () => {
@@ -94,7 +113,7 @@ describe('published Fantrax first-season calendars', () => {
   })
   it('maps sport-specific weights onto stat keys produced by the game feed', () => {
     const info=(group:string,codes:string[]) => ({scoringSystem:{ scoringCategorySettings:[{group:{code:group},
-      configs:codes.map(code=>({scoringCategory:{code},points:1}))}]}} as FantraxLeagueInfo)
+      configs:codes.map(code=>({scoringCategory:{code},points:1}))}]}})
     const basket=info('BASKETBALL_PLAYER',['INDIVIDUAL_FREE_THROWS_MADE','INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES','INDIVIDUAL_TRIPLE_DOUBLES'])
     const nba=normalizeNbaGameStats({stats:{points:15,rebounds:12,assists:11,free_throws_made:4}}).stats
     expect(fantraxScoringRules(basket,'nba').rules.map(r=>nba[r.stat_key])).toEqual([4,1,1])

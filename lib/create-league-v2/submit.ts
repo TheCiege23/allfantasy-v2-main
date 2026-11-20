@@ -64,11 +64,11 @@ function getEndpoint(state: CreateLeagueV2State): string {
 
 /**
  * Body matches `createLeagueBodySchema` / `validateCreatePayload` on the server.
- * `concept` uses format ids; IDP is sent as `idp` (maps to redraft shell + IDP modifiers server-side).
+ * The IDP aliases preserve the league's retention format and defensive roster settings.
  */
 function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unknown> {
   const lt = getEffectiveLeagueType(state) as LeagueTypeId
-  const concept = state.idpSelected ? 'idp' : lt
+  const concept = state.idpSelected ? (lt === 'dynasty' || lt === 'keeper' ? `${lt}_idp` : 'idp') : lt
 
   const conceptSetup: Record<string, unknown> = {
     ...((lt === 'redraft' || lt === 'dynasty') && state.allowMultiTeamManagers ? { allowMultiTeamManagers: true } : {}),

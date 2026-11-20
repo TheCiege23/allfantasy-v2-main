@@ -41,6 +41,8 @@ const CONCEPT_TO_FORMAT: Record<string, LeagueFormatId> = {
   KING_OF_THE_HILL: 'redraft',
   idp: 'redraft',
   IDP: 'redraft',
+  dynasty_idp: 'dynasty',
+  keeper_idp: 'keeper',
   // Survivor Guilly is a redraft shell whose season rules live in SurvivorGuillotineLeague; the
   // create transaction writes them alongside the league (lib/survivor-guillotine/createFit.ts).
   survivor_guillotine: 'redraft',
@@ -64,7 +66,7 @@ export function normalizeConceptToFormat(rawConcept: string | null | undefined):
   if (lower === 'pirate_vampire' || key === 'PIRATE_VAMPIRE') aliasTags.push('pirate_vampire')
   if (lower === 'royal' || key === 'ROYAL') aliasTags.push('royal')
   if (lower === 'king_of_the_hill' || key === 'KING_OF_THE_HILL') aliasTags.push('king_of_the_hill')
-  if (lower === 'idp' || key === 'IDP') aliasTags.push('idp')
+  if (lower === 'idp' || lower === 'dynasty_idp' || lower === 'keeper_idp') aliasTags.push('idp')
   if (lower === 'survivor_guillotine') aliasTags.push('survivor_guillotine')
 
   return { formatId, aliasTags }

@@ -193,7 +193,7 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
   // A carryover keeps its imported team count (already required above to equal the import's) for
   // the import-flexible types; every other request keeps the catalog list.
   const importedTeamCountAllowed = importedSource != null &&
-    isImportedTeamCountAllowed(catalogConcept, validated.data.teamCount, allowedTeamCounts)
+    isImportedTeamCountAllowed(normalizedConcept?.aliasTags.includes('idp') ? normalizedConcept.formatId : catalogConcept, validated.data.teamCount, allowedTeamCounts)
   if (allowedTeamCounts.length > 0 && !allowedTeamCounts.includes(validated.data.teamCount) && !importedTeamCountAllowed) {
     return NextResponse.json(
       {

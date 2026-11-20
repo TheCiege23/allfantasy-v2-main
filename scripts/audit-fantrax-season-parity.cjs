@@ -60,6 +60,29 @@ async function capture(id) {
   const rulesHtml = await summary.text()
   return { info, standings, periods, rosters, rulesUrl, rulesHtml }
 }
+// A scoreboard can include extra exhibitions and repeat the same scheduled result. Keep their
+// counts visible and compare official schedule games once. Conflicting duplicates fail the audit.
+function scheduledResults(source) {
+  const periods=[], pair=(a,b)=>[a,b].sort().join('|')
+  let unscheduled=0, repeated=0, conflicting=0
+  for(const p of source.periods.filter(p=>p.ended)) {
+    const scheduled=new Set(source.info.matchups.find(w=>w.period===p.period)?.matchupList
+      .filter(m=>m.away?.id && m.home?.id).map(m=>pair(m.away.id,m.home.id)))
+    const games=new Map()
+    for(const m of p.matchups){
+      if(!m.away?.teamId || !m.home?.teamId || !(m.away.gamesPlayed>0 || m.home.gamesPlayed>0))continue
+      const key=pair(m.away.teamId,m.home.teamId)
+      if(!scheduled.has(key)){unscheduled++;continue}
+      const first=games.get(key)
+      if(!first){games.set(key,m);continue}
+      repeated++
+      const straight=first.away.teamId===m.away.teamId
+      if(!close(first.away.score,straight?m.away.score:m.home.score) || !close(first.home.score,straight?m.home.score:m.away.score))conflicting++
+    }
+    periods.push({...p,matchups:[...games.values()]})
+  }
+  return {periods,unscheduled,repeated,conflicting}
+}
 function replayTransport(source,sport,key) {
   const ids=Object.keys(source.info.teamInfo)
   const names=new Map(ids.map((id,i)=>[id,'QA '+key+' team '+(i+1)]))
@@ -200,7 +223,8 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const records=new Map(orig.map(id=>[id,[0,0,0]]))
     const decidedRecords=new Map(orig.map(id=>[id,[0,0,0]]))
     let sourceTiebreaks=0, matchedTiebreaks=0
-    for(const p of source.periods.filter(p=>p.ended)) for(const m of p.matchups) {
+    const scheduled=scheduledResults(source)
+    for(const p of scheduled.periods) for(const m of p.matchups) {
       if(!m.away?.teamId || !m.home?.teamId || !(m.away.gamesPlayed>0 || m.home.gamesPlayed>0))continue
       games++
       const a=external(m.away.teamId),b=external(m.home.teamId)
@@ -262,7 +286,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const screenRecords=displayRanks.filter(({row,source:t})=>row && row.currentRank===t.rank &&
       [row.wins,row.losses,row.ties].join('-')===t.points && (t.totalPointsFor==null?row.pointsFor==null:close(row.pointsFor,t.totalPointsFor))).length
     let screenGames=0,uniqueGames=0
-    for(const p of source.periods.filter(p=>p.ended)){
+    for(const p of scheduled.periods){
       const board=await screen('/api/redraft/matchup?seasonId='+season.id+'&week='+p.period,cookie)
       const fixtures=new Map((board.matchups||[]).map(g=>[[g.homeRoster.teamName,g.awayRoster.teamName].sort().join('|'),g]))
       uniqueGames+=new Set((board.matchups||[]).map(g=>g.id)).size
@@ -280,6 +304,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       season.totalWeeks===Math.max(...source.info.scoringPeriods.map(p=>p.number)) &&
       season.currentWeek===(source.periods.length?source.periods.at(-1).period:0)
     const evidence={index,sport,leagueId,field:league.playoffTeams,playoffStart:league.playoffStartWeek,currentPeriod:season.currentWeek,closed,
+      unscheduledScores:scheduled.unscheduled,repeatedScores:scheduled.repeated,conflictingScores:scheduled.conflicting,
       backfill,teams:teams.length,sourceTeams:orig.length,matchedRecords,matchedRank,availablePF,matchedPF,matchedRebuiltRecords,
       sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,screenRecords,screenGames,uniqueGames,
       games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,policyPass,divisionPass,divisionMatches,simulatedBracket,
@@ -292,7 +317,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     evidence.pass=backfill==='complete' && settingsPass && policyPass && divisionPass && simulatedBracket.pass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
       games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
-      facts.length===games && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
+      facts.length===games && scheduled.conflicting===0 && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
     try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie)}
     catch(error){evidence.native={created:false,reason:String(error.message).slice(0,260)}}
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
@@ -313,6 +338,17 @@ async function main(){
   const passwordHash=await require('bcryptjs').hash(password,10)
   const user=await prisma.appUser.create({data:{username,passwordHash,emailVerified:new Date()},select:{id:true}})
   const cookie=await signIn(username,password)
+  const pro=require('../lib/player-identity/ingestProFantraxIdentities.ts')
+  const college=require('../lib/player-identity/ingestNcaabFantraxIdentities.ts')
+  const refresh={NBA:pro.ingestNbaFantraxIdentities,NHL:pro.ingestNhlFantraxIdentities,NCAAB:college.ingestNcaabFantraxIdentities}
+  for(const sport of new Set(cases.map(([sport])=>sport))){
+    const native=sport==='NFL'?{sleeperId:{not:null}}:{rollingInsightsId:{not:null}}
+    const nativeIdentities=await prisma.playerIdentityMap.count({where:{sport,...native}})
+    const feedPlayers=await prisma.sportsPlayer.count({where:{sport}})
+    const link=refresh[sport] && nativeIdentities ? await refresh[sport]().catch(()=>({error:'Identity refresh failed'})):null
+    const linked=await prisma.playerIdentityMap.count({where:{sport,...native,fantraxId:{not:null}}})
+    console.log('FANTRAX_DIRECTORY '+JSON.stringify({sport,nativeIdentities,feedPlayers,linked,updated:link?.updated||0,refreshError:link?.error||null}))
+  }
   let passed=true
   for(const [i,[sport,id]] of cases.entries()){
     try {if(!await runCase(user.id,sport,id,i,runId,cookie))passed=false}

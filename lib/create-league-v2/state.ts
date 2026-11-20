@@ -477,7 +477,7 @@ export function clearPersistedV2State(): void {
 }
 
 export function getEffectiveLeagueType(state: CreateLeagueV2State): LeagueTypeId | null {
-  if (state.idpSelected) return 'redraft'
+  if (state.idpSelected && state.leagueType !== 'dynasty' && state.leagueType !== 'keeper') return 'redraft'
   return state.leagueType
 }
 

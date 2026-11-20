@@ -34,18 +34,16 @@ export function createStateFromImportedLeague(source: ImportedLeagueTemplateSour
   const rawType = String(source.leagueType ?? '').trim().toLowerCase()
   const idpSelected = (rawType === 'idp' || String(source.leagueVariant ?? '').toLowerCase().includes('idp')) &&
     (sport === 'NFL' || sport === 'NCAAF')
-  const leagueType = idpSelected
-    ? 'redraft'
-    : catalog.concepts.some((concept) => concept.id === rawType && concept.id !== 'idp') &&
-        catalog.allowedSportsByConcept[rawType]?.includes(sport)
-      ? rawType as LeagueTypeId
-      : 'redraft'
+  const leagueType = catalog.concepts.some((concept) => concept.id === rawType && concept.id !== 'idp') &&
+    catalog.allowedSportsByConcept[rawType]?.includes(sport)
+    ? rawType as LeagueTypeId
+    : 'redraft'
   const soccerPipeline = sport === 'SOCCER' ? 'euro' : null
   // A carryover keeps every imported team, so the import's own size is offered for the
   // import-flexible types even when the native list lacks it.
   const teamOptions = teamCountOptionsWithImported(
     getTeamCountOptions(sport, leagueType, soccerPipeline),
-    idpSelected ? 'idp' : leagueType,
+    leagueType,
     source.leagueSize,
   )
   const teamCount = source.leagueSize != null && teamOptions.includes(source.leagueSize)
