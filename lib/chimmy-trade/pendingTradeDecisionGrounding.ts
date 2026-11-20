@@ -3,6 +3,9 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { evaluateStoredTrade } from '@/lib/decision-os/trade/evaluateStoredTrade'
+import { oneWorldPerBatch } from '@/lib/decision-os/trade/sharedWorld'
+import { resolveCanonicalWorld } from '@/lib/decision-os/world'
+import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import type { LoadedTrade, LoadedTradeAsset, TradeRef } from '@/lib/decision-os/trade/tradeRecord'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
@@ -108,6 +111,8 @@ export type PendingTradeDeps = {
   /** Native and provider offers awaiting this user's answer. */
   findStoredOffers: (leagueId: string, userId: string, limit: number) => Promise<StoredPendingOffer[]>
   evaluate: typeof evaluateStoredTrade
+  /** The league's canonical world, loaded ONCE per build and handed to every evaluation as its own copy. */
+  resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
   /** Told the letters the one trade engine gave, so the chat route can hold the answer to them. */
   onGrade?: (grade: ChimmyTradeGrade) => void
 }
@@ -198,6 +203,7 @@ const defaultDeps: PendingTradeDeps = {
   },
   findStoredOffers: (leagueId, userId, limit) => findStoredPendingOffers(leagueId, userId, limit),
   evaluate: evaluateStoredTrade,
+  resolveWorld: (leagueId) => resolveCanonicalWorld(leagueId),
 }
 
 /**
@@ -410,6 +416,13 @@ export async function buildPendingTradeDecisionContext(
   if (proposals.length === 0 && stored.length === 0) return null
 
   /*
+   * One league world for every offer graded below (2026-11-20). Each evaluation re-resolved it — four queries an
+   * offer, three offers in a row, inside the packet's first-wave deadline. Same league, same request: the grades are
+   * unchanged, each evaluation gets its own copy, and a miss is retried rather than shared (`sharedWorld.ts`).
+   */
+  const evaluateDeps = { resolveWorld: oneWorldPerBatch(d.resolveWorld) }
+
+  /*
    * One list across the three sources, the soonest to expire first: those are the ones the user has to answer before
    * they can come back for the rest. An offer with no expiry goes last. The sort is stable, so within a tie each
    * source keeps its own newest-first order.
@@ -448,7 +461,7 @@ export async function buildPendingTradeDecisionContext(
         continue
       }
       try {
-        const r = await d.evaluate({ leagueId, ref: { kind: 'redraft', proposalId: p.id }, userId, surface: 'chimmy-pending' })
+        const r = await d.evaluate({ leagueId, ref: { kind: 'redraft', proposalId: p.id }, userId, surface: 'chimmy-pending' }, evaluateDeps)
         if (!r.ok) {
           lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
           continue
@@ -472,7 +485,7 @@ export async function buildPendingTradeDecisionContext(
       continue
     }
     try {
-      const r = await d.evaluate({ leagueId, ref: o.ref, userId, surface: 'chimmy-pending' })
+      const r = await d.evaluate({ leagueId, ref: o.ref, userId, surface: 'chimmy-pending' }, evaluateDeps)
       if (!r.ok) {
         lines.push(`- ${source} from ${o.from}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
         lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
