@@ -652,11 +652,13 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
+    // A replay must not resurrect a drafted player who was later dropped or traded.
+    // Survivor Guillotine permits roster moves immediately after draft finalization.
     const existingActive = await prisma.redraftRosterPlayer.findFirst({
       where: {
         rosterId: mapping.redraftRoster.id,
         playerId,
-        droppedAt: null,
+        ...(league.leagueVariant === 'survivor_guillotine' ? {} : { droppedAt: null }),
       },
       select: { id: true },
     })
