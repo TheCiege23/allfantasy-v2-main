@@ -31,6 +31,13 @@ import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { ResultsRosterPanel, type ResultsRosterPanelPick, type ResultsRosterPanelTeam } from '@/components/app/draft-room/ResultsRosterPanel'
 import { sportHasByeWeeks } from '@/lib/draft-room/rosterSlotOrder'
+import {
+  buildSleeperPoolStatColumnDefs,
+  formatDraftStatDisplay,
+  getStatValueForDraftPlayer,
+  type DraftStatPlayerSource,
+} from '@/lib/draft-room/draftSportStatColumns'
+import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
 import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
 import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
@@ -251,6 +258,12 @@ interface AvailablePlayer {
   isRookie: boolean
   /* Football bye week from the pool feed (Phase 7). Optional so an older saved mock still restores. */
   byeWeek?: number | null
+  /*
+   * The live room's season stat columns (lib/mock-draft/mockPoolSeasonStats.ts): `display.stats` and,
+   * in football, the season splits. Optional, so a mock saved before them restores with dashes.
+   */
+  display?: { stats?: Record<string, number> | null } | null
+  nflDraftProjectionSplits?: DraftStatPlayerSource['nflDraftProjectionSplits']
   /* Optional so a mock saved before headshots existed still restores. */
   headshotUrl?: string | null
   teamLogoUrl?: string | null
@@ -306,6 +319,43 @@ const SPEED_OPTIONS: Array<{ value: DraftSpeed; label: string }> = [
 
 const FOOTBALL_SCORING_OPTIONS: DraftScoring[] = ['PPR', 'Half PPR', 'Standard']
 const GENERIC_SCORING_OPTIONS: DraftScoring[] = ['Points', 'Categories', 'Standard']
+
+/** Only the numeric stats survive into the saved mock: the columns read numbers and nothing else. */
+function numericStatsFromUnknown(value: unknown): Record<string, number> | null {
+  const record = recordFromUnknown(value)
+  if (!record) return null
+  const out: Record<string, number> = {}
+  for (const [key, v] of Object.entries(record)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[key] = v
+  }
+  return Object.keys(out).length ? out : null
+}
+
+/** NFL offense: points and average, then the two columns that describe the position. */
+const NFL_MOCK_STAT_KEYS: Record<string, readonly string[]> = {
+  QB: ['pts', 'avg', 'pa_yds', 'pa_td'],
+  RB: ['pts', 'avg', 'ru_yds', 'ru_td'],
+  WR: ['pts', 'avg', 'rec', 'rec_yds'],
+  TE: ['pts', 'avg', 'rec', 'rec_yds'],
+}
+
+/**
+ * Up to four of the live room's stat columns (its pool table's own set) for one pool row, by sport
+ * and position — a pitcher gets pitching columns, a goalie goalie ones, a receiver catches and yards.
+ * A missing value is a dash, never a guess.
+ */
+export function mockPoolStatCells(player: Pick<AvailablePlayer, 'position' | 'display' | 'nflDraftProjectionSplits' | 'adp'>, sport: string) {
+  const defs = buildSleeperPoolStatColumnDefs(sport, { position: player.position })
+  const wanted = String(sport).toUpperCase() === 'NFL' ? NFL_MOCK_STAT_KEYS[String(player.position).toUpperCase()] : undefined
+  const picked = wanted ? wanted.flatMap((key) => defs.filter((d) => d.key === key)) : defs
+  return picked
+    .slice(0, 4)
+    .map((column) => ({
+      key: column.key,
+      label: column.label,
+      value: formatDraftStatDisplay(getStatValueForDraftPlayer(player as DraftStatPlayerSource, column), column),
+    }))
+}
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -943,7 +993,8 @@ export default function MockDraftSleeperRoomClient({
     () => tileSignatureChipsByOverall(
       leagueConceptForMock,
       draftState?.picks ?? [],
-      (draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id })),
+      // Mock rows keep age at the top level; their `display` holds only stats, which the chips never read.
+      (draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id, display: null })),
     ),
     [leagueConceptForMock, draftState?.picks, draftState?.availablePlayers],
   )
@@ -1516,6 +1567,9 @@ export default function MockDraftSleeperRoomClient({
           posRank: `${position}${index + 1}`,
           isRookie: raw.isRookie === true,
           byeWeek: numberFromUnknown(raw.byeWeek) ?? numberFromUnknown(raw.bye),
+          display: { stats: numericStatsFromUnknown(recordFromUnknown(raw.display)?.stats) },
+          nflDraftProjectionSplits:
+            (recordFromUnknown(raw.nflDraftProjectionSplits) as DraftStatPlayerSource['nflDraftProjectionSplits']) ?? null,
           age: numberFromUnknown(raw.age),
           classYearLabel: stringFromUnknown(raw.classYearLabel),
           poolType: stringFromUnknown(raw.poolType),
@@ -2467,11 +2521,29 @@ export default function MockDraftSleeperRoomClient({
                         <span data-testid={`mock-draft-player-bye-${player.id}`}> · BYE {player.byeWeek}</span>
                       ) : null}
                     </div>
+                    {/* Phones: the live room's compact stat line. */}
+                    {(() => {
+                      const line = compactDraftPlayerStats(player as unknown as DraftStatPlayerSource, sport, player.position)
+                      return line ? (
+                        <div className="truncate text-[11px] text-white/60 md:hidden" data-testid={`mock-draft-player-stats-line-${player.id}`}>
+                          {line}
+                        </div>
+                      ) : null
+                    })()}
                   </div>
                   {queued ? (
                     <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-black text-orange-200">{mockCopy.queued}</span>
                   ) : null}
                   {player.injuryStatus ? <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span> : null}
+                  {/* Laptop and tablet: the sport's stat columns, each with its own label. */}
+                  <div className="hidden shrink-0 items-center gap-3 md:flex" data-testid={`mock-draft-player-stats-${player.id}`}>
+                    {mockPoolStatCells(player, sport).map((cell) => (
+                      <div key={cell.key} className="flex w-11 flex-col items-end leading-tight">
+                        <span className="text-[11px] uppercase tracking-wide text-white/40">{cell.label}</span>
+                        <span className="font-mono text-[12px] text-white/85">{cell.value}</span>
+                      </div>
+                    ))}
+                  </div>
                   <div className="flex shrink-0 flex-col items-end leading-tight">
                     <span className="font-mono text-[11px] text-white/45" title={systemAdpCellTitle(player.adp != null)} data-testid={`mock-draft-player-adp-${player.id}`}>
                       {player.adp?.toFixed(1) ?? '—'}
