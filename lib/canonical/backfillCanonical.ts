@@ -29,6 +29,7 @@ import { prisma } from '@/lib/prisma'
 import {
   deriveCanonicalPlayerIdentity,
   deriveCanonicalTeamIdentity,
+  legacyCanonicalTeamName,
   normalizePosition,
   normalizeSport,
   type CanonicalMatchStrategy,
@@ -298,19 +299,24 @@ export async function backfillCanonicalTeams(
     try {
       // Find-then-write rather than upsert: both unique constraints below span a nullable
       // `leagueKey`, which Prisma's compound-unique where-input cannot express as null.
-      const found = await prisma.team.findFirst({
+      // Under the folded name, or under the name a pre-2026-11-20 run stored (en dash kept) — which is then
+      // rewritten, so one school can never be created twice for its dash style.
+      const legacy = legacyCanonicalTeamName(row.name)
+      const candidates = await prisma.team.findMany({
         where: {
           sportKey: identity.sportKey,
           leagueKey: identity.leagueKey,
-          normalizedName: identity.normalizedName,
+          normalizedName: { in: [...new Set([identity.normalizedName, legacy])] },
         },
-        select: { id: true },
+        select: { id: true, normalizedName: true },
       })
+      const found = candidates.find((c) => c.normalizedName === identity.normalizedName) ?? candidates[0] ?? null
 
       const team = found
         ? await prisma.team.update({
             where: { id: found.id },
-            data: { canonicalName: row.name, shortName: row.shortName, lastSeenAt: new Date() },
+            data: { canonicalName: row.name, shortName: row.shortName, lastSeenAt: new Date(),
+              ...(found.normalizedName !== identity.normalizedName && candidates.length === 1 ? { normalizedName: identity.normalizedName } : {}) },
             select: { id: true },
           })
         : await prisma.team.create({
