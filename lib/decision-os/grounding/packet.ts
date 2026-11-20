@@ -275,6 +275,14 @@ export interface DecisionOsGroundingPacket {
   draftBoard?: GroundedSlice<string>
 
   /**
+   * Every other manager in the league, one line each — trades made, waiver claims and FAAB left this season, drafts on
+   * file — with the facts-only contract: the exact text Chimmy's `get_manager_record` tool returns with no manager named
+   * (`buildManagerRecordContext`), 2026-11-20 re-score push. Competitive Edge only: without the plan the slice is a
+   * `not_entitled` gap and carries NO history. Asked for on manager questions only.
+   */
+  managerRecords?: GroundedSlice<string>
+
+  /**
    * NBA / MLB / NHL: the asker's roster on the league's own value board — the trade grade's price, rest-of-season value
    * over the best free agent (`rosterBoardValues.ts`). These sports have no market slice, so until 2026-11-20 their
    * values reached Chimmy only through a per-player tool call. Asked for whenever values are; NFL is not_requested.
@@ -331,6 +339,8 @@ const DRAFT_BOARD_FAILED = '__draft_board_failed__' as const
 const DRAFT_BOARD_NONE = '__draft_board_none__' as const
 const NO_DRAFT_BOARD = 'This league has no draft session in AllFantasy, so there is no draft board to describe.'
 const DRAFT_BOARD_PICK_BUDGET_MS = 1500
+/** `managerRecords`: the builder threw. (A locked plan is not a failure — it is a `not_entitled` gap.) */
+const MANAGER_RECORDS_FAILED = '__manager_records_failed__' as const
 
 /** A league using none of the commissioner tools — not a gap, so it is filed the silent way. */
 const NO_LEAGUE_OFFICE: GroundingGap = {
@@ -670,6 +680,8 @@ export interface GroundingPacketArgs {
      * question comes from inside the draft room, which already hands the tool loop the same board.
      */
     draftBoard?: boolean
+    /** Every leaguemate's record, facts only (default OFF). On manager questions only; Competitive Edge only. */
+    managerRecords?: boolean
   }
   /**
    * Receives the waiver engine's claims when `want.waiverDecision` runs it — the side channel Chimmy
@@ -1071,6 +1083,20 @@ export async function buildDecisionOsGroundingPacket(
             // ⚠ The builder's null means "this league has no draft"; `kick`'s null means "missed the deadline".
             .then((text): string | typeof DRAFT_BOARD_NONE => text ?? DRAFT_BOARD_NONE)
             .catch(() => DRAFT_BOARD_FAILED),
+        )
+      : Promise.resolve(undefined)
+
+  /*
+   * Leaguemates' records, on manager questions. First wave, under the packet's deadline. The plan is checked inside the
+   * builder, the same check the tool makes; a locked plan returns no history at all.
+   */
+  const pManagerRecords =
+    want.managerRecords && leagueId && args.userId
+      ? kick(
+          'managerRecords',
+          import('@/lib/chimmy/managerRecordGrounding')
+            .then((m) => m.buildManagerRecordContext({ leagueId, userId: args.userId!, manager: null }))
+            .catch(() => MANAGER_RECORDS_FAILED),
         )
       : Promise.resolve(undefined)
 
@@ -1762,6 +1788,28 @@ export async function buildDecisionOsGroundingPacket(
     // A read still running at the deadline is stamped late below.
   }
 
+  let managerRecords: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.managerRecords && leagueId && args.userId) {
+    const out = await pManagerRecords
+    if (out === MANAGER_RECORDS_FAILED) {
+      managerRecords = absent<string>({
+        reason: 'not_computed',
+        detail: 'The league’s manager records could not be read for this answer.',
+        remedy: 'Do not describe any manager’s history; the manager-record tool reads it directly.',
+      })
+    } else if (out && typeof out === 'object') {
+      // 🛑 A locked plan carries NO history into the prompt — only the gap. The tool still shows the plan line if asked.
+      managerRecords = out.locked
+        ? absent<string>({
+            reason: 'not_entitled',
+            detail: 'A leaguemate’s trade, waiver and draft history is part of Competitive Edge, which this user’s plan does not include.',
+            remedy: 'Do not describe any manager’s history or habits. If they ask about one, the manager-record tool shows the plan line.',
+          })
+        : present(out.text, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    }
+    // A read still running at the deadline is stamped late below.
+  }
+
   marketValues = stamp('marketValues', marketValues)
   devyValues = stamp('devyValues', devyValues)
   projections = stamp('projections', projections)
@@ -1769,6 +1817,7 @@ export async function buildDecisionOsGroundingPacket(
   myTeamLineup = stamp('myTeamLineup', myTeamLineup)
   pendingTrades = stamp('pendingTrades', pendingTrades)
   draftBoard = stamp('draftBoard', draftBoard)
+  managerRecords = stamp('managerRecords', managerRecords)
   rosterBoardValues = stamp('rosterBoardValues', rosterBoardValues)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
@@ -1800,6 +1849,7 @@ export async function buildDecisionOsGroundingPacket(
     ['myTeamLineup', myTeamLineup as GroundedSlice<unknown>],
     ['pendingTrades', pendingTrades as GroundedSlice<unknown>],
     ['draftBoard', draftBoard as GroundedSlice<unknown>],
+    ['managerRecords', managerRecords as GroundedSlice<unknown>],
     ['rosterBoardValues', rosterBoardValues as GroundedSlice<unknown>],
   ]
 
@@ -1825,6 +1875,7 @@ export async function buildDecisionOsGroundingPacket(
     myTeamLineup,
     pendingTrades,
     draftBoard,
+    managerRecords,
     rosterBoardValues,
     rosterValueGrade,
     gaps: collectGaps(slices),

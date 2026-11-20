@@ -65,6 +65,7 @@ type IntentDerivedWant = Required<
     | 'myTeamLineup'
     | 'pendingTrades'
     | 'draftBoard'
+    | 'managerRecords'
   >
 >
 
@@ -94,6 +95,11 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * draft board tool; the route turns it off inside the draft room, which already hands the loop that board.
      */
     draftBoard: intent === 'draft',
+    /*
+     * Every leaguemate's record, facts only, on a manager question (2026-11-20) — the manager-record tool's league
+     * summary. Competitive Edge only: the builder checks the plan and a locked plan puts no history in the packet.
+     */
+    managerRecords: intent === 'manager_psychology',
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *

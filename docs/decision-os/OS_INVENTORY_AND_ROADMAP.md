@@ -242,6 +242,13 @@ viewer's (`dynastyHealthReads.ts`), so a league-scoped entry would tell a co-com
 Commissioner access is still proved on every request before the read. Not done: no scheduled warm (nothing shows one
 is needed at a five-minute TTL), and the hub screen still builds its own snapshot live.
 
+**Manager Psychology (facts only), 2026-11-20 — leaguemates' records are in the packet, behind the plan.** They
+reached Chimmy only through the paid `get_manager_record` tool, so a manager question the model did not route to the
+tool was answered without them. A manager question now asks for a `managerRecords` slice: the exact text that tool
+returns with no manager named — one line per leaguemate (trades, waiver claims and FAAB this season, drafts on file)
+under its facts-only contract. 🛑 Competitive Edge only, checked inside the builder the tool uses: a locked plan puts NO
+history in the packet, only a `not_entitled` gap, and the tool still shows the plan line if they ask.
+
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
 

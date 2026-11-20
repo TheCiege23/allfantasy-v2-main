@@ -26,11 +26,12 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
    * `optimizeLineup`; the psychology one had no renderer. An exact key set fails the moment either
    * is re-added, which a pair of `toBe(false)` assertions could not do.
    */
-  it('the router decides exactly six slices', () => {
+  it('the router decides exactly seven slices', () => {
     for (const intent of ALL_INTENTS) {
       expect(Object.keys(deriveWantFromIntent(intent)).sort()).toEqual([
         'commissionerHealthDecision',
         'draftBoard',
+        'managerRecords',
         'myTeamLineup',
         'pendingTrades',
         'rosterValueGrade',
@@ -70,10 +71,12 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('manager_psychology turns on nothing', () => {
+  // 2026-11-20: a manager question carries every leaguemate's record, facts only, behind Competitive Edge.
+  it('manager_psychology turns on managerRecords, and nothing else; no other intent does', () => {
     const w = deriveWantFromIntent('manager_psychology')
-    expect(w.commissionerHealthDecision).toBe(false)
-    expect(w.rosterValueGrade).toBe(false)
+    expect(w.managerRecords).toBe(true)
+    expect(Object.entries(w).filter(([, v]) => v).map(([k]) => k)).toEqual(['managerRecords'])
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'manager_psychology')) expect(deriveWantFromIntent(intent).managerRecords).toBe(false)
   })
 
   /**
