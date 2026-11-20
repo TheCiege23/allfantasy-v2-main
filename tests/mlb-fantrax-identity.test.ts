@@ -29,11 +29,11 @@ describe('MLB Fantrax native identity links', () => {
   it('links a player who changed club only when the name is unique on both sides and the role fits (Dillon Tate)', () => {
     const tate = row('tate', 'Dillon Tate', 'TORONTO BLUE JAYS', 'P')
     const ref = { fantraxId: 't', name: 'Tate, Dillon', team: 'LAA', position: 'RP' }
-    expect(planMlbFantraxIdentityLinks([ref], [tate]).links).toEqual([{ id: 'tate', fantraxId: 't', rollingInsightsId: 'ri-tate' }])
+    expect(planMlbFantraxIdentityLinks([ref], [tate], { fullDirectory: true }).links).toEqual([{ id: 'tate', fantraxId: 't', rollingInsightsId: 'ri-tate' }])
     // A namesake anywhere (even linked), a second Fantrax Dillon Tate (even unattached), or a hitter: refused.
-    expect(planMlbFantraxIdentityLinks([ref], [tate, { ...row('t2', 'Dillon Tate', 'ATL', 'P'), fantraxId: 'taken' }]).links).toEqual([])
-    expect(planMlbFantraxIdentityLinks([ref, { ...ref, fantraxId: 'u', team: '(N/A)' }], [tate]).links.filter((l) => l.fantraxId === 't')).toEqual([])
-    expect(planMlbFantraxIdentityLinks([{ ...ref, position: 'CF' }], [tate]).links).toEqual([])
+    expect(planMlbFantraxIdentityLinks([ref], [tate, { ...row('t2', 'Dillon Tate', 'ATL', 'P'), fantraxId: 'taken' }], { fullDirectory: true }).links).toEqual([])
+    expect(planMlbFantraxIdentityLinks([ref, { ...ref, fantraxId: 'u', team: '(N/A)' }], [tate], { fullDirectory: true }).links.filter((l) => l.fantraxId === 't')).toEqual([])
+    expect(planMlbFantraxIdentityLinks([{ ...ref, position: 'CF' }], [tate], { fullDirectory: true }).links).toEqual([])
   })
   it('reads the registry\'s generic "IF" as a hitter (Danny Serretti 2B / IF)', () => {
     expect(planMlbFantraxIdentityLinks([{ fantraxId: 's', name: 'Serretti, Danny', team: 'ARI', position: '2B' }],

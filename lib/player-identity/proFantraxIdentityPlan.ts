@@ -185,7 +185,14 @@ export function proTeamCode(sport: ProFantraxSport, label: string | null | undef
 }
 
 /** Exact normalized name + recognized current team + compatible role; never a name-only guess. */
-export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: FantraxPlayerRef[], identities: ProIdentityRow[]) {
+/**
+ * `fullDirectory`: the caller passes Fantrax's WHOLE player directory for the sport (only the scheduled
+ * ingest does). The unattached, team-surname-initial and changed-club rules rest on "Fantrax lists this name
+ * once", which a partial list cannot prove — the ESPN MLB matcher and the points grader's one-league roster
+ * claims both reuse this planner with partial lists, and keep the strict rules only.
+ */
+export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: FantraxPlayerRef[], identities: ProIdentityRow[], opts: { fullDirectory?: boolean } = {}) {
+  const full = opts.fullDirectory === true
   const rules = RULES[sport]
   const teamAliases = TEAM_ALIASES[sport]
   const byName = new Map<string, ProIdentityRow[]>()
@@ -218,7 +225,7 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
      * NBA and NHL only: MLB's directory carries 7,000+ unattached minor leaguers and unsigned players, and
      * `tests/mlb-fantrax-identity.test.ts` pins its "(N/A) never links" decision deliberately.
      */
-    if ((sport === 'NBA' || sport === 'NHL') && ref.fantraxId && !sourceTeam && compact(ref.team ?? '') === 'na' && sourceRoles.length) {
+    if (full && (sport === 'NBA' || sport === 'NHL') && ref.fantraxId && !sourceTeam && compact(ref.team ?? '') === 'na' && sourceRoles.length) {
       const named = byName.get(key) ?? []
       const only = named.length === 1 && refNames.get(key) === 1 ? named.filter(row => row.rollingInsightsId && rules.roles(row.position).some(role => sourceRoles.includes(role))) : []
       if (only.length !== 1) { unmatched++; continue }
@@ -246,7 +253,7 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
      * Alvarado in MLB, and Keith with Kai Andrews in soccer: Fantrax lists whole organisations under one
      * club code there, so "the only Lopez on the team" is not true on its side. All 28 NBA/NHL pairs held.
      */
-    if ((sport === 'NBA' || sport === 'NHL') && !candidates.length && !(byName.get(key) ?? []).length) {
+    if (full && (sport === 'NBA' || sport === 'NHL') && !candidates.length && !(byName.get(key) ?? []).length) {
       const split = nameSplit(ref.name)
       const onTeam = split ? (bySurname.get(split.last) ?? []).filter(row => teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam) : []
       const other = onTeam.length === 1 ? nameSplit(onTeam[0]!.canonicalName) : null
@@ -260,7 +267,7 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
      * name never moves — and only for a compatible role. MLB and soccer only: NBA/NHL keep the pinned
      * "never crosses a team" decision (`tests/fantrax-nba-nhl-import.test.ts`), and had no such case left.
      */
-    if (!candidates.length && (sport === 'MLB' || sport === 'SOCCER')) {
+    if (full && !candidates.length && (sport === 'MLB' || sport === 'SOCCER')) {
       const named = byName.get(key) ?? []
       if (named.length === 1 && refNames.get(key) === 1 && named[0]!.rollingInsightsId && rules.roles(named[0]!.position).some(role => sourceRoles.includes(role))) candidates = named
     }
