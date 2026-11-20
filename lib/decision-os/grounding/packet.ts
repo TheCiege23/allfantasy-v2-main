@@ -611,7 +611,7 @@ export interface GroundingPacketArgs {
   week?: number | null
   /** Market value format, when the question touches player prices. */
   valueFormat?: { format: string; qbFormat: string } | null
-  /** The user's question, so the commissioner-intelligence intent gate can run. */
+  /** The user's question. Which slices it calls for is `want`; commissioner intelligence follows `commissionerHealthDecision`. */
   question?: string | null
   /** This league's IDP rules, so projections arrive rescored. Null = canonical. */
   leagueIdpRules?: Record<string, number> | null
@@ -1116,14 +1116,24 @@ export async function buildDecisionOsGroundingPacket(
         )
       : Promise.resolve(null)
 
+  /*
+   * 🛑 ROUTED BY THE SAME QUESTION AS THE HEALTH DECISION (2026-11-20). This read used to decide for itself, with its
+   * own word list (`detectCommissionerIntelligenceIntent`: `inactiv`, `pending`, `recent`, `what…happen`), while the
+   * health decision beside it was routed by the chat's intent. Two routers for one question, and they disagreed both
+   * ways: "which managers are inactive?" got the activity log but never the health decision (the one the inactive-flag
+   * record now tunes), and "any pending trade offers?" — a trade question — ran the commissioner's activity log.
+   * Both now follow `want.commissionerHealthDecision`, which the chat sets on a commissioner question; the word list
+   * still serves the older `/api/chimmy` route, which has no intent router.
+   */
   const pCommissioner =
-    leagueId && args.userId && !commishKill
+    want.commissionerHealthDecision && leagueId && args.userId && !commishKill
       ? kick(
           'commissionerIntelligence',
           resolveCommissionerGroundingOutcome({
             leagueId,
             userId: args.userId,
             question: args.question ?? null,
+            commissionerFlag: true,
           }).catch((): CommissionerGroundingOutcome => ({ status: 'unavailable' })),
         )
       : null
@@ -1465,8 +1475,8 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Commissioner intelligence (4.4): the one slice with its own access rule ────────────────
   let commissionerIntelligence: GroundedSlice<string> = absent(NOT_REQUESTED)
-  if (leagueId && args.userId && commishKill) commissionerIntelligence = absent(commishKill)
-  else if (leagueId && args.userId) {
+  if (want.commissionerHealthDecision && leagueId && args.userId && commishKill) commissionerIntelligence = absent(commishKill)
+  else if (want.commissionerHealthDecision && leagueId && args.userId) {
     const outcome = (await pCommissioner) ?? ({ status: 'unavailable' } as CommissionerGroundingOutcome)
 
     if (outcome.status === 'ok') {
