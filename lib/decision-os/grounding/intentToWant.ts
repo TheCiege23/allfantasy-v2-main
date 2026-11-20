@@ -63,6 +63,7 @@ type IntentDerivedWant = Required<
     | 'rosterValueGrade'
     | 'waiverDecision'
     | 'myTeamLineup'
+    | 'pendingTrades'
   >
 >
 
@@ -81,6 +82,12 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * lineup tool reads it, so a "who should I start" turn has the answer in its packet as well as its tool.
      */
     myTeamLineup: intent === 'start_sit',
+    /*
+     * The trades waiting on the asker, graded, on a trade question (2026-11-20). The trade tool reads the same inbox
+     * with the same engine; in the packet, "should I take this offer?" has the offer and its grade without the model
+     * having to think of calling it.
+     */
+    pendingTrades: intent === 'trade',
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *

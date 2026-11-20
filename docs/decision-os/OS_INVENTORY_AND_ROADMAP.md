@@ -212,6 +212,18 @@ CONFIDENCE (never the ranking, scores or bid) by half the shrunk gap, ±10 at mo
 only where the ledger's measure IS the league's own. Everywhere else nothing changes. Expect no movement until about
 three weeks of claims have been graded.
 
+**Trade OS, 2026-11-20 — the trades waiting on you are in the packet, graded.** On the tool-loop path (the default)
+Chimmy saw pending offers only if the model called `get_league_trade_activity`; the block in the fallback prompt never
+reached it. A trade question now asks for a `pendingTrades` slice: the exact text that tool returns for "Incoming
+proposals" (`buildPendingTradeDecisionContext` — native, redraft and synced Sleeper offers, the soonest-expiring three
+graded by the one trade engine). That is not the "invented proposal" `packet.ts` rules out: it reads the offers that
+exist. Every letter it gives is pushed into the same list the trade tools fill (`toolContext.tradeGrades`), so the
+letter check accepts an answer quoting the packet. "Nothing waiting" is stated only when both reads finished; a
+builder that throws is a gap that tells Chimmy not to say either way; a late read is stamped late, never "nothing".
+⚠ Still not done, deliberately: trade letters are not moved by the ledger (`engineRecord.ts`), the offer sweep stays
+Sleeper-only (no other provider contract carries pending offers — `contracts/`), and `tradeSettingsSource` remains
+unread rather than warmed (warming an entry nobody reads is the waste retired on 2026-09-06).
+
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
 

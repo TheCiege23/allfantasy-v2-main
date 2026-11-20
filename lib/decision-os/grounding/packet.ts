@@ -41,6 +41,7 @@ import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } fro
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { stampLineupSlots, starterSlotsFromRules } from './stampLineupSlots'
 import type { ImportAssertions } from '../import/assertions'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import type { ProjectionFact } from '../projection/facts'
 import type { ValueLookup } from '../value/contract'
 
@@ -228,7 +229,8 @@ export interface DecisionOsGroundingPacket {
    * 🛑 TRADE IS DELIBERATELY ABSENT. `decideTradeEvaluate` requires a `TradeProposalContext` — a
    * trade decision is PROPOSAL-scoped, and a general turn ("how does my roster look?") contains no
    * proposal. Adding a trade slice here would mean inventing one. The proposal-scoped path already
-   * exists at `lib/chimmy-trade/pendingTradeDecisionGrounding.ts`.
+   * exists at `lib/chimmy-trade/pendingTradeDecisionGrounding.ts` — and its output, the trades that
+   * really ARE waiting on the asker, is the `pendingTrades` slice below. That invents nothing.
    */
   waiverDecision?: GroundedSlice<DecisionFact>
   commissionerHealthDecision?: GroundedSlice<DecisionFact>
@@ -255,6 +257,14 @@ export interface DecisionOsGroundingPacket {
    * Asked for on lineup questions only; bounded by the packet's deadline.
    */
   myTeamLineup?: GroundedSlice<string>
+
+  /**
+   * The trades waiting on the asker in this league, each graded by the one trade engine — the exact text Chimmy's
+   * `get_league_trade_activity` tool returns for "Incoming proposals" (`buildPendingTradeDecisionContext`), so the
+   * two can never disagree (2026-11-20 re-score push). Asked for on trade questions only. Not a trade DECISION: no
+   * proposal is invented — these are the offers that exist.
+   */
+  pendingTrades?: GroundedSlice<string>
 
   /**
    * NBA / MLB / NHL: the asker's roster on the league's own value board — the trade grade's price, rest-of-season value
@@ -301,6 +311,12 @@ const NOT_REQUESTED: GroundingGap = {
   detail: 'This was not part of the question, so it was not assembled.',
   remedy: 'Ask about it and it will be gathered.',
 }
+
+/** `pendingTrades` sentinels: the builder threw, or both reads finished and nothing is waiting. */
+const PENDING_TRADES_FAILED = '__pending_trades_failed__' as const
+const PENDING_TRADES_NONE = '__pending_trades_none__' as const
+const NO_PENDING_TRADES =
+  'No trade offers are waiting on you in this league (AllFantasy proposals and the synced Sleeper offers were both read).'
 
 /** A league using none of the commissioner tools — not a gap, so it is filed the silent way. */
 const NO_LEAGUE_OFFICE: GroundingGap = {
@@ -629,6 +645,12 @@ export interface GroundingPacketArgs {
      * optimizer My Team already runs, read the same way the lineup tool reads it.
      */
     myTeamLineup?: boolean
+    /**
+     * The trades waiting on the asker, graded (default OFF). On trade questions only: up to three offers are graded,
+     * which is real work, so it is opt-in and races the packet's deadline — a late read is a gap for this slice alone
+     * and the trade tool still answers.
+     */
+    pendingTrades?: boolean
   }
   /**
    * Receives the waiver engine's claims when `want.waiverDecision` runs it — the side channel Chimmy
@@ -636,6 +658,12 @@ export interface GroundingPacketArgs {
    * see `WaiverDecisionBridgeArgs.onClaims`.
    */
   onWaiverClaims?: WaiverDecisionBridgeArgs['onClaims']
+  /**
+   * Receives every letter the trade engine gave while building `pendingTrades` — the same channel the trade tools
+   * fill (`ChimmyToolContext.tradeGrades`), so an answer quoting a letter from the packet passes the letter check
+   * (`lib/chimmy/tradeGradeCheck.ts`). Never part of the packet or the prompt.
+   */
+  onTradeGrade?: (grade: ChimmyTradeGrade) => void
 }
 
 /**
@@ -992,6 +1020,24 @@ export async function buildDecisionOsGroundingPacket(
             .catch(() => ({ fallback: 'no_my_team' as const })),
         )
       : Promise.resolve(null)
+
+  /*
+   * The trades waiting on the asker, on trade questions. First wave, under the packet's deadline. Every letter the engine
+   * gives goes to `onTradeGrade` as it is given, so the answer check knows it whether or not the model also calls the tool.
+   */
+  const pPendingTrades =
+    want.pendingTrades && leagueId && args.userId
+      ? kick(
+          'pendingTrades',
+          import('@/lib/chimmy-trade/pendingTradeDecisionGrounding')
+            .then((m) =>
+              m.buildPendingTradeDecisionContext(leagueId, args.userId!, args.onTradeGrade ? { onGrade: args.onTradeGrade } : {}),
+            )
+            // ⚠ The builder's null means "nothing waiting"; `kick`'s null means "missed the deadline". Never the same.
+            .then((text): string | typeof PENDING_TRADES_NONE => text ?? PENDING_TRADES_NONE)
+            .catch(() => PENDING_TRADES_FAILED),
+        )
+      : Promise.resolve(undefined)
 
   /* The league's value board for a board sport (NBA/MLB/NHL). It needs no roster, so it loads in the first wave. */
   const pBoard =
@@ -1645,11 +1691,30 @@ export async function buildDecisionOsGroundingPacket(
   }
   importSlice = stamp('importAssertions', importSlice)
   leagueRules = stamp('leagueRules', leagueRules)
+  let pendingTrades: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.pendingTrades && leagueId && args.userId) {
+    const out = await pPendingTrades
+    if (out === PENDING_TRADES_FAILED) {
+      pendingTrades = absent<string>({
+        reason: 'not_computed',
+        detail: 'The trade inbox could not be read for this answer.',
+        remedy: 'Do not say whether trades are waiting; the trade tool reads the inbox directly.',
+      })
+    } else if (out === PENDING_TRADES_NONE) {
+      // The reads finished and found nothing (an unreadable inbox comes back as text saying so, never as none).
+      pendingTrades = present(NO_PENDING_TRADES, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    } else if (typeof out === 'string') {
+      pendingTrades = present(out, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    }
+    // A read still running at the deadline is stamped late below.
+  }
+
   marketValues = stamp('marketValues', marketValues)
   devyValues = stamp('devyValues', devyValues)
   projections = stamp('projections', projections)
   rosterProjections = stamp('rosterProjections', rosterProjections)
   myTeamLineup = stamp('myTeamLineup', myTeamLineup)
+  pendingTrades = stamp('pendingTrades', pendingTrades)
   rosterBoardValues = stamp('rosterBoardValues', rosterBoardValues)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
@@ -1679,6 +1744,7 @@ export async function buildDecisionOsGroundingPacket(
       : []),
     ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
     ['myTeamLineup', myTeamLineup as GroundedSlice<unknown>],
+    ['pendingTrades', pendingTrades as GroundedSlice<unknown>],
     ['rosterBoardValues', rosterBoardValues as GroundedSlice<unknown>],
   ]
 
@@ -1702,6 +1768,7 @@ export async function buildDecisionOsGroundingPacket(
     idpKickerValues,
     rosterProjections,
     myTeamLineup,
+    pendingTrades,
     rosterBoardValues,
     rosterValueGrade,
     gaps: collectGaps(slices),

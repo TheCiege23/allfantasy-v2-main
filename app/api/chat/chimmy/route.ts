@@ -2247,6 +2247,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const waiverClaimsSeen: { claims: Parameters<typeof recordChatWaiverAdvice>[0]['claims'] | null } = {
     claims: null,
   }
+  /*
+   * Every trade letter the engine gives while the packet grades the asker's pending offers (`pendingTrades`,
+   * 2026-11-20). The SAME array the tool loop's context collects into, so an answer quoting a letter from the packet
+   * passes the letter check (`lib/chimmy/tradeGradeCheck.ts`) exactly as one quoting the trade tool does.
+   */
+  const packetTradeGrades: ChimmyTradeGrade[] = []
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueSnapshot && userId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
@@ -2306,6 +2312,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            */
           onWaiverClaims: (claims) => {
             waiverClaimsSeen.claims = claims
+          },
+          onTradeGrade: (grade) => {
+            packetTradeGrades.push(grade)
           },
         })
           .then((packet) => {
@@ -3245,7 +3254,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: packetTradeGrades, faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
     /*
      * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
      * handed to the loop, instead of costing the model a tool round trip first — which is several
