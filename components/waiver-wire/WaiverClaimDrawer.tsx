@@ -9,6 +9,7 @@ import {
   normalizePriorityOrder,
   parseOptionalNumber,
 } from "@/lib/waiver-wire/WaiverClaimFlowController"
+import { useHoldUnsavedWork } from "@/lib/core-app/unsavedWork"
 
 type RosterOption = { id: string; name?: string | null }
 
@@ -51,6 +52,9 @@ export default function WaiverClaimDrawer({
       setSubmitting(false)
     }
   }, [open])
+
+  // A claim being composed (drop, bid, priority): no deploy reload while it is (lib/core-app/unsavedWork).
+  useHoldUnsavedWork(open && !!player)
 
   if (!open || !player) return null
 
