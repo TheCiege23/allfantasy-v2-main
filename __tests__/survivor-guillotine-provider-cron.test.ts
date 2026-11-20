@@ -1,11 +1,11 @@
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest'
 import {NextRequest} from 'next/server'
-const deps=vi.hoisted(()=>({auth:vi.fn(),ingest:vi.fn()}))
+const deps=vi.hoisted(()=>({auth:vi.fn(),ingest:vi.fn(),telemetry:vi.fn(),classified:vi.fn()}))
 vi.mock('@/app/api/cron/_auth',()=>({requireCronAuth:deps.auth}))
-vi.mock('@/lib/production-health/syncJobRunTelemetry',()=>({withSyncJobRun:async(_meta:any,run:any)=>run()}))
+vi.mock('@/lib/production-health/syncJobRunTelemetry',()=>({withSyncJobRun:deps.telemetry}))
 vi.mock('@/lib/survivor-guillotine/providerIngestion',()=>({ingestSGProviderData:deps.ingest}))
 import {GET} from '@/app/api/cron/survivor-guillotine-ingest/route'
-beforeEach(()=>{vi.resetAllMocks();vi.stubEnv('SG_PROVIDER_INGEST_ENABLED','true');deps.auth.mockReturnValue(true);deps.ingest.mockResolvedValue({ok:true,sport:'NFL'})});afterEach(()=>vi.unstubAllEnvs())
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv('SG_PROVIDER_INGEST_ENABLED','true');deps.auth.mockReturnValue(true);deps.ingest.mockResolvedValue({ok:true,sport:'NFL'});deps.telemetry.mockImplementation(async(meta,run,classify)=>{const result=await run();deps.classified(meta.jobName,classify(result));return result})});afterEach(()=>vi.unstubAllEnvs())
 describe('scheduled provider ingress',()=>{
  it('requires cron authorization before calling any provider',async()=>{deps.auth.mockReturnValue(false);expect((await GET(new NextRequest('http://localhost/api/cron/survivor-guillotine-ingest?sport=NFL'))).status).toBe(401);expect(deps.ingest).not.toHaveBeenCalled()})
  it('refuses a disabled feed rather than acknowledging a successful no-op',async()=>{vi.stubEnv('SG_PROVIDER_INGEST_ENABLED','false');expect((await GET(new NextRequest('http://localhost/api/cron/survivor-guillotine-ingest?sport=NFL'))).status).toBe(503);expect(deps.ingest).not.toHaveBeenCalled()})
@@ -21,6 +21,7 @@ describe('combined provider schedule',()=>{
   expect(response.status).toBe(503)
   expect(deps.ingest.mock.calls.map(([arg])=>arg.sport).sort()).toEqual(['NBA','NFL'])
   expect((await response.json()).ok).toBe(false)
+  expect(deps.classified).toHaveBeenCalledWith('cron-survivor-guillotine-provider',expect.objectContaining({status:'failed'}))
  })
  it('requires an explicit sport for a historical period',async()=>{
   const response=await GET(new NextRequest('http://localhost/api/cron/survivor-guillotine-ingest?season=2026'))

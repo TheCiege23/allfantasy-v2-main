@@ -27,10 +27,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result, { status: result.ok ? 200 : 503 })
   }
   // One scheduler slot covers both independent feeds, with separate leases and telemetry.
-  const results = await Promise.allSettled([run('NFL'), run('NBA')])
-  const failures = results.some(result => result.status === 'rejected' || !result.value.ok)
-  return NextResponse.json({ ok: !failures, feeds: results.map((result, index) =>
-    result.status === 'fulfilled' ? result.value : { ok: false, sport: index === 0 ? 'NFL' : 'NBA', error: 'Provider ingestion failed' }) },
-  { status: failures ? 503 : 200 })
+  const combined = await withSyncJobRun(
+    { jobName: 'cron-survivor-guillotine-provider', trigger: 'cron' },
+    async () => {
+      const results = await Promise.allSettled([run('NFL'), run('NBA')])
+      return { ok: results.every(result => result.status === 'fulfilled' && result.value.ok), feeds: results.map((result, index) =>
+        result.status === 'fulfilled' ? result.value : { ok: false, sport: index === 0 ? 'NFL' : 'NBA', error: 'Provider ingestion failed' }) }
+    },
+    result => ({ status: result.ok ? 'success' : 'failed', ...(result.ok ? {} : { errors: ['One or more Survivor provider feeds failed'] }) }),
+  )
+  return NextResponse.json(combined, { status: combined.ok ? 200 : 503 })
 }
 export const POST = GET
