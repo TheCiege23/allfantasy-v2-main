@@ -10,19 +10,22 @@
  *   - PA/G: points allowed per game from the stored regular-season scores (`SportsGame`, weeks 1–18,
  *     one row per game even when two feeds carry it).
  *
- * Fumble recoveries are deliberately LEFT EMPTY. `defense_fumble_recoveries` sums to 28 for one team
- * in 2025 (no defense recovers that many) and disagrees with `fumbles_recoveries`; a column we cannot
- * vouch for shows a dash rather than a confident wrong number.
+ *   - FR: each defender's recoveries read by `playerFumbleRecoveries`, which drops the vendor's
+ *     games-played echo and never adds the two copies of the count. Summing the raw
+ *     `defense_fumble_recoveries` made one 2025 defense look like it recovered 28 fumbles; read
+ *     this way every 2025 team totals 4–12.
  *
  * Fantasy points (PTS / AVG) stay empty too: DST scoring needs per-game points-allowed tiers, and
  * this file only has season totals (see `nflDraftSeasonLine`, which refuses the same).
  */
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { playerFumbleRecoveries } from '@/lib/providers/rollingInsightsFumbleRecoveries'
 
 export interface TeamDefenseLine {
   dst_sacks: number
   dst_interceptions: number
   dst_td: number
+  dst_fumble_recoveries: number
   /** Null when the schedule has no scored games for the team that season. */
   dst_points_allowed_per_game: number | null
   games: number
@@ -37,6 +40,7 @@ export const NFL_DEFENSIVE_POSITIONS = [
 export interface DefenderSeasonRow {
   team: string | null
   stats: unknown
+  gamesPlayed?: number | null
 }
 
 export interface ScoredGameRow {
@@ -55,7 +59,7 @@ export function summarizeTeamDefense(defenders: readonly DefenderSeasonRow[], ga
   const lineFor = (team: string) => {
     let line = out.get(team)
     if (!line) {
-      line = { dst_sacks: 0, dst_interceptions: 0, dst_td: 0, dst_points_allowed_per_game: null, games: 0 }
+      line = { dst_sacks: 0, dst_interceptions: 0, dst_td: 0, dst_fumble_recoveries: 0, dst_points_allowed_per_game: null, games: 0 }
       out.set(team, line)
     }
     return line
@@ -69,6 +73,7 @@ export function summarizeTeamDefense(defenders: readonly DefenderSeasonRow[], ga
     line.dst_sacks += num(s.sacks)
     line.dst_interceptions += num(s.interceptions)
     line.dst_td += num(s.interception_touchdowns) + num(s.fumble_return_touchdowns)
+    line.dst_fumble_recoveries += playerFumbleRecoveries(s, row.gamesPlayed) ?? 0
   }
 
   const allowed = new Map<string, { points: number; games: number }>()
@@ -140,7 +145,7 @@ export async function loadNflTeamDefenseSeason(season: number | string): Promise
         source: 'rolling_insights',
         position: { in: [...NFL_DEFENSIVE_POSITIONS] },
       },
-      select: { team: true, stats: true },
+      select: { team: true, stats: true, gamesPlayed: true },
     }),
     prisma.sportsGame.findMany({
       where: { sport: 'NFL', season: year, week: { gte: 1, lte: 18 }, homeScore: { not: null }, awayScore: { not: null } },

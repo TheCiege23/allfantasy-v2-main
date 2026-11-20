@@ -255,7 +255,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
 
   if (idpRules) {
     idpWeekly = scoreIdpWeekly(input.weeklyRaw ?? [], idpRules, input.recencyHalfLife ?? 4)
-    const seasonExtract = extractIdpComponents(aggregate.components, 'ri_season')
+    const seasonExtract = extractIdpComponents(aggregate.components, 'ri_season', aggregate.gamesPlayed)
     const seasonScored = scoreIdpComponents({ ...seasonExtract, rules: idpRules })
     if (seasonScored && seasonScored.points !== 0) {
       // The season aggregate is a full-season TOTAL, so both the points and the component
