@@ -300,6 +300,12 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
     never 0; unknown games give no week total.
   - A category league has no points: no new rows, and the slice says why (`not_requested`). Access is checked before
     the board is read, as the packet's league-metrics slice does; NFL is untouched.
+- **Chimmy's trade inbox grades up to six offers, not three** (owner's "grade more than 3", 2026-11-20). The block is
+  built inside the packet's first-wave deadline (2,400 ms), and a block that misses it reaches Chimmy as nothing, so
+  the rule is time-bounded rather than a bigger number: the three expiring soonest are always graded, as before, and
+  each further offer (up to six) is started only while the build is inside `EXTRA_GRADING_BUDGET_MS` (1,200 ms). The
+  graded offers are always the soonest-expiring prefix, and the header states exactly how many — never a fixed "3".
+  The shared league world above is what makes the extra offers affordable.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
@@ -313,7 +319,8 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
 | ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
 | ✅ | League-scored projections for every board sport's points leagues (NBA, NHL, MLB, college basketball, soccer) — **owner said yes, done in this change** (below). Category leagues have no points and keep the canonical rows | Projection Chimmy → ✅ (~100) | M |
-| — | **Owner decision:** let graded trades move letters; grade more than 3 pending offers (latency) | Trade Engine | M / S |
+| ✅ | Grade more than 3 pending offers — **owner said yes, done in this change** (below): up to 6, time-bounded inside the packet deadline | Trade, user-visible | S |
+| ⏸ | Let graded trades move letters — **declined for now** (owner's "use your recommendation", 2026-11-20): the letter IS the trade decision, and waivers and start/sit use their records to tune confidence, never to change the call. It needs a record validated as predictive first; the record already shows beside every grade | Trade Engine stays ⚠ | M |
 | — | **Migration:** draft advice learns from graded tips | Draft Engine → ✅ (~100) | L |
 
 **THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
