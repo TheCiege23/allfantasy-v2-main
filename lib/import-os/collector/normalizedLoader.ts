@@ -303,10 +303,11 @@ export async function fetchNormalizedForConnection(
    * contain a score yet.
    *
    * 🛑 PAST WEEKS ARE NEVER DROPPED, WHICH IS WHY THIS IS A CAP. A past week holds a real score,
-   * `TeamPerformance` is the only place it lands from this path, and
-   * `SleeperHistoricalMatchupSyncService` has no scheduled caller — so a week omitted here would
-   * simply stop being refreshed, with nothing behind it. `1..current+1` keeps every played week
-   * and drops only the unplayed tail.
+   * and this path is what keeps it current in both `TeamPerformance` and `dw_matchup_facts`
+   * (`currentSeasonMatchupFacts.ts`). The scheduled history refresh
+   * (`/api/cron/sleeper-historical-refresh`) takes days to lap every league, so a week omitted
+   * here would go stale for that long. `1..current+1` keeps every played week and drops only the
+   * unplayed tail.
    */
   const matchupCap = resolveMatchupWeekCap(seasonInput) ?? undefined
 
