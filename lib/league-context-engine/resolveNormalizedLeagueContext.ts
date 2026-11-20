@@ -4,6 +4,9 @@ import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
+import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { readPlayerPoolScope } from '@/lib/league/player-pools/policy'
 import { normalizeLeagueScoring } from '@/lib/league-context-engine/normalizeScoring'
 import { resolveMatchupPeriod } from '@/lib/league-context-engine/resolvePeriod'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
@@ -205,6 +208,13 @@ export async function resolveNormalizedLeagueContext(
     platformLeagueId: league.platformLeagueId,
     season: league.season,
     leagueStatus: league.status,
+    ...(isNativePlatform(league.platform) ? {
+      nativeCompetitionRules: {
+        weeklyMedian: league.medianGame === true,
+        medianInPlayoffs: readMedianGameInPlayoffs(settings),
+        playerPool: readPlayerPoolScope(settings),
+      },
+    } : {}),
     matchupPeriod,
     scoring,
     roster: {

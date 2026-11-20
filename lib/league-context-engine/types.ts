@@ -151,6 +151,11 @@ export type NormalizedLeagueContext = {
   platformLeagueId: string
   season: number
   leagueStatus: string | null
+  nativeCompetitionRules?: {
+    weeklyMedian: boolean
+    medianInPlayoffs: boolean
+    playerPool: import('@/lib/league/player-pools/policy').PlayerPoolScope
+  }
   matchupPeriod: MatchupPeriodContext
   scoring: NormalizedScoringRules
   roster: {

@@ -12,6 +12,7 @@ export async function buildSelectedLeagueRules(leagueId: string, userId: string)
   if (!rules.ok) return 'The selected league settings could not be verified. Do not describe its rules.'
 
   const { leagueName, season, sport, platform, scoring, roster, waiver, trade, playoff, matchupPeriod, lineupBehavior, flags, importHealth } = rules.context
+  const competition = rules.context.nativeCompetitionRules
   const published = await prisma.leagueStoryline.findFirst({
     where: { leagueId, season, storyType: 'constitution' },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -37,6 +38,12 @@ export async function buildSelectedLeagueRules(leagueId: string, userId: string)
     'Report conflicts explicitly: stored settings describe platform behavior; the published constitution describes written league policy. Missing fields are unverified.',
     'The field names below are internal (scoringModel, tePremiumExtra, pointsByStat keys and the like). Never quote one to the user: say what it means in plain words, such as "a TE premium of 0.5 per catch" or "the schedule is not made yet".',
     'Stored settings: ' + JSON.stringify({ leagueName: sanitizeUntrusted(leagueName), season, sport, platform, scoring: category ? { ...scoringForModel, scoringModel: 'category' } : scoringForModel, roster, waiver, trade, playoff, matchupPeriod, lineupBehavior, flags, lastSyncedAt: importHealth.lastSyncedAt }),
+    ...(competition ? [
+      competition.weeklyMedian
+        ? 'The weekly league-median game is enabled. Each team earns a separate win, loss or tie by comparing its score with the league median. A head-to-head win and a score below the median produce a 1–1 week. It applies during ' + (competition.medianInPlayoffs ? 'the regular season and playoffs.' : 'the regular season.')
+        : 'The weekly league-median game is disabled.',
+      'Player ownership allows one copy of each athlete per ' + competition.playerPool + '. Drafts, waivers and trades use that limit.',
+    ] : []),
     ...(category ? ['Verified league categories: ' + JSON.stringify(category) + '. Evaluate category contributions separately and preserve rate-stat denominators.'] : []),
     ...(published && sections && validVersion
       ? [

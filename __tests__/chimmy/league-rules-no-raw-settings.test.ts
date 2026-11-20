@@ -43,6 +43,7 @@ beforeEach(() => {
       matchupPeriod: null,
       lineupBehavior: null,
       flags: {},
+      nativeCompetitionRules: { weeklyMedian: true, medianInPlayoffs: false, playerPool: 'conference' },
       importHealth: { lastSyncedAt: null },
     },
   })
@@ -61,6 +62,9 @@ describe('get_selected_league_rules', () => {
     expect(out).toContain('"pointsByStat":{"rec":1,"rec_yd":0.1}')
     expect(out).toContain('"receptionFormat":"ppr"')
     expect(out).toContain('"budget":100')
+    expect(out).toContain('weekly league-median game is enabled')
+    expect(out).toContain('1–1 week')
+    expect(out).toContain('one copy of each athlete per conference')
   })
 
   it('still detects category scoring from the blob, server-side', async () => {
