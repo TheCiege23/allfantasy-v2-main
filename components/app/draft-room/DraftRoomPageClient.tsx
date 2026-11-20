@@ -4206,6 +4206,7 @@ export function DraftRoomPageClient({
   const chatPanelNode = useMemo(
     () => (
       <DraftChatDock
+        collapsible={false}
         messages={chatMessagesWithAi}
         onSend={handleSendChat}
         sending={chatSending}
@@ -5521,7 +5522,7 @@ export function DraftRoomPageClient({
     )}
     {showCommissionerModal && isCommissioner && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="Commissioner control center" data-testid="draft-commissioner-overlay">
-        <div className="w-full max-w-md max-h-[90vh] overflow-auto">
+        <div className="w-full max-w-2xl max-h-[90vh] overflow-auto">
           <CommissionerControlCenterModal
             leagueId={leagueId}
             draftStatus={session?.status ?? 'pre_draft'}
@@ -5559,6 +5560,28 @@ export function DraftRoomPageClient({
             teamNameByRosterId={Object.fromEntries(
               (session?.slotOrder ?? []).map((entry) => [entry.rosterId, `${entry.displayName} (slot ${entry.slot})`]),
             )}
+            leagueType={leagueType}
+            teamCount={session?.teamCount ?? 0}
+            seats={(session?.slotOrder ?? []).map((entry) => ({
+              slot: entry.slot,
+              rosterId: entry.rosterId,
+              displayName: entry.displayName,
+              status: aiManagedRosterIds.includes(entry.rosterId)
+                ? ('chimmy' as const)
+                : (session?.autoDraftRosterIds ?? []).includes(entry.rosterId)
+                  ? ('auto' as const)
+                  : (orphanAiStatus?.orphanRosterIds ?? []).includes(entry.rosterId)
+                    ? ('empty' as const)
+                    : ('human' as const),
+            }))}
+            onOpenPickEditor={
+              commissionerCanEditBoard
+                ? (overall) => {
+                    setShowCommissionerModal(false)
+                    openCommissionerPickEditor(overall)
+                  }
+                : undefined
+            }
           />
         </div>
       </div>

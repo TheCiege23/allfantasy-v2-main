@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
 import { isNewVersionReady, subscribeNewVersionReady } from "@/lib/core-app/deployGuard"
 import { musicBus } from "@/components/app-music/musicBus"
+import { hasUnsavedWork } from "@/lib/core-app/unsavedWork"
 
 /**
  * Picks up a new deploy WITHOUT asking — the reader's side of `lib/core-app/deployGuard`.
@@ -92,6 +93,8 @@ export function NewVersionReload() {
       if (document.visibilityState !== "hidden") return
       if (NEVER_AUTO_RELOAD.test(pathRef.current)) return
       if (wouldStopMusic()) return
+      // A trade being built by tapping, or any other work a screen registered (lib/core-app/unsavedWork).
+      if (hasUnsavedWork()) return
       for (const el of typed) if (!el.isConnected) typed.delete(el)
       if (wouldLoseTyping(typed)) return
       reloading = true

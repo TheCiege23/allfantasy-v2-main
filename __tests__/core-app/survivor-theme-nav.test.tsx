@@ -47,15 +47,30 @@ function shell(props: Record<string, unknown>) {
     labels: Array.from(nav.querySelectorAll('.af-nav-label')).map((n) => n.textContent),
     headings: Array.from(nav.querySelectorAll('.af-nav-heading')).map((n) => n.textContent),
     hrefs: Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? ''),
+    tabs: Array.from(nav.querySelectorAll('[data-league-tab]')).map((a) => a.getAttribute('data-league-tab') ?? ''),
+    subtabs: Array.from(container.querySelectorAll('[data-testid=af-subtabs] a')).map((a) => a.getAttribute('href') ?? ''),
   }
+}
+
+/**
+ * Every screen a standard (untheme'd) league reaches: since 2026-11-19 its rail is Sleeper's tabs, and a tab's other
+ * screens are the strip above the screen, so one screen per tab is opened to draw every strip.
+ */
+function standardReach(): Set<string> {
+  const out = new Set<string>()
+  for (const active of ['home', 'my-team', 'matchup', 'trades', 'league-settings']) {
+    const { hrefs, subtabs } = shell({ active })
+    for (const h of [...hrefs, ...subtabs]) out.add(h)
+  }
+  return out
 }
 
 describe('the shell in a Survivor league', () => {
   it('names the tabs after the show, keeps every link, and hides Defense Hub', () => {
-    const standard = shell({})
+    const standard = standardReach()
     const survivor = shell({ leagueTheme: 'survivor' })
 
-    expect(standard.labels).toContain('Defense Hub')
+    expect(standard.has('/core/defense-hub?league=l1')).toBe(true)
     expect(survivor.labels).not.toContain('Defense Hub')
     expect(survivor.hrefs.some((h) => h.startsWith('/core/defense-hub'))).toBe(false)
 
@@ -64,8 +79,8 @@ describe('the shell in a Survivor league', () => {
     }
     expect(survivor.labels).not.toContain('Standings')
     expect(survivor.labels).not.toContain('War Room')
-    // Same screens, same order: only Defense Hub is gone.
-    expect(survivor.hrefs).toEqual(standard.hrefs.filter((h) => !h.startsWith('/core/defense-hub')))
+    // Same screens: only Defense Hub is gone. (A Survivor league keeps its show-named sections rather than the tabs.)
+    expect(new Set(survivor.hrefs)).toEqual(new Set([...standard].filter((h) => !h.startsWith('/core/defense-hub'))))
     // Account-wide entries leave a league's rail (2026-11-15); its one way out keeps its plain name.
     expect(survivor.labels).not.toContain('Settings')
     expect(survivor.labels).not.toContain('Brackets')
@@ -81,8 +96,10 @@ describe('the shell in a Survivor league', () => {
     expect(survivor.headings).not.toContain('This week')
     expect(survivor.root.getAttribute('data-league-theme')).toBe('survivor')
 
+    // A standard league shows the Sleeper tabs instead (lib/core-app/leagueDestinations.ts LEAGUE_TABS).
     const standard = shell({})
-    expect(standard.headings).toContain('League')
+    expect(standard.tabs).toEqual(['matchup', 'team', 'league', 'trade', 'settings'])
+    expect(survivor.tabs).toEqual([])
     expect(standard.root.hasAttribute('data-league-theme')).toBe(false)
   })
 })

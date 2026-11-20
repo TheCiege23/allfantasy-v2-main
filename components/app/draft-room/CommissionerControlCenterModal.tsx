@@ -60,6 +60,13 @@ export type CommissionerControlCenterModalProps = {
   startDraftDisabled?: boolean
   onClose: () => void
   onAction: (action: string, payload?: Record<string, unknown>) => Promise<unknown>
+  /** League concept (redraft, guillotine, survivor...). Options for other league types are hidden. */
+  leagueType?: string | null
+  /** One row per seat for the Managers section. */
+  seats?: Array<{ slot: number; rosterId: string; displayName: string; status: 'human' | 'auto' | 'chimmy' | 'empty' }>
+  /** Opens the room's pick editor on one pick (Fix a pick). */
+  onOpenPickEditor?: (overall: number) => void
+  teamCount?: number
   onSettingsPatch: (patch: Partial<DraftUISettings>) => Promise<void>
   onSaveDevyConfig?: (input: { enabled: boolean; devyRounds: number[] }) => Promise<{ ok?: boolean; error?: string; session?: unknown } | void>
   onSaveC2CConfig?: (input: { enabled: boolean; collegeRounds: number[] }) => Promise<{ ok?: boolean; error?: string; session?: unknown } | void>
@@ -121,6 +128,10 @@ export function CommissionerControlCenterModal({
   commissionerAiDraft = null,
   onSaveCommissionerAiDraft,
   teamNameByRosterId = {},
+  leagueType = null,
+  seats = [],
+  onOpenPickEditor,
+  teamCount = 0,
 }: CommissionerControlCenterModalProps) {
   // What "Set timer" will send. null = Off (0 seconds); starts from the draft's current timer.
   const [pendingTimerSeconds, setPendingTimerSeconds] = useState<number | null>(timerSeconds && timerSeconds > 0 ? timerSeconds : null)
@@ -155,6 +166,14 @@ export function CommissionerControlCenterModal({
   const [undoReason, setUndoReason] = useState('')
   const [undoSubmitting, setUndoSubmitting] = useState(false)
   const [undoError, setUndoError] = useState<string | null>(null)
+  // Phase 4 (2026-11-19): Fix a pick, Penalties and Reset.
+  const [fixRound, setFixRound] = useState(1)
+  const [fixPick, setFixPick] = useState(1)
+  const [forfeitRosterId, setForfeitRosterId] = useState('')
+  const [forfeitRound, setForfeitRound] = useState(1)
+  const [forfeitReason, setForfeitReason] = useState('')
+  const [forfeitMessage, setForfeitMessage] = useState<string | null>(null)
+  const [resetText, setResetText] = useState('')
 
   useEffect(() => {
     if (commissionerAiDraft?.tradeRules) {
@@ -181,6 +200,12 @@ export function CommissionerControlCenterModal({
   const isInProgress = draftStatus === 'in_progress'
   const isPaused = draftStatus === 'paused'
   const isAuctionDraft = String(draftType ?? '').toLowerCase() === 'auction'
+  /** After the draft nothing changes: it is on the record. */
+  const isFinal = draftStatus === 'completed'
+  const concept = String(leagueType ?? '').toLowerCase()
+  /* League-type options show only in that league type (a redraft league saw Guillotine and Survivor video toggles). */
+  const showGuillotineOptions = concept.includes('guillotine')
+  const showSurvivorOptions = concept.includes('survivor')
   /*
    * ⚠ PRESENCE, NOT ENABLED-NESS. These previously read
    * `enabled || rounds.length > 0`, which meant the section holding the ENABLE toggle
@@ -384,7 +409,7 @@ export function CommissionerControlCenterModal({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 px-4 py-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Settings className="h-5 w-5 text-cyan-400" />
-          <h2 className="text-base font-semibold text-white">Commissioner control center</h2>
+          <h2 className="text-base font-semibold text-white">Commissioner controls</h2>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <button
@@ -397,15 +422,7 @@ export function CommissionerControlCenterModal({
             disabled={!onOpenDraftRoomSettings}
             className="min-h-[44px] rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
           >
-            Room Settings
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSwapManager(true)}
-            data-testid="draft-commissioner-open-swap-manager"
-            className="min-h-[44px] rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
-          >
-            Swap Managers
+            Draft settings
           </button>
           <button
             type="button"
@@ -519,9 +536,19 @@ export function CommissionerControlCenterModal({
             </button>
           </div>
         ) : null}
-        {/* Draft flow */}
-        <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Draft flow</h3>
+        {isFinal ? (
+          <p className="rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-[12px] text-white/75" data-testid="draft-commissioner-final">
+            This draft is final — it&apos;s on the record. Settings below are shown for reference.
+          </p>
+        ) : null}
+        {/* Live controls */}
+        <section className={isFinal ? 'hidden' : undefined}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-1">Live controls</h3>
+          <ul className="mb-3 space-y-0.5 text-[11px] leading-snug text-white/50" data-testid="draft-commissioner-live-help">
+            <li><span className="text-white/75">Pause</span> stops every clock until you resume. <span className="text-white/75">Reset timer</span> gives the team on the clock a full clock.</li>
+            <li><span className="text-white/75">Undo last pick</span> puts that player back in the pool and that team back on the clock.</li>
+            <li><span className="text-white/75">Skip pick</span> moves on with no player for this team. <span className="text-white/75">Force auto-pick</span> picks for them now.</li>
+          </ul>
           {transitionMessage && (
             <div className="mb-3 flex items-start justify-between gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/12 px-3 py-2 text-[12px] text-emerald-50">
               <span>{transitionMessage}</span>
@@ -561,16 +588,6 @@ export function CommissionerControlCenterModal({
                 Start draft
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleTransitionToDrafting}
-              disabled={transitionLoading || loading || actionLoading !== null || startDraftBlocked}
-              title="Manually transition league to drafting state (fixes stuck setup state)"
-              className="inline-flex items-center gap-2 rounded-lg border border-blue-400/35 bg-blue-500/10 px-3 py-2 text-sm text-blue-100 hover:bg-blue-500/20 disabled:opacity-50"
-            >
-              <Zap className="h-4 w-4" />
-              {transitionLoading ? 'Transitioning...' : 'Transition to drafting'}
-            </button>
             {isInProgress && (
               <button
                 type="button"
@@ -654,17 +671,6 @@ export function CommissionerControlCenterModal({
                   <Play className="h-4 w-4" />
                   Force auto-pick now
                 </button>
-                <button
-                  type="button"
-                  onClick={handleRefreshAdp}
-                  disabled={loading || actionLoading !== null}
-                  data-testid="draft-commissioner-refresh-adp"
-                  className="inline-flex items-center gap-2 rounded-lg border border-violet-300/30 bg-violet-500/12 px-3 py-2 text-sm text-violet-100 hover:bg-violet-500/20 disabled:opacity-50"
-                  title="Re-fetch ADP from FantasyFootballCalculator and refresh the player pool's ADP column"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  {actionLoading === 'refresh_adp' ? 'Refreshing ADP…' : 'Refresh ADP'}
-                </button>
                 {isAuctionDraft && (
                   <>
                     <button
@@ -689,30 +695,6 @@ export function CommissionerControlCenterModal({
                     </button>
                   </>
                 )}
-                {!isAuctionDraft && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => run('slow_tick', () => onAction('slow_tick'))}
-                      disabled={loading || actionLoading !== null}
-                      data-testid="draft-commissioner-slow-tick"
-                      className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      Run slow draft automation
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={() => run('complete', () => onAction('complete'))}
-                  disabled={loading || actionLoading !== null}
-                  data-testid="draft-commissioner-complete"
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-sm text-white/80 hover:bg-white/10 disabled:opacity-50"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  Complete draft
-                </button>
               </>
             )}
           </div>
@@ -755,10 +737,368 @@ export function CommissionerControlCenterModal({
           </section>
         )}
 
+
+        {/* Fix a pick */}
+        {!isFinal && !isAuctionDraft && onOpenPickEditor ? (
+          <section data-testid="draft-commissioner-fix-pick">
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/50">Fix a pick</h3>
+            <p className="mb-2 text-[11px] leading-snug text-white/50">
+              Choose a pick, then: <span className="text-white/75">remove the player</span> so that team picks again,{' '}
+              <span className="text-white/75">replace</span> him with someone else, put a player on an empty pick, or{' '}
+              <span className="text-white/75">move the pick</span> to another team. The draft pauses while you edit.
+              You can also click any pick on the board.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[11px] text-white/60">
+                Round{' '}
+                <select
+                  value={fixRound}
+                  onChange={(e) => setFixRound(Number(e.target.value))}
+                  data-testid="draft-commissioner-fix-round"
+                  className="rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
+                >
+                  {Array.from({ length: Math.max(1, rounds) }, (_, i) => i + 1).map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[11px] text-white/60">
+                Pick{' '}
+                <select
+                  value={fixPick}
+                  onChange={(e) => setFixPick(Number(e.target.value))}
+                  data-testid="draft-commissioner-fix-pick-number"
+                  className="rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
+                >
+                  {Array.from({ length: Math.max(1, teamCount) }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => onOpenPickEditor((fixRound - 1) * Math.max(1, teamCount) + fixPick)}
+                data-testid="draft-commissioner-open-pick-editor"
+                className="rounded border border-amber-300/35 bg-amber-500/12 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-500/20"
+              >
+                Edit pick {fixRound}.{String(fixPick).padStart(2, '0')}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {/* Penalties */}
+        {!isFinal && !isAuctionDraft && seats.length > 0 ? (
+          <section data-testid="draft-commissioner-penalties">
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/50">Penalties</h3>
+            <p className="mb-2 text-[11px] leading-snug text-white/50">
+              <span className="text-white/75">Forfeit a pick:</span> that team&apos;s pick in the round you choose is
+              skipped when the draft reaches it and shows as &quot;Forfeited&quot; on the board. It can&apos;t be a pick already made.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={forfeitRosterId}
+                onChange={(e) => setForfeitRosterId(e.target.value)}
+                data-testid="draft-commissioner-forfeit-team"
+                aria-label="Team"
+                className="max-w-[12rem] rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
+              >
+                <option value="">Choose team…</option>
+                {seats.map((seat) => (
+                  <option key={seat.rosterId} value={seat.rosterId}>{seat.displayName}</option>
+                ))}
+              </select>
+              <label className="text-[11px] text-white/60">
+                Round{' '}
+                <select
+                  value={forfeitRound}
+                  onChange={(e) => setForfeitRound(Number(e.target.value))}
+                  data-testid="draft-commissioner-forfeit-round"
+                  className="rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
+                >
+                  {Array.from({ length: Math.max(1, rounds) }, (_, i) => i + 1).map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </label>
+              <input
+                value={forfeitReason}
+                onChange={(e) => setForfeitReason(e.target.value.slice(0, 100))}
+                placeholder="Reason (shown in the log)"
+                data-testid="draft-commissioner-forfeit-reason"
+                className="min-w-0 flex-1 rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white placeholder:text-white/35"
+              />
+              <button
+                type="button"
+                disabled={!forfeitRosterId || actionLoading !== null || loading}
+                onClick={() =>
+                  run('forfeit_pick', async () => {
+                    setForfeitMessage(null)
+                    const result = (await onAction('forfeit_pick', {
+                      rosterId: forfeitRosterId,
+                      round: forfeitRound,
+                      reason: forfeitReason,
+                    })) as { ok?: boolean; error?: string } | undefined
+                    if (result && result.ok === false) return result
+                    const team = seats.find((x) => x.rosterId === forfeitRosterId)?.displayName ?? 'That team'
+                    setForfeitMessage(`${team}'s round ${forfeitRound} pick is forfeited.`)
+                    setForfeitReason('')
+                    return result
+                  })
+                }
+                data-testid="draft-commissioner-forfeit-submit"
+                className="rounded border border-rose-400/35 bg-rose-500/12 px-3 py-1.5 text-xs text-rose-100 hover:bg-rose-500/20 disabled:opacity-50"
+              >
+                Forfeit pick
+              </button>
+            </div>
+            {forfeitMessage ? (
+              <p className="mt-1 text-[11px] text-emerald-200" role="status" data-testid="draft-commissioner-forfeit-message">{forfeitMessage}</p>
+            ) : null}
+          </section>
+        ) : null}
+
         {/* Toggles */}
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Draft settings</h3>
-          <div className="space-y-2 text-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Clock &amp; rules</h3>
+          <fieldset disabled={isFinal} className="space-y-2 text-sm">
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Traded pick color mode</span><span className="block text-[11px] leading-snug text-white/50">Colour a traded pick by the team that now owns it.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.tradedPickColorModeEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-traded-color"
+                onClick={() => handleToggle('tradedPickColorModeEnabled', !(ui.tradedPickColorModeEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${ui.tradedPickColorModeEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.tradedPickColorModeEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Traded pick owner name in red</span><span className="block text-[11px] leading-snug text-white/50">Show the new owner&apos;s name in red on a traded pick.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.tradedPickOwnerNameRedEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-traded-owner-red"
+                onClick={() => handleToggle('tradedPickOwnerNameRedEnabled', !(ui.tradedPickOwnerNameRedEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${ui.tradedPickOwnerNameRedEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.tradedPickOwnerNameRedEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Chimmy ADP</span><span className="block text-[11px] leading-snug text-white/50">Show Chimmy&apos;s ADP beside market ADP in the player pool.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.aiAdpEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-ai-adp"
+                onClick={() => handleToggle('aiAdpEnabled', !(ui.aiAdpEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${ui.aiAdpEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.aiAdpEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Chimmy queue reorder</span><span className="block text-[11px] leading-snug text-white/50">Let Chimmy reorder a manager&apos;s queue when they ask.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.aiQueueReorderEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-ai-queue-reorder"
+                onClick={() => handleToggle('aiQueueReorderEnabled', !(ui.aiQueueReorderEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${ui.aiQueueReorderEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.aiQueueReorderEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Live draft ↔ league chat sync</span><span className="block text-[11px] leading-snug text-white/50">Draft chat and league chat become one conversation.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.liveDraftChatSyncEnabled ?? false}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-chat-sync"
+                onClick={() => handleToggle('liveDraftChatSyncEnabled', !(ui.liveDraftChatSyncEnabled ?? false))}
+                className={`rounded border px-3 py-1 text-xs ${ui.liveDraftChatSyncEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.liveDraftChatSyncEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Auto-pick enabled</span><span className="block text-[11px] leading-snug text-white/50">When a clock runs out, pick for that team (their queue first). Off: the pick waits or is skipped, per league rules.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.autoPickEnabled ?? false}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-auto-pick-enabled"
+                onClick={() => handleToggle('autoPickEnabled', !(ui.autoPickEnabled ?? false))}
+                className={`rounded border px-3 py-1 text-xs ${ui.autoPickEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.autoPickEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Timer mode</span><span className="block text-[11px] leading-snug text-white/50">Per pick: every pick has a clock. Soft or overnight pause: the clock stops overnight. No timer: picks wait.</span></span>
+              <select
+                value={ui.timerMode ?? 'per_pick'}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-select-timer-mode"
+                onChange={(event) => handleTimerModeChange(event.target.value as TimerMode)}
+                className="rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
+              >
+                {TIMER_MODE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Commissioner force auto-pick</span><span className="block text-[11px] leading-snug text-white/50">Allows the &quot;Force auto-pick now&quot; button in Live controls.</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.commissionerForceAutoPickEnabled ?? false}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-force-autopick"
+                onClick={() => handleToggle('commissionerForceAutoPickEnabled', !(ui.commissionerForceAutoPickEnabled ?? false))}
+                className={`rounded border px-3 py-1 text-xs ${ui.commissionerForceAutoPickEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {ui.commissionerForceAutoPickEnabled ? 'On' : 'Off'}
+              </button>
+            </label>
+            {isAuctionDraft && (
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                <span className="min-w-0"><span className="block text-white/90">Auction auto nomination</span><span className="block text-[11px] leading-snug text-white/50">Nominate for a team whose nomination clock runs out.</span></span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={ui.auctionAutoNominationEnabled ?? true}
+                  disabled={settingsSaving}
+                  data-testid="draft-commissioner-toggle-auction-auto-nomination"
+                  onClick={() => handleToggle('auctionAutoNominationEnabled', !(ui.auctionAutoNominationEnabled ?? true))}
+                  className={`rounded border px-3 py-1 text-xs ${(ui.auctionAutoNominationEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+                >
+                  {(ui.auctionAutoNominationEnabled ?? true) ? 'On' : 'Off'}
+                </button>
+              </label>
+            )}
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="min-w-0"><span className="block text-white/90">Draft import enabled</span><span className="block text-[11px] leading-snug text-white/50">Allows importing the draft order and picks from a file (Advanced).</span></span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.importEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-import-enabled"
+                onClick={() => handleToggle('importEnabled', !(ui.importEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${(ui.importEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {(ui.importEnabled ?? true) ? 'On' : 'Off'}
+              </button>
+            </label>
+
+            {showGuillotineOptions || showSurvivorOptions ? (
+            <div className="rounded-lg border border-cyan-300/15 bg-cyan-500/5 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-cyan-100/80">League Event Videos</p>
+              <p className="mt-1 text-[11px] text-white/65">
+                Controls automatic HeyGen clips for guillotine eliminations and survivor finale winner reveal.
+              </p>
+            </div>
+            ) : null}
+            {showGuillotineOptions ? (
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="text-white/90">Guilly elimination auto-video</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.guillotineAutoHeyGenEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-guillotine-auto-heygen"
+                onClick={() => handleToggle('guillotineAutoHeyGenEnabled', !(ui.guillotineAutoHeyGenEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${(ui.guillotineAutoHeyGenEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {(ui.guillotineAutoHeyGenEnabled ?? true) ? 'On' : 'Off'}
+              </button>
+            </label>
+            ) : null}
+            {showSurvivorOptions ? (
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <span className="text-white/90">Survivor winner reveal auto-video</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={ui.survivorFinaleAutoHeyGenEnabled ?? true}
+                disabled={settingsSaving}
+                data-testid="draft-commissioner-toggle-survivor-auto-heygen"
+                onClick={() => handleToggle('survivorFinaleAutoHeyGenEnabled', !(ui.survivorFinaleAutoHeyGenEnabled ?? true))}
+                className={`rounded border px-3 py-1 text-xs ${(ui.survivorFinaleAutoHeyGenEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+              >
+                {(ui.survivorFinaleAutoHeyGenEnabled ?? true) ? 'On' : 'Off'}
+              </button>
+            </label>
+            ) : null}
+          </fieldset>
+        </section>
+
+
+        {/* Managers */}
+        <section data-testid="draft-commissioner-managers">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/50">Managers</h3>
+          <p className="mb-2 text-[11px] leading-snug text-white/50">
+            Who drafts for each team. <span className="text-white/75">Auto</span> means the team picks by itself;{' '}
+            <span className="text-white/75">Chimmy</span> means Chimmy runs a team with no manager.
+          </p>
+          {seats.length ? (
+            <ul className="mb-2 divide-y divide-white/5 rounded-lg border border-white/10 bg-black/20 text-[12px]">
+              {seats.map((seat) => (
+                <li key={seat.rosterId} className="flex items-center justify-between gap-2 px-3 py-1.5" data-testid={`draft-commissioner-seat-${seat.slot}`}>
+                  <span className="min-w-0 truncate text-white/85">
+                    <span className="mr-2 tabular-nums text-white/40">{seat.slot}</span>
+                    {seat.displayName}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      seat.status === 'chimmy'
+                        ? 'bg-violet-500/20 text-violet-100'
+                        : seat.status === 'auto'
+                          ? 'bg-emerald-500/20 text-emerald-100'
+                          : seat.status === 'empty'
+                            ? 'bg-amber-500/15 text-amber-100'
+                            : 'bg-white/10 text-white/70'
+                    }`}
+                  >
+                    {seat.status === 'chimmy' ? 'Chimmy' : seat.status === 'auto' ? 'Auto' : seat.status === 'empty' ? 'No manager' : 'Manager'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {!isFinal ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSwapManager(true)}
+                data-testid="draft-commissioner-open-swap-manager"
+                className="min-h-[36px] rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
+              >
+                Swap two managers
+              </button>
+              <span className="text-[11px] leading-snug text-white/50">
+                Trades who controls two draft slots from now on (for example, a manager who joined late takes over the right team). Picks already made stay where they are.
+              </span>
+            </div>
+          ) : null}
+          <fieldset disabled={isFinal} className="space-y-2 text-sm">
             <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
               <span className="text-white/90">Orphan team Chimmy manager</span>
               <button
@@ -990,187 +1330,105 @@ export function CommissionerControlCenterModal({
                 {aiMgrMessage ? <p className="mt-1 text-[11px] text-white/60">{aiMgrMessage}</p> : null}
               </div>
             )}
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Traded pick color mode</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.tradedPickColorModeEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-traded-color"
-                onClick={() => handleToggle('tradedPickColorModeEnabled', !(ui.tradedPickColorModeEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${ui.tradedPickColorModeEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.tradedPickColorModeEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Traded pick owner name in red</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.tradedPickOwnerNameRedEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-traded-owner-red"
-                onClick={() => handleToggle('tradedPickOwnerNameRedEnabled', !(ui.tradedPickOwnerNameRedEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${ui.tradedPickOwnerNameRedEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.tradedPickOwnerNameRedEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Chimmy ADP</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.aiAdpEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-ai-adp"
-                onClick={() => handleToggle('aiAdpEnabled', !(ui.aiAdpEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${ui.aiAdpEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.aiAdpEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Chimmy queue reorder</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.aiQueueReorderEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-ai-queue-reorder"
-                onClick={() => handleToggle('aiQueueReorderEnabled', !(ui.aiQueueReorderEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${ui.aiQueueReorderEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.aiQueueReorderEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Live draft ↔ league chat sync</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.liveDraftChatSyncEnabled ?? false}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-chat-sync"
-                onClick={() => handleToggle('liveDraftChatSyncEnabled', !(ui.liveDraftChatSyncEnabled ?? false))}
-                className={`rounded border px-3 py-1 text-xs ${ui.liveDraftChatSyncEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.liveDraftChatSyncEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Auto-pick enabled</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.autoPickEnabled ?? false}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-auto-pick-enabled"
-                onClick={() => handleToggle('autoPickEnabled', !(ui.autoPickEnabled ?? false))}
-                className={`rounded border px-3 py-1 text-xs ${ui.autoPickEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.autoPickEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Timer mode</span>
-              <select
-                value={ui.timerMode ?? 'per_pick'}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-select-timer-mode"
-                onChange={(event) => handleTimerModeChange(event.target.value as TimerMode)}
-                className="rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white"
-              >
-                {TIMER_MODE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Commissioner force auto-pick</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.commissionerForceAutoPickEnabled ?? false}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-force-autopick"
-                onClick={() => handleToggle('commissionerForceAutoPickEnabled', !(ui.commissionerForceAutoPickEnabled ?? false))}
-                className={`rounded border px-3 py-1 text-xs ${ui.commissionerForceAutoPickEnabled ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {ui.commissionerForceAutoPickEnabled ? 'On' : 'Off'}
-              </button>
-            </label>
-            {isAuctionDraft && (
-              <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-                <span className="text-white/90">Auction auto nomination</span>
+          </fieldset>
+        </section>
+
+        {/* Finish */}
+        {!isFinal && (isInProgress || isPaused || isPreDraft) ? (
+          <section data-testid="draft-commissioner-finish">
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/50">Finish or start over</h3>
+            <p className="mb-2 text-[11px] leading-snug text-white/50">
+              <span className="text-white/75">Complete draft</span> ends it now and locks it — it&apos;s on the record.{' '}
+              <span className="text-white/75">Reset whole draft</span> removes every pick and starts again from pick 1.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+            {(isInProgress || isPaused) && (
+              <>
                 <button
                   type="button"
-                  role="switch"
-                  aria-checked={ui.auctionAutoNominationEnabled ?? true}
-                  disabled={settingsSaving}
-                  data-testid="draft-commissioner-toggle-auction-auto-nomination"
-                  onClick={() => handleToggle('auctionAutoNominationEnabled', !(ui.auctionAutoNominationEnabled ?? true))}
-                  className={`rounded border px-3 py-1 text-xs ${(ui.auctionAutoNominationEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+                  onClick={() => run('complete', () => onAction('complete'))}
+                  disabled={loading || actionLoading !== null}
+                  data-testid="draft-commissioner-complete"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-sm text-white/80 hover:bg-white/10 disabled:opacity-50"
                 >
-                  {(ui.auctionAutoNominationEnabled ?? true) ? 'On' : 'Off'}
+                  <CheckSquare className="h-4 w-4" />
+                  Complete draft
                 </button>
-              </label>
+              </>
             )}
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Draft import enabled</span>
+              <input
+                value={resetText}
+                onChange={(e) => setResetText(e.target.value)}
+                placeholder='Type RESET'
+                aria-label="Type RESET to confirm"
+                data-testid="draft-commissioner-reset-confirm-text"
+                className="w-28 rounded border border-white/20 bg-black/30 px-2 py-1 text-xs text-white placeholder:text-white/35"
+              />
               <button
                 type="button"
-                role="switch"
-                aria-checked={ui.importEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-import-enabled"
-                onClick={() => handleToggle('importEnabled', !(ui.importEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${(ui.importEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
+                disabled={resetText.trim().toUpperCase() !== 'RESET' || actionLoading !== null || loading}
+                onClick={() =>
+                  run('reset_draft', async () => {
+                    const result = await onAction('reset_draft')
+                    setResetText('')
+                    return result
+                  })
+                }
+                data-testid="draft-commissioner-reset-draft"
+                className="rounded border border-rose-500/45 bg-rose-600/20 px-3 py-1.5 text-xs font-semibold text-rose-100 hover:bg-rose-600/30 disabled:opacity-40"
               >
-                {(ui.importEnabled ?? true) ? 'On' : 'Off'}
+                Reset whole draft
               </button>
-            </label>
-
-            <div className="rounded-lg border border-cyan-300/15 bg-cyan-500/5 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-cyan-100/80">League Event Videos</p>
-              <p className="mt-1 text-[11px] text-white/65">
-                Controls automatic HeyGen clips for guillotine eliminations and survivor finale winner reveal.
-              </p>
             </div>
+          </section>
+        ) : null}
 
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Guilly elimination auto-video</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.guillotineAutoHeyGenEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-guillotine-auto-heygen"
-                onClick={() => handleToggle('guillotineAutoHeyGenEnabled', !(ui.guillotineAutoHeyGenEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${(ui.guillotineAutoHeyGenEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {(ui.guillotineAutoHeyGenEnabled ?? true) ? 'On' : 'Off'}
-              </button>
-            </label>
-
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-white/90">Survivor winner reveal auto-video</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={ui.survivorFinaleAutoHeyGenEnabled ?? true}
-                disabled={settingsSaving}
-                data-testid="draft-commissioner-toggle-survivor-auto-heygen"
-                onClick={() => handleToggle('survivorFinaleAutoHeyGenEnabled', !(ui.survivorFinaleAutoHeyGenEnabled ?? true))}
-                className={`rounded border px-3 py-1 text-xs ${(ui.survivorFinaleAutoHeyGenEnabled ?? true) ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100' : 'border-white/15 bg-black/30 text-white/70'}`}
-              >
-                {(ui.survivorFinaleAutoHeyGenEnabled ?? true) ? 'On' : 'Off'}
-              </button>
-            </label>
+        {/* Advanced */}
+        <section data-testid="draft-commissioner-advanced">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/50">Advanced</h3>
+          <p className="mb-2 text-[11px] leading-snug text-white/50">
+            Rarely needed: fix a league stuck in setup, re-read ADP, or run the automation by hand.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleTransitionToDrafting}
+              disabled={transitionLoading || loading || actionLoading !== null || startDraftBlocked}
+              title="Manually transition league to drafting state (fixes stuck setup state)"
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-400/35 bg-blue-500/10 px-3 py-2 text-sm text-blue-100 hover:bg-blue-500/20 disabled:opacity-50"
+            >
+              <Zap className="h-4 w-4" />
+              {transitionLoading ? 'Transitioning...' : 'Transition to drafting'}
+            </button>
+            {(isInProgress || isPaused) && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRefreshAdp}
+                  disabled={loading || actionLoading !== null}
+                  data-testid="draft-commissioner-refresh-adp"
+                  className="inline-flex items-center gap-2 rounded-lg border border-violet-300/30 bg-violet-500/12 px-3 py-2 text-sm text-violet-100 hover:bg-violet-500/20 disabled:opacity-50"
+                  title="Re-fetch ADP from FantasyFootballCalculator and refresh the player pool's ADP column"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {actionLoading === 'refresh_adp' ? 'Refreshing ADP…' : 'Refresh ADP'}
+                </button>
+                {!isAuctionDraft && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => run('slow_tick', () => onAction('slow_tick'))}
+                      disabled={loading || actionLoading !== null}
+                      data-testid="draft-commissioner-slow-tick"
+                      className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Run slow draft automation
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </section>
 
