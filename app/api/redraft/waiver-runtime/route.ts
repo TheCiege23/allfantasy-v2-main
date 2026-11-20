@@ -176,6 +176,10 @@ export async function POST(request: Request) {
   if (!leagueId) return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant === 'survivor_guillotine' && action !== 'cancel_claim') {
+    return NextResponse.json({ error: 'Use your Survivor Guilly league waiver board for claims and processing.' }, { status: 409 })
+  }
 
   try {
     if (action === 'process_waivers' || action === 'apply_commissioner_override') {

@@ -60,7 +60,7 @@ beforeEach(() => {
   pool.pool.mockResolvedValue(ROWS)
   pool.rows.mockResolvedValue(new Map([['k-mine-g', ROWS[0]]]))
   pool.identity.mockResolvedValue(
-    new Map(['k-fa-1', 'k-fa-2', 'k-fa-thin'].map((k, i) => [k, { team: 'BOS', ids: { sleeperId: `s-fa-${i}` }, ambiguous: new Set() }])),
+    new Map(['k-fa-1', 'k-fa-2', 'k-fa-thin'].map((k, i) => [k, { team: 'BOS', ids: { sleeperId: `football-${i}`, sleeperNbaId: `s-fa-${i}` }, ambiguous: new Set() }])),
   )
 })
 

@@ -128,3 +128,17 @@ describe('the Commissioner Hub card', () => {
     expect(container.innerHTML).toBe('')
   })
 })
+
+describe('unsaved bids hold the deploy reload (lib/core-app/unsavedWork)', () => {
+  it('holds once a bid is typed, and releases after it is saved', async () => {
+    const { hasUnsavedWork } = await import('@/lib/core-app/unsavedWork')
+    stub(view())
+    render(<OrphanAuctionBids leagueId="L" />)
+    const [star] = await screen.findAllByTestId('orphan-auction-bid')
+    expect(hasUnsavedWork()).toBe(false)
+    fireEvent.change(star!, { target: { value: '30' } })
+    expect(hasUnsavedWork()).toBe(true)
+    fireEvent.click(screen.getByTestId('orphan-auction-save'))
+    await waitFor(() => expect(hasUnsavedWork()).toBe(false))
+  })
+})

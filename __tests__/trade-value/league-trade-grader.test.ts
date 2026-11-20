@@ -17,6 +17,11 @@ const h = vi.hoisted(() => ({
   dynastySettings: false,
 }))
 
+vi.mock('@/lib/trade-value-console/afLeaguePlayerPrice', () => ({
+  loadAfNflMarketQuote: async ({ name }: { name: string }) => h.prices.has(name)
+    ? { marketValue: h.prices.get(name), position: 'WR', generatedAt: new Date('2026-09-28T14:27:28.097Z') }
+    : null,
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 vi.mock('@/lib/trade-value-console/league-loader', () => ({
@@ -233,8 +238,8 @@ describe('createLeagueTradeGrader', () => {
       await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: true }),
     )
     expect(v.lines.map((l) => [l.name, l.valueSource, l.valueAsOf])).toEqual([
-      ['Drake London', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
-      ['Puka Nacua', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
+      ['Drake London', 'af_completed_trades', '2026-09-28T14:27:28.097Z'],
+      ['Puka Nacua', 'af_completed_trades', '2026-09-28T14:27:28.097Z'],
     ])
   })
 
@@ -413,6 +418,6 @@ describe('P0 package and team-direction regression through the shared league gra
     h.leagueType = 'redraft'
     const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })
     const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false }))
-    expect(view.lines.every((l) => l.valueSource === 'fantasycalc')).toBe(true)
+    expect(view.lines.every((l) => l.valueSource === 'af_completed_trades')).toBe(true)
   })
 })

@@ -117,6 +117,8 @@ export function allowanceFor(gapMs, probe = {}) {
  * stayed invisible.
  */
 export const PROBES = {
+  // The aggregate heartbeat fails if either the NFL or NBA ingestion fails.
+  '/api/cron/survivor-guillotine-ingest': { heartbeat: 'cron-survivor-guillotine-provider' },
   // The operational overlay is outside cron-schedule.json. Probe its unique job heartbeat,
   // then audit every connected NFL league's certified active-lane success below.
   '/api/cron/fantasy-os-active-sync': { heartbeat: 'cron-fantasy-os-active-sync' },
@@ -583,6 +585,7 @@ export const PROBES = {
    * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
    * keeps the strong claim in season and self-suppresses out of it.
    */
+  '/api/cron/college-weekly-projections': { heartbeat: 'cron-college-weekly-projections' },
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 
   /*

@@ -22,15 +22,15 @@ const draw = (platform: string, m: RailMatchupSummary | null = h2h()) =>
   render(<RailRowBody name="Yellow Buffalo Dynasty" platform={platform} m={m} showScoreStatus />).container
 
 describe('RailRowBody — the league card', () => {
-  it('both managers either side of VS, each with the league-scored projection and no AF engine number', () => {
+  it('both managers either side of VS, each with the shared AF projection', () => {
     const el = draw('sleeper')
     const sides = [...el.querySelectorAll('.af-rail-row-side')]
     expect(sides.map((s) => s.querySelector('.af-rail-row-team')?.textContent)).toEqual(['Ciege Squad', 'Logan8888'])
     expect(sides[1]!.getAttribute('data-side')).toBe('them')
     expect(el.querySelector('.af-rail-row-line')?.getAttribute('data-vs')).toBe('true')
     expect(el.querySelector('.af-rail-row-vs')?.textContent).toBe('VS')
-    expect(sides.map((s) => s.querySelector('.af-rail-row-projected')?.textContent)).toEqual(['proj167.6', 'proj176.8'])
-    expect(el.textContent).not.toMatch(/171\.9|180\.4|SLPR|SCORE/)
+    expect(sides.map((s) => s.querySelector('.af-rail-row-projected')?.textContent)).toEqual(['proj171.9', 'proj180.4'])
+    expect(el.textContent).not.toMatch(/167\.6|176\.8|150\.2|170\.1|SLPR|SCORE/)
   })
 
   it('an unplayed week draws no score, never 0.0', () => {

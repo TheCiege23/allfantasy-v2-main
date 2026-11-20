@@ -1,13 +1,11 @@
 import type { DramaEventView } from '@/lib/drama-engine/DramaQueryService'
 import type { RivalryRecordView } from '@/lib/rivalry-engine/RivalryQueryService'
-import type { ManagerPsychProfileView } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import type { LeagueRelationshipProfile } from '@/lib/league-intelligence-graph'
 
+/** Which drama involves a manager. Profile and "behaviour heat" removed 2026-11-19 (re-score build item 10). */
 export interface BehaviorDramaManagerContext {
   managerId: string
-  profile: ManagerPsychProfileView | null
   dramaEvents: DramaEventView[]
-  behaviorHeat: number
 }
 
 /**
@@ -17,12 +15,6 @@ export interface BehaviorDramaManagerContext {
 export interface PublicBehaviorDramaContext {
   managerId: string
   dramaEvents: DramaEventView[]
-}
-
-/** Profile coverage only — that a profile exists for this manager, never what it says. */
-export interface PublicProfileCoverage {
-  id: string
-  managerId: string
 }
 
 export interface UnifiedStorylineRecord {
@@ -48,7 +40,6 @@ export interface UnifiedRelationshipInsights {
   season: number | null
   relationshipProfile: LeagueRelationshipProfile
   rivalries: RivalryRecordView[]
-  profiles: PublicProfileCoverage[]
   drama: DramaEventView[]
   behaviorDramaContext: PublicBehaviorDramaContext[]
   storylines: UnifiedStorylineRecord[]

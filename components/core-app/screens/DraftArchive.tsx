@@ -52,12 +52,15 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
         if (h.kind === 'drafting') return g.impDrafting(where, h.picks);
         if (h.kind === 'done') return g.impDone(where, h.picks, h.season);
         if (h.kind === 'before') return g.impBefore(where);
+        if (h.kind === 'recorded') return g.impRecorded(where, h.picks, h.season);
         return g.impOther(h.status);
     })();
     // The picker read "2026 · snake · complete · 1391441779609317376" (live /core, 2026-11-06). The provider's
     // draft id is only worth showing to tell apart two drafts that would otherwise read the same, and then
     // its last four digits do it; the full id stays in Timing and source details.
-    const baseLabel = (c: { season: number | null; format: string; status: string }) => `${c.season ?? '?'} · ${c.format} · ${c.status}`;
+    // A draft imported without its format or status is stored as 'unknown'; that word is left out, not printed.
+    const known = (...parts: Array<string | number | null | undefined>) => parts.filter(p => p != null && p !== '' && p !== 'unknown').join(' · ');
+    const baseLabel = (c: { season: number | null; format: string; status: string }) => known(c.season ?? '?', c.format, c.status);
     const draftLabel = (c: { key: string; season: number | null; format: string; status: string; sourceId: string }) =>
         choices.some(o => o.key !== c.key && baseLabel(o) === baseLabel(c)) ? `${baseLabel(c)} · …${c.sourceId.slice(-4)}` : baseLabel(c);
     const [pickPage, setPickPage] = useState(0), [team, setTeam] = useState(''), [player, setPlayer] = useState('');
@@ -84,17 +87,17 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     const timelineHref = (next: number) => href(detail?.choice.key, leagueId, page) + '&timelinePage=' + next;
     const sectionHelp = [m.archiveHelpSnapshot, m.archiveHelpClockTimeline, m.archiveHelpCorrections, m.archiveHelpTradePackages, m.archiveHelpExecutedTrades];
     return <section className="af-frame af-archive" aria-label={m.archiveDraftArchive}>
-  {asDraftHq && <header className="af-archive-hq"><h1 className="af-archive-hq-title">{hqHead}</h1>{detail && <p className="af-archive-hq-sub">{detail.choice.season ?? m.archiveUnknownSeason} · {detail.choice.sport} · {detail.choice.format}</p>}{detail && <p className="af-archive-hq-intro">{g.impIntro(where)}</p>}</header>}
+  {asDraftHq && <header className="af-archive-hq"><h1 className="af-archive-hq-title">{hqHead}</h1>{detail && <p className="af-archive-hq-sub">{known(detail.choice.season ?? m.archiveUnknownSeason, detail.choice.sport, detail.choice.format)}</p>}{detail && <p className="af-archive-hq-intro">{g.impIntro(where)}</p>}</header>}
   <header><h2>{m.archiveDraftArchive} {help(m.archiveDraftIdentity, m.archiveHelpDraftIdentity)}</h2><p>{m.archiveDraftRecords(total)}</p></header>
   <details className="af-archive-search"><summary>{m.archiveSearchAndFilter}</summary><form action="/core/draft-hq" method="get"><input type="hidden" name="league" value={leagueId ?? ''}/><label>{m.archiveSearchLabel}<input name="archiveQuery" defaultValue={query} maxLength={120}/></label><label>{m.archiveSeason}<input name="archiveSeason" type="number" min={1900} max={2100} defaultValue={season}/></label><button>{m.archiveSearch}</button><Link href={leagueId ? '/core/draft-hq?league=' + encodeURIComponent(leagueId) : '/core/draft-hq'}>{m.archiveResetFilters}</Link></form></details>
   {leagueId && <label>{m.archiveIndividualDraft}<select aria-label={m.archiveSelectDraft} value={detail?.choice.key ?? ''} onChange={e => router.push(href(e.target.value))}><option value="">{m.archiveChooseADraft}</option>{detail && !choices.some(c => c.key === detail.choice.key) && <option value={detail.choice.key}>{draftLabel(detail.choice)}</option>}{choices.map(c => <option key={c.key} value={c.key}>{draftLabel(c)}</option>)}</select></label>}
-  {!leagueId && <ul className="af-archive-list">{choices.map(c => <li key={c.leagueId + ':' + c.key}><Link className="af-archive-row" href={href(c.key, c.leagueId)}><b>{c.leagueName}</b><span className="af-archive-row-meta">{c.season ?? '?'} · {c.sport} · {c.format}</span><span className="af-archive-row-status" data-status={c.status}>{c.status}</span></Link></li>)}</ul>}
+  {!leagueId && <ul className="af-archive-list">{choices.map(c => <li key={c.leagueId + ':' + c.key}><Link className="af-archive-row" href={href(c.key, c.leagueId)}><b>{c.leagueName}</b><span className="af-archive-row-meta">{known(c.season ?? '?', c.sport, c.format)}</span>{c.status !== 'unknown' && <span className="af-archive-row-status" data-status={c.status}>{c.status}</span>}</Link></li>)}</ul>}
   {/* One page of drafts has nowhere to go, so "Page 1" alone is noise. */}
   {(page > 1 || more) && <nav aria-label={m.archiveArchivePages}>{page > 1 && <Link href={href(detail?.choice.key, leagueId, page - 1)}>{m.archivePrevious}</Link>}<span>{m.archivePage} {page}</span>{more && <Link href={href(detail?.choice.key, leagueId, page + 1)}>{m.archiveNext}</Link>}</nav>}
   {error && <p role="alert">{m.archiveError(error)} <Link href={leagueId ? '/core/draft-hq?league=' + encodeURIComponent(leagueId) : '/core/draft-hq'}>{m.archiveReturnToCurrent}</Link></p>}
   {detail && <>
    {/* As Draft HQ, the header line already says this. */}
-   {!asDraftHq && <h3>{detail.choice.season ?? m.archiveUnknownSeason} · {detail.choice.sport} · {detail.choice.format} · {detail.choice.status}</h3>}
+   {!asDraftHq && <h3>{known(detail.choice.season ?? m.archiveUnknownSeason, detail.choice.sport, detail.choice.format, detail.choice.status)}</h3>}
    {detail.canReconcile && <DraftHistoryReview key={'review:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key}/>}
    {/* Provenance, not the draft: the source id, UTC clock and coverage notes fold away so the selections lead (live /core, 2026-11-05). */}
    <details className="af-archive-tech"><summary>{m.archiveRecordDetails}</summary>

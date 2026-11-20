@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultSGConfig } from '@/lib/survivor-guillotine/config'
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/survivor-guillotine/commissionerRuntime', () => ({ sgAutomationAllowed: vi.fn(async () => true), recordSGAutomation: vi.fn(async () => undefined) }))
 const live = vi.hoisted(() => ({ executeChop: vi.fn() }))
 vi.mock('@/lib/survivor-guillotine/live', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/survivor-guillotine/live')>(),

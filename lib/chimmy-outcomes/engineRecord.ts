@@ -18,6 +18,11 @@
  * own, and the ledger measures something narrower than the letter claims (standard PPR, players only,
  * redraft only) — so it is reported, never applied.
  *
+ * ⚠ ONE NARROW EXCEPTION, AND IT IS NOT HERE (2026-11-20): the waiver engine's CONFIDENCE (never its ranking)
+ * is corrected by its own graded #1 claims, but only in a redraft full-PPR NFL league — the one scope where the
+ * ledger's measure IS the league's, so the objection above does not apply. See `lib/decision-os/waiver/calibration.ts`.
+ * The waiver panel's record below is still reported as it always was; trade letters are still never moved.
+ *
  * 🛑 THE SAMPLE RULES ARE THE LEDGER'S: a letter is absent below MIN_TRADES_PER_LETTER graded deals, and a
  * pickup rate is null below MIN_GRADED_FOR_OVERALL_RATE. Nothing here lowers either.
  *
@@ -43,6 +48,21 @@ export function tradeLetterRecord(view: LedgerRecordView | null | undefined, let
   const row = view?.trades?.find((t) => t.letter === l)
   if (!row) return null
   return { letter: row.letter, n: row.n, netPerWeek: row.netPerWeek, aheadPct: row.aheadPct ?? null, verdict: letterVerdict(row.letter, row.netPerWeek) }
+}
+
+/**
+ * For the commissioner's trade review: the letter's record over trades a COMMISSIONER was shown, when that
+ * letter has enough of them; otherwise the record over every graded deal. `scope` says which, so the copy can
+ * say it. Null when neither qualifies — the panel then shows the grade alone.
+ */
+export function commissionerLetterRecord(
+  view: LedgerRecordView | null | undefined,
+  letter: string | null | undefined,
+): (TradeLetterRecord & { scope: 'commissioner' | 'everyone' }) | null {
+  const own = tradeLetterRecord(view ? { ...view, trades: view.commissionerTrades ?? null } : null, letter)
+  if (own) return { ...own, scope: 'commissioner' }
+  const all = tradeLetterRecord(view, letter)
+  return all ? { ...all, scope: 'everyone' } : null
 }
 
 /**

@@ -22,6 +22,7 @@ import {
 import type { LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { buildDisplayPlayerMap, type DisplayPlayerMap, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import { buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
@@ -81,6 +82,7 @@ type DbRoster = {
   source?: string
   roster: unknown
   unifiedRoster?: UnifiedPlayerWireDto[]
+  nativePlayerFallback?: PlayerMap
   rosterId?: string
   /** Echoed back on save as `expectedLineupVersion` (lib/roster/lineupVersion.ts). */
   lineupVersion?: string
@@ -272,7 +274,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       const base = initOrSyncLineupLists(json.roster, slots)
       // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
       // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
-      const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
+      const byId = buildDisplayPlayerMap(json.nativePlayerFallback, json.unifiedRoster ?? [])
       setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
     } else setLists(null)
   }, [])
@@ -370,7 +372,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     }
   }, [league.id])
 
-  const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(null, data?.unifiedRoster ?? []), [data])
+  const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(data?.nativePlayerFallback, data?.unifiedRoster ?? []), [data])
   // Redraft (lib/league-media/redraftIdentity.ts): sport position chips and the bye / off-day badge.
   const rd = useRedraftScreen(league)
   // Daily leagues: players whose team has no game on the day shown — only when the day's schedule was read.
@@ -908,14 +910,25 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
       <ScreenHead eyebrow="My team" title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
-        <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>
+        {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
+        {league.bestBallMode ? null : <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>}
         <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
-        <button type="button" className="nls-btn" data-variant="primary" disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
+        <button type="button" className="nls-btn" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
           Optimize lineup
         </button>
       </ScreenHead>
 
       <Segmented label="Team view" value={tab} onChange={setTab} options={[{ id: 'lineup', label: 'Lineup' }, { id: 'roster', label: 'Full roster' }]} />
+
+      {/*
+        A best ball manager landed on a lineup to arrange and an Optimize button, with nothing saying
+        that neither changes a score: the week's best legal lineup is counted automatically.
+      */}
+      {league.bestBallMode ? (
+        <p className="nls-empty" role="note" data-testid="lineup-best-ball-note">
+          Best ball: you don&apos;t set a lineup. Each week your highest-scoring legal lineup is counted automatically, whoever is in these slots. See the Best Ball tab for the players that counted.
+        </p>
+      ) : null}
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !data ? <p className="nls-empty" role="status">Loading your roster…</p> : null}

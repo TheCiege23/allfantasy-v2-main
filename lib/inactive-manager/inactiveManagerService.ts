@@ -38,6 +38,7 @@ import {
 } from './inactiveManagerMode'
 import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
+import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 
 /**
  * Inactive manager mode (./inactiveManagerMode.ts): the commissioner's view and switch, the owner's
@@ -314,24 +315,24 @@ export async function runAutoHandovers(opts?: { now?: Date; limit?: number; dead
       const rule = readAutoHandover(league?.settings)
       if (!league || !rule || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
       result.leagues += 1
-      const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
-      const [saves, claims] = await Promise.all([
-        prisma.afRosterMoveHistory.groupBy({ by: ['rosterId', 'actorUserId'], where: { leagueId, source: 'user_save' }, _max: { createdAt: true } }),
-        prisma.waiverClaim.groupBy({ by: ['rosterId'], where: { leagueId }, _max: { createdAt: true } }),
-      ])
+      const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, managerUserId: true, redraftRosterId: true } })
+      /*
+       * The manager's own last action — the SAME clock the commissioner's "inactive" reads
+       * (lib/commissioner-hub/ownerLastAction.ts, 2026-11-20): their lineup saves, the claims they filed
+       * EXCEPT autopilot's (filed under the owner's id, so counting them reset a returned owner's idle clock
+       * to whenever Chimmy last claimed for them), redraft claims and the trades they proposed. A
+       * commissioner's or a former owner's save does not count.
+       */
+      const own = await loadOwnerLastActions(
+        rosters.map((r) => ({ id: r.id, leagueId, platformUserId: r.platformUserId ?? null, managerUserId: r.managerUserId ?? null, redraftRosterId: r.redraftRosterId ?? null })),
+      )
+      // Who is told, and who the managed entry names: the roster's owner key, as before.
       const owner = new Map(rosters.map((r) => [r.id, r.platformUserId ?? null]))
-      const last = new Map<string, number>()
-      const bump = (rosterId: string, at: Date | null | undefined) => {
-        if (at) last.set(rosterId, Math.max(last.get(rosterId) ?? 0, at.getTime()))
-      }
-      // Only the owner's own saves count; a commissioner's or a former owner's do not.
-      for (const s of saves) if (s.actorUserId && s.actorUserId === owner.get(s.rosterId)) bump(s.rosterId, s._max.createdAt)
-      for (const c of claims) bump(c.rosterId, c._max.createdAt)
       const toHand = teamsToHandOver({
         rule,
         managed: readManagedLineups(league.settings),
         now,
-        candidates: rosters.map((r) => ({ rosterId: r.id, lastOwnActionAt: last.has(r.id) ? new Date(last.get(r.id)!) : null })),
+        candidates: rosters.map((r) => ({ rosterId: r.id, lastOwnActionAt: own.get(r.id) ?? null })),
       })
       if (toHand.length === 0) continue
       const autopilot = rule.to === 'autopilot' && (await autopilotEntitled(league.userId))

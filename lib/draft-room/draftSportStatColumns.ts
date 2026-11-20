@@ -257,7 +257,9 @@ const NFL_DST: DraftStatColumnDef[] = [
   col('dst_int', 'INT', 'number', 'defense', ['dst_interceptions', 'def_interceptions', 'interceptions']),
   col('dst_fr', 'FR', 'number', 'defense', ['dst_fumble_recoveries', 'fumble_recoveries', 'fumbles_recovered']),
   col('dst_td', 'TD', 'number', 'defense', ['dst_td', 'defensive_touchdowns']),
-  col('dst_pa', 'PA', 'number', 'defense', ['dst_points_allowed', 'points_allowed']),
+  // Points allowed PER GAME (nflTeamDefenseSeason.ts): a season total ranks a 17-game defense below a
+  // 16-game one for nothing but the schedule.
+  col('dst_pa', 'PA/G', 'number', 'defense', ['dst_points_allowed_per_game', 'points_allowed_per_game']),
 ]
 
 /** Kickers: the season box carries FG / XP made (`kicking` splits), nothing else. */

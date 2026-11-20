@@ -2,16 +2,20 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
 import {
+  addWindowEnd,
   completedThrough,
   firstWeekNotKickedOff,
   foldLedger,
   LAST_REGULAR_WEEK,
   ADD_WINDOW_WEEKS,
+  STARTABLE_PPR_PER_WEEK,
   TRADE_LETTERS,
   weekCalendar,
+  weekIsOver,
   type AddRow,
   type BenchRow,
   type LedgerSnapshot,
@@ -147,6 +151,71 @@ async function loadAddRows(season: number, db: Db, leagueIds?: readonly string[]
   })
 }
 
+/**
+ * THE WAIVER ENGINE'S #1 CLAIMS, WITH THE SCORE IT GAVE THEM (2026-11-20) — the input to the engine's own
+ * calibration (`lib/decision-os/waiver/calibration.ts`). Rows from the scheduled weekly run
+ * (`waiver_engine`) and the panel (`waiver_panel`), but only those carrying a score: both record one only
+ * in a league the ledger can measure (redraft, full-PPR NFL), so a row with no score is out of scope by
+ * construction and never reaches the bands.
+ */
+export type EngineClaimRow = AddRow & { score: number; givenAt: Date }
+
+async function loadEngineClaimRows(season: number, db: Db): Promise<EngineClaimRow[]> {
+  const rows = await db.$queryRaw<Array<{ user_id: string; week: number; rec_key: string; score: number; given_at: Date }>>`
+    SELECT user_id, week, rec_player_key AS rec_key, confidence_pct AS score, given_at
+    FROM chimmy_advice
+    WHERE surface IN (${WAIVER_ENGINE_SURFACE}, ${WAIVER_PANEL_SURFACE}) AND advice_type = 'add' AND season = ${season}
+      AND confidence_pct IS NOT NULL`
+  const ids = [...new Set(rows.map((r) => r.rec_key).filter(Boolean))]
+  const feed = await readPprByWeek(season, ids, db)
+  return rows.map((r) => {
+    const week = Number(r.week)
+    const end = Math.min(week + ADD_WINDOW_WEEKS - 1, LAST_REGULAR_WEEK)
+    const m = feed.get(r.rec_key)
+    let pts = 0
+    let weeks = 0
+    for (let w = week; w <= end; w++) {
+      const p = m?.get(w)
+      if (p != null) {
+        pts += p
+        weeks++
+      }
+    }
+    return {
+      userId: r.user_id,
+      week,
+      recPts: weeks > 0 ? pts : null,
+      recWeeks: weeks,
+      altPts: null,
+      hasDrop: false,
+      score: Number(r.score),
+      givenAt: new Date(r.given_at),
+    }
+  })
+}
+
+/**
+ * Graded engine claims → the per-band counts the snapshot stores. The pickup rule exactly: nothing until
+ * the claim's three-week window is provably over, a window with no stat row is unscored (never "not
+ * startable"), and startable is STARTABLE_PPR_PER_WEEK or more per week of the window.
+ */
+export function gradeEngineClaims(rows: readonly EngineClaimRow[], cal: WeekCalendar, now: Date): WaiverEngineLedger {
+  const graded: GradedWaiverClaim[] = []
+  for (const r of rows) {
+    const end = addWindowEnd(r.week)
+    if (!weekIsOver(cal, end, now)) continue
+    if (!(r.recWeeks > 0) || r.recPts == null || !Number.isFinite(r.recPts)) continue
+    const weeks = end - r.week + 1
+    const at = r.givenAt instanceof Date ? r.givenAt.getTime() : Number.NaN
+    graded.push({
+      score: r.score,
+      startable: r.recPts / weeks >= STARTABLE_PPR_PER_WEEK,
+      ageDays: Number.isFinite(at) ? (now.getTime() - at) / 86_400_000 : 0,
+    })
+  }
+  return foldWaiverEngineBands(graded)
+}
+
 export type TradeLedgerInputs = {
   rows: Array<TradeLedgerRow & { completed: boolean }>
   skips: Record<string, number>
@@ -157,23 +226,47 @@ export type TradeLedgerInputs = {
   idsPlaced: number
 }
 
-/** Every saved trade evaluation of the season, as gradable rows, with the feed to grade them. */
+/** The surface `reviewStoredTrade` evaluates under (`lib/decision-os/trade/tradeReviewContext.ts`). */
+export const COMMISSIONER_REVIEW_SURFACE = 'commissioner-review'
+
+/**
+ * Every saved trade evaluation of the season, as gradable rows, with the feed to grade them — ONE ROW PER DEAL.
+ *
+ * 🛑 A RECEIPT IS AN EVALUATION, NOT A DEAL, AND UNTIL 2026-11-20 THIS COUNTED EVALUATIONS. `saveAdHocReceipt`
+ * reuses a receipt only for the same surface, viewer and league within 24 hours, so one disputed trade looked at
+ * on three days, on two screens, by both managers and by the commissioner was graded as a dozen trades. The
+ * letter's record beside every Trade Center grade (and its 20-deal floor) was inflated by however often its
+ * deals were re-opened. Now each `inputHash` — league, both sides' assets and the viewer's side — counts once,
+ * at its FIRST evaluation: the letter the manager was shown before anything else happened. The two sides of
+ * one deal stay two rows on purpose; they are two calls (an A for one side is an F for the other). A row from
+ * before the hash column existed has none and counts on its own, as before.
+ *
+ * The dedup is in SQL, ahead of the LIMIT, so re-opened deals no longer crowd real ones out of the read.
+ * `surface` narrows to one surface first (the commissioner review's own record), deduplicated the same way.
+ */
 export async function loadTradeLedgerInputs(
   season: number,
   cal: WeekCalendar,
-  opts: { limit?: number; db?: Db } = {},
+  opts: { limit?: number; db?: Db; surface?: string } = {},
 ): Promise<TradeLedgerInputs> {
   const db = opts.db ?? prisma
   const limit = Math.max(1, opts.limit ?? MAX_TRADE_RECEIPTS_READ)
+  const onSurface = opts.surface ? Prisma.sql`AND s.surface = ${opts.surface}` : Prisma.empty
   const snaps = await db.$queryRaw<Array<{ is_trade: boolean; completed: boolean; surface: string | null; captured_at: Date; receipt: unknown }>>`
-    SELECT s."tradeId" IS NOT NULL AS is_trade,
-           COALESCE(t.status IN ('accepted', 'processed', 'completed'), false) AS completed,
-           s.surface, s."capturedAt" AS captured_at, s."evaluationReceipt" AS receipt
-    FROM trade_decision_snapshots s
-    LEFT JOIN af_league_trades t ON t.id = s."tradeId"
-    WHERE s."evaluationReceipt" IS NOT NULL
-      AND s."capturedAt" >= ${new Date(Date.UTC(season, 7, 1))} AND s."capturedAt" < ${new Date(Date.UTC(season + 1, 1, 15))}
-    ORDER BY s."capturedAt" DESC
+    SELECT d.is_trade, d.completed, d.surface, d.captured_at, d.receipt
+    FROM (
+      SELECT DISTINCT ON (COALESCE(s."inputHash", s.id))
+             s."tradeId" IS NOT NULL AS is_trade,
+             COALESCE(t.status IN ('accepted', 'processed', 'completed'), false) AS completed,
+             s.surface, s."capturedAt" AS captured_at, s."evaluationReceipt" AS receipt
+      FROM trade_decision_snapshots s
+      LEFT JOIN af_league_trades t ON t.id = s."tradeId"
+      WHERE s."evaluationReceipt" IS NOT NULL
+        AND s."capturedAt" >= ${new Date(Date.UTC(season, 7, 1))} AND s."capturedAt" < ${new Date(Date.UTC(season + 1, 1, 15))}
+        ${onSurface}
+      ORDER BY COALESCE(s."inputHash", s.id), s."capturedAt" ASC, s.id ASC
+    ) d
+    ORDER BY d.captured_at DESC
     LIMIT ${limit}`
 
   const skips: Record<string, number> = {}
@@ -206,8 +299,8 @@ export async function loadTradeLedgerInputs(
   return { rows, skips, read: snaps.length, pointsPerWeek, idsTotal: ids.length, idsPlaced: ids.filter((id) => placed(id) != null).length }
 }
 
-async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<LedgerSnapshot['trades']> {
-  const inputs = await loadTradeLedgerInputs(season, cal, { db })
+async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db, surface?: string): Promise<LedgerSnapshot['trades']> {
+  const inputs = await loadTradeLedgerInputs(season, cal, { db, surface })
   const redraft = inputs.rows.filter((r) => r.format === 'redraft')
   const g = gradeTradeRows(redraft, completedThrough(cal, now), inputs.pointsPerWeek)
   const byLetter: LedgerSnapshot['trades']['byLetter'] = {}
@@ -241,12 +334,18 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
   if (cal.size === 0) return null
-  const [bench, adds, trades] = await Promise.all([
+  const noTrades = { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }
+  const [bench, adds, trades, commissionerTrades, engineClaims] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
     part(() => loadAddRows(season, db), [] as AddRow[]),
-    part(() => gradeTrades(season, cal, now, db), { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }),
+    part(() => gradeTrades(season, cal, now, db), noTrades),
+    // The same letters, graded only where a commissioner was shown them in a trade review.
+    part(() => gradeTrades(season, cal, now, db, COMMISSIONER_REVIEW_SURFACE), noTrades),
+    // The waiver engine's #1 claims, by the score it gave them — its own calibration.
+    part(() => loadEngineClaimRows(season, db), [] as EngineClaimRow[]),
   ])
-  return foldLedger({ season, cal, now, bench, adds, trades })
+  const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
+  return foldLedger({ season, cal, now, bench, adds, trades, commissionerTrades, waiverEngine })
 }
 
 /**

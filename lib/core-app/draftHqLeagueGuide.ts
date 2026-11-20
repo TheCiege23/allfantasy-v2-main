@@ -83,6 +83,8 @@ type ImportedDraftHeadline =
   | { kind: 'drafting'; picks: number }
   | { kind: 'done'; picks: number; season: number | null }
   | { kind: 'before' }
+  /** No status was recorded with the picks: say what is on file, never the word "unknown". */
+  | { kind: 'recorded'; picks: number; season: number | null }
   /** A status we do not recognise — shown as it is, never guessed into a phase. */
   | { kind: 'other'; status: string }
 
@@ -92,5 +94,6 @@ export function importedDraftHeadline(choice: { status: string; season: number |
   if (phase === 'done') return { kind: 'done', picks, season: choice.season }
   const s = choice.status.trim().toLowerCase()
   if (s === 'pre_draft' || s === 'pre-draft' || s === 'scheduled' || s === 'upcoming') return { kind: 'before' }
+  if (s === '' || s === 'unknown') return { kind: 'recorded', picks, season: choice.season }
   return { kind: 'other', status: choice.status }
 }

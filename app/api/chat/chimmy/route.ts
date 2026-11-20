@@ -228,7 +228,7 @@ import {
   buildOrchestrationMeta,
   buildOrchestrationPromptSection,
   buildMemorySummaryLine,
-  classifyChimmyIntent,
+  classifyChimmyTurn,
   parseOrchestrationResponseSections,
 } from '@/lib/chimmy-orchestration'
 import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
@@ -2188,15 +2188,24 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * ⚠ THE INTENT ROUTER GAP — R2/R3.1/R3.3/R4b.5's opt-in slices were built, tested, wired into
    * the packet, and never requested here. `want` below was hardcoded to four always-on flags;
    * nothing decided, per question, whether a lineup/commissioner-health/psychology-consistency/
-   * roster-value read was worth its cost. This is the fix: a SECOND, early call to the intent
-   * classifier already used later in this route (line ~1789, with full conversation history) —
-   * using only `message`, which is available this early, rather than reordering existing working
-   * code to share one call. `classifyChimmyIntent` is pure and synchronous (regex matching, no
-   * I/O), so calling it twice costs microseconds, not a second network hop. The intent -> want
-   * mapping itself lives in `lib/decision-os/grounding/intentToWant.ts` — see its own header for
-   * why only four of the seven opt-in slices are mapped.
+   * roster-value read was worth its cost. This is the fix: the turn is classified once, here, and the
+   * intent -> want mapping lives in `lib/decision-os/grounding/intentToWant.ts` — see its own header
+   * for which opt-in slices are mapped. (This was first a SECOND classification, of `message` alone,
+   * beside the one with history further down; the two disagreed on follow-ups — see below.)
    */
-  const earlyWant = deriveWantFromIntent(classifyChimmyIntent(message).intent)
+  /*
+   * ⚠ ONE CLASSIFICATION FOR THE WHOLE TURN (2026-11-20). This used to classify `message` alone here and again further
+   * down with the last two user turns joined in, so on a follow-up the packet and the prompt disagreed about what was
+   * asked. `classifyChimmyTurn` decides once — the current question first, the previous turns only when it names
+   * nothing — and the packet, the intent label and the specialist agent all read this one result.
+   */
+  const recentUserSnippet = conversation
+    .filter((t) => t.role === 'user')
+    .slice(-2)
+    .map((t) => t.content)
+    .join('\n')
+  const chimmyOrchestrationClassification = classifyChimmyTurn(message, recentUserSnippet)
+  const earlyWant = deriveWantFromIntent(chimmyOrchestrationClassification.intent)
   /*
    * 🛑 THE THIRD BYPASS FAMILY, AND THE ONLY ONE GATED BEHIND A FLAG.
    *
@@ -2247,6 +2256,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const waiverClaimsSeen: { claims: Parameters<typeof recordChatWaiverAdvice>[0]['claims'] | null } = {
     claims: null,
   }
+  /*
+   * Every trade letter the engine gives while the packet grades the asker's pending offers (`pendingTrades`,
+   * 2026-11-20). The SAME array the tool loop's context collects into, so an answer quoting a letter from the packet
+   * passes the letter check (`lib/chimmy/tradeGradeCheck.ts`) exactly as one quoting the trade tool does.
+   */
+  const packetTradeGrades: ChimmyTradeGrade[] = []
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueSnapshot && userId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
@@ -2290,6 +2305,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
             idpKicker: true,
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
+            // Inside the draft room the loop is already handed this board (`draftRoomBoard` below): never twice.
+            draftBoard: earlyWant.draftBoard && insightType !== 'draft',
           },
           /*
            * The waiver engine's claims, HELD — not recorded here. A side channel: never in the
@@ -2306,6 +2323,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            */
           onWaiverClaims: (claims) => {
             waiverClaimsSeen.claims = claims
+          },
+          onTradeGrade: (grade) => {
+            packetTradeGrades.push(grade)
           },
         })
           .then((packet) => {
@@ -2326,7 +2346,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                 `[chimmy] Decision OS grounding finished late: ${packet.meta.durationMs}ms (engine ${packet.meta.engineMs ?? '?'}ms). Slowest: ${slowest || 'none timed'}.`,
               )
             }
-            const text = serializeDecisionOsGroundingForPrompt(packet)
+            // The slices this turn's intent asked for lead the packet (`ANSWERING_SLICES_BY_INTENT`).
+            const text = serializeDecisionOsGroundingForPrompt(packet, Date.now(), {
+              intent: chimmyOrchestrationClassification.intent,
+              intentLabel: chimmyOrchestrationClassification.label,
+            })
             // ⚠ Never overwrite a verdict the ceiling has already reached. The race abandons this
             // promise but does not stop it, so this callback still runs AFTER a timeout — and
             // reporting 'ok' for a packet nobody used is worse than reporting nothing at all.
@@ -2477,12 +2501,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     portfolioPlayerGroundingResult.status === 'fulfilled' ? portfolioPlayerGroundingResult.value : null
   const myRosterInjuries = myRosterInjuriesResult.status === 'fulfilled' ? myRosterInjuriesResult.value : null
 
-  const recentUserSnippet = conversation
-    .filter((t) => t.role === 'user')
-    .slice(-2)
-    .map((t) => t.content)
-    .join('\n')
-  const chimmyOrchestrationClassification = classifyChimmyIntent(message, recentUserSnippet)
+  // `chimmyOrchestrationClassification` is the turn's one classification, made before the packet (see `earlyWant`).
   let coachingProfileForOrchestration: Record<string, unknown> | null = null
   if (userId) {
     /*
@@ -3245,7 +3264,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: packetTradeGrades, faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
     /*
      * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
      * handed to the loop, instead of costing the model a tool round trip first — which is several

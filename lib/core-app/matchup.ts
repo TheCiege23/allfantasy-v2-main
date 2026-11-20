@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds, lineupRegistryNames, type LineupRegistryName } from './lineupCrosswalk'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -890,10 +891,17 @@ async function buildMatchupData(
    * one lookup would silently break the score join.
    */
   const playerCrosswalk = scoreIds.length
-    ? await timer.time('crosswalk', crosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
+    ? await timer.time('crosswalk', lineupCrosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
         () => new Map<string, string>(),
       ))
     : new Map<string, string>()
+  /* A Fantrax starter the crosswalk could not translate is still named, from the registry (see lineupCrosswalk.ts). */
+  const untranslatedIds = scoreIds.filter((id) => !playerCrosswalk.has(id))
+  const registryNames = untranslatedIds.length
+    ? await timer.time('registryNames', lineupRegistryNames(league.platform, sport, untranslatedIds).catch(
+        () => new Map<string, LineupRegistryName>(),
+      ))
+    : new Map<string, LineupRegistryName>()
   /* ⚠ ESPN D/ST ids (`-16002` is BUF) are not in the player crosswalk; the id alone names the club. */
   const sleeperIdByRosterId = String(sport ?? 'NFL').toUpperCase() === 'NFL'
     ? withTeamDefenseIds(league.platform, playerCrosswalk, scoreIds.map((playerId) => ({ playerId })))
@@ -1187,6 +1195,8 @@ async function buildMatchupData(
       }
     }
     const identity = identityBy.get(entry.playerId)
+    // Name, position and club only: with no Sleeper id there is no headshot, injury status or box score to attach.
+    const registry = identity ? undefined : registryNames.get(entry.playerId)
     return {
       playerId: entry.playerId,
       /*
@@ -1196,15 +1206,15 @@ async function buildMatchupData(
        * roster id.
        */
       sleeperId: identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null,
-      name: identity?.name ?? null,
-      position: displayPosition(identity?.position),
+      name: identity?.name ?? registry?.name ?? null,
+      position: displayPosition(identity?.position ?? registry?.position),
       /*
        * ⚠ NORMALISED, BECAUSE THE CREST LOOKUP UPPERCASES WHAT IT IS GIVEN AND
        * DOES NOT NORMALISE. `SportsPlayer.team` holds "Kansas City Chiefs" on 32
        * distinct values in production; `teamLogoUrl` would hand
        * "KANSAS CITY CHIEFS" to the CDN resolver and get nothing back.
        */
-      team: normalizeTeamAbbrev(identity?.team),
+      team: normalizeTeamAbbrev(identity?.team ?? registry?.team),
       sport,
       // Already vetted by `asHeadshotUrl` when the identity was composed.
       imageUrl: identity?.imageUrl ?? null,
@@ -1218,8 +1228,8 @@ async function buildMatchupData(
       injury: !entry.unavailable && identity
         ? atRisk[sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) ?? ''] ?? null
         : null,
-      ...fixtureOf(normalizeTeamAbbrev(identity?.team)),
-      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team),
+      ...fixtureOf(normalizeTeamAbbrev(identity?.team ?? registry?.team)),
+      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team ?? registry?.team),
     }
   }
 

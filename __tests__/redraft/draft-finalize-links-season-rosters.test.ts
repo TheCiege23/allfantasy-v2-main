@@ -73,6 +73,17 @@ beforeEach(() => {
 })
 
 describe('draft finalization links league rosters to the season rosters it creates', () => {
+  it('does not recreate a dropped Survivor Guillotine draft pick on finalization replay', async () => {
+    await seedDraftedDynastyLeague()
+    await syncCompletedDraftToRedraftSeason(LEAGUE)
+    await holder.db.league.update({ where: { id: LEAGUE }, data: { leagueVariant: 'survivor_guillotine' } })
+    await holder.db.redraftRosterPlayer.updateMany({ where: { playerId: 'p-qb-1', droppedAt: null }, data: { droppedAt: new Date() } })
+
+    const replay = await syncCompletedDraftToRedraftSeason(LEAGUE)
+    expect(replay.redraftPlayersCreated).toBe(0)
+    expect(rowsOf(holder.db, 'RedraftRosterPlayer').filter((p: any) => p.playerId === 'p-qb-1' && !p.droppedAt)).toHaveLength(0)
+  })
+
   it('links every team in a native dynasty league, not only Survivor', async () => {
     await seedDraftedDynastyLeague()
     const summary = await syncCompletedDraftToRedraftSeason(LEAGUE)

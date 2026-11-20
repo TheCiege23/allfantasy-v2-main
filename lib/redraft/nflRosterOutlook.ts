@@ -122,7 +122,7 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
         select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
       })
       .catch(() => []),
-    loadMatchupAfProjections({ playerIds: ids, season, week, sport, platform: args.league.platform, leagueSettings: args.league.settings }),
+    loadMatchupAfProjections({ leagueId: args.league.id, playerIds: ids, season, week, sport, platform: args.league.platform, leagueSettings: args.league.settings }),
     loadDefenseVsPositionRanks(db, season, week).catch(() => new Map<string, OpponentRank>()),
     loadNflByeWeeks(db, season).catch(() => new Map<string, number>()),
   ])

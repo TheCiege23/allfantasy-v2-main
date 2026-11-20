@@ -1,3 +1,4 @@
+import { fantraxSoccerExportKey, hasFantraxSoccerPool, validateFantraxSoccerExport } from '@/lib/league-import/fantrax/soccerPlayerExport'
 import 'server-only'
 
 import { providerIdentityColumn } from '@/lib/player-identity/resolveProviderRosterPlayers'
@@ -6,7 +7,6 @@ import { readEspnNcaabClassYears } from '@/lib/espn/ncaabRosterSnapshot'
 import type { TradeValuationGap } from './tradeGrade'
 import { playerIdSpaceFor } from './tradePlayers'
 import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
-import { fantraxSoccerExportKey, hasFantraxSoccerPool, validateFantraxSoccerExport } from '@/lib/league-import/fantrax/soccerPlayerExport'
 import { extractSeasonAggregate, perGameRates } from '@/lib/af-projections/core'
 import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
@@ -17,6 +17,9 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { planProFantraxIdentityLinks, proTeamCode, type ProFantraxSport } from '@/lib/player-identity/proFantraxIdentityPlan'
 
+import { loadCompletedSportDeals, sportMarketAdjustments } from '@/lib/trade-market/sportCompletedMarket'
+import { loadNcaabGameRates, loadPriorNcaabBoxRates } from '@/lib/af-projections/ncaabGameRates'
+import { blendWeight } from '@/lib/af-projections/seasonBlend'
 import { prisma } from '@/lib/prisma'
 import { buildLeagueStatScorer, type LeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
@@ -156,6 +159,11 @@ async function seasonGamesLeft(sport: PointsGradedSport, season: number, now: Da
   if (sport !== 'MLB') return counted == null ? null : { season, games: counted.games, scheduleKnown: true }
   if (counted == null) return { season, games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false }
   if (counted.teams * 2 >= MLB_CLUBS) return { season, games: counted.games, scheduleKnown: true }
+  // A partial calendar before March can be spring training or a placeholder.
+  // It cannot establish that this regular season has finished.
+  if (now.getTime() < Date.UTC(season, 2, 1)) {
+    return { season, games: MLB_REGULAR_SEASON_GAMES, scheduleKnown: false }
+  }
   const next = await gamesRemaining(sport, season + 1, now)
   return next != null && next.teams * 2 >= MLB_CLUBS
     ? { season: season + 1, games: next.games, scheduleKnown: true }
@@ -288,7 +296,7 @@ export async function loadSportPointsBase(args: {
   const campus = args.campusOnly === true && sport === 'NCAAB' && league && isNativePlatform(league.platform)
   const space = campus ? { provider: 'espn' } : league ? playerIdSpaceFor({ platform: league.platform ?? null, sport }) : null
   const column = typeof space === 'object' && space ? providerIdentityColumn(space.provider)
-    : space === 'sleeper' ? 'sleeperId' : space === 'rolling_insights' ? 'rollingInsightsId' : null
+    : space === 'sleeper' ? (sport === 'NBA' ? 'sleeperNbaId' : 'sleeperId') : space === 'rolling_insights' ? 'rollingInsightsId' : null
   const provider = typeof space === 'object' && space ? space.provider : undefined
   const storedRosters = league ? await prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } }).catch(() => []) : []
   const rosterRows = campus ? storedRosters.map(({ playerData }) => ({
@@ -296,14 +304,25 @@ export async function loadSportPointsBase(args: {
   })) : storedRosters
   const canLinkFromRoster = provider === 'yahoo' || provider === 'espn' || (provider === 'fantrax' && sport === 'SOCCER')
   const claims = canLinkFromRoster ? providerRosterClaims(rosterRows, provider) : []
-  const published = sport === 'SOCCER' && provider === 'fantrax' && league && valuation.kind === 'points'
+  const modeled = sport === 'SOCCER' ? await loadSoccerLines(now, column, claims) : await loadSnapshotLines(sport, normalize, now, column, claims)
+  // A verified export contains actual accumulated league points and club games;
+  // AF can estimate a rate from that history when component box scores are missing.
+  const published = !modeled.ok && sport === 'SOCCER' && provider === 'fantrax' && league && valuation.kind === 'points'
     ? await loadPublishedSoccerLines(league, rosterRows, now) : null
-  const source = published ?? (sport === 'SOCCER' ? await loadSoccerLines(now, column, claims) : await loadSnapshotLines(sport, normalize, now, column, claims))
+  const source = published ?? modeled
   if (!source.ok) return source
   const { season, games, lines, verifiedSoccerOwnGoals } = source
   const sourcedValuation = verifiedSoccerOwnGoals ? valuationFor(sport, league, args.format, true) : valuation
   if ('refuse' in sourcedValuation) return { ok: false, reason: sourcedValuation.refuse }
   const finished = await finishBoard({ sport, league, valuation: sourcedValuation, season, games, lines, verifiedSoccerOwnGoals, publishedSoccerPoints: Boolean(published), rosterProvider: provider, rosterRows, campusOnly: Boolean(campus) })
+  if (finished.ok && league && league.season === season) {
+    const deals = await loadCompletedSportDeals(sport, season, league.leagueType).catch(() => [])
+    if (deals.length) {
+      const chart = new Map(finished.ctx.board.filter(meetsSampleBar).map((p) => [p.id, p.perGame]))
+      const adjustments = sportMarketAdjustments(deals, chart)
+      for (const player of finished.ctx.board) player.tradeMarket = adjustments.get(player.id)
+    }
+  }
   if (!finished.ok || !league || !isDynastyGradedSport(sport) || !isDynastyLeagueType(league.leagueType)) return finished
   const boardIds = finished.ctx.board.map((p) => p.id)
   const nextDraftYear = nextRookieDraftYear(league, season, games.games, FULL_SEASON_GAMES[sport])
@@ -410,7 +429,7 @@ export function pickBoardAges(
   return out
 }
 
-const identitySelect = { id: true, rollingInsightsId: true, sleeperId: true, espnId: true, fantraxId: true, mflId: true, fleaflickerId: true } as const
+const identitySelect = { id: true, sleeperNbaId: true, rollingInsightsId: true, sleeperId: true, espnId: true, fantraxId: true, mflId: true, fleaflickerId: true } as const
 type RosterIdColumn = Exclude<keyof typeof identitySelect, 'id'> | null
 const crosswalkSelect = { ...identitySelect, canonicalName: true, currentTeam: true, position: true } as const
 
@@ -468,6 +487,7 @@ type BoardLine = Omit<BoardPlayer, 'perGame'> & { stats: Record<string, number>;
 type LinesResult =
   | { ok: true; season: number; games: GamesLeft; lines: BoardLine[]; verifiedSoccerOwnGoals?: boolean }
   | { ok: false; reason: string; valuationGap?: TradeValuationGap }
+
 
 async function loadPublishedSoccerLines(league: SportPointsLeague, rosters: readonly RosterRow[], now: Date): Promise<Extract<LinesResult, { ok: true }> | null> {
   if (!league.platformLeagueId || !league.season) return null
@@ -645,7 +665,8 @@ async function loadSnapshotLines(
   if (!rows) return { ok: false, reason: `The ${sport} projections could not be read just now.`, valuationGap: 'missing_projections' }
   if (games == null) return { ok: false, reason: `The ${seasonLabelFor(season, sport)} ${sport} schedule is not on file, so the games left to play cannot be counted.`, valuationGap: 'missing_schedule' }
 
-  const projected = { id: { in: rows.map((r) => r.playerId) } }
+  const collegeGames = sport === 'NCAAB' ? await loadNcaabGameRates(season, now) : null
+  const projected = { id: { in: [...new Set([...rows.map((r) => r.playerId), ...(collegeGames?.keys() ?? [])])] } }
   const providerColumn = column === 'rollingInsightsId' || column === 'sleeperId' ? null : column
   const proSport = sport === 'NBA' || sport === 'NHL' || sport === 'MLB' ? sport : null
   const rosterClaims = proSport ? claims : []
@@ -658,7 +679,7 @@ async function loadSnapshotLines(
   const providerLinks = proSport && rosterClaims.length
     ? rosterProjectionLinks(proSport, providerColumn, identities, rosterClaims)
     : providerColumn ? reduceCrosswalk(identities.map((i) => ({ from: i[providerColumn], to: i.id }))) : null
-  const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, i.sleeperId].filter((v): v is string => Boolean(v))]))
+  const aliasesById = new Map(identities.map((i) => [i.id, [i.rollingInsightsId, sport === 'NBA' ? i.sleeperNbaId : i.sleeperId].filter((v): v is string => Boolean(v))]))
   const rosterAliasById = providerLinks
     ? new Map([...providerLinks].map(([alias, id]) => [id, alias]))
     : new Map(identities.map((i) => [i.id, column ? i[column]?.trim() : null]))
@@ -693,6 +714,64 @@ async function loadSnapshotLines(
       seasonBlend: seasonBlendOf(r.adjustmentFactors),
       stats,
     })
+  }
+  if (sport === 'NCAAB') {
+    // A prior-season rate can price a returner once current-season box scores
+    // establish that the same athlete is still playing college basketball.
+    const played = await prisma.fantasyStatLine.findMany({
+      where: { sport, season: String(season), week: 0, source: 'rolling_insights' },
+      select: { playerId: true, stats: true },
+    })
+    const current = new Set(played.filter((row) => extractSeasonAggregate(row.stats)).map((row) => row.playerId))
+    for (const id of collegeGames!.keys()) current.add(id)
+    const active = lines.filter((line) => line.sourceSeason === season || current.has(line.id))
+    const byId = new Map(active.map((line) => [line.id, line]))
+    const meta = new Map(identities.map((i) => [i.id, i]))
+    for (const [id, box] of collegeGames!) {
+      const line = byId.get(id)
+      if (!line) {
+        const i = meta.get(id)
+        if (!i?.canonicalName || !i.position) continue
+        active.push({ id, name: i.canonicalName, position: i.position, aliases: aliasesById.get(id) ?? [], rosterAlias: rosterAliasById.get(id),
+          sourceSeason: season, stats: box.stats, sampleGames: box.games })
+      } else if (line.sourceSeason === season - 1) {
+        const w = blendWeight(box.games)
+        line.stats = Object.fromEntries(Object.keys(box.stats).map((k) => [k, w * box.stats[k] + (1 - w) * (line.stats[k] ?? box.stats[k])]))
+        line.sampleGames = (line.sampleGames ?? 0) + box.games
+        line.sourceSeason = season
+      } else if (box.games > (line.sampleGames ?? 0)) {
+        line.stats = box.stats
+        line.sampleGames = box.games
+        line.sourceSeason = season
+      }
+    }
+    const thin = new Map(active.filter((line) => line.sourceSeason === season && (line.sampleGames ?? 0) < MIN_SAMPLE_GAMES)
+      .map((line) => [line.id, line]))
+    if (thin.size) {
+      const prior = await prisma.fantasyStatLine.findMany({
+        where: { sport, season: String(season - 1), week: 0, source: 'rolling_insights', playerId: { in: [...thin.keys()] } },
+        select: { playerId: true, stats: true },
+      })
+      const priorBoxes = await loadPriorNcaabBoxRates(season - 1)
+      const aggregates = new Map(prior.map(row => [row.playerId, extractSeasonAggregate(row.stats)]))
+      for (const [id, line] of thin) {
+        const aggregate = aggregates.get(id)
+        const box = priorBoxes.get(id)
+        const previous = aggregate && aggregate.gamesPlayed >= (box?.games ?? MIN_SAMPLE_GAMES)
+          ? { stats: scoringStats(perGameRates(aggregate)), games: aggregate.gamesPlayed } : box
+        if (!previous) continue
+        const priorStats = previous.stats
+        if (!Object.keys(priorStats).length) continue
+        const weight = blendWeight(line.sampleGames ?? 0)
+        for (const stat of Object.keys(priorStats)) {
+          line.stats[stat] = weight * (line.stats[stat] ?? 0) + (1 - weight) * priorStats[stat]
+        }
+        line.sampleGames = (line.sampleGames ?? 0) + previous.games
+      }
+    }
+    if (!active.length && lines.length) return { ok: false, reason: 'College rosters turn over every year. No projected player has a verified appearance this season.', valuationGap: 'projection_coverage' }
+    for (const line of active) line.currentSeasonParticipant = true
+    return { ok: true, season: games.season, games, lines: active }
   }
   if (sport === 'NBA') {
     // The projection writer switches after three games. Trade values require ten, so use
@@ -790,8 +869,7 @@ async function finishBoard(args: {
     const { stats: _stats, publishedPerGame: _published, ...player } = line
     board.push({ ...player, perGame })
   }
-  const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport) })
-  if (notReady) return { ok: false, reason: notReady, valuationGap: 'projection_coverage' }
+  let verifiedWire = false
   const baseline = baselineSeasonOf(board, season)
 
   let replacementByPosition = replacementFromLineups(board, { teams, slots: lineup.slots, benchPerTeam: lineup.benchPerTeam })
@@ -811,10 +889,29 @@ async function finishBoard(args: {
           mapped += 1
         }
       }
-      if (mapped / rostered.length >= MIN_ROSTER_MAPPING) replacementByPosition = replacementFromRosters(board, onBoard)
+      if (mapped / rostered.length >= MIN_ROSTER_MAPPING) {
+        replacementByPosition = replacementFromRosters(board, onBoard)
+        verifiedWire = replacementByPosition.size > 0
+      }
+      else if (sport === 'NCAAB' && rosterProvider === 'fantrax' && args.rosterRows.length === teams &&
+        args.rosterRows.every(r => rosteredIdsOf(r.playerData).length > 0)) {
+        // A complete Fantrax roster census proves that a verified Fantrax player ID is free,
+        // even if a different rostered player's ID has no AF projection yet.
+        const held = new Set(rostered)
+        const verifiedFree = board.filter(p => p.rosterAlias && rosterIndex?.get(p.rosterAlias)?.id === p.id && !held.has(p.rosterAlias))
+        const wire = replacementFromRosters(verifiedFree, new Set())
+        if (wire.size) {
+          replacementByPosition = wire
+          verifiedWire = true
+        }
+      }
       else if (args.campusOnly) return { ok: false, reason: 'Too few Campus roster IDs link to current college projections.', valuationGap: 'projection_coverage' }
     }
   }
+
+  const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport),
+    verifiedWire, rosterDepth: teams * (lineup.benchPerTeam + lineup.slots.reduce((n, s) => n + s.count, 0)) })
+  if (notReady) return { ok: false, reason: notReady, valuationGap: 'projection_coverage' }
 
   return {
     ok: true,

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import { prisma } from '@/lib/prisma'
 import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer'
-import { LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE } from './adviceSurfaces'
+import { LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE } from './adviceSurfaces'
 
 /**
  * Advice Chimmy gave — the storage half of Chimmy receipts (retention item 6, user decisions
@@ -32,9 +32,10 @@ export type AdviceSurface =
   | 'triage_swap'
   | 'my_team_bench'
   | 'waiver_panel'
+  | 'waiver_engine'
 
 // `triage_swap` and `my_team_bench` are AllFantasy's calls, not Chimmy's — see ./adviceSurfaces.ts.
-export { AF_TIP_SURFACE, LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE, isChimmyAdvice } from './adviceSurfaces'
+export { AF_TIP_SURFACE, LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE, isChimmyAdvice } from './adviceSurfaces'
 
 export const ADVICE_TYPES: readonly AdviceType[] = ['start_sit', 'add', 'lineup_swap']
 export const ADVICE_SURFACES: readonly AdviceSurface[] = [
@@ -44,6 +45,7 @@ export const ADVICE_SURFACES: readonly AdviceSurface[] = [
   'triage_swap',
   'my_team_bench',
   'waiver_panel',
+  'waiver_engine',
 ]
 export const MAX_ADVICE_READ = 200
 
@@ -110,6 +112,11 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
    * open, so the same call from Chimmy would be relabelled theirs and drop out of Chimmy's track
    * record. Their upsert is scoped to their own rows (`DO UPDATE … WHERE surface = <their surface>`),
    * and a Chimmy call on the same pair still takes the row, as Chimmy's.
+   *
+   * ⚠ THE ONE EXCEPTION IS `waiver_engine` (2026-11-20): the scheduled engine run's pick, which nobody was
+   * shown. Any surface that SHOWS the same pick takes that row over (the `OR` below, and Chimmy's upsert
+   * already takes any row) — so a user-shown pickup is never lost to an unshown one. The engine itself
+   * still matches only its own rows: `surface = 'waiver_engine'` is the same test twice.
    */
   const ownRowsOnly = LEDGER_ONLY_SURFACES.includes(input.surface)
   const recProjected = finiteOrNull(input.projected?.rec)
@@ -128,6 +135,7 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
              ${recKey}, ${recName}, ${altKey}, ${input.alt?.name?.trim() || null}, ${input.slot?.trim() || null}, ${confidence},
              ${recProjected}, ${altProjected})
           ON CONFLICT ("user_id", "league_id", "season", "week", "advice_type", "rec_player_key", "alt_player_key") DO UPDATE SET
+            "surface"        = EXCLUDED."surface",
             "rec_name"       = EXCLUDED."rec_name",
             "alt_name"       = EXCLUDED."alt_name",
             "slot"           = EXCLUDED."slot",
@@ -136,7 +144,7 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
             "alt_projected"  = EXCLUDED."alt_projected",
             "withdrawn_at"   = NULL,
             "given_at"       = CURRENT_TIMESTAMP
-          WHERE "chimmy_advice"."surface" = ${input.surface}
+          WHERE "chimmy_advice"."surface" = ${input.surface} OR "chimmy_advice"."surface" = ${WAIVER_ENGINE_SURFACE}
         `
       } else {
         await prisma.$executeRaw`

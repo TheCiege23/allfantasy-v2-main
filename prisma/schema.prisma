@@ -2527,6 +2527,27 @@ model TradeBlockEntry {
   @@map("trade_block_entries")
 }
 
+/// One stretch in which the commissioner's manager table called a NATIVE league's manager inactive
+/// (lib/commissioner-hub/inactiveFlagLedger.ts, 2026-11-20), graded two weeks later: did the manager do
+/// something of their own again (`came_back`) or not (`stayed_away`). A stretch is keyed by the last action
+/// it was idle FROM, so a manager who returns and goes quiet again opens a new row, and re-showing the same
+/// flag writes nothing. Counts only leave the server (the advice record); rows name a roster, never a person.
+model CommissionerInactiveFlag {
+  id           String    @id @default(cuid())
+  leagueId     String
+  rosterId     String
+  /// The manager's own last action when the flag was raised — the stretch's key.
+  lastActionAt DateTime  @db.Timestamptz(6)
+  flaggedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  /// `came_back` | `stayed_away`; null until two weeks have passed.
+  outcome      String?   @db.VarChar(16)
+  gradedAt     DateTime? @db.Timestamptz(6)
+
+  @@unique([leagueId, rosterId, lastActionAt])
+  @@index([outcome, flaggedAt])
+  @@map("commissioner_inactive_flags")
+}
+
 /// A manager's "I want this player" mark: the AF crest on the league page's Propose grid and trade
 /// block cards. Shown to other managers only as an anonymous COUNT per player, never as who marked it.
 /// Keyed by the AllFantasy league and user and the player id the league's rosters use.

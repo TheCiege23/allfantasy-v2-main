@@ -13,6 +13,7 @@ import '@/components/core-app/trades/af-trades-league-guide.css'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { holdUnsavedWork } from '@/lib/core-app/unsavedWork'
 import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
@@ -851,6 +852,9 @@ export function TradeCenter(props: {
   // this form and discard an unsaved proposal or its in-flight analysis.
   const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
   useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
+  // And no deploy reload while building: after a deploy the page reloads when it goes into the
+  // background, which threw a half-built trade away the moment a manager checked another app.
+  useEffect(() => editingProposal ? holdUnsavedWork() : undefined, [editingProposal])
   const [draftNote, setDraftNote] = useState<string | null>(null)
   const [recoverableDraft, setRecoverableDraft] = useState<ReturnType<typeof decodeTradeDraft>>(null)
   const [draftTouched, setDraftTouched] = useState(false)

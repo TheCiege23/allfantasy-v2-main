@@ -81,6 +81,8 @@ export async function POST(req: NextRequest) {
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant === 'survivor_guillotine') return NextResponse.json({ error: 'Use your Survivor Guilly league waiver board for claims.' }, { status: 409 })
 
   const roster = await prisma.redraftRoster.findFirst({
     where: { id: rosterId, seasonId, leagueId },

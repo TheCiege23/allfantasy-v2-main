@@ -120,7 +120,7 @@ describe('insight cards — present only with data', () => {
     expect(g.inGame).toBe(4)
     expect(g.remaining).toBe(7)
     render(<Matchup data={data('live')} />)
-    expect(screen.getByText(/Your Ja'Marr Chase and Ravens against their Lamar Jackson and Derrick Henry\. 4 of 7/)).toBeTruthy()
+    expect(screen.getByText(/Your Ja'Marr Chase and Ravens against their Lamar Jackson and Derrick Henry\. 4 of the 7 starters still to play are in this game\./)).toBeTruthy()
   })
 
   it('no swing game when no starter can be placed in a game, and none on a final week', () => {

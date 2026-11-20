@@ -377,6 +377,7 @@ export async function buildMatchupCenterPayload(params: {
   // AF's own projection beside the provider's, in this league's scoring. Empty when the engine has
   // nothing for the week — the UI then shows no AF line rather than a substitute.
   const afByPlayer = await loadMatchupAfProjections({
+    leagueId: league.id,
     playerIds: [...myStarters, ...oppStarters].map((p) => p.id),
     season,
     week,
@@ -384,7 +385,11 @@ export async function buildMatchupCenterPayload(params: {
     platform: league.platform ?? null,
     leagueSettings: league.settings,
   })
-  const withAf = (slot: MatchupPlayerSlot): MatchupPlayerSlot => ({ ...slot, afProjectedPoints: afByPlayer.get(slot.playerId) ?? null })
+  const withAf = (slot: MatchupPlayerSlot): MatchupPlayerSlot => {
+    const forecast = afByPlayer.get(slot.playerId)
+    return { ...slot, projectedPoints: forecast ?? slot.currentPoints, hasRealProjection: forecast != null,
+      afProjectedPoints: forecast ?? null, aiInsight: slotAiInsight(slot.currentPoints, forecast ?? slot.currentPoints, slot.injuryStatus, forecast != null) }
+  }
 
   const leftSlots = myStarters.map((r) => withAf(toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming')))
   const rightSlots = oppStarters.map((r) => withAf(toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming')))

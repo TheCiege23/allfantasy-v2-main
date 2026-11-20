@@ -1217,6 +1217,25 @@ export async function executeChimmyTool(
 
       case 'get_available_players': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const [{ loadWaiverBoard }, { prisma }] = await Promise.all([
+          import('@/lib/waivers/waiverBoard'),
+          import('@/lib/prisma'),
+        ])
+        const board = await loadWaiverBoard({
+          prisma, leagueId: ctx.leagueId, userId: ctx.userId, limit: 15,
+        }).catch(() => null)
+        if (board?.state === 'ok' && board.candidates.length > 0) {
+          const rows = board.candidates.map((player, index) => [
+            `${index + 1}. ${player.name}${player.position ? ` (${player.position})` : ''}`,
+            `${player.projectedPoints.toFixed(2)} projected`,
+            `+${player.gain.toFixed(2)} to the best eligible lineup`,
+          ].join(' · '))
+          return [
+            'The league’s Worth Adding board ranks these pickups by projected lineup gain.',
+            ...rows,
+            ...board.notes,
+          ].join('\n')
+        }
         return buildAvailablePlayersContext(ctx.leagueId, ctx.userId)
       }
 
@@ -1328,24 +1347,31 @@ export async function executeChimmyTool(
        * player and the concept — it is the same number for every user — so requiring a selected
        * league would refuse a question we can answer perfectly well.
        */
+      case 'explain_value':
       case 'get_player_value': {
-        const asked = typeof args.player === 'string' ? args.player : ''
-        /*
-         * An NBA league in scope (2026-11-16): the league's own value board — the same pricing the trade
-         * grade uses (lib/chimmy/sportBoardValue.ts). Null for any other sport, which keeps the NFL
-         * market values below.
-         */
-        if (ctx.leagueId) {
+        const asked = typeof args.player === 'string' ? args.player.trim() : ''
+        const sport = typeof args.sport === 'string' ? args.sport.trim().toUpperCase() : null
+        if (!ctx.leagueId) return name === 'explain_value'
+          ? await buildExplainValueContext({ playerName: asked, sport })
+          : await buildPlayerValueContext({ playerName: asked, leagueId: null })
+        if (!asked) return 'Ask which player the manager means.'
+        const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
+        const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
+        if (metrics && sport && metrics.sport !== (sport === 'NCAABB' ? 'NCAAB' : sport)) return 'The requested sport differs from the connected league.'
+        if (metrics && metrics.rows.length > 1) return 'Multiple players in this league sport match. Ask for their position or team.'
+        const row = metrics?.rows[0]
+        const value = row?.dynastyTradeValue ?? row?.tradeValue
+        if (value == null || !row) return 'AF has no verified trade value for that player in this league.'
+        const quote = `${row.playerName} has an AF trade value of ${value.toFixed(2)} ${row.tradeValueUnit} in this league.`
+        if (row.completedTradeSample) return quote + ' Completed trade sample: ' + row.completedTradeSample + '.'
+        if (name === 'explain_value') {
           const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
-          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
-          if (board != null) return board
+          const detail = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked }).catch(() => null)
+          if (detail) return quote + '\n' + detail
         }
-        // The player card's number, on this league's chart when one is in scope (`playerMarketValue.ts`).
-        return await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId ?? null })
+        return quote
       }
 
-      /* No league gate: the standard projection remains useful without one. When a verified
-       * scope exists, the builder also computes a league-scored number from component stats. */
       case 'get_player_projection': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
@@ -1358,22 +1384,6 @@ export async function executeChimmyTool(
           ? Math.floor(args.week)
           : null
         return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId })
-      }
-
-      case 'explain_value': {
-        const asked = typeof args.player === 'string' ? args.player : ''
-        const sport = typeof args.sport === 'string' ? args.sport : null
-        /*
-         * In an NBA league in scope, "why is he worth that" is answered from the league's own value board —
-         * per game against the best free agent, times games left (lib/chimmy/sportBoardValue.ts). Null for
-         * any other league sport, or when the model asked about another sport.
-         */
-        if (ctx.leagueId && (!sport || sport.trim().toUpperCase() === 'NBA')) {
-          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
-          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
-          if (board != null) return `WHY (the league's own value, step by step):\n${board}`
-        }
-        return await buildExplainValueContext({ playerName: asked, sport })
       }
 
       /*
@@ -1508,9 +1518,9 @@ export async function executeChimmyTool(
       case 'optimize_my_lineup': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         /*
-         * ONE START/SIT ANSWER (2026-11-16): an NFL lineup is answered from My Team's own best lineup, so chat and
-         * the screen cannot disagree. Only when My Team has no NFL lineup to read does the weekly-feed tool answer,
-         * and it says so.
+         * ONE START/SIT ANSWER (2026-11-16; every sport 2026-11-20): a lineup is answered from My Team's own best
+         * lineup, so chat and the screen cannot disagree. Only when My Team has no best lineup for a non-NFL league
+         * (a category league) or cannot load does the weekly-feed tool answer, and a load failure says so.
          */
         const { buildMyTeamLineupContext } = await import('@/lib/chimmy/myTeamLineupGrounding')
         const fromMyTeam = await buildMyTeamLineupContext({

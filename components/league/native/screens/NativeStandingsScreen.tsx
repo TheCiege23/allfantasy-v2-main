@@ -1,5 +1,7 @@
 'use client'
 
+import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
+import { GuillotineStandingsScreen } from './NativeGuillotineScreens'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { allPlayShare, fitPlayoffFormatToLeague, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
@@ -41,7 +43,13 @@ type View = 'standings' | 'playoffs' | 'power'
 
 const record = (r: Row) => `${r.wins}–${r.losses}${r.ties ? `–${r.ties}` : ''}`
 
-export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
+export function NativeStandingsScreen(props: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
+  // Guillotine has no record and no playoffs: the table is who is still alive, then who was chopped.
+  if (isNativeGuillotineLeague(props.league)) return <GuillotineStandingsScreen league={props.league} onSelectTab={props.onSelectTab} />
+  return <HeadToHeadStandingsScreen {...props} />
+}
+
+function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
   const [view, setView] = useState<View>('standings')
   const [data, setData] = useState<StandingsData | null>(null)
   const [forecast, setForecast] = useState<Forecast[] | null>(null)

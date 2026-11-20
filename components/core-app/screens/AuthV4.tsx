@@ -22,6 +22,7 @@ import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialP
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOption'
+import IosBracketAppOption from '@/components/brackets/IosBracketAppOption'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -976,7 +977,7 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
   return <>
-    {callbackUrl.startsWith('/brackets/leagues/') ? <AndroidBracketAppOption /> : null}
+    {callbackUrl.startsWith('/brackets/leagues/') ? <><AndroidBracketAppOption /><IosBracketAppOption /></> : null}
     {mode === 'signin' ? <SignIn callbackUrl={callbackUrl} /> : <SignUp callbackUrl={callbackUrl} />}
   </>
 }

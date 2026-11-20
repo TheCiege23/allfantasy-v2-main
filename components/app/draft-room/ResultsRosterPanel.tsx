@@ -21,9 +21,12 @@ import { useMemo, useState, useEffect } from 'react'
 import { ChevronDown, Bot, User, AlertTriangle } from 'lucide-react'
 import { detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
 import { PlayerAvatar } from './PlayerAvatar'
+import { proTeamKey } from '@/lib/draft-room/proTeamKey'
+import { nextGameLabel, nextGameShort, weekGamesLabel, type WeekGamesByTeam } from '@/lib/draft-room/weekGames'
 import {
   buildOrderedRosterSlots,
   assignPicksToSlots,
+  sportHasByeWeeks,
   type RosterSlotEntry,
 } from '@/lib/draft-room/rosterSlotOrder'
 
@@ -61,6 +64,16 @@ interface ResultsRosterPanelProps {
   starterSlots: Record<string, number> | null | undefined
   benchSlots?: number | null
   idpEnabled?: boolean
+  /**
+   * Sport code. Drives the slot order (PG SG … for basketball, C 1B … for baseball) and whether
+   * a BYE is shown at all — only football has bye weeks. Football when absent.
+   */
+  sport?: string | null
+  /**
+   * NBA / NHL / MLB: each team's games in the next seven days (`useWeekGames`). Shown where football
+   * shows BYE — "3 games", with the next game in the tooltip. Absent or empty, nothing is shown.
+   */
+  weekGames?: WeekGamesByTeam | null
   /** Optional override of the focused team — used by tests / external triggers. */
   focusRosterIdOverride?: string | null
   testIdBase?: string
@@ -73,6 +86,8 @@ export function ResultsRosterPanel({
   starterSlots,
   benchSlots,
   idpEnabled = false,
+  sport = null,
+  weekGames = null,
   focusRosterIdOverride,
   testIdBase = 'results-roster-panel',
 }: ResultsRosterPanelProps) {
@@ -91,8 +106,8 @@ export function ResultsRosterPanel({
   )
 
   const orderedSlots = useMemo(
-    () => buildOrderedRosterSlots({ starterSlots, benchSlots, idpEnabled }),
-    [starterSlots, benchSlots, idpEnabled],
+    () => buildOrderedRosterSlots({ starterSlots, benchSlots, idpEnabled, sport }),
+    [starterSlots, benchSlots, idpEnabled, sport],
   )
 
   const focusedPicks = useMemo(() => {
@@ -103,8 +118,8 @@ export function ResultsRosterPanel({
   }, [picks, focusedRosterId])
 
   const slotAssignments = useMemo(
-    () => assignPicksToSlots(focusedPicks, orderedSlots),
-    [focusedPicks, orderedSlots],
+    () => assignPicksToSlots(focusedPicks, orderedSlots, sport),
+    [focusedPicks, orderedSlots, sport],
   )
 
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -112,12 +127,15 @@ export function ResultsRosterPanel({
   const starterPicks = slotAssignments.filter((s) => s.slot.kind === 'starter' || s.slot.kind === 'custom')
   const benchPicks = slotAssignments.filter((s) => s.slot.kind === 'bench')
   /** 3+ STARTERS sharing a bye is the one bye problem worth a warning while drafting. */
+  const showBye = sportHasByeWeeks(sport)
   const byeStacks = useMemo(
     () =>
-      detectByeWeekClusters(
-        starterPicks.flatMap((e) => (e.pick ? [{ position: e.pick.position, byeWeek: e.pick.byeWeek ?? null }] : [])),
-      ),
-    [starterPicks],
+      !showBye
+        ? []
+        : detectByeWeekClusters(
+            starterPicks.flatMap((e) => (e.pick ? [{ position: e.pick.position, byeWeek: e.pick.byeWeek ?? null }] : [])),
+          ),
+    [starterPicks, showBye],
   )
 
   return (
@@ -208,9 +226,9 @@ export function ResultsRosterPanel({
             {byeStacks[0]!.count} starters are off in week {byeStacks[0]!.byeWeek}
           </p>
         ) : null}
-        <SlotGroup heading="STARTERS" entries={starterPicks} testIdBase={`${testIdBase}-starters`} />
+        <SlotGroup heading="STARTERS" entries={starterPicks} showBye={showBye} sport={sport} weekGames={weekGames} testIdBase={`${testIdBase}-starters`} />
         {benchPicks.length ? (
-          <SlotGroup heading="BENCH" entries={benchPicks} testIdBase={`${testIdBase}-bench`} />
+          <SlotGroup heading="BENCH" entries={benchPicks} showBye={showBye} sport={sport} weekGames={weekGames} testIdBase={`${testIdBase}-bench`} />
         ) : null}
         {starterPicks.length === 0 && benchPicks.length === 0 ? (
           <div className="px-3 py-6 text-center text-[11px] text-white/45">
@@ -225,10 +243,14 @@ export function ResultsRosterPanel({
 interface SlotGroupProps {
   heading: string
   entries: ReadonlyArray<{ slot: RosterSlotEntry; pick: ResultsRosterPanelPick | null }>
+  /** Football only; other sports have no bye weeks, so the column is left out rather than dashed. */
+  showBye: boolean
+  sport: string | null
+  weekGames: WeekGamesByTeam | null
   testIdBase: string
 }
 
-function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
+function SlotGroup({ heading, entries, showBye, sport, weekGames, testIdBase }: SlotGroupProps) {
   if (!entries.length) return null
   return (
     <div className="border-b border-white/8 last:border-b-0" data-testid={testIdBase}>
@@ -262,12 +284,31 @@ function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
                   <span className="block truncate text-[11px] text-white/50">
                     {entry.pick.position}
                     {entry.pick.team ? ` · ${entry.pick.team}` : ''}
+                    {(() => {
+                      if (showBye) return null
+                      const next = nextGameShort(weekGames?.[proTeamKey(sport, entry.pick.team) ?? ''])
+                      return next ? <span data-testid={`${testIdBase}-next-${idx}`}>{` · ${next}`}</span> : null
+                    })()}
                   </span>
                 </span>
                 <span className="shrink-0 text-right text-[11px] leading-tight tabular-nums">
-                  <span className="block text-white/70" data-testid={`${testIdBase}-bye-${idx}`}>
-                    {entry.pick.byeWeek != null ? `BYE ${entry.pick.byeWeek}` : 'BYE —'}
-                  </span>
+                  {showBye ? (
+                    <span className="block text-white/70" data-testid={`${testIdBase}-bye-${idx}`}>
+                      {entry.pick.byeWeek != null ? `BYE ${entry.pick.byeWeek}` : 'BYE —'}
+                    </span>
+                  ) : (() => {
+                    const week = weekGames?.[proTeamKey(sport, entry.pick.team) ?? ''] ?? null
+                    const label = weekGamesLabel(week)
+                    return label ? (
+                      <span
+                        className="block text-white/70"
+                        title={nextGameLabel(week) ?? undefined}
+                        data-testid={`${testIdBase}-games-${idx}`}
+                      >
+                        {label}
+                      </span>
+                    ) : null
+                  })()}
                   {entry.pick.pickLabel ? (
                     <span className="block text-white/45" data-testid={`${testIdBase}-pick-${idx}`}>
                       {entry.pick.pickLabel}

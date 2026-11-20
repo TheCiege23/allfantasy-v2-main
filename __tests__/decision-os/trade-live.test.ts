@@ -61,9 +61,10 @@ describe('trade-proposals route Stage 1 wiring', () => {
     // fields below past 900 chars. A fixed byte window fails on INSERTION, not regression.
     const liveBlock = routeSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('decisionId: decision.decision_id')
-    // NOT toTradeCard(decision): the card must render the decision AFTER attachSavedAnalysis,
-    // or the AI explanation never reaches it. Stronger than what this asserted before.
-    expect(liveBlock).toContain('card: toTradeCard(attached.decision)')
+    // The card renders the decision itself: the saved three-brain explanation that used to be attached in
+    // between was retired 2026-11-19 (re-score build item 9), and nothing may re-insert it unannounced.
+    expect(liveBlock).toContain('card: toTradeCard(decision)')
+    expect(liveBlock).not.toContain('attachSavedAnalysis')
     expect(liveBlock).toContain('completeness: decision.data_completeness')
     expect(liveBlock).toContain('uncertaintySources: decision.uncertainty_sources')
   })

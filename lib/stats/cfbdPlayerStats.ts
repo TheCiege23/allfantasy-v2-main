@@ -4,7 +4,7 @@ import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 import { prisma } from '@/lib/prisma'
 import { createCfbdGameLogCollector, planCfbdGameLogs, type CfbdGameLogReport } from '@/lib/stats/cfbdGameLogs'
-import { appearancesOfWeek, decideWeekFetch, gamesPlayedFrom, readWeekAppearances, weekAppearancesKey, type WeekAppearances } from '@/lib/stats/cfbdWeekFetchPlan'
+import { appearancesOfWeek, decideWeekFetch, verifiedSeasonAppearances, readWeekAppearances, weekAppearancesKey, type WeekAppearances } from '@/lib/stats/cfbdWeekFetchPlan'
 
 /**
  * cfbdPlayerStats — NCAAF season stat lines from CollegeFootballData, and (since 2026-09-23) the
@@ -60,7 +60,7 @@ async function fetchGamesPlayed(
   plan?: WeekPlan | null,
 ): Promise<{ counts: Map<string, number>; report: GamesPlayedReport }> {
   const report: GamesPlayedReport = { weeksFetched: [], weeksFromStore: [], weeksNotStarted: [] }
-  const weeks: WeekAppearances[] = []
+  const weeks = new Map<number, WeekAppearances>()
 
   // Settled weeks kept by an earlier run. A failed read only costs the saving, never the count.
   const stored = new Map<number, WeekAppearances>()
@@ -84,7 +84,7 @@ async function fetchGamesPlayed(
       ? decideWeekFetch({ isComplete: complete, hasStarted: plan.hasStarted(week), cached: stored.has(week) })
       : 'fetch'
     if (decision === 'cached') {
-      weeks.push(stored.get(week) as WeekAppearances)
+      weeks.set(week, stored.get(week) as WeekAppearances)
       report.weeksFromStore.push(week)
       continue
     }
@@ -100,7 +100,7 @@ async function fetchGamesPlayed(
       if (!res.ok) {
         // We could not ask. A week kept earlier is still the right count for it.
         const kept = stored.get(week)
-        if (kept) weeks.push(kept)
+        if (kept) weeks.set(week, kept)
         continue
       }
       const games = (await res.json()) as unknown
@@ -113,7 +113,7 @@ async function fetchGamesPlayed(
         /* reported by the collector itself */
       }
       const appearances = appearancesOfWeek(games)
-      weeks.push(appearances)
+      weeks.set(week, appearances)
       // A settled, written week does not change again: keep it, so no later run asks for it.
       if (complete && Object.keys(appearances).length > 0) {
         const cacheKey = weekAppearancesKey(season, week)
@@ -127,7 +127,10 @@ async function fetchGamesPlayed(
     }
   }
 
-  return { counts: gamesPlayedFrom(weeks), report }
+  const participation = await prisma.sportsDataCache.findUnique({
+    where: { cacheKey: `ncaaf:official-participation:${season}` }, select: { data: true },
+  })
+  return { counts: verifiedSeasonAppearances(weeks, participation?.data, maxWeek), report }
 }
 
 /**

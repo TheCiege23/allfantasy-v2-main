@@ -418,7 +418,9 @@ describe('Chimmy — explains the one grade, never makes one (design step 7)', (
 
   it('the tool loop’s answer is held to the letters the engine gave', () => {
     const route = code('app/api/chat/chimmy/route.ts')
-    expect(route).toMatch(/tradeGrades: \[\] as ChimmyTradeGrade\[\]/)
+    // One list, started empty, shared with the grounding packet's graded inbox (2026-11-20).
+    expect(route).toMatch(/const packetTradeGrades: ChimmyTradeGrade\[\] = \[\]/)
+    expect(route).toMatch(/tradeGrades: packetTradeGrades,/)
     expect(route).toMatch(/enforceTradeLetters\(\{\s*answer: loop\.text,\s*grades: toolContext\.tradeGrades,/)
   })
 })

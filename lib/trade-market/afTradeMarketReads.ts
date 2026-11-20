@@ -132,12 +132,15 @@ export async function loadAfTradeMarketRows(
   sleeperIds: readonly string[],
   book: MarketBook,
   now = new Date(),
+  includeFlat = false,
 ): Promise<Map<string, AfMarketRow>> {
   const ids = [...new Set(sleeperIds.map((s) => s.trim()).filter((s) => /^\d+$/.test(s)))]
   const out = new Map<string, AfMarketRow>()
   if (ids.length === 0) return out
   const rows = await findRows(prisma, { ...freshWhere(book, now), playerId: { in: ids } })
-  for (const r of rows) if (isApplicableMarketRow(r, now)) out.set(r.playerId, r)
+  for (const r of rows) {
+    if (isApplicableMarketRow(r, now) || (includeFlat && r.adjustmentPercent === 0 && r.sampleSize >= 5 && r.generatedAt >= freshSince(now))) out.set(r.playerId, r)
+  }
   return out
 }
 
