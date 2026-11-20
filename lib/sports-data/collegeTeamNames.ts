@@ -175,6 +175,11 @@ export const CFBD_SCHOOL_ALIASES: Record<string, string> = {
   'university of tennessee at chattanooga': 'Chattanooga',
   'stephen f. austin state university': 'Stephen F. Austin',
   'virginia military institute': 'VMI',
+  // Rolling Insights' short spellings of two schools (2026-11-20, measured: the only two of its 263
+  // NCAAF team names, besides Jacksonville University, which has no football, that matched no CFBD
+  // schedule team). "Albany State" (GA) is a different school and is not touched.
+  albany: 'UAlbany',
+  'mcneese state': 'McNeese',
 }
 
 /** "San José State" and "San Jose State" are one school; the loose rule keeps accents. */
