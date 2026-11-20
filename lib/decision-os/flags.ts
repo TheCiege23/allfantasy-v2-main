@@ -59,7 +59,6 @@ export type DecisionOsFeed =
   | 'commissionerIntelligence'
   | 'leagueIntelligence'
   | 'portfolio'
-  | 'savedAnalysis'
   /**
    * The commissioner health decision bridged from Pipeline A (R2.3).
    *
@@ -101,7 +100,6 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'commissionerIntelligence',
   'leagueIntelligence',
   'portfolio',
-  'savedAnalysis',
   'commissionerHealthDecision',
   'idpKickerValues',
   'rosterValueGrade',

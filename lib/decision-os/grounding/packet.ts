@@ -35,7 +35,6 @@ import {
 import { loadRosterValueGradeSliceCached, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
-import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
 import { stampLineupSlots, starterSlotsFromRules } from './stampLineupSlots'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
@@ -209,19 +208,6 @@ export interface DecisionOsGroundingPacket {
   leagueIntelligence: GroundedSlice<string>
   portfolio: GroundedSlice<string>
 
-  /**
-   * Three-brain's SAVED conclusion for this league (6.2).
-   *
-   * 🛑 READ, NOT RUN, AND THAT IS MEASURED. `runThreeBrainAnalysis` is DeepSeek ∥ Grok →
-   * OpenAI synthesis → optional Claude review at 25s PER PROVIDER — ~75s worst case against this
-   * route's 3s ceiling. Calling it inline would be a switch nobody could turn on. The analyses are
-   * already persisted in `decisionIntelligenceRun`, so this surfaces the conclusion deterministic
-   * code already reached: one indexed read, no provider call, and P3 holds by construction.
-   *
-   * ⚠ `locked` becomes `not_entitled` — the SECOND real producer of that reason, which until now
-   * only commissioner intelligence could raise.
-   */
-  savedAnalysis: GroundedSlice<string>
 
   /*
    * ── R2 — THE BRIDGE FROM PIPELINE A ─────────────────────────────────────────────────────────
@@ -970,19 +956,6 @@ export async function buildDecisionOsGroundingPacket(
         )
       : null
 
-  const pSavedAnalysis =
-    leagueId && args.userId && flags.enabled('savedAnalysis')
-      ? kick(
-          'savedAnalysis',
-          loadSavedThreeBrainAnalysis({
-            leagueId,
-            userId: args.userId,
-            tool: 'mission_control',
-            decisionType: 'league_health',
-          }).catch(() => ({ status: 'not_computed', reason: 'loader_threw' }) as const),
-        )
-      : null
-
   const pLeagueIntel =
     leagueId && args.userId && !leagueIntelKill
       ? kick(
@@ -1461,41 +1434,6 @@ export async function buildDecisionOsGroundingPacket(
       })
 
   /*
-   * ⚠ Gated with the rest of the context, and only with a league AND a user — the read is
-   * entitlement-checked per user, so asking without one is meaningless rather than merely empty.
-   */
-  let savedAnalysis: GroundedSlice<string> = absent(NOT_REQUESTED)
-  if (leagueId && args.userId && flags.enabled('savedAnalysis')) {
-    const outcome =
-      (await pSavedAnalysis) ?? ({ status: 'not_computed', reason: 'loader_threw' } as const)
-
-    if (outcome.status === 'ok') {
-      savedAnalysis = present(outcome.text, {
-        asOf: outcome.generatedAt,
-        servedFrom: 'store',
-        // A stale conclusion is still worth having as long as the verdict says so.
-        conclusive: outcome.stale ? verdictFor('managerBehaviour') : { ok: true },
-      })
-    } else if (outcome.status === 'not_entitled') {
-      savedAnalysis = absent({
-        reason: 'not_entitled',
-        // No apostrophe on purpose: this string has been through a shell heredoc and a Python
-        // literal, and an escaped one arrived unescaped and broke the parse.
-        detail: 'The saved analysis for this league is not available to you.',
-        remedy: 'Ask the league commissioner, who can see it.',
-      })
-    } else {
-      savedAnalysis = absent({
-        reason: 'not_computed',
-        detail: 'No saved analysis has been produced for this league yet.',
-        remedy: 'It is written by the intelligence runs; one has not succeeded here yet.',
-      })
-    }
-  } else if (leagueId && args.userId) {
-    savedAnalysis = absent(killed('savedAnalysis') ?? NOT_REQUESTED)
-  }
-
-  /*
    * ── R3.1 — IDP + KICKER VALUES. THE ONE SERIALISED PRODUCER. ────────────────────────────────
    *
    * 🛑 IT STARTS HERE, NOT IN THE CONCURRENT WAVE, AND THAT IS NOT AN OVERSIGHT. Every producer
@@ -1615,7 +1553,6 @@ export async function buildDecisionOsGroundingPacket(
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
   portfolio = stamp('portfolio', portfolio)
-  savedAnalysis = stamp('savedAnalysis', savedAnalysis)
   commissionerHealthDecision = stamp('commissionerHealthDecision', commissionerHealthDecision)
   rosterValueGrade = stamp('rosterValueGrade', rosterValueGrade)
   waiverDecision = stamp('waiverDecision', waiverDecision)
@@ -1625,7 +1562,6 @@ export async function buildDecisionOsGroundingPacket(
     ['commissionerIntelligence', commissionerIntelligence as GroundedSlice<unknown>],
     ['leagueIntelligence', leagueIntelligence as GroundedSlice<unknown>],
     ['portfolio', portfolio as GroundedSlice<unknown>],
-    ['savedAnalysis', savedAnalysis as GroundedSlice<unknown>],
     ['commissionerHealthDecision', commissionerHealthDecision as GroundedSlice<unknown>],
     ['idpKickerValues', idpKickerValues as GroundedSlice<unknown>],
     ['rosterValueGrade', rosterValueGrade as GroundedSlice<unknown>],
@@ -1654,7 +1590,6 @@ export async function buildDecisionOsGroundingPacket(
     commissionerIntelligence,
     leagueIntelligence,
     portfolio,
-    savedAnalysis,
     waiverDecision,
     commissionerHealthDecision,
     idpKickerValues,

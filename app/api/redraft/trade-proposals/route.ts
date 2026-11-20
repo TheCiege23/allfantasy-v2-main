@@ -28,7 +28,6 @@ import { toTradeCard, type TradeCard } from '@/lib/decision-os/trade/tradeCardAd
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { createTradeOsLoaders } from '@/lib/decision-os/trade-os'
-import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { safeDisplayName } from '@/lib/chat-notifications/displayName'
 import {
   MULTI_TEAM_CAP_LEAGUE_REFUSAL,
@@ -586,29 +585,15 @@ export async function POST(req: NextRequest) {
       const liveResult = await runTradeShadowForProposal(shadowArgs, tradeOsLoaders)
       if (liveResult.ran && liveResult.result) {
         const { decision } = liveResult.result
-        // Attach a saved three-brain analysis, if this user has one for this league. Same seam
-        // #545 mounted on the waiver surface: evidence -> analysis -> recommendation only pays
-        // off if the generated analysis reaches somebody, and until now exactly one of the four
-        // live surfaces read it.
-        //
-        // Costs one indexed count when there is nothing to show, which is every request while
-        // AI spend is disabled. It cannot throw, and `aiAuthorityPolicy` resolves this decision
-        // type to explanation_only (fail-closed for anything unlisted), so it can change the
-        // explanation string and nothing else -- the verdict, actions and rule verdicts are
-        // returned untouched.
-        const attached = await attachSavedAnalysis({
-          decision,
-          leagueId,
-          userId,
-          tool: 'manager_intelligence',
-        })
+        // The saved three-brain analysis was retired 2026-11-19 (re-score build item 9): nothing produced one,
+        // so this read one indexed count per request to find nothing.
         decisionOs = {
           decisionId: decision.decision_id,
-          card: toTradeCard(attached.decision),
+          card: toTradeCard(decision),
           completeness: decision.data_completeness,
           uncertaintySources: decision.uncertainty_sources,
         }
-        emitLiveTelemetry('trade.value', { enriched: true, ai_explained: attached.enriched, ai_reason: attached.reason, latency_ms: Date.now() - liveStart, leagueId }, decision.decision_id)
+        emitLiveTelemetry('trade.value', { enriched: true, latency_ms: Date.now() - liveStart, leagueId }, decision.decision_id)
       } else {
         emitLiveTelemetry('trade.value', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, leagueId })
       }

@@ -1,22 +1,15 @@
 /**
- * publicView — the projection between the psychological-profile engine and
- * anything a relationship-insights caller can return or prompt with.
+ * publicView — what a relationship-insights caller can return or prompt with about each manager.
  *
- * 🛑 Milestone 32: manager characterisation (labels, trait scores, the
- * behaviour-heat composite built from them) is shown to nobody. The engine keeps
- * using profiles internally to rank storylines; what crosses this boundary is
- * coverage (a profile exists) and facts (which drama involves whom).
+ * 🛑 Milestone 32: manager characterisation (labels, trait scores) is shown to nobody. Since 2026-11-19
+ * (re-score build item 10) the personality profiles are gone from this path entirely — no profile is read,
+ * and storylines rank on rivalry and drama facts alone. What crosses this boundary is facts: which drama
+ * involves whom.
  */
-import type { ManagerPsychProfileView } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import type {
   BehaviorDramaManagerContext,
   PublicBehaviorDramaContext,
-  PublicProfileCoverage,
 } from './types'
-
-export function toPublicProfileCoverage(profiles: ManagerPsychProfileView[]): PublicProfileCoverage[] {
-  return profiles.map((p) => ({ id: p.id, managerId: p.managerId }))
-}
 
 export function toPublicBehaviorDramaContext(
   rows: BehaviorDramaManagerContext[]

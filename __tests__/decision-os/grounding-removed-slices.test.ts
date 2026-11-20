@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 /**
- * Three packet slices were removed on 2026-11-17, and this pins that they stay removed.
+ * Four packet slices were removed — three on 2026-11-17, one on 2026-11-19 — and this pins that they stay removed.
  *
  *   managerPsychology      never loaded since Milestone 32 — `serialize.ts` has no entry for it and
  *                          refuses any profile-shaped item, so it was always `not_requested`.
  *   psychologyConsistency  no intent requested it since 2026-11-16 (nothing rendered it).
  *   lineupDecision         no intent requested it since 2026-09-07 (37s against a 3s ceiling), and
  *                          it ran a second start/sit engine the owner retired on 2026-09-29.
+ *   savedAnalysis          three-brain's saved conclusion (removed 2026-11-19, re-score build item 9). Nothing
+ *                          ever produced one — `runManagedIntelligence` had no caller — so every chat turn
+ *                          spent an entitlement-checked read to report "no saved analysis".
  *
  * Manager facts reach Chimmy through the paid `get_manager_record` tool; start/sit through My
  * Team's `optimizeLineup`. Neither path runs through this packet.
@@ -54,7 +57,7 @@ const { serializeDecisionOsGroundingForPrompt } = await import('@/lib/decision-o
 
 const ARGS = { leagueId: 'lg1', userId: 'u1', sport: 'NFL', season: 2026, week: 3 }
 const NOW = Date.parse('2026-08-31T20:00:00.000Z')
-const REMOVED = ['managerPsychology', 'psychologyConsistency', 'lineupDecision'] as const
+const REMOVED = ['managerPsychology', 'psychologyConsistency', 'lineupDecision', 'savedAnalysis'] as const
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -66,7 +69,7 @@ describe('removed grounding slices stay removed', () => {
     const p = await buildDecisionOsGroundingPacket(ARGS)
     // Positive control: a real packet came back, with its other slices.
     expect(p.leagueId).toBe('lg1')
-    expect(p.meta.sources.map((s) => s.slice)).toContain('savedAnalysis')
+    expect(p.meta.sources.map((s) => s.slice)).toContain('portfolio')
     for (const name of REMOVED) {
       expect(`${name}: ${name in p}`).toBe(`${name}: false`)
       expect(p.meta.sources.map((s) => s.slice)).not.toContain(name)

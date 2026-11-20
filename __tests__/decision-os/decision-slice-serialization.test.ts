@@ -60,7 +60,6 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
     commissionerIntelligence: absent,
     leagueIntelligence: absent,
     portfolio: absent,
-    savedAnalysis: absent,
     gaps: [],
     meta: { sources: [], killedFeeds: [], buildMs: 1 },
     ...over,
