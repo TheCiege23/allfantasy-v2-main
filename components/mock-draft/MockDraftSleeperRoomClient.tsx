@@ -337,6 +337,9 @@ const NFL_MOCK_STAT_KEYS: Record<string, readonly string[]> = {
   RB: ['pts', 'avg', 'ru_yds', 'ru_td'],
   WR: ['pts', 'avg', 'rec', 'rec_yds'],
   TE: ['pts', 'avg', 'rec', 'rec_yds'],
+  // Team defenses have no fantasy points from season totals (nflTeamDefenseSeason.ts), so lead with the counting stats.
+  DEF: ['dst_sack', 'dst_int', 'dst_td', 'dst_pa'],
+  DST: ['dst_sack', 'dst_int', 'dst_td', 'dst_pa'],
 }
 
 /**

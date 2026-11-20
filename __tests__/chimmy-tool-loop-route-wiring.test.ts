@@ -298,7 +298,8 @@ describe('the specialist agent is chosen from the orchestration intent', () => {
   })
 
   it('computes that intent before choosing the agent', () => {
-    const classified = ROUTE.indexOf('const chimmyOrchestrationClassification = classifyChimmyIntent(')
+    // One classification for the turn (2026-11-20): the packet, the label and the agent all read it.
+    const classified = ROUTE.indexOf('const chimmyOrchestrationClassification = classifyChimmyTurn(message, recentUserSnippet)')
     const chosen = ROUTE.indexOf('const specialistAgent = inferAgentFromMessage(')
     expect(classified).toBeGreaterThan(-1)
     expect(chosen).toBeGreaterThan(classified)

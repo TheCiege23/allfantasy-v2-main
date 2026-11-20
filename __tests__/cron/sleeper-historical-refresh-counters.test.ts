@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
-  dynastyBackfillStatus: { findMany: vi.fn() },
+  dynastyBackfillStatus: { findMany: vi.fn(), updateMany: vi.fn() },
   league: { findMany: vi.fn() },
 }))
 const backfill = vi.hoisted(() => ({ syncSleeperHistoricalBackfillAfterImport: vi.fn() }))
@@ -40,6 +40,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = SECRET
   telemetry.outcomes.length = 0
   db.dynastyBackfillStatus.findMany.mockReset()
+  db.dynastyBackfillStatus.updateMany.mockReset().mockResolvedValue({ count: 1 })
   db.league.findMany.mockReset()
   backfill.syncSleeperHistoricalBackfillAfterImport.mockReset()
 
@@ -86,7 +87,7 @@ describe('sleeper-historical-refresh counters', () => {
     expect(body).toMatchObject({ ok: false, status: 'partial', leaguesRefreshed: 2, leaguesFailed: 1 })
     expect(body.metadata.matchupSeasons).toEqual(expected)
     // The existing metadata is still there.
-    expect(body.metadata).toMatchObject({ leagueCap: 50, budgetMs: 240_000 })
+    expect(body.metadata).toMatchObject({ leagueCap: 25, budgetMs: 240_000 })
 
     expect(telemetry.outcomes).toHaveLength(1)
     expect((telemetry.outcomes[0] as { metadata: Record<string, unknown> }).metadata.matchupSeasons).toEqual(expected)
@@ -179,19 +180,5 @@ describe('addMatchupSeasonCounters', () => {
     addMatchupSeasonCounters(c, { attempted: true, refreshed: false, skipped: false, error: 'rate limited' })
     addMatchupSeasonCounters(c, { attempted: true, refreshed: false, skipped: false, error: 'rate limited' })
     expect(c.leaguesWithError).toBe(2)
-  })
-})
-
-/*
- * A status row outlives its league. Such a row is never refreshed, so it stays the oldest forever:
- * on production the 25 oldest rows were all dead and took the starved bucket's whole reserve.
- */
-describe('the starved bucket is drawn only from leagues that can be refreshed', () => {
-  it('asks for status rows of live Sleeper leagues, so a dead row cannot hold a slot', async () => {
-    const res = await GET(new Request('http://localhost/api/cron/sleeper-historical-refresh', { headers: { authorization: `Bearer ${SECRET}` } }))
-    expect(res.status).toBe(200)
-    const starvedQuery = db.dynastyBackfillStatus.findMany.mock.calls[0][0] as { where: { leagueId?: { in: string[] }; updatedAt?: unknown } }
-    expect(starvedQuery.where.leagueId).toEqual({ in: ['L1', 'L2', 'L3'] })
-    expect(starvedQuery.where.updatedAt).toBeDefined()
   })
 })

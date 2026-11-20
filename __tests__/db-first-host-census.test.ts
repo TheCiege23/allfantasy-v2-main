@@ -87,6 +87,7 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'request-origin', why: 'NBA website used only as Origin and Referer headers; official JSON is fetched from cdn.nba.com', test: /^www\.nba\.com$/i },
   { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
   { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
   { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
@@ -482,7 +483,7 @@ describe('DB-first boundary — outbound host census', () => {
      * host in the WRONG category reads as settled, so nobody looks again. This asserts
      * the claim instead of restating it.
      */
-    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only'])
+    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only', 'request-origin'])
     const monitored = monitoredPatterns()
     const violations: string[] = []
 

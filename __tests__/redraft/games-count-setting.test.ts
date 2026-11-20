@@ -151,8 +151,8 @@ describe('the commissioner settings PATCH', () => {
   it('probes with to_regclass for BOTH tables', async () => {
     await patchMode({ gamesCountMode: 'lock_in' })
     const sql = (m.prisma.$queryRaw.mock.calls[0][0] as TemplateStringsArray).join('')
-    expect(sql).toContain("to_regclass('public.player_week_game_scores') IS NOT NULL")
-    expect(sql).toContain("to_regclass('public.redraft_games_count_choices') IS NOT NULL")
+    expect(sql).toContain("to_regclass(format('%I.%I', current_schema(), 'player_week_game_scores')) IS NOT NULL")
+    expect(sql).toContain("to_regclass(format('%I.%I', current_schema(), 'redraft_games_count_choices')) IS NOT NULL")
   })
 
   describe('the season-in-progress rule', () => {

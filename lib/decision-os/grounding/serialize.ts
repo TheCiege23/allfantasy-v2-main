@@ -580,9 +580,41 @@ export function collapseGapsByCause(
   return order.map((k) => byCause.get(k) as { slices: string[]; reason: string; detail: string; remedy: string })
 }
 
+/**
+ * THE FACTS THAT ANSWER EACH KIND OF QUESTION, by the slice names above (Decision OS hub, assembly, 2026-11-20).
+ *
+ * 🛑 THE PACKET WAS ASSEMBLED IN ONE FIXED ORDER WHATEVER WAS ASKED. A trade question's graded offers sat behind import
+ * state, the rules, the market table and two projection blocks; a standings question found the table at the very end,
+ * after nine other slices. Nothing was dropped — every slice still renders, whole — but the slice the router
+ * requested FOR this question was buried in the slices every question gets. These lead now, in this order, under a
+ * line naming them; everything else follows in the usual order.
+ *
+ * ⚠ ONLY SLICES THAT RENDERED ARE NAMED. An absent slice is a gap and stays in the gap block, so the line never claims
+ * a fact the packet does not hold.
+ */
+export const ANSWERING_SLICES_BY_INTENT: Readonly<Record<string, readonly string[]>> = {
+  start_sit: [MY_TEAM_LINEUP_SLICE, ROSTER_PROJECTIONS_SLICE, 'Matchup'],
+  matchup: ['Matchup', ROSTER_PROJECTIONS_SLICE],
+  trade: [PENDING_TRADES_SLICE, ROSTER_BOARD_VALUES_SLICE, 'Market player values'],
+  waiver: ['Waiver decision'],
+  draft: [DRAFT_BOARD_SLICE],
+  player_value: ['Roster value grade', ROSTER_BOARD_VALUES_SLICE, 'Market player values'],
+  commissioner: ['Commissioner health decision', 'Commissioner intelligence', 'League rules'],
+  manager_psychology: [MANAGER_RECORDS_SLICE],
+  league_strength: ['Standings', 'Rankings', 'League difficulty'],
+}
+
+export interface SerializeGroundingOptions {
+  /** The turn's intent (`classifyChimmyTurn`), so the slices that answer it lead. Omitted = the usual order. */
+  intent?: string | null
+  /** That intent's label ("Trade analysis"), named on the lead line. */
+  intentLabel?: string | null
+}
+
 export function serializeDecisionOsGroundingForPrompt(
   packet: DecisionOsGroundingPacket,
   now: number = Date.now(),
+  options: SerializeGroundingOptions = {},
 ): string {
   const lines: string[] = []
 
@@ -680,7 +712,19 @@ export function serializeDecisionOsGroundingForPrompt(
    * empty set for that, making the ordering a no-op rather than an error.
    */
   const onRoster = rosterPlayerKeys(packet.contextFacts?.roster)
-  const available = slices.flatMap(([n, s]) => sliceLine(n, s, now, onRoster))
+  const rendered = slices.map(([n, s]) => [n, sliceLine(n, s, now, onRoster)] as const)
+  const answering = (options.intent ? ANSWERING_SLICES_BY_INTENT[options.intent] ?? [] : []).filter((name) =>
+    rendered.some(([n, l]) => n === name && l.length > 0),
+  )
+  const available =
+    answering.length === 0
+      ? rendered.flatMap(([, l]) => l)
+      : [
+          `  (${options.intentLabel ? `This question: ${options.intentLabel}. ` : ''}` +
+            `What answers it is listed first: ${answering.join('; ')}.)`,
+          ...answering.flatMap((name) => rendered.find(([n]) => n === name)?.[1] ?? []),
+          ...rendered.filter(([n]) => !answering.includes(n)).flatMap(([, l]) => l),
+        ]
 
   if (available.length > 0) {
     lines.push('WHAT IS AVAILABLE:')

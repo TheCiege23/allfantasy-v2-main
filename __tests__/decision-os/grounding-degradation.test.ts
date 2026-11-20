@@ -35,6 +35,12 @@ const commissioner = vi.fn()
 const leagueIntel = vi.fn()
 const portfolio = vi.fn()
 
+// A commissioner question also runs the health decision beside the commissioner's activity read; it is not under test
+// here. Only that loader is mocked: the waiver suite below runs the real waiver bridge.
+vi.mock('@/lib/decision-os/grounding/decisionBridge', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  loadCommissionerHealthDecisionSlice: vi.fn(async () => null),
+}))
 vi.mock('@/lib/decision-os/import-os', () => ({
   createImportOsLoaders: () => ({ loadAssertions }),
 }))
@@ -355,7 +361,8 @@ describe('5.2 — unsynced and un-entitled scopes stay distinguishable', () => {
     // sentences, and only one of them has an action the user can take.
     commissioner.mockResolvedValue({ status: 'not_entitled' })
 
-    const p = await buildDecisionOsGroundingPacket(ARGS)
+    // Asked on a commissioner question — the one that requests it (2026-11-20: it follows the health decision's intent).
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, commissionerHealthDecision: true } })
     expect(p.commissionerIntelligence.gap?.reason).toBe('not_entitled')
     expect(p.gaps.find((g) => g.slice === 'commissionerIntelligence')?.reason).toBe('not_entitled')
   })

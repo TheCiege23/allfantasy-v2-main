@@ -414,3 +414,11 @@ export function validateRedraftLineup(args: {
     warningCount,
   }
 }
+
+/** Preserve defense abbreviations while splitting dual positions. */
+export function redraftPlayerPositionTokens(position: string | null | undefined): string[] {
+  return String(position ?? '').split(/[,;]/).flatMap(part => {
+    const value = part.trim().toUpperCase()
+    return ['D/ST', 'DEF/ST'].includes(value) ? ['DEF'] : value.split('/').map(normalizeToken)
+  }).filter(Boolean)
+}

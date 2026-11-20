@@ -4,7 +4,7 @@ import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { prisma } from '@/lib/prisma'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
-import { classifyChimmyIntent } from '@/lib/chimmy-orchestration/intent-classifier'
+import { classifyChimmyTurn } from '@/lib/chimmy-orchestration/intent-classifier'
 import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
 
 /**
@@ -150,6 +150,8 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // The chat's one turn classification, so this page requests and orders the packet the way a live turn does.
+  const turn = classifyChimmyTurn(question ?? '')
   const startedAt = Date.now()
   const packet = await buildDecisionOsGroundingPacket({
     leagueId,
@@ -164,7 +166,7 @@ export async function GET(request: NextRequest) {
      * `leagueIdpRules` are derived inside the packet from the rules it already loads.
      *
      * 🛑 AND IT HAD STOPPED MIRRORING IT. The chat route gained an intent router — it spreads
-     * `deriveWantFromIntent(classifyChimmyIntent(message).intent)` over this same base, so which
+     * `deriveWantFromIntent(classifyChimmyTurn(message, recentUserSnippet).intent)` over this same base, so which
      * opt-in slices a turn requests depends on what was ASKED. Without that spread this surface
      * built the base packet for every question and could not show any opt-in slice at all, which
      * is precisely the "proves nothing about the live route" failure the paragraph above warns
@@ -182,7 +184,7 @@ export async function GET(request: NextRequest) {
       leagueRules: true,
       // As the chat route asks on every turn — without it this page measured a lighter packet than users get.
       idpKicker: true,
-      ...deriveWantFromIntent(classifyChimmyIntent(question ?? '').intent),
+      ...deriveWantFromIntent(turn.intent),
       ...forced,
     },
   }).catch((e: unknown) => {
@@ -194,7 +196,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: packet.__error }, { status: 500 })
   }
 
-  const serialized = serializeDecisionOsGroundingForPrompt(packet)
+  const serialized = serializeDecisionOsGroundingForPrompt(packet, Date.now(), { intent: turn.intent, intentLabel: turn.label })
 
   return NextResponse.json({
     ok: true,
