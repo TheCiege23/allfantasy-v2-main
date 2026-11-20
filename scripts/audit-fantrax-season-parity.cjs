@@ -230,7 +230,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const divisions=await loadSeasonRosterDivisions(leagueId,seasonRosters)
     const groupNames=new Map(seasonRosters.map(r=>[r.teamName,divisions?.byRoster.get(r.id)?.name]))
     const dividedTeams=orig.filter(id=>Boolean(source.info.teamInfo[id].division))
-    const divisionMatches=dividedTeams.filter(id=>groupNames.get(replay.names.get(id))===source.info.teamInfo[id].division).length
+    const divisionMatches=dividedTeams.filter(id=>groupNames.get(replay.names.get(id))===source.info.teamInfo[id].division.trim()).length
     const divisionPass=!divisionTop || divisions?.playoffRule==='top_seeds' && dividedTeams.length===orig.length && divisionMatches===orig.length
     const simulatedBracket=await exerciseBracket(season.id,expected,divisionTop,reseed==='yes')
     const displayed=await screen('/api/redraft/standings?seasonId='+season.id,cookie)
