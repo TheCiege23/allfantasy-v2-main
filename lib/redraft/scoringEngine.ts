@@ -40,7 +40,7 @@ import {
 } from './dailyLineups'
 import { gamesCountActive } from './gamesCount'
 import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
-import { readCutover, sourceOwnsWeek, sourceOwnedFixture } from '@/lib/league-import/fantrax/cutoverPolicy'
+import { datedCutoverSport, readCutover, sourceOwnsWeek, sourceOwnedFixture } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { warnDailyBestBallWaitingForSchedule } from '@/lib/bestball/dailyScheduleStatus'
 import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
@@ -388,6 +388,7 @@ export type MatchupScoreUpdateSummary = {
 }
 
 async function scoreRosterStarters(args: {
+  league?: {settings:unknown; sport:unknown} | null
   leagueId: string
   rosterId: string
   week: number
@@ -400,6 +401,15 @@ async function scoreRosterStarters(args: {
   /** Also return `dailyBestBall` when the week scores as daily best ball (`scoreRosterForWeek`). */
   collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
+  const cutover = readCutover(args.league?.settings,args.seasonYear)
+  const period = cutover?.periods.find(p=>p.number === args.week)
+  if (period && datedCutoverSport(args.league?.sport)) {
+    if (args.bestBall || args.useDevyEngine) throw Error('This scoring format requires verification for Fantrax period dates.')
+    const { readDatedCutoverRoster } = await import('@/lib/league-import/fantrax/datedCutoverScoring')
+    const dated = await readDatedCutoverRoster({ leagueId:args.leagueId, rosterId:args.rosterId, sport:String(args.league!.sport),
+      settings:args.league!.settings, season:args.seasonYear, period })
+    return dated.summary
+  }
   if (args.bestBall && !args.useDevyEngine) return scoreRosterBestBall({ ...args, bestBall: args.bestBall })
   if (args.useDevyEngine) {
     const r = await calculateOfficialTeamScore(args.leagueId, args.rosterId, args.week, args.seasonYear)
@@ -1090,8 +1100,8 @@ export async function scoreRosterForWeek(args: {
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
-  const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
   const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, settings: true } })
+  const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall, league })
   if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'basketball') return result
   const settings = settingsForScoringWeek(league.settings as Record<string, any> | null, args.seasonYear, args.week)
   const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
@@ -1186,6 +1196,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const collectPlayerPoints = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform)
   // `playerPoints` is split off here so it never lands in `lineupSnapshots` below.
   const { playerPoints: homePlayerPoints, ...home } = await scoreRosterStarters({
+    league: scoringLeague,
     leagueId,
     rosterId: homeRosterId,
     week,
@@ -1195,6 +1206,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     collectPlayerPoints,
   })
   const { playerPoints: awayPlayerPoints, ...away } = await scoreRosterStarters({
+    league: scoringLeague,
     leagueId,
     rosterId: awayRosterId,
     week,

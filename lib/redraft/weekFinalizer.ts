@@ -6,7 +6,7 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
-import { readCutover, sourceOwnsWeek } from '@/lib/league-import/fantrax/cutoverPolicy'
+import { datedCutoverSport, readCutover, sourceOwnsWeek } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
@@ -475,9 +475,21 @@ export async function finalizeRedraftWeek(
     week: params.week,
   }
 
-  if (sourceOwnsWeek(readCutover(season.league?.settings, season.season), params.week)) return emptyResult(base, 'fantrax_owns_period')
+  const cutover = readCutover(season.league?.settings, season.season)
+  if (sourceOwnsWeek(cutover, params.week)) return emptyResult(base, 'fantrax_owns_period')
   if (isWeekFinalizerDisabled()) return emptyResult(base, 'finalizer_disabled')
 
+  if (cutover && datedCutoverSport(sport)) {
+    const period = cutover.periods.find(p=>p.number===params.week)
+    if (!period || now.getTime() <= Date.parse(period.endDate)+graceMs) return emptyResult(base,'week_window_open')
+    const games = await prisma.redraftMatchup.findMany({where:{seasonId:season.id,week:params.week},select:{status:true,awayRosterId:true}})
+    if (isSealedWeek(games)) return emptyResult(base,null,{alreadyFinal:true,matchupsFinal:games.length,matchupsConsidered:games.length})
+    if (params.dryRun) return emptyResult(base,null,{matchupsConsidered:games.length})
+    await recalc(season.id,params.week)
+    const after = await prisma.redraftMatchup.findMany({where:{seasonId:season.id,week:params.week},select:{status:true,awayRosterId:true}})
+    const complete = isSealedWeek(after)
+    return emptyResult(base,complete ? null : 'game_stats_missing',{finalized:complete,matchupsConsidered:after.length,matchupsFinal:after.filter(m=>m.status==='final').length})
+  }
   const isDateWindowed = DATE_WINDOWED_SPORTS.includes(sport)
   if (!WEEK_KEYED_SPORTS.includes(sport) && !isDateWindowed) {
     return emptyResult(base, 'sport_not_week_keyed')

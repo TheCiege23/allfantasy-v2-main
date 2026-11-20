@@ -25,6 +25,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { getAllCanonicalTeams } from '@/lib/team-abbrev'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
+import { cutoverWindow, object, readCutover } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 // Client-safe: takes the client as an argument and imports Prisma for types only.
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
@@ -223,9 +224,11 @@ function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: stri
  */
 export async function buildWeekKickoffMap(
   prisma: PrismaClient,
-  args: { sport: string; season: number; week: number },
+  args: { sport: string; season: number; week: number; leagueSettings?: unknown },
 ): Promise<WeekKickoffs> {
   const warnings: string[] = []
+  const importedPeriod=readCutover(args.leagueSettings,args.season)?.periods.find(p=>p.number===args.week)
+  const importedWindow=cutoverWindow(args.leagueSettings,args.season,args.week)
   const byTeam = new Map<string, Date>()
   let firstKickoff: Date | null = null
   const sport = String(args.sport).toUpperCase()
@@ -336,7 +339,7 @@ export async function buildWeekKickoffMap(
   if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
     // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
     await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
-    const window = resolveDailySportWeekWindow(sport, args.season, args.week)
+    const window = importedWindow ?? resolveDailySportWeekWindow(sport, args.season, args.week)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -365,6 +368,7 @@ export async function buildWeekKickoffMap(
       }
       const kickoff = g.startTime ? new Date(g.startTime) : new Date(`${g.day}T04:00:00.000Z`)
       if (Number.isNaN(kickoff.getTime())) continue
+      if (importedPeriod && (kickoff.getTime()<Date.parse(importedPeriod.startDate) || kickoff.getTime()>Date.parse(importedPeriod.endDate))) continue
       if (!firstKickoff || kickoff.getTime() < firstKickoff.getTime()) firstKickoff = kickoff
       for (const [team, teamId, opponent, home] of [
         [g.homeTeam, g.homeTeamId, g.awayTeam, true],
@@ -403,7 +407,7 @@ export async function buildWeekKickoffMap(
     // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
     await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
+    const window = importedWindow ?? (seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -420,6 +424,7 @@ export async function buildWeekKickoffMap(
     for (const g of games) {
       if (!g.startTime) continue
       const kickoff = g.startTime
+      if (importedPeriod && (kickoff.getTime()<Date.parse(importedPeriod.startDate) || kickoff.getTime()>Date.parse(importedPeriod.endDate))) continue
       if (!firstKickoff || kickoff.getTime() < firstKickoff.getTime()) firstKickoff = kickoff
       // A 10pm Eastern tip is that Eastern day's game even though its UTC date is the next day.
       const day = easternDayKey(kickoff)
@@ -572,6 +577,7 @@ export type LockablePlayer = {
 }
 
 type LockContext = {
+  lockLeadMs: number
   sport: string
   mode: LineupLockMode
   manualLocked: boolean
@@ -597,7 +603,7 @@ async function loadLockContext(
   const schedule: WeekKickoffs =
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
-      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
+      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week, leagueSettings: args.leagueSettings })
   const kickoffs: WeekKickoffs = settings.warnings.length
     ? { ...schedule, warnings: [...settings.warnings, ...schedule.warnings] }
     : schedule
@@ -605,6 +611,7 @@ async function loadLockContext(
     sport: args.sport,
     mode,
     manualLocked: manualLockedWeeks.has(args.week),
+    lockLeadMs: readCutover(args.leagueSettings,args.season) ? Math.max(0,Number(object(object(args.leagueSettings).fantrax_public_rules).lineupLockMinutes) || 0)*60000 : 0,
     overrides,
     kickoffs,
     currentTeamByPlayerId: args.currentTeamByPlayerId,
@@ -641,7 +648,7 @@ function stampLineupLock<T extends LockablePlayer>(
           .find((kickoff): kickoff is Date => kickoff != null) ?? null)
   const isLocked = computeLineupLock({
     mode: ctx.mode,
-    now: scope.now,
+    now: ctx.lockLeadMs ? new Date(scope.now.getTime()+ctx.lockLeadMs) : scope.now,
     playerKickoffUtc,
     playerKickoffTodayUtc,
     firstKickoffUtc: ctx.kickoffs.firstKickoff,

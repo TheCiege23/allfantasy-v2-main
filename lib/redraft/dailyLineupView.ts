@@ -15,6 +15,7 @@ import {
 } from './dailyLineups'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { cutoverWindow } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 
 /**
@@ -65,7 +66,7 @@ export async function loadDailyLineupView(
   const league = await db.league?.findFirst?.({ where: { id: args.leagueId }, select: { sport: true, settings: true } })
   const sport = String(league?.sport ?? '').toUpperCase()
   if (!league || !isDailyLineupScoringEnabled(league.settings, sport)) return null
-  const window = resolveDailySportWeekWindow(sport, args.season, args.week)
+  const window = cutoverWindow(league.settings,args.season,args.week) ?? resolveDailySportWeekWindow(sport, args.season, args.week)
   if (!window) return null
   const scorer = buildLeagueStatScorer({ sport, settings: league.settings })
 

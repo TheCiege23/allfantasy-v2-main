@@ -766,6 +766,7 @@ export async function PATCH(req: NextRequest) {
     // A daily-lineup league is scored per day: pin this lineup to every day the save decides.
     if (dailyLineups) {
       await writeDailyLineupForSave(tx, {
+        leagueSettings: leagueForLock?.settings,
         leagueId: roster.leagueId,
         redraftRosterId: roster.id,
         sport: roster.season.sport,

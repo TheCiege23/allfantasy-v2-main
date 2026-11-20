@@ -1,4 +1,5 @@
 import 'server-only'
+import { readCutover } from '@/lib/league-import/fantrax/cutoverPolicy'
 
 import { prisma } from '@/lib/prisma'
 import { listBroadcastLeagues } from '@/lib/commissioner/broadcastAccess'
@@ -59,6 +60,7 @@ const STALE_ROW_LIMIT = 3
 export type OverviewTone = 'good' | 'warn' | 'bad' | 'muted'
 
 export type OverviewLeagueCard = {
+  scoringHandoff?: boolean
   leagueId: string
   variant: string | null
   name: string
@@ -127,6 +129,7 @@ type LeagueRow = {
   lifecycleState: string | null
   lastSyncedAt: Date | null
   syncStatus: string | null
+  settings?: unknown
   season?: number | null
   createdAt?: Date | null
 }
@@ -190,6 +193,7 @@ export async function getCommissionerOverview(input: {
               name: true,
               userId: true,
               platform: true,
+              settings: true,
               leagueSize: true,
               leagueType: true,
               leagueVariant: true,
@@ -380,6 +384,7 @@ export async function getCommissionerOverview(input: {
       variant: b.row.leagueVariant,
       name: b.name,
       platform: String(b.row.platform ?? '').toLowerCase(),
+      scoringHandoff: Boolean(readCutover(b.row.settings,b.row.season ?? -1)),
       sub,
       activity:
         measured ??

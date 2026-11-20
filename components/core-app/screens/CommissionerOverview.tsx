@@ -110,6 +110,7 @@ function LeagueCard({ l }: { l: OverviewLeagueCard }) {
           Commissioner
         </Link>
         <Link href={`/core?league=${encodeURIComponent(l.leagueId)}`}>Overview</Link>
+        {l.scoringHandoff && <Link href={`/leagues/${encodeURIComponent(l.leagueId)}/import-carryover`}>Scoring handoff</Link>}
         {l.variant === 'survivor_guillotine' && <Link href={`/survivor-guillotine/${encodeURIComponent(l.leagueId)}`}>Survivor control</Link>}
         <Link href={`/core/standings?league=${encodeURIComponent(l.leagueId)}`}>Standings</Link>
       </nav>

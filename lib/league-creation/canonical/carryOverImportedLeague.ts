@@ -453,6 +453,10 @@ export async function carryOverImportedLeague(tx: Tx, args: {
       ...(nbaCategories ? { ...nbaCategories, scoringSettings: { ...asRecord(asRecord(target.settings).scoringSettings),
         scoringMode: nbaCategories.scoring_mode, categoryPresetId: nbaCategories.category_preset_id, categoryRecordMode: nbaCategories.category_record_mode },
         sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: nbaCategories.scoring_mode } } : {}),
+      ...(cutover && publicRules.lineupFrequency === 'daily' && ['NBA','NHL'].includes(args.sport) ? {
+        sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), ...(nbaCategories ? { scoringMode:nbaCategories.scoring_mode } : {}),
+          dailyLineupsEnabled:true, lineupLockType:'daily' },
+      } : {}),
       // A league that played several games a week keeps doing so; the native schedule reads this setting.
       ...(readGamesPerWeek(source.settings) > 1 ? { [GAMES_PER_WEEK_SETTINGS_KEY]: readGamesPerWeek(source.settings) } : {}),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,

@@ -66,14 +66,15 @@ export async function refreshCutover(leagueId: string, seasonId: string, now = n
   await prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
     const latest = readCutover((await tx.league.findUniqueOrThrow({ where: { id:leagueId }, select:{settings:true} })).settings)
-    if (!latest || latest.installedSeasonId !== seasonId || latest.settled) return
+    if (!latest || latest.installedSeasonId !== seasonId || latest.settled || (latest.lastSourceReadAt && Date.parse(latest.lastSourceReadAt)>=now.getTime())) return
+    latest.lastSourceReadAt=now.toISOString()
     for (const { id,...data } of updates) await tx.redraftMatchup.update({ where:{id}, data })
     if (closed) {
       latest.settled = true
       latest.nativeFrom = cut.period+1
       latest.reason = 'Fantrax finalized the selected period. AllFantasy owns subsequent periods.'
-      await saveCutover(tx,leagueId,latest)
     }
+    await saveCutover(tx,leagueId,latest)
   },{ timeout:60000 })
   if (closed) {
     const season = await prisma.redraftSeason.findUniqueOrThrow({ where:{id:seasonId}, select:{currentWeek:true} })

@@ -188,6 +188,8 @@ export type FantraxScheduleRow = {
   homeScore: number | null
   categoryOutcomes?: Array<{ name: string; winnerTeamId: string | null }>
   tiebreakWinnerId?: string
+  scoreObservedAt?: string
+  retainedScore?: boolean
   /** True only when Fantrax reported at least one game played on either side. */
   played: boolean
 }

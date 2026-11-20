@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
+import { cutoverWindow } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { buildWeekKickoffMap, lockTeamLookupKeys, readLineupLockSettings } from './lineupLock'
 
@@ -75,6 +76,7 @@ export async function writeDailyLineupForSave(
   args: {
     leagueId: string
     redraftRosterId: string
+    leagueSettings?: unknown
     sport: string
     season: number
     week: number
@@ -84,7 +86,7 @@ export async function writeDailyLineupForSave(
     before?: ReadonlyMap<string, string>
   },
 ): Promise<{ days: number; rows: number; backfilledDays?: number }> {
-  const window = resolveDailySportWeekWindow(args.sport, args.season, args.week)
+  const window = cutoverWindow(args.leagueSettings,args.season,args.week) ?? resolveDailySportWeekWindow(args.sport, args.season, args.week)
   if (!window) {
     throw new Error(
       `Daily lineups are on for this league, but ${args.sport} ${args.season} week ${args.week} has no date window. ` +

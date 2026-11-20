@@ -1,3 +1,5 @@
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
+
 export type CutoverPolicy = 'after_open_period' | 'reconcile_open_period'
 export const cutoverPolicyValid = (value: unknown): value is CutoverPolicy =>
   value === 'after_open_period' || value === 'reconcile_open_period'
@@ -12,6 +14,7 @@ export type Cutover = {
   teams: Record<string, string>
   installedSeasonId?: string
   settled?: boolean
+  lastSourceReadAt?: string
   nativeFrom?: number
   officialRanks?: Record<string, number>
   reason?: string
@@ -39,6 +42,18 @@ export function activeFantraxCalendar(platform: unknown, settings: unknown, now 
 
 export function sourceOwnsWeek(cutover: Cutover | undefined, week: number) {
   return Boolean(cutover && week < (cutover.nativeFrom ?? cutover.period + 1))
+}
+
+export const datedCutoverSport = (sport: unknown) => ['NBA','NHL','MLB','NCAAB'].includes(String(sport).toUpperCase())
+
+export function periodDays(period: CutoverPeriod) {
+  const start = easternCalendarDay(new Date(period.startDate))!, last = easternCalendarDay(new Date(period.endDate))!
+  return { start, end: new Date(last.getTime()+86400000) }
+}
+
+export function cutoverWindow(settings:unknown,season:number,week:number) {
+  const period=readCutover(settings,season)?.periods.find(p=>p.number===week)
+  return period && periodDays(period)
 }
 
 export function sourceOwnedFixture(snapshot: unknown) {

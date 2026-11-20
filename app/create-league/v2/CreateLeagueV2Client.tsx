@@ -195,9 +195,9 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
         method: 'POST',
         credentials: 'include',
       })
-      const result = (await response.json()) as { complete?: boolean; error?: string }
+      const result = (await response.json()) as { complete?: boolean; error?: string; cutover?: { policy: CutoverPolicy } }
       if (response.ok && result.complete) {
-        router.push(href)
+        router.push(result.cutover ? '/leagues/'+encodeURIComponent(leagueId)+'/import-carryover' : href)
       } else {
         setCreationWarning(result.error ?? 'Your league was created, but roster setup is still pending. Retry setup or open the league to review it.')
       }

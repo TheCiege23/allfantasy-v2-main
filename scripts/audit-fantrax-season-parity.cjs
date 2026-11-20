@@ -330,11 +330,12 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const displayRanks=replay.rows.map(t=>({row:displayedByName.get(replay.names.get(t.teamId)),source:t}))
     const screenRecords=displayRanks.filter(({row,source:t})=>row && row.currentRank===t.rank &&
       [row.wins,row.losses,row.ties].join('-')===t.points && (t.totalPointsFor==null?row.pointsFor==null:close(row.pointsFor,t.totalPointsFor))).length
-    let screenGames=0,uniqueGames=0
+    let screenGames=0,uniqueGames=0,screenFinalGames=0
     for(const p of scheduled.periods){
       const board=await screen('/api/redraft/matchup?seasonId='+season.id+'&week='+p.period,cookie)
       const fixtures=new Map((board.matchups||[]).map(g=>[[g.homeRoster.teamName,g.awayRoster.teamName].sort().join('|'),g]))
       uniqueGames+=new Set((board.matchups||[]).map(g=>g.id)).size
+      screenFinalGames+=(board.matchups||[]).filter(g=>g.status==='final').length
       for(const m of p.matchups){
         if(!m.home?.teamId || !m.away?.teamId || !(m.home.gamesPlayed>0||m.away.gamesPlayed>0))continue
         const home=replay.names.get(m.home.teamId),away=replay.names.get(m.away.teamId)
@@ -353,6 +354,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       backfill,teams:teams.length,sourceTeams:orig.length,matchedRecords,matchedRank,availablePF,matchedPF,matchedRebuiltRecords,
       sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,screenRecords,screenGames,uniqueGames,
       games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,policyPass,divisionPass,divisionMatches,simulatedBracket,
+      screenFinalGames,sourceResultsMissing:uniqueGames-games,
       sourceTiebreaks,matchedTiebreaks,matchedDecidedRecords:replay.rows.filter(t=>decidedRecords.get(t.teamId)?.join('-')===t.points).length,
       rules:policy && {reseed:policy.reseed,divisionWinners:policy.divisionWinners,keeperType:policy.keeperType,
         standingsTies:policy.standingsTies,matchupTies:policy.matchupTies,playoffTies:policy.playoffTies},
@@ -363,6 +365,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
       games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
       facts.length===games && scheduled.conflicting===0 && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
+    evidence.allAvailableScoresMatched=games===matchedScores && games===screenGames && games===screenFinalGames && facts.length===games
     try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie,source,replay)}
     catch(error){evidence.native={created:false,reason:String(error.message).slice(0,260)}}
     if(source.info.scoringSystem?.type==='HEAD_TO_HEAD_ROTI_SINGLE_WIN'){

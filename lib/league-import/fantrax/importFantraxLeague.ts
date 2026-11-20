@@ -45,6 +45,7 @@ import {
 } from './fantraxApi'
 
 import { fantraxCategoryTieWinner, fetchFantraxPublicRules, type FantraxPublicRules } from './fantraxPublicRules'
+import { retainClosedResults } from './retainClosedResults'
 
 export type FantraxImportOutcome =
   | {
@@ -156,7 +157,7 @@ export async function importFantraxLeague(args: {
         where: { id: args.refreshSnapshotId },
         select: {
           id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true,
-          userTeam: true, standings: true, transactions: true,
+          userTeam: true, standings: true, transactions: true, matchups: true, updatedAt: true,
         },
       })
     : null
@@ -409,7 +410,7 @@ export async function importFantraxLeague(args: {
         season,
       },
     },
-    select: { appUserId: true, sourceLeagueId: true, roster: true, standings: true, transactions: true },
+    select: { appUserId: true, sourceLeagueId: true, roster: true, standings: true, transactions: true, matchups:true, updatedAt:true },
   })
   /*
    * ⚠ THIS REFUSED PEOPLE THEIR OWN LEAGUES, AND THE IDENTITY IS WHY.
@@ -534,7 +535,7 @@ export async function importFantraxLeague(args: {
      * distinguishes the two (`asNumber(matchup.awayScore, null) ?? undefined`),
      * so a null week arrives as "no score on file" instead of a scoreless tie.
      */
-    matchups: schedule.rows.map(row => {
+    matchups: retainClosedResults(schedule.rows,prior?.appUserId===args.appUserId ? prior?.matchups : null,info.data.scoringPeriods ?? [],prior?.updatedAt).map(row => {
       if (!row.played || row.awayScore !== row.homeScore || !row.categoryOutcomes?.length) return row
       const winner = fantraxCategoryTieWinner(row.isPlayoff ? effectiveRules?.playoffTies : effectiveRules?.matchupTies, row.categoryOutcomes)
       return winner ? { ...row, tiebreakWinnerId: winner } : row

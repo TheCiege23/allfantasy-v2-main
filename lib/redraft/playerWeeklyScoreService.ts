@@ -49,6 +49,7 @@ import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { datedCutoverSport, readCutover } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { isDailyBestBallLeague } from '@/lib/bestball/scoringPeriod'
 import { addDatedGameRow, buildPlayerDailyStatLines, type DatedGameRows } from '@/lib/redraft/playerDailyStatLines'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
@@ -392,6 +393,10 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     warnings: [],
   }
 
+  if (readCutover(survivorLeague?.settings, seasonYear) && datedCutoverSport(sport)) {
+    summary.warnings.push('This league scores native game logs by the exact start and end of each imported scoring period.')
+    return summary
+  }
   if (untranslatedForeignPlayerIds?.length) {
     summary.warnings.push(
       `${untranslatedForeignPlayerIds.length} roster id(s) are this league's platform ids with no one-to-one Sleeper id; ` +

@@ -402,6 +402,7 @@ async function runRosterLineupWithEngine(
       // A daily-lineup league is scored per day: pin the synced slots to every day the save decides.
       if (dailyLineups) {
         await writeDailyLineupForSave(tx, {
+          leagueSettings: league.settings,
           before,
           leagueId: input.leagueId,
           redraftRosterId,

@@ -2,6 +2,8 @@ import { parse, type DefaultTreeAdapterTypes } from 'parse5'
 import type { TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 
 export interface FantraxPublicRules {
+  lineupFrequency?: 'daily' | 'weekly'
+  lineupLockMinutes?: number
   reseed?: boolean
   divisionWinners?: 'top_seeds'
   keeperType?: 'dynasty' | 'keeper' | 'redraft'
@@ -32,6 +34,10 @@ export function parseFantraxPublicRules(html: string): FantraxPublicRules | null
     if (n.nodeName === 'title') rulesPage = /^League Rules Summary\s*-/i.test(label(n))
     if (n.nodeName === 'li') {
       const rule = label(n)
+      const frequency = /^Lineup changes are executed\s*:\s*(Daily|Weekly)$/i.exec(rule)
+      if (frequency) result.lineupFrequency = frequency[1].toLowerCase() as 'daily' | 'weekly'
+      const before = /^Lineups will become locked\s+(\d{1,2}):([0-5]\d)\s+\(hours:minutes\) before scheduled start-time of game/i.exec(rule)
+      if (before) result.lineupLockMinutes = Number(before[1])*60+Number(before[2])
       const reseed = /^Reseed each playoff round\s*:\s*(Yes|No)$/i.exec(rule)
       if (reseed) result.reseed = reseed[1].toLowerCase() === 'yes'
       if (/^Playoff Seeding\s*:+\s*Division winners get top seeds$/i.test(rule)) result.divisionWinners = 'top_seeds'
