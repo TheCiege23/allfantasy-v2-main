@@ -12,7 +12,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 import { dailyScheduleWaitingNotice, loadDailyBestBallScheduleStatus } from '@/lib/bestball/dailyScheduleStatus'
-import { buildImportedBestBallTab, importedBestBallNote } from '@/lib/bestball/importedBestBallTab'
+import { buildImportedBestBallTab, importedBestBallNote, teamWeeksFromMatchupFacts } from '@/lib/bestball/importedBestBallTab'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +38,7 @@ export async function GET(
       bbMatchupFormat: true,
       bbScoringPeriod: true,
       platform: true,
+      platformLeagueId: true,
       rosters: {
         select: {
           id: true,
@@ -161,14 +162,25 @@ export async function GET(
    */
   if (weeksAvailable.length === 0 && resolveWriteAuthority(league.platform) !== 'NATIVE') {
     try {
-      const [facts, importedTeams] = await Promise.all([
-        prisma.matchupFact.findMany({
-          where: { leagueId, season: league.season },
-          select: { weekOrPeriod: true, teamA: true, teamB: true, scoreA: true, scoreB: true },
-        }),
+      const [teamWeeks, importedTeams] = await Promise.all([
+        league.platformLeagueId && league.season != null
+          ? prisma.weeklyMatchup.findMany({
+              where: { leagueId: league.platformLeagueId, seasonYear: league.season },
+              select: { week: true, rosterId: true, pointsFor: true, matchupId: true, game: true },
+            })
+          : Promise.resolve([]),
         prisma.leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } }),
       ])
-      const imported = buildImportedBestBallTab(facts, importedTeams, Number.isFinite(requestedWeek) ? requestedWeek : null)
+      // The older store, only for a league the regular sync has written nothing for.
+      const rows = teamWeeks.some((r) => r.pointsFor > 0)
+        ? teamWeeks
+        : teamWeeksFromMatchupFacts(
+            await prisma.matchupFact.findMany({
+              where: { leagueId, season: league.season },
+              select: { weekOrPeriod: true, teamA: true, teamB: true, scoreA: true, scoreB: true },
+            }),
+          )
+      const imported = buildImportedBestBallTab(rows, importedTeams, Number.isFinite(requestedWeek) ? requestedWeek : null)
       if (imported.weeksAvailable.length > 0) {
         return NextResponse.json({
           league: { id: league.id, name: league.name, sport: league.sport, season: league.season, summary: buildBestBallSettingsSummary(bestBallSettings), settings: bestBallSettings, profile, structureLock },

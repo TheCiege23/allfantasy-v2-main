@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildImportedBestBallTab, importedBestBallNote } from '@/lib/bestball/importedBestBallTab'
+import { buildImportedBestBallTab, importedBestBallNote, teamWeeksFromMatchupFacts } from '@/lib/bestball/importedBestBallTab'
 import { settingWords } from '@/app/league/[leagueId]/tabs/BestBallTab'
 
 const teams = [
@@ -14,12 +14,16 @@ const teams = [
   { externalId: '3', teamName: '  ', ownerName: null },
   { externalId: '4', teamName: 'Ghost Team', ownerName: null },
 ]
-const row = (weekOrPeriod: number, teamA: string, teamB: string, scoreA: number, scoreB: number) => ({ weekOrPeriod, teamA, teamB, scoreA, scoreB })
+// One row per team per game, as the regular sync stores them (`WeeklyMatchup`).
+const game = (week: number, matchupId: number | null, a: [string, number], b?: [string, number]) => [
+  { week, rosterId: a[0], pointsFor: a[1], matchupId },
+  ...(b ? [{ week, rosterId: b[0], pointsFor: b[1], matchupId }] : []),
+]
 const rows = [
-  row(1, '1', '2', 120.5, 99.25), row(1, '3', '4', 88, 88),
-  row(2, '1', '3', 101, 130.4), row(2, '2', '4', 110, 90),
-  // The provider lists the whole schedule up front at 0-0.
-  row(3, '1', '4', 0, 0), row(3, '2', '3', 0, 0),
+  ...game(1, 1, ['1', 120.5], ['2', 99.25]), ...game(1, 2, ['3', 88], ['4', 88]),
+  ...game(2, 1, ['1', 101], ['3', 130.4]), ...game(2, 2, ['2', 110], ['4', 90]),
+  // The provider lists the whole schedule up front at 0.
+  ...game(3, 1, ['1', 0], ['4', 0]), ...game(3, 2, ['2', 0], ['3', 0]),
 ]
 
 describe('buildImportedBestBallTab', () => {
@@ -55,11 +59,33 @@ describe('buildImportedBestBallTab', () => {
     expect(tab.history.every((h) => h.week <= 2)).toBe(true)
   })
 
-  it('a bye is a score with no result; nothing stored is an empty tab on week 1', () => {
-    const bye = buildImportedBestBallTab([row(1, '1', '', 95, 0)], teams, null)
+  it('a team with no opponent has a score and no result; nothing stored is an empty tab on week 1', () => {
+    const bye = buildImportedBestBallTab(game(1, null, ['1', 95]), teams, null)
     expect(bye.lineups).toEqual([{ rosterId: '1', teamName: 'BS & The Duch', totalPoints: 95, winLoss: null, starters: [], bench: [] }])
     expect(bye.standings[0]).toMatchObject({ wins: 0, losses: 0, ties: 0, pointsFor: 95 })
     expect(buildImportedBestBallTab([], teams, null)).toEqual({ selectedWeek: 1, weeksAvailable: [], lineups: [], standings: [], history: [] })
+  })
+
+  it('a league that plays several games a week: one card per team with the points summed, every game in the standings', () => {
+    const multi = [
+      { week: 1, rosterId: '1', pointsFor: 50, matchupId: 1, game: 1 }, { week: 1, rosterId: '2', pointsFor: 40, matchupId: 1, game: 1 },
+      { week: 1, rosterId: '1', pointsFor: 30, matchupId: 1, game: 2 }, { week: 1, rosterId: '2', pointsFor: 45, matchupId: 1, game: 2 },
+    ]
+    const tab = buildImportedBestBallTab(multi, teams, null)
+    expect(tab.lineups.map((l) => [l.teamName, l.totalPoints, l.winLoss])).toEqual([['Bogoljub', 85, null], ['BS & The Duch', 80, null]])
+    expect(tab.standings.map((s) => [s.teamName, s.wins, s.losses])).toEqual([['Bogoljub', 1, 1], ['BS & The Duch', 1, 1]])
+    expect(tab.history).toEqual([{ rosterId: '1', week: 1, totalPoints: 80 }, { rosterId: '2', week: 1, totalPoints: 85 }])
+  })
+})
+
+describe('teamWeeksFromMatchupFacts: the older store reads the same way', () => {
+  it('a stored game becomes two team rows that pair up; a bye becomes one with no opponent', () => {
+    const facts = [
+      { weekOrPeriod: 1, teamA: '1', teamB: '2', scoreA: 120.5, scoreB: 99.25 },
+      { weekOrPeriod: 1, teamA: '3', teamB: '', scoreA: 95, scoreB: 0 },
+    ]
+    const tab = buildImportedBestBallTab(teamWeeksFromMatchupFacts(facts), teams, null)
+    expect(tab.lineups.map((l) => [l.teamName, l.totalPoints, l.winLoss])).toEqual([['BS & The Duch', 120.5, 'W'], ['Bogoljub', 99.25, 'L'], ['Team', 95, null]])
   })
 })
 
@@ -76,6 +102,9 @@ describe('the tab and the handler use it only for an imported league with nothin
   it('the handler gates on no legacy weeks and a non-native platform', () => {
     expect(handler).toMatch(/^\s*if \(weeksAvailable\.length === 0 && resolveWriteAuthority\(league\.platform\) !== 'NATIVE'\) \{$/m)
     expect(handler).toMatch(/^\s*source: 'imported',$/m)
+    // The store the regular sync keeps current is read first; the slower one only when it is empty.
+    expect(handler.indexOf('prisma.weeklyMatchup.findMany')).toBeGreaterThan(0)
+    expect(handler.indexOf('prisma.weeklyMatchup.findMany')).toBeLessThan(handler.indexOf('prisma.matchupFact.findMany'))
   })
   it('the tab asks for no week first, so the server opens it on the latest scored week', () => {
     expect(tab).toMatch(/^\s*const \[week, setWeek\] = useState<number \| null>\(null\)$/m)
