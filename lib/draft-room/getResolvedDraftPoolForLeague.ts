@@ -5,6 +5,7 @@ import { byeWeekForTeam, loadDraftPoolByeWeekMap } from './draftPoolByeWeeks'
 import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
+import { attachTeamDefenseStats, loadNflTeamDefenseSeason, type TeamDefenseByTeam } from './nflTeamDefenseSeason'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
  * Use from API route, DraftWorker, autopick fallback, and tests.
@@ -2898,6 +2899,17 @@ async function buildResolvedDraftPoolForLeague(
     })
   entries = entriesWithProjectionFallbacks
   perfProjectionFallbacks()
+
+  // NFL team defenses: SACK / INT / TD / PA/G from stored defender rows and scores
+  // (nflTeamDefenseSeason.ts), for the same season every other NFL column shows. A failed read
+  // leaves the DEF columns as dashes rather than failing the pool.
+  if (sport === 'NFL' && nflPoolStatSeason) {
+    const defenseByTeam = await loadNflTeamDefenseSeason(nflPoolStatSeason).catch((error) => {
+      console.warn('[draft-pool] team defense stats unavailable', { leagueId, error: String(error) })
+      return new Map() as TeamDefenseByTeam
+    })
+    entries = attachTeamDefenseStats(entries, defenseByTeam)
+  }
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.
   // This avoids visually jumbled boards when merged sources contribute mixed/null ADP values.
