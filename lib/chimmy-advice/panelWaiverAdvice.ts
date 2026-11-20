@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { recordAdvice, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceStore'
+import type { WAIVER_ENGINE_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import type { WaiverClaimRecommendation } from '@/lib/decision-os/waiver/decision'
 import { resolveDropOnRoster, resolveWaiverAddTarget, topWaiverClaim, type WaiverTargetRefusal } from './waiverAdviceTarget'
 
@@ -20,8 +21,24 @@ import { resolveDropOnRoster, resolveWaiverAddTarget, topWaiverClaim, type Waive
 
 export type PanelWaiverAdviceOutcome = 'recorded' | 'unavailable' | 'invalid' | 'no_claim' | 'disabled' | WaiverTargetRefusal
 
-export async function recordPanelWaiverAdvice(
-  args: { userId: string; leagueId: string; claims: readonly WaiverClaimRecommendation[] },
+export type TopWaiverClaimArgs = {
+  userId: string
+  leagueId: string
+  claims: readonly WaiverClaimRecommendation[]
+  /**
+   * True only in a league the ledger can measure (redraft, full-PPR NFL — `isWaiverCalibrationScope`).
+   * Then the top claim's RAW engine score is recorded with it, and the engine's calibration grades it;
+   * otherwise no score is recorded and the row counts only toward the panel's pickup record.
+   */
+  scored?: boolean
+}
+
+/**
+ * The waiver engine's #1 claim, recorded under `surface`: the panel's (shown to the user) or the scheduled
+ * weekly run's (`waiver_engine`, shown to nobody — see lib/chimmy-advice/adviceSurfaces.ts).
+ */
+export async function recordTopWaiverClaim(
+  args: TopWaiverClaimArgs & { surface: typeof WAIVER_PANEL_SURFACE | typeof WAIVER_ENGINE_SURFACE },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PanelWaiverAdviceOutcome> {
   if (String(env['ADVICE_LEDGER_WAIVERS'] ?? '').trim().toLowerCase() === 'off') return 'disabled'
@@ -37,16 +54,20 @@ export async function recordPanelWaiverAdvice(
     season: target.season,
     week: target.week,
     adviceType: 'add',
-    surface: WAIVER_PANEL_SURFACE,
+    surface: args.surface,
     rec: { key: target.sleeperId, name: target.playerName },
     alt: drop,
     slot: null,
-    confidencePct: null,
+    confidencePct: args.scored && Number.isFinite(top.compositeScore) ? Math.round(top.compositeScore) : null,
   })
 }
 
+export function recordPanelWaiverAdvice(args: TopWaiverClaimArgs, env: NodeJS.ProcessEnv = process.env): Promise<PanelWaiverAdviceOutcome> {
+  return recordTopWaiverClaim({ ...args, surface: WAIVER_PANEL_SURFACE }, env)
+}
+
 /** Never awaited by the route, never thrown into it. */
-export function schedulePanelWaiverAdvice(args: { userId: string; leagueId: string; claims: readonly WaiverClaimRecommendation[] }): void {
+export function schedulePanelWaiverAdvice(args: TopWaiverClaimArgs): void {
   void recordPanelWaiverAdvice(args).catch((err) => {
     console.warn('[advice-ledger] waiver panel pick not recorded', err instanceof Error ? err.message : err)
   })

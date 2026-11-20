@@ -1,8 +1,6 @@
 import 'server-only'
 
-import type { UserLeague } from '@/app/dashboard/types'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
-import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { runCommissionerHealthDecision } from '../commissioner-health'
 import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
@@ -11,6 +9,8 @@ import type { WaiverClaimRecommendation } from '../waiver/decision'
 import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
 import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
+import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
+import { createCommissionerOsLoaders } from '../commissioner-os'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice } from './packet'
@@ -160,12 +160,13 @@ export async function loadCommissionerHealthDecisionSlice(
     const access = await assertLeagueCommissioner(leagueId, userId, 'view')
     if (!access?.ok) return notEntitled()
 
-    // Safe to assert: the line above verified it. The loader filters on this flag.
-    const minimal = [{ id: leagueId, isCommissioner: true } as unknown as UserLeague]
-    // `dynastySignals`: a dynasty league's pick balance and taxi findings ride in `alerts`, so the
-    // decision below — and the line Chimmy reads — carries them. A no-op for every other league.
-    const snapshots = await getCommissionerHubHealthForUser(userId, minimal, { dynastySignals: true })
-    const snapshot = snapshots.find((s) => s?.leagueId === leagueId) ?? null
+    /*
+     * Through Commissioner OS (2026-11-20): the same snapshot the hub builds — `getCommissionerHubHealthForUser`
+     * with dynasty signals, so a dynasty league's pick balance and taxi findings ride in `alerts` — held for five
+     * minutes per (commissioner, league) instead of rebuilt on every question. Access was proved just above, on
+     * this request; a stored snapshot never stands in for that check.
+     */
+    const snapshot = await createCommissionerOsLoaders().loadHealthSnapshot({ userId, leagueId })
 
     if (!snapshot) {
       return {
@@ -299,7 +300,11 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       }
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
+    const [pool, calibration] = await Promise.all([
+      loadWaiverPool(leagueId, facts.sport, facts.rosterId),
+      // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
+      loadWaiverCalibrationForLeague(leagueId),
+    ])
     if (pool.availablePlayers.length === 0) {
       /*
        * Distinct from "no roster": the league resolved and the wire is empty after subtraction.
@@ -356,7 +361,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
         poolIncomplete: pool.poolIncomplete,
         pricing: pool.pricing,
       },
-      { decision: buildLiveWaiverDecisionDeps(facts) },
+      { decision: buildLiveWaiverDecisionDeps(facts, calibration.calibration) },
     )
 
     if (args.onClaims) {

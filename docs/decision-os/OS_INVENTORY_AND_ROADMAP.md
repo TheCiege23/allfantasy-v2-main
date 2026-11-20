@@ -189,6 +189,27 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
+the 2026-11-20 re-score (axes 1–3 = 40%, 4–5 = 30%, 6–7 = 30%; ⚠ counts half; n/a leaves its group). Code-scheduled
+only, like every mark here: production tables were not read.
+
+| OS | Before | After | What moved |
+|---|---|---|---|
+| League | 100 | 100 | — |
+| Projection | 100 | 100 | — |
+| Import | ~93 | ~100 | Chimmy ⚠→✅: the import slice reaches the prompt in full, not its first 8 fields |
+| Waiver | ~86 | ~100 | Engine ⚠→✅ (confidence learns from graded #1 claims, full-PPR redraft only); Cron ⚠→✅ (weekly engine run) |
+| Player Value | ~78 | ~93 | Packet ⚠→✅ (NBA/MLB/NHL board values); Chimmy ⚠→✅ (tools on the league's chart). User ⚠ (soccer) stays |
+| Manager Psychology (facts) | ~75 | ~90 | Packet ⚠→✅ and Chimmy ⚠→✅: leaguemates' records in the packet, Competitive Edge only |
+| Lineup | ~75 | ~86 | Chimmy ⚠→✅: My Team's best lineup in every sport that has one, and in the packet. Kernel ⚠ stays |
+| Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
+| Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
+| Commissioner | ~52 | ~78 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain. Engine, Cron, User ⚠ stay |
+| Decision OS hub | ~50–58 | not re-scored | Nothing here targeted the hub's own axes (multi-model ❌); measure it on its own |
+
+⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
+commits after it.
+
 **Commissioner "inactive", 2026-11-20 — native leagues read the manager's own last action (owner's call: fix the
 flag before grading it).** Both the per-manager table (`managerHealth.ts`) and the hub's "N teams inactive"
 (`commissionerHubHealth.ts`) used `Roster.updatedAt`, which every system write moves — auto-subs, IR and bye moves,
@@ -198,6 +219,56 @@ saves, the claims they filed (autopilot's, filed under the owner's id with `meta
 excluded), redraft claims and the trades they proposed. Nothing on record reads as not inactive, never inactive.
 Imported leagues keep the synced timestamp. ⚠ Grading the flag is still to do: it is not stored when shown, and
 native leagues have no current-week column for the advice table, so it needs its own small table (a migration).
+
+**Waiver OS, 2026-11-20 — the engine runs on a schedule and its confidence learns from its own claims.** The
+engine ran only when somebody opened the panel or asked Chimmy. The alert sweep now runs it weekly for every league
+the ledger can grade — Sleeper, redraft, full-PPR NFL (`isWaiverCalibrationScope`) — and records its #1 claim with
+its raw score under a new ledger-only surface, `waiver_engine`, which nobody is shown
+(`lib/decision-os/waiver/weeklyEngineCalls.ts`; 45 s a tick, 25 leagues, each at most once in six days; honours the
+`waiverDecision` kill switch and `ADVICE_LEDGER_WAIVERS=off`). A pick the panel or Chimmy actually SHOWS takes over
+that unshown row. The ledger grades every scored #1 claim by band (High ≥80, Medium ≥50) on the pickup rule — 10+
+PPR a week over three weeks — and `lib/decision-os/waiver/calibration.ts` moves the card's and the panel's
+CONFIDENCE (never the ranking, scores or bid) by half the shrunk gap, ±10 at most, silent below 20 graded claims.
+⚠ This narrows `engineRecord.ts`'s "reported, never applied" rule rather than overturning it: the correction applies
+only where the ledger's measure IS the league's own. Everywhere else nothing changes. Expect no movement until about
+three weeks of claims have been graded.
+
+**Trade OS, 2026-11-20 — the trades waiting on you are in the packet, graded.** On the tool-loop path (the default)
+Chimmy saw pending offers only if the model called `get_league_trade_activity`; the block in the fallback prompt never
+reached it. A trade question now asks for a `pendingTrades` slice: the exact text that tool returns for "Incoming
+proposals" (`buildPendingTradeDecisionContext` — native, redraft and synced Sleeper offers, the soonest-expiring three
+graded by the one trade engine). That is not the "invented proposal" `packet.ts` rules out: it reads the offers that
+exist. Every letter it gives is pushed into the same list the trade tools fill (`toolContext.tradeGrades`), so the
+letter check accepts an answer quoting the packet. "Nothing waiting" is stated only when both reads finished; a
+builder that throws is a gap that tells Chimmy not to say either way; a late read is stamped late, never "nothing".
+⚠ Still not done, deliberately: trade letters are not moved by the ledger (`engineRecord.ts`), the offer sweep stays
+Sleeper-only (no other provider contract carries pending offers — `contracts/`), and `tradeSettingsSource` remains
+unread rather than warmed (warming an entry nobody reads is the waste retired on 2026-09-06).
+
+**Draft OS, 2026-11-20 — the draft and Draft OS's pick are in the packet.** A draft question asked outside the draft
+room reached the board and the pick only if the model called `get_current_draft_board`. A draft question now asks for a
+`draftBoard` slice: the exact text that tool returns (`buildDraftContext` — the board, the asker's picks and queue,
+the managers before their pick, and Draft OS's pick when they are on the clock, gated by the room's own pick rules).
+The pick decision gets 1,500 ms there (DRAFT_BOARD_PICK_BUDGET_MS) instead of 2,500 so the board fits the packet's
+first-wave deadline; past it the board comes without the pick, which is that builder's existing honest fallback, and
+the tool still runs the full budget. Not asked for from inside the draft room, which already hands the loop the same
+board. "No draft session" is stated as a fact; a failed read is a gap; a late read is stamped late.
+
+**Commissioner OS, 2026-11-20 — league health reads through the domain-OS kernel.** It was the one Decision OS
+decision with no maintained facts: Chimmy's league-health slice rebuilt the hub's whole snapshot (rosters, seven days of
+counts, the owner-action clock, dynasty reads) on every question. `'commissioner'` is now an `OsDomain`, and
+`lib/decision-os/commissioner-os` holds that snapshot as a fact — read through `createOsFeed` like waiver, trade and
+import, five-minute TTL. ⚠ USER-scoped on purpose: with dynasty signals on, the snapshot marks which team is the
+viewer's (`dynastyHealthReads.ts`), so a league-scoped entry would tell a co-commissioner another's team is theirs.
+Commissioner access is still proved on every request before the read. Not done: no scheduled warm (nothing shows one
+is needed at a five-minute TTL), and the hub screen still builds its own snapshot live.
+
+**Manager Psychology (facts only), 2026-11-20 — leaguemates' records are in the packet, behind the plan.** They
+reached Chimmy only through the paid `get_manager_record` tool, so a manager question the model did not route to the
+tool was answered without them. A manager question now asks for a `managerRecords` slice: the exact text that tool
+returns with no manager named — one line per leaguemate (trades, waiver claims and FAAB this season, drafts on file)
+under its facts-only contract. 🛑 Competitive Edge only, checked inside the builder the tool uses: a locked plan puts NO
+history in the packet, only a `not_entitled` gap, and the tool still shows the plan line if they ask.
 
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.

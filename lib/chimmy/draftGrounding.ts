@@ -227,7 +227,16 @@ async function auctionAdviceWithin(leagueId: string, rosterId: string): Promise<
  * Draft state for the league in scope. Returns null when the league has no draft
  * session at all, so the prompt gains no empty section.
  */
-export async function buildDraftContext(leagueId: string, userId: string): Promise<string | null> {
+export async function buildDraftContext(
+  leagueId: string,
+  userId: string,
+  /**
+   * `draftOsBudgetMs` shortens the pick decision's budget (DRAFT_OS_BUDGET_MS) — the grounding packet passes one so the
+   * whole board fits its own deadline. Past it the board is returned without the pick lines, which is this file's own
+   * honest fallback ("answers from board state alone"); the draft tools still run the full budget.
+   */
+  opts: { draftOsBudgetMs?: number } = {},
+): Promise<string | null> {
   if (!leagueId || !userId) return null
 
   let session: SessionRow | null
@@ -504,7 +513,10 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
    * viewer would be advised from someone else's roster.
    */
   if (mine && viewerRosterId && !isAuction && !paused && nextOverall <= totalPicks) {
-    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId, { userId })
+    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId, {
+      userId,
+      ...(opts.draftOsBudgetMs != null ? { budgetMs: opts.draftOsBudgetMs } : {}),
+    })
     if (draftOsLines) lines.push(...draftOsLines)
   }
 
