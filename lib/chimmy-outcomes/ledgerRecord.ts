@@ -142,6 +142,11 @@ export type LedgerSnapshot = {
   pickups: PickupTally
   /** Redraft evaluations only: a dynasty deal is priced for years, not weeks. */
   trades: { byLetter: Partial<Record<TradeLetter, TradeTally>>; pending: number; unscored: number; read: number; gradable: number }
+  /**
+   * The same tally over only the trades a commissioner was shown in a trade review (surface
+   * `commissioner-review`), one per deal. Absent on a snapshot written before 2026-11-20.
+   */
+  commissionerTrades?: LedgerSnapshot['trades']
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -155,6 +160,7 @@ export function foldLedger(input: {
   bench: readonly BenchRow[]
   adds: readonly AddRow[]
   trades: LedgerSnapshot['trades']
+  commissionerTrades?: LedgerSnapshot['trades']
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -227,6 +233,7 @@ export function foldLedger(input: {
     bench,
     pickups,
     trades: input.trades,
+    ...(input.commissionerTrades ? { commissionerTrades: input.commissionerTrades } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
@@ -247,6 +254,8 @@ export type LedgerRecordView = {
    * 2026-11-19, which stored no split.
    */
   trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
+  /** The same, over only trades a commissioner was shown in a trade review. Absent or null when none qualify. */
+  commissionerTrades?: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
 }
 
 const nat = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
@@ -293,16 +302,25 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
       ? { you: pickYou, everyone: pickEveryone ? { ...pickEveryone, vsDrop: nat(p.vsDrop), beatDrop: Math.min(nat(p.beatDrop), nat(p.vsDrop)) } : null }
       : null
 
-  const letters = TRADE_LETTERS.flatMap((letter) => {
-    const t = ledger.trades?.byLetter?.[letter]
-    if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.netPerWeek !== 'number' || !Number.isFinite(t.netPerWeek)) return []
-    const ahead = nat(t.ahead)
-    const decided = ahead + nat(t.behind)
-    return [{ letter, n: nat(t.n), netPerWeek: round1(t.netPerWeek), aheadPct: decided > 0 ? Math.round((100 * ahead) / decided) : null }]
-  })
+  const lettersOf = (tally: LedgerSnapshot['trades'] | undefined) =>
+    TRADE_LETTERS.flatMap((letter) => {
+      const t = tally?.byLetter?.[letter]
+      if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.netPerWeek !== 'number' || !Number.isFinite(t.netPerWeek)) return []
+      const ahead = nat(t.ahead)
+      const decided = ahead + nat(t.behind)
+      return [{ letter, n: nat(t.n), netPerWeek: round1(t.netPerWeek), aheadPct: decided > 0 ? Math.round((100 * ahead) / decided) : null }]
+    })
+  const letters = lettersOf(ledger.trades)
+  const commissionerLetters = lettersOf(ledger.commissionerTrades)
 
   if (!bench && !pickups && letters.length === 0) return null
-  return { season: nat(ledger.season), bench, pickups, trades: letters.length ? letters : null }
+  return {
+    season: nat(ledger.season),
+    bench,
+    pickups,
+    trades: letters.length ? letters : null,
+    ...(commissionerLetters.length ? { commissionerTrades: commissionerLetters } : {}),
+  }
 }
 
 /** Only a well-formed view survives a trip to the client; anything else renders nothing. */
@@ -325,16 +343,27 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
   const pickups = v.pickups as LedgerRecordView['pickups']
   if (bench != null && (typeof bench !== 'object' || !okLine(bench.you) || !okLine(bench.everyone))) return null
   if (pickups != null && (typeof pickups !== 'object' || !okPick(pickups.you) || !okPick(pickups.everyone))) return null
-  const trades = v.trades
-  if (trades != null) {
-    if (!Array.isArray(trades)) return null
-    for (const t of trades) {
-      if (!t || typeof t !== 'object') return null
+  const okLetters = (list: unknown) => {
+    if (list == null) return true
+    if (!Array.isArray(list)) return false
+    for (const t of list) {
+      if (!t || typeof t !== 'object') return false
       const x = t as Record<string, unknown>
-      if (!TRADE_LETTERS.includes(x.letter as TradeLetter) || typeof x.n !== 'number' || typeof x.netPerWeek !== 'number') return null
-      if (x.aheadPct != null && !(typeof x.aheadPct === 'number' && x.aheadPct >= 0 && x.aheadPct <= 100)) return null
+      if (!TRADE_LETTERS.includes(x.letter as TradeLetter) || typeof x.n !== 'number' || typeof x.netPerWeek !== 'number') return false
+      if (x.aheadPct != null && !(typeof x.aheadPct === 'number' && x.aheadPct >= 0 && x.aheadPct <= 100)) return false
     }
+    return true
   }
+  const trades = v.trades
+  if (!okLetters(trades)) return null
+  // A malformed commissioner list drops only itself: the rest of the record is still good.
+  const commissionerTrades = okLetters(v.commissionerTrades) ? (v.commissionerTrades as LedgerRecordView['commissionerTrades']) ?? null : null
   if (bench == null && pickups == null && trades == null) return null
-  return { season: typeof v.season === 'number' ? v.season : 0, bench: bench ?? null, pickups: pickups ?? null, trades: (trades as LedgerRecordView['trades']) ?? null }
+  return {
+    season: typeof v.season === 'number' ? v.season : 0,
+    bench: bench ?? null,
+    pickups: pickups ?? null,
+    trades: (trades as LedgerRecordView['trades']) ?? null,
+    ...(commissionerTrades?.length ? { commissionerTrades } : {}),
+  }
 }

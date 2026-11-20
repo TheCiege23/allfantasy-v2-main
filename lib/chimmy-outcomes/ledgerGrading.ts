@@ -157,23 +157,47 @@ export type TradeLedgerInputs = {
   idsPlaced: number
 }
 
-/** Every saved trade evaluation of the season, as gradable rows, with the feed to grade them. */
+/** The surface `reviewStoredTrade` evaluates under (`lib/decision-os/trade/tradeReviewContext.ts`). */
+export const COMMISSIONER_REVIEW_SURFACE = 'commissioner-review'
+
+/**
+ * Every saved trade evaluation of the season, as gradable rows, with the feed to grade them — ONE ROW PER DEAL.
+ *
+ * 🛑 A RECEIPT IS AN EVALUATION, NOT A DEAL, AND UNTIL 2026-11-20 THIS COUNTED EVALUATIONS. `saveAdHocReceipt`
+ * reuses a receipt only for the same surface, viewer and league within 24 hours, so one disputed trade looked at
+ * on three days, on two screens, by both managers and by the commissioner was graded as a dozen trades. The
+ * letter's record beside every Trade Center grade (and its 20-deal floor) was inflated by however often its
+ * deals were re-opened. Now each `inputHash` — league, both sides' assets and the viewer's side — counts once,
+ * at its FIRST evaluation: the letter the manager was shown before anything else happened. The two sides of
+ * one deal stay two rows on purpose; they are two calls (an A for one side is an F for the other). A row from
+ * before the hash column existed has none and counts on its own, as before.
+ *
+ * The dedup is in SQL, ahead of the LIMIT, so re-opened deals no longer crowd real ones out of the read.
+ * `surface` narrows to one surface first (the commissioner review's own record), deduplicated the same way.
+ */
 export async function loadTradeLedgerInputs(
   season: number,
   cal: WeekCalendar,
-  opts: { limit?: number; db?: Db } = {},
+  opts: { limit?: number; db?: Db; surface?: string } = {},
 ): Promise<TradeLedgerInputs> {
   const db = opts.db ?? prisma
   const limit = Math.max(1, opts.limit ?? MAX_TRADE_RECEIPTS_READ)
+  const onSurface = opts.surface ? Prisma.sql`AND s.surface = ${opts.surface}` : Prisma.empty
   const snaps = await db.$queryRaw<Array<{ is_trade: boolean; completed: boolean; surface: string | null; captured_at: Date; receipt: unknown }>>`
-    SELECT s."tradeId" IS NOT NULL AS is_trade,
-           COALESCE(t.status IN ('accepted', 'processed', 'completed'), false) AS completed,
-           s.surface, s."capturedAt" AS captured_at, s."evaluationReceipt" AS receipt
-    FROM trade_decision_snapshots s
-    LEFT JOIN af_league_trades t ON t.id = s."tradeId"
-    WHERE s."evaluationReceipt" IS NOT NULL
-      AND s."capturedAt" >= ${new Date(Date.UTC(season, 7, 1))} AND s."capturedAt" < ${new Date(Date.UTC(season + 1, 1, 15))}
-    ORDER BY s."capturedAt" DESC
+    SELECT d.is_trade, d.completed, d.surface, d.captured_at, d.receipt
+    FROM (
+      SELECT DISTINCT ON (COALESCE(s."inputHash", s.id))
+             s."tradeId" IS NOT NULL AS is_trade,
+             COALESCE(t.status IN ('accepted', 'processed', 'completed'), false) AS completed,
+             s.surface, s."capturedAt" AS captured_at, s."evaluationReceipt" AS receipt
+      FROM trade_decision_snapshots s
+      LEFT JOIN af_league_trades t ON t.id = s."tradeId"
+      WHERE s."evaluationReceipt" IS NOT NULL
+        AND s."capturedAt" >= ${new Date(Date.UTC(season, 7, 1))} AND s."capturedAt" < ${new Date(Date.UTC(season + 1, 1, 15))}
+        ${onSurface}
+      ORDER BY COALESCE(s."inputHash", s.id), s."capturedAt" ASC, s.id ASC
+    ) d
+    ORDER BY d.captured_at DESC
     LIMIT ${limit}`
 
   const skips: Record<string, number> = {}
@@ -206,8 +230,8 @@ export async function loadTradeLedgerInputs(
   return { rows, skips, read: snaps.length, pointsPerWeek, idsTotal: ids.length, idsPlaced: ids.filter((id) => placed(id) != null).length }
 }
 
-async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<LedgerSnapshot['trades']> {
-  const inputs = await loadTradeLedgerInputs(season, cal, { db })
+async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db, surface?: string): Promise<LedgerSnapshot['trades']> {
+  const inputs = await loadTradeLedgerInputs(season, cal, { db, surface })
   const redraft = inputs.rows.filter((r) => r.format === 'redraft')
   const g = gradeTradeRows(redraft, completedThrough(cal, now), inputs.pointsPerWeek)
   const byLetter: LedgerSnapshot['trades']['byLetter'] = {}
@@ -241,12 +265,15 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
   if (cal.size === 0) return null
-  const [bench, adds, trades] = await Promise.all([
+  const noTrades = { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }
+  const [bench, adds, trades, commissionerTrades] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
     part(() => loadAddRows(season, db), [] as AddRow[]),
-    part(() => gradeTrades(season, cal, now, db), { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }),
+    part(() => gradeTrades(season, cal, now, db), noTrades),
+    // The same letters, graded only where a commissioner was shown them in a trade review.
+    part(() => gradeTrades(season, cal, now, db, COMMISSIONER_REVIEW_SURFACE), noTrades),
   ])
-  return foldLedger({ season, cal, now, bench, adds, trades })
+  return foldLedger({ season, cal, now, bench, adds, trades, commissionerTrades })
 }
 
 /**

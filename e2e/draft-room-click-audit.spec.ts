@@ -1981,9 +1981,8 @@ test.describe('@draft-room click audit', () => {
     await openDraftRoomHarness(page, { e2eRoom: true })
     const mobile = page.getByTestId('draft-mobile-layout')
     await expect(page.getByTestId('draft-mobile-quick-dock')).toHaveCount(0)
-    await page.getByTestId('draft-mobile-more').click()
-    await expect(page.getByTestId('draft-mobile-quick-dock')).toBeVisible()
-    await page.getByTestId('draft-mobile-more').click()
+    // Phase 5 (2026-11-19): all six tabs sit in the tray, so "More" appears only for extra tabs (keepers).
+    await expect(page.getByTestId('draft-mobile-more')).toHaveCount(0)
 
     // Dismiss the on-turn suggestion with its real button before scrolling the board underneath it.
     const turnAlert = page.getByTestId('draft-youre-up-alert')
@@ -2019,7 +2018,6 @@ test.describe('@draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
-    await page.getByTestId('draft-mobile-more').click()
     const helperTab = page.getByTestId('draft-mobile-tab-helper')
     const helperWarRoomToggle = mobile.getByTestId('draft-open-war-room-button').first()
     const helperUpgradeLink = mobile.getByTestId('locked-feature-upgrade-link').first()
@@ -2051,7 +2049,8 @@ test.describe('@draft-room click audit', () => {
     await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-roster')
-    await expect(mobile.getByTestId('draft-team-panel')).toBeVisible()
+    // A plain redraft league's phone "My team" is the desktop dock's view.
+    await expect(mobile.getByTestId('results-roster-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-chat')
     await expect(mobile.getByTestId('draft-chat-panel')).toBeVisible()
     await openCommissionerControls(page)

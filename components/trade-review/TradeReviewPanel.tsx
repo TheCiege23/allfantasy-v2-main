@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReviewCheck, TradeReview } from '@/lib/decision-os/trade/tradeReview'
 import { rememberReviewId } from '@/lib/trade-review/reviewIdStore'
+import { commissionerLetterRecord, letterRecordApplies } from '@/lib/chimmy-outcomes/engineRecord'
+import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
+import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
+import { useMessages } from '@/components/i18n/useMessages'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tOr } from '@/lib/i18n/tInterpolate'
 import {
@@ -29,6 +33,8 @@ type ReviewResponse = {
   sides: [string, string]
   tradeGrade: { grade: string | null; partnerGrade: string | null; gradeWithheld: string | null }
   reviewId: string | null
+  /** Sport and graded league type — whether the letter's graded record applies (NFL redraft only). */
+  recordScope?: { sport: string | null; leagueType: string | null }
   explanation: { noteToLeague: string | null; headline: string; source: 'ai' | 'template' }
   actOn: { platform: string; deepLink: string | null; note: string } | null
 }
@@ -99,6 +105,14 @@ export function TradeReviewPanel(props: {
         tone: RECOMMENDATION_TONE[data.review.recommendation],
       }
     : null
+  /*
+   * How the letter has held up (`lib/chimmy-outcomes/engineRecord.ts`): over trades commissioners reviewed when
+   * that letter has enough of them, else over every graded deal — and only for NFL redraft, the one kind the
+   * ledger grades. Reported beside the grade, never applied to it: the recommendation above is unchanged.
+   */
+  const rm = useMessages(adviceRecordMessages)
+  const recordApplies = Boolean(data?.tradeGrade.grade && data.recordScope && letterRecordApplies(data.recordScope))
+  const letterRecord = commissionerLetterRecord(useAdviceRecord(recordApplies), recordApplies ? data?.tradeGrade.grade : null)
   const raised = data?.review.checks.filter((c) => c.status === 'raised') ?? []
   const clear = data?.review.checks.filter((c) => c.status === 'clear') ?? []
   const notChecked = data?.review.checks.filter((c) => c.status === 'not_computed') ?? []
@@ -138,6 +152,12 @@ export function TradeReviewPanel(props: {
                   </span>
                 )}
               </div>
+
+              {letterRecord ? (
+                <p className="text-white/60" data-testid="trade-review-letter-record">
+                  {rm.commissionerTradeRecord(letterRecord.scope, letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.verdict)}
+                </p>
+              ) : null}
 
               {data.explanation.noteToLeague ? (
                 <p className="text-white/75" data-testid="trade-review-note">

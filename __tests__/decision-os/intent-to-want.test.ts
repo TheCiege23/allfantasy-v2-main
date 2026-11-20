@@ -26,21 +26,28 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
    * `optimizeLineup`; the psychology one had no renderer. An exact key set fails the moment either
    * is re-added, which a pair of `toBe(false)` assertions could not do.
    */
-  it('the router decides exactly three slices', () => {
+  it('the router decides exactly four slices', () => {
     for (const intent of ALL_INTENTS) {
       expect(Object.keys(deriveWantFromIntent(intent)).sort()).toEqual([
         'commissionerHealthDecision',
+        'myTeamLineup',
         'rosterValueGrade',
         'waiverDecision',
       ])
     }
   })
 
-  it('start_sit turns on nothing', () => {
+  /*
+   * 2026-11-20: start_sit asks for My Team's best lineup — the one optimizer the screen runs, read the way the lineup
+   * tool reads it (NOT the retired 37 s `lineupDecision` engine). Bounded by the packet's deadline like any read.
+   */
+  it('start_sit turns on myTeamLineup, and nothing else', () => {
     const w = deriveWantFromIntent('start_sit')
+    expect(w.myTeamLineup).toBe(true)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
     expect(w.waiverDecision).toBe(false)
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'start_sit')) expect(deriveWantFromIntent(intent).myTeamLineup).toBe(false)
   })
 
   it('commissioner turns on commissionerHealthDecision, and nothing else', () => {

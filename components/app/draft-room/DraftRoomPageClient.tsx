@@ -35,12 +35,10 @@ import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
 import { currentChimmySurface } from '@/lib/draft-room/chimmySurface'
 import { DraftDecisionOsCard } from '@/components/app/draft-room/DraftDecisionOsCard'
-import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
 import { DraftHelperFloatingWindow } from '@/components/app/draft-room/DraftHelperFloatingWindow'
 import { calculateDraftHelperBadgeCount, hasDraftHelperContent } from '@/lib/draft-helper/calculateBadgeCount'
 import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState'
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
-import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs, type DraftRightDockTab } from '@/components/app/draft-room/DraftRightDockTabs'
 import { DraftCenterDockTabBar, type CenterDockTab } from '@/components/app/draft-room/DraftCenterDockTabBar'
 import { CHIMMY_PICK_DELAY_MS } from '@/lib/commissioner-ai-draft-manager/chimmyPickTiming'
@@ -3254,7 +3252,6 @@ export function DraftRoomPageClient({
    * D.6 — War Room popup notification badge. Lights up when a fresh AI
    * recommendation is available and the user hasn't opened the popup yet.
    */
-  const warRoomHasNewIntel = Boolean(recommendationResult?.recommendation)
 
   const viewerDraftedPicks = useMemo(
     () => (session?.picks ?? []).filter((p) => p.rosterId === currentUserRosterId),
@@ -4528,7 +4525,25 @@ export function DraftRoomPageClient({
     return { offenseNeed, idpNeed, benchNeed, myOffense, myIdp, myBench }
   })()
 
-  const rosterPanel = (
+  /*
+   * Phone "My team" (2026-11-19): the same view as the desktop dock — plain slot names, bye week and
+   * draft pick per player — for ordinary leagues. Devy, C2C and IDP leagues keep the detailed panel
+   * below, which carries their college/pro markers and slot summaries.
+   */
+  const usePlainMyTeam =
+    formatType !== 'IDP' && devySlotTotal === 0 && !(session as DraftSessionSnapshot).c2c?.enabled
+  const rosterPanel = usePlainMyTeam ? (
+    <div className="flex h-full min-h-[60dvh] flex-col">
+      <ResultsRosterPanel
+        teams={resultsRosterTeams}
+        picks={resultsRosterPicks}
+        currentUserRosterId={currentUserRosterId ?? null}
+        starterSlots={rosterConfig?.starterSlots ?? null}
+        benchSlots={rosterConfig?.benchSlots ?? null}
+        idpEnabled={Boolean(idpRosterSummary)}
+      />
+    </div>
+  ) : (
     <div className="space-y-2 p-2">
       <div className="md:hidden">
         <DraftTeamPanel {...draftTeamPanelProps} redraftStarterHints={redraftStarterHints} />
@@ -4614,7 +4629,9 @@ export function DraftRoomPageClient({
   const hasKeeperConfig =
     (session as DraftSessionSnapshot).keeper?.config != null &&
     ((session as DraftSessionSnapshot).keeper?.config?.maxKeepers ?? 0) > 0
-  const showKeeperPanel = hasKeeperConfig || isCommissioner
+  // Keepers only where the league uses them — or before the draft, when a commissioner may set them
+  // up. It was offered to every commissioner, which put a "More" tab in every phone draft room.
+  const showKeeperPanel = hasKeeperConfig || (isCommissioner && session?.status === 'pre_draft')
   const requestedOrphanDrafterMode =
     draftUISettings?.orphanDrafterMode
     ?? (session as { orphanDrafterMode?: 'cpu' | 'ai' }).orphanDrafterMode
@@ -4962,6 +4979,7 @@ export function DraftRoomPageClient({
                     starterSlots={rosterConfig?.starterSlots ?? null}
                     benchSlots={rosterConfig?.benchSlots ?? null}
                     idpEnabled={Boolean(idpRosterSummary)}
+                    sport={effectiveDraftSport}
                   />
                 }
                 chimmyBody={
@@ -5444,32 +5462,18 @@ export function DraftRoomPageClient({
       playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
       helperPanel={chimmyTabNode}
-      intelPanel={session.draftType !== 'auction' ? intelPanelNode : undefined}
+      /* No separate Intel tab on phones: "Before your next pick" is inside the Chimmy tab. */
       chatPanel={chatPanelNode}
       rosterPanel={rosterPanel}
       keeperPanel={keeperPanel}
       mobileStickyBar={mobileStickyBar}
-      mobileDockAccessory={
-        hasDraftHelperData ? (
-          <DraftHelperFloatingBubble
-            badgeCount={draftHelperBadgeCount}
-            hasContent={hasDraftHelperData}
-            onClick={() => floatingHelperState.setVisible(true)}
-            anchor="mobile-dock"
-          />
-        ) : undefined
-      }
+      /* No floating Draft Helper bubble on phones (2026-11-19): it sat over the board and the player
+         list, and the Chimmy tab opens the same helper ("Draft intelligence"). */
       mobileTab={mobileTab}
       onMobileTabChange={setMobileTab}
     />
-    {/* D.6 — Sleeper-style War Room as floating bottom-right popup. The same
-        DraftTeamPanel content that used to live in the left aside lives inside
-        the popup body now, so power users still have one-click access to
-        starter balance / positional mix / Chimmy guidance, but the layout reclaims
-        that left column for the player table. */}
-    <WarRoomPopup hasNewIntel={warRoomHasNewIntel} triggerLabel="AF Legacy Draft Room">
-      <DraftTeamPanel {...draftTeamPanelProps} redraftStarterHints={redraftStarterHints} />
-    </WarRoomPopup>
+    {/* The floating "AF" War Room bubble is gone (2026-11-19): the same DraftTeamPanel is the
+        Chimmy tab's "Board read", and the bubble sat over the chat box and the Draft buttons. */}
     <DraftRoomSettingsModal
       open={draftRoomSettingsOpen}
       onClose={() => setDraftRoomSettingsOpen(false)}
@@ -5690,15 +5694,7 @@ export function DraftRoomPageClient({
       focusOriginalRosterId={tradeHistoryFocus?.originalRosterId ?? null}
     />
 
-    {/* Draft Helper Floating Bubble */}
-    {hasDraftHelperData && (
-      <DraftHelperFloatingBubble
-        badgeCount={draftHelperBadgeCount}
-        hasContent={hasDraftHelperData}
-        onClick={() => floatingHelperState.setVisible(true)}
-        className="hidden md:flex xl:hidden"
-      />
-    )}
+    {/* The tablet Draft Helper bubble is gone too (2026-11-19): the Chimmy tab opens the helper. */}
 
     {/* Draft Helper Floating Window */}
     {hasDraftHelperData && (

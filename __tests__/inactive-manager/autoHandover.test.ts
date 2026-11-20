@@ -19,9 +19,18 @@ const m = vi.hoisted(() => {
   return {
     state,
     saves: [] as Array<{ rosterId: string; actorUserId: string | null; _max: { createdAt: Date | null } }>,
-    claims: [] as Array<{ rosterId: string; _max: { createdAt: Date | null } }>,
+    // The owner-action clock's claim read (lib/commissioner-hub/ownerLastAction.ts) is raw SQL, keyed by actor.
+    claims: [] as Array<{ rosterId: string; actorUserId: string | null; at: Date | null }>,
+    claimSql: [] as string[],
     prisma: {
-      $queryRaw: vi.fn(async () => [{ id: 'L' }]),
+      $queryRaw: vi.fn(async (q: { strings?: readonly string[] }) => {
+        const sql = Array.isArray(q?.strings) ? q.strings.join('?') : ''
+        if (sql.includes('waiver_claims')) {
+          m.claimSql.push(sql)
+          return m.claims
+        }
+        return [{ id: 'L' }]
+      }),
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       league: { findUnique: vi.fn(async () => ({ settings: state.settings, platform: 'allfantasy', userId: 'league-owner', name: 'Dyn' })) },
       roster: { findMany: vi.fn(async () => [{ id: 'r-away', platformUserId: 'away' }, { id: 'r-here', platformUserId: 'here' }, { id: 'r-orphan', platformUserId: 'orphan-1' }]) },
@@ -59,6 +68,7 @@ beforeEach(() => {
     { rosterId: 'r-away', actorUserId: 'commish', _max: { createdAt: ago(1) } },
   ]
   m.claims = []
+  m.claimSql = []
 })
 
 describe('the rule', () => {
@@ -97,9 +107,20 @@ describe('the hourly run', () => {
   })
 
   it('a recent waiver claim counts as the owner being active', async () => {
-    m.claims = [{ rosterId: 'r-away', _max: { createdAt: ago(3) } }]
+    m.claims = [{ rosterId: 'r-away', actorUserId: 'away', at: ago(3) }]
     await runAutoHandovers({ now: NOW })
     expect(Object.keys(readManagedLineups(m.state.settings))).toEqual(['r-orphan'])
+  })
+
+  it("reads the same clock as the commissioner's inactive flag: autopilot's claims are left out", async () => {
+    await runAutoHandovers({ now: NOW })
+    expect(m.claimSql[0]).toMatch(/<> 'chimmy_autopilot'/)
+  })
+
+  it("a claim filed by someone other than the team's manager does not count", async () => {
+    m.claims = [{ rosterId: 'r-away', actorUserId: 'commish', at: ago(1) }]
+    await runAutoHandovers({ now: NOW })
+    expect(Object.keys(readManagedLineups(m.state.settings)).sort()).toEqual(['r-away', 'r-orphan'])
   })
 
   it('hands to Chimmy autopilot when chosen and the plan allows; lineups only when it has lapsed', async () => {

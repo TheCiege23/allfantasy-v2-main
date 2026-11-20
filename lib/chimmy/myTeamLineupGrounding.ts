@@ -15,8 +15,13 @@ import type { ChatStartCall } from './tools/chimmyTools'
  * Chimmy's lineup tools priced the vendor's weekly line and filled the lineup greedily, so the same roster on the
  * same Sunday could get one answer on the screen and another in chat. Both tools now read My Team's own result.
  *
- * ⚠ NFL ONLY, ON PURPOSE. My Team's optimizer is what the screen shows for an NFL lineup; the other sports keep
- * Chimmy's game-log comparison (`otherSportStartSit.ts`), which answers category leagues the optimizer does not.
+ * EVERY SPORT WHERE MY TEAM HAS AN ANSWER (2026-11-20 re-score push). This was NFL-only, and the re-score found the
+ * cost: My Team runs `optimizeLineup` for every sport, so an NCAAF, NBA, MLB or NHL points league saw one best lineup
+ * on the screen and a different one from Chimmy's season-baseline optimizer in chat. Now:
+ *   - NFL: always My Team's answer — including "My Team has no best lineup right now, and why".
+ *   - Every other sport: My Team's answer whenever My Team itself computed a best lineup. When it did not (a
+ *     category league, a lineup My Team cannot price), this steps aside exactly as before and Chimmy's own
+ *     comparison answers (`otherSportStartSit.ts`), which handles the category leagues the optimizer does not.
  *
  * ⚠ A FALLBACK IS SAID OUT LOUD. When My Team cannot load at all (no claimed team, a failed read), the caller
  * uses the weekly-feed tool and the block says the answer did not come from My Team.
@@ -26,7 +31,33 @@ import type { ChatStartCall } from './tools/chimmyTools'
 
 export type MyTeamLineupDeps = { load: (leagueId: string, userId: string) => Promise<MyTeamData | null> }
 
-const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => getMyTeamData(leagueId, userId) }
+/*
+ * ONE MY TEAM LOAD PER TURN (2026-11-20). A lineup question now asks for this answer twice: the grounding packet's
+ * `myTeamLineup` slice and the lineup tool the model calls. Both read through here, so the load is shared for a
+ * minute per (league, user): the second caller gets the same data rather than paying for My Team again. The text is
+ * still rebuilt per caller (it is cheap), so the tool's ledger callback runs exactly as before. A failed load is not
+ * kept.
+ */
+const LOAD_TTL_MS = 60_000
+const LOAD_MAX = 200
+const loads = new Map<string, { at: number; p: Promise<MyTeamData | null> }>()
+function loadShared(leagueId: string, userId: string): Promise<MyTeamData | null> {
+  const key = `${leagueId}:${userId}`
+  const now = Date.now()
+  const hit = loads.get(key)
+  if (hit && now - hit.at < LOAD_TTL_MS) return hit.p
+  if (loads.size >= LOAD_MAX) loads.delete(loads.keys().next().value!)
+  const p = getMyTeamData(leagueId, userId)
+  loads.set(key, { at: now, p })
+  p.catch(() => loads.delete(key))
+  return p
+}
+/** Test hook. */
+export function __resetMyTeamLoadsForTests(): void {
+  loads.clear()
+}
+
+const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => loadShared(leagueId, userId) }
 
 const BENCH_SHOWN = 6
 
@@ -48,17 +79,19 @@ function flags(p: LineupPlayer, now: number): string {
 }
 
 /**
- * Why the My Team answer stepped aside: `not_nfl` is by design (other sports keep their own tool); `no_my_team`
- * means My Team could not load this lineup, which the caller must say out loud.
+ * Why the My Team answer stepped aside: `not_nfl` is by design — a non-NFL league for which My Team computed no best
+ * lineup (a category league, an unpriced lineup), so the sport's own tool answers; `no_my_team` means My Team could
+ * not load this lineup, which the caller must say out loud.
  */
 export type MyTeamFallback = { fallback: 'not_nfl' | 'no_my_team' }
 
-/** The NFL My Team payload, or why there is none. */
-async function loadNfl(args: { leagueId: string; userId: string }, d: MyTeamLineupDeps): Promise<MyTeamData | MyTeamFallback> {
+/** The My Team payload Chimmy answers from, or why it steps aside (see the header). */
+async function loadMyTeam(args: { leagueId: string; userId: string }, d: MyTeamLineupDeps): Promise<MyTeamData | MyTeamFallback> {
   const data = await d.load(args.leagueId, args.userId).catch(() => null)
   if (!data) return { fallback: 'no_my_team' }
   const sport = String(data.league.sport ?? 'NFL').toUpperCase()
-  return sport === 'NFL' ? data : { fallback: 'not_nfl' }
+  if (sport === 'NFL') return data
+  return data.lineupOptimizer ? data : { fallback: 'not_nfl' }
 }
 
 const isFallback = (x: MyTeamData | MyTeamFallback): x is MyTeamFallback => 'fallback' in x
@@ -105,7 +138,7 @@ export async function buildMyTeamLineupContext(
   deps: Partial<MyTeamLineupDeps> = {},
 ): Promise<string | MyTeamFallback> {
   const d: MyTeamLineupDeps = { ...defaultDeps, ...deps }
-  const data = await loadNfl(args, d)
+  const data = await loadMyTeam(args, d)
   if (isFallback(data)) return data
   const now = (args.now ?? new Date()).getTime()
   const starters = data.starters.available ? data.starters.data : []
@@ -169,7 +202,7 @@ export async function buildMyTeamStartSitContext(
   deps: Partial<MyTeamLineupDeps> = {},
 ): Promise<string | MyTeamFallback> {
   const d: MyTeamLineupDeps = { ...defaultDeps, ...deps }
-  const data = await loadNfl(args, d)
+  const data = await loadMyTeam(args, d)
   if (isFallback(data)) return data
   const starters = data.starters.available ? data.starters.data : []
   const bench = data.bench.available ? data.bench.data : []
