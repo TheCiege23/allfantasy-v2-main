@@ -1,3 +1,4 @@
+import { currentNflSeason } from '@/lib/follows/followFreeAgentCheck'
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -362,7 +363,12 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
       return [] as { format: string; qbFormat: string }[]
     })
 
-  const season = new Date().getUTCFullYear()
+  /*
+   * The football season, not the calendar year (2026-11-20 re-score). In January and February a league still plays —
+   * and asks for — LAST year's season (the playoffs, the Super Bowl window, the NCAAF bowls), so a calendar-year key
+   * warmed 2027 entries that no league read while the 2026 ones went cold. Same rule the follow-alert check uses.
+   */
+  const season = currentNflSeason(new Date())
 
   type Unit = { domain: OsDomain; label: string; run: () => Promise<'written' | 'unavailable' | 'write_failed'> }
   const units: Unit[] = [

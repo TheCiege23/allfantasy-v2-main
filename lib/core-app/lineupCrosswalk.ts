@@ -31,3 +31,28 @@ export async function lineupCrosswalkToSleeperIds(
   }
   return out
 }
+
+/** A starter as the identity registry names him: no Sleeper id, so no headshot, projection or injury status. */
+export type LineupRegistryName = { name: string; position: string | null; team: string | null }
+
+/**
+ * Names for the Fantrax NFL starters `lineupCrosswalkToSleeperIds` could not translate.
+ *
+ * The registry knows many Fantrax players by name with no Sleeper id beside it (staging 2026-11-20: 88 of the
+ * 204 players in one league's first six draft rounds). The board showed those as a blank row — "2 of 18 players in
+ * this lineup could not be identified" on production — though the name, position and club were on file. This
+ * returns only that: the name is the registry's, and nothing else is inferred from it.
+ */
+export async function lineupRegistryNames(
+  platform: string,
+  sport: string,
+  rosterIds: string[],
+): Promise<Map<string, LineupRegistryName>> {
+  const out = new Map<string, LineupRegistryName>()
+  const identitySport = normalizeIdentitySport(sport)
+  if (platform.trim().toLowerCase() !== 'fantrax' || identitySport !== 'NFL' || rosterIds.length === 0) return out
+  for (const [rosterId, identity] of await resolveFantraxIdentities(identitySport, rosterIds)) {
+    if (identity.name) out.set(rosterId, { name: identity.name, position: identity.position, team: identity.team })
+  }
+  return out
+}

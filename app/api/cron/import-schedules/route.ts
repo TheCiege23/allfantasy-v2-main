@@ -1,7 +1,8 @@
 /**
  * GET/POST /api/cron/import-schedules
  *
- * Vercel Cron schedule: weekly on Monday at 03:00 UTC (see vercel.json).
+ * Schedule: daily at 07:00 UTC (see cron-schedule.json). It was weekly, Monday 03:00 UTC, which is mid Sunday
+ * Night Football: that game's row was stored as in progress and stayed so for seven days.
  * Runs a full schedule sync for NFL (and optionally NCAAF) using Rolling
  * Insights (primary) then API-Sports (supplement).  Stores games into the
  * sportsGame table and gameSchedule table where applicable.

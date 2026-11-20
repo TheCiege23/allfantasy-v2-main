@@ -9,10 +9,9 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
  * 🛑 The pool used to hard-code `bye: null` on every row, so the BYE column was blank for
  * every NFL player even though the bye map already existed for waivers and lineups.
  *
- * ⚠ NFL ONLY. College rosters name schools formally ("United States Naval Academy",
- * "University of Mississippi") while the NCAAF schedule uses short names ("Navy", "Ole Miss"),
- * and no map between the two exists yet. Guessing would put wrong byes on the board, which is
- * worse than a blank, so NCAAF returns null until that map is built.
+ * ⚠ NFL ONLY. College byes live in `collegeByeWeeks.ts`, which matches schools through the
+ * college-name crosswalk; this lookup matches by club code and city, so it must never see a
+ * school ("Miami" would read as the Dolphins).
  *
  * A club missing from the map means "we do not know", never "no bye".
  */

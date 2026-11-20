@@ -185,6 +185,12 @@ jobs:
       run: bash scripts/ci/install-playwright.sh chromium
     - name: Install Playwright Chromium + WebKit
       if: startsWith(matrix.lane, 'mobile-')
+      env:
+        # 2026-11-20 (job 136336052767): on a ~57 KB/s mirror the 140 MB WebKit list ate 25 minutes of this 45-minute
+        # job and still never installed libevent, so WebKit could not start. The script now installs the libraries
+        # the browsers link against first; once both launch, this caps the wait on the rest (fonts, codecs).
+        # Safe here because no mobile spec compares screenshots — leave it off any lane that does.
+        PW_APT_OPTIONAL_WAIT_BUDGET: '120'
       run: bash scripts/ci/install-playwright.sh chromium webkit
     # Schema bootstrap — applied to both `referral-growth-db` (always
     # needed) and `core` (added in fix/ci-playwright-core-schema-bootstrap).

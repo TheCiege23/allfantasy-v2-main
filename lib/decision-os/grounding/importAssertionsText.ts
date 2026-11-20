@@ -39,6 +39,20 @@ function share(part: number, whole: number | null | undefined, rate: number | nu
 }
 
 export function renderImportAssertions(a: ImportAssertions): string[] {
+  /*
+   * 🛑 A NATIVE LEAGUE WAS TOLD ITS IMPORT FAILED (2026-11-20 re-score). A league hosted on AllFantasy has no sync
+   * state, so every scope read "not complete on the last run", the sync read "never", and the closing line told the
+   * model to say the sync was incomplete — beside a parity note saying no sync is normal here. Chimmy could tell a
+   * native league's manager their league had not synced. Nothing is imported, so there is nothing to report but the
+   * rosters AllFantasy holds; and a native league that somehow HAS a sync record still renders in full below.
+   */
+  if (a.native && !a.lastSuccessfulSyncAt && !a.lastAttemptedSyncAt && !a.syncStatus) {
+    return [
+      '    hosted on AllFantasy: nothing is imported, so there is no sync, parity or import freshness to report — rosters, rules and history are AllFantasy\'s own records',
+      `    rosters held: ${share(a.rostersHeld, a.rostersExpected, a.rosterCoverage)}`,
+      '    Do not describe this league as unsynced, stale or partly imported. Say so only if the rosters above are missing.',
+    ]
+  }
   const rows: string[] = []
   rows.push(`    platform: ${a.provider} league ${a.externalLeagueId}, season ${a.season}`)
   rows.push(
