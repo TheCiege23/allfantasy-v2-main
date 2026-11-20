@@ -206,3 +206,20 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
   - Fumble recoveries (96) = Sleeper `fum_rec` + `def_st_fum_rec`; return TDs score as sums at equal weight.
   - ⚠ A shutout has NO `pts_allow` key in Sleeper's weekly rows (zeros are omitted). Reading only rows that
     carry the key dropped exactly the 10 shutouts of 2024–25 and failed the 0-points bucket for no real reason.
+
+
+## Knockout / total-points league with no schedule, 2026-11-20 — recorded without probing
+
+- `K-01` OPEN, ASK BEFORE PROBING: an ESPN NFL league in a knockout (guillotine) format has no weekly
+  scores stored, so its Guilly tab has nothing to show. Measured on production, read-only: the league
+  syncs daily (`syncStatus: synced`, 18 rosters of 15 players), and its matchup sync state
+  (`SportsDataCache` key `external_matchup_sync:espn:<leagueId>:2026`) reads `status: synced,
+  weeksWritten: 0, weeksUnchanged: 0, soloRowsWritten: 0` in NFL week 11. Per the note on that counter in
+  `lib/import-os/collector/externalMatchupParity.ts`, all three at zero means ESPN served NO schedule
+  entries for this league, paired or solo; unpaired entries would have landed as solo rows. It is the
+  only one of 10 in-season ESPN leagues with no `WeeklyMatchup` rows.
+  - What is not known: where ESPN carries each team's points per week for a league with no schedule
+    (a standings or team view, or per-period team totals), and that view's shape.
+    `fixtures/fantasy-league.NFL.2026.json` is a head-to-head league and cannot answer it.
+  - Not probed. Resolving it needs a capture of this league format through `scripts/probe.sh`, committed
+    as a fixture in the same change, and the owner's go-ahead.
