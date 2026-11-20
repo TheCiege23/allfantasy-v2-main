@@ -1518,9 +1518,9 @@ export async function executeChimmyTool(
       case 'optimize_my_lineup': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         /*
-         * ONE START/SIT ANSWER (2026-11-16): an NFL lineup is answered from My Team's own best lineup, so chat and
-         * the screen cannot disagree. Only when My Team has no NFL lineup to read does the weekly-feed tool answer,
-         * and it says so.
+         * ONE START/SIT ANSWER (2026-11-16; every sport 2026-11-20): a lineup is answered from My Team's own best
+         * lineup, so chat and the screen cannot disagree. Only when My Team has no best lineup for a non-NFL league
+         * (a category league) or cannot load does the weekly-feed tool answer, and a load failure says so.
          */
         const { buildMyTeamLineupContext } = await import('@/lib/chimmy/myTeamLineupGrounding')
         const fromMyTeam = await buildMyTeamLineupContext({
