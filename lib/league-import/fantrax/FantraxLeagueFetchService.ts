@@ -33,6 +33,7 @@ type LegacyMatchup = {
   week?: unknown
   awayTeam?: unknown
   awayScore?: unknown
+  tiebreakWinnerId?: unknown
   homeTeam?: unknown
   homeScore?: unknown
   isPlayoff?: unknown
@@ -772,6 +773,8 @@ export async function fetchFantraxLeagueForImport(
     scheduleByWeek.get(week)!.push({
       teamId1,
       teamId2,
+      ...(matchup.tiebreakWinnerId && matchup.tiebreakWinnerId === matchup.awayTeamId ? { tiebreakWinnerId:teamId1 } :
+        matchup.tiebreakWinnerId && matchup.tiebreakWinnerId === matchup.homeTeamId ? { tiebreakWinnerId:teamId2 } : {}),
       points1: asNumber(matchup.awayScore, null) ?? undefined,
       points2: asNumber(matchup.homeScore, null) ?? undefined,
       isPlayoff: asBoolean(matchup.isPlayoff),

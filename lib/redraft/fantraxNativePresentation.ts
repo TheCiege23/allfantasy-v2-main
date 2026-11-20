@@ -24,7 +24,8 @@ export function projectFantraxHistory(input: { seasonId: string; leagueId: strin
     const actualsAvailable = input.sourceActualTeamPeriods?.has(`${row.week}:${row.homeTeamId}`) && input.sourceActualTeamPeriods?.has(`${row.week}:${row.awayTeamId}`)
     const homeKey = `${row.week}:${row.homeTeamId}`
     const fixtureKey = (homeCounts.get(homeKey) ?? 0) > 1 ? `${homeKey}:${row.awayTeamId}` : homeKey
-    return [{ id: `fantrax:${input.seasonId}:${fixtureKey}`, seasonId: input.seasonId, leagueId: input.leagueId, week: row.week, type: row.isPlayoff ? 'playoff' : 'regular', homeRosterId: home.id, awayRosterId: away.id, homeRoster: home, awayRoster: away, homeScore: scored ? row.homeScore : null, awayScore: scored ? row.awayScore : null, status: scored ? complete ? 'final' : 'live' : 'scheduled', isMedianMatchup: false, source: 'fantrax', readOnly: true, scoringEvidence: { teamScores: 'fantrax', individualSourceScores: actualsAvailable ? 'available' : 'unavailable', message: actualsAvailable ? 'Verified Fantrax individual actual points are imported for both teams in this period.' : 'Fantrax provides team totals for this period; individual source scores are unavailable.' }, periodStart: period?.startDate ?? null, periodEnd: period?.endDate ?? null }]
+    const winnerRosterId = scored && complete && row.tiebreakWinnerId ? input.teamIds[row.tiebreakWinnerId] : undefined
+    return [{ winnerRosterId, id: `fantrax:${input.seasonId}:${fixtureKey}`, seasonId: input.seasonId, leagueId: input.leagueId, week: row.week, type: row.isPlayoff ? 'playoff' : 'regular', homeRosterId: home.id, awayRosterId: away.id, homeRoster: home, awayRoster: away, homeScore: scored ? row.homeScore : null, awayScore: scored ? row.awayScore : null, status: scored ? complete ? 'final' : 'live' : 'scheduled', isMedianMatchup: false, source: 'fantrax', readOnly: true, scoringEvidence: { teamScores: 'fantrax', individualSourceScores: actualsAvailable ? 'available' : 'unavailable', message: actualsAvailable ? 'Verified Fantrax individual actual points are imported for both teams in this period.' : 'Fantrax provides team totals for this period; individual source scores are unavailable.' }, periodStart: period?.startDate ?? null, periodEnd: period?.endDate ?? null }]
   })
   const firstPlayoffPeriod = input.info.playoffs?.used ? Number(input.info.playoffs.firstPlayoffPeriod) : null
   const playoffStartWeek = firstPlayoffPeriod && Number.isInteger(firstPlayoffPeriod) && firstPlayoffPeriod > 1 ? firstPlayoffPeriod : null
@@ -173,7 +174,9 @@ export function projectFantraxStandings(rosters: any[], matchups: ReturnType<typ
       if (!pointsForCounted.has(`${id}:${m.week}`)) { pointsForCounted.add(`${id}:${m.week}`); t.pointsFor += points }
       // Points Against is each period's average opponent score (lib/redraft/weeklyPointsAgainst.ts).
       weeklyPointsAgainst.add(id, m.week, against)
-      if (points > against) t.wins++; else if (points < against) t.losses++; else t.ties++
+      if (points > against || m.winnerRosterId === id) t.wins++
+      else if (points < against || m.winnerRosterId) t.losses++
+      else t.ties++
     }
   }
   for (const [id, against] of weeklyPointsAgainst.totals()) { const t = totals.get(id); if (t) t.pointsAgainst = against }

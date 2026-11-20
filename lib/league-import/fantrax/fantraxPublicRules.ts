@@ -53,6 +53,17 @@ export function parseFantraxPublicRules(html: string): FantraxPublicRules | null
   return result
 }
 
+export function fantraxCategoryTieWinner(rules: string[] | undefined, outcomes: Array<{name: string; winnerTeamId: string | null}> | undefined): string | null {
+  for (const rule of rules ?? []) {
+    const name = /^Ahead in specific scoring category\s*-\s*(.+)$/i.exec(rule)?.[1]
+    if (!name) return null
+    const matches = outcomes?.filter(row => row.name.toLowerCase() === name.toLowerCase())
+    if (matches?.length !== 1) return null
+    if (matches[0].winnerTeamId) return matches[0].winnerTeamId
+  }
+  return null
+}
+
 export async function fetchFantraxPublicRules(leagueId: string): Promise<FantraxPublicRules | null> {
   if (!/^[a-z0-9]{16}$/i.test(leagueId)) return null
   try {

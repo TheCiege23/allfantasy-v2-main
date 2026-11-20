@@ -5,7 +5,7 @@ import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 import { fantraxStarterSlot } from '@/lib/league-import/fantrax/fantraxProSports'
 import { projectFantraxStandings } from '@/lib/redraft/fantraxNativePresentation'
-import { parseFantraxPublicRules } from '@/lib/league-import/fantrax/fantraxPublicRules'
+import { fantraxCategoryTieWinner, parseFantraxPublicRules } from '@/lib/league-import/fantrax/fantraxPublicRules'
 import { normalizeNbaGameStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { normalizeMlbGameStats } from '@/lib/scoring-runtime/mlbStatNormalization'
 import { playoffFinalWeek } from '@/lib/playoff-runtime/playoffFit'
@@ -41,6 +41,12 @@ describe('published Fantrax first-season calendars', () => {
     expect(FantraxLeagueMapper.map(input)).toMatchObject({isDynasty:true,league_type:'dynasty',tiebreaker_order:['wins','coin_flip'],
       playoff_structure:{playoff_team_count:12,first_round_byes:4,total_rounds:4,reseed_behavior:'reseed_after_each_round'}})
     expect(parseFantraxPublicRules('<title>Login</title><ul><li>Reseed each playoff round: Yes</li></ul>')).toBeNull()
+  })
+  it('settles a tied category matchup in the published order only when the preceding categories are known', () => {
+    const order=['Points','Field Goals Made','Steals'].map(name=>'Ahead in specific scoring category - '+name)
+    const outcomes=[{name:'Points',winnerTeamId:null},{name:'Field Goals Made',winnerTeamId:'home'},{name:'Steals',winnerTeamId:'away'}]
+    expect(fantraxCategoryTieWinner(order,outcomes)).toBe('home')
+    expect(fantraxCategoryTieWinner(order,outcomes.slice(1))).toBeNull()
   })
   it('scores the NBA shooting penalties from each game and leaves missing attempts unknown', () => {
     const row=normalizeNbaGameStats({stats:{two_points_made:5,two_points_attempted:8,three_points_made:3,

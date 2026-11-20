@@ -92,6 +92,37 @@ function replayTransport(source,sport,key) {
     return Response.json(data)
   }}
 }
+// Play future rounds in memory on the staged runtime. The real season and its champion stay untouched.
+async function exerciseBracket(seasonId, expected, divisionTop, reseed) {
+  const { resolveNflRedraftPlayoffRuntime } = require('../lib/playoff-runtime/resolveNflRedraftPlayoffRuntime.ts')
+  const { generateNflRedraftPlayoffBracket, advanceNflRedraftPlayoffRound, finalizeNflRedraftPlayoffChampion } = require('../lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime.ts')
+  const loaded = await resolveNflRedraftPlayoffRuntime({seasonId, week:expected.firstPlayoffPeriod})
+  if (!loaded.ok) return {pass:false,reason:loaded.reason}
+  let state = loaded.state
+  const s=state.settings, rounds=Math.ceil(Math.log2(expected.numPlayoffTeams)), byes=2**rounds-expected.numPlayoffTeams
+  state={...state,bracket:generateNflRedraftPlayoffBracket({state,lockBracket:true}).bracket}
+  const first=state.bracket.rounds[0]
+  const qualification=s.playoffTeamCount===expected.numPlayoffTeams && s.playoffStartWeek===expected.firstPlayoffPeriod &&
+    s.regularSeasonEndWeek===expected.lastRegularSeasonPeriod && s.roundCount===rounds && s.firstRoundByes===byes &&
+    first?.matchups.filter(m=>m.bye).length===byes && s.reseedAfterEachRound===reseed && s.divisionWinnersTopSeeds===divisionTop
+  for(let step=0;step<12;step++){
+    for(const round of [...state.bracket.rounds,...state.bracket.consolationRounds]){
+      for(const game of round.matchups){
+        if(game.bye || game.complete || !game.homeRosterId || !game.awayRosterId)continue
+        game.homeScore=round.roundNumber%2?70:91;game.awayScore=80
+      }
+    }
+    const third=state.bracket.thirdPlaceMatchup
+    if(third?.homeRosterId && third.awayRosterId){third.homeScore=62;third.awayScore=65}
+    const advance=advanceNflRedraftPlayoffRound({state})
+    if(!advance.ok) return {pass:false,qualification,reason:advance.code}
+    state=advance.state
+    const final=finalizeNflRedraftPlayoffChampion({state})
+    if(final.ok)return {pass:qualification && !!final.championRosterId,qualification,simulatedChampion:true,rounds,byes,
+      field:s.playoffTeamCount,start:s.playoffStartWeek,regular:s.regularSeasonEndWeek,reseed:s.reseedAfterEachRound,divisionTop:s.divisionWinnersTopSeeds}
+  }
+  return {pass:false,qualification,reason:'round limit'}
+}
 async function runCase(userId,sport,id,index,runId,cookie) {
   const source=await capture(id), key='qa'+runId+String(index).padStart(6,'0')
   const replay=replayTransport(source,sport,key)
@@ -144,16 +175,32 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const stored=new Map(facts.map(f=>[[f.weekOrPeriod,...[f.teamA,f.teamB].sort()].join('|'),f]))
     let matchedRecords=0,matchedRank=0,matchedPF=0,availablePF=0,games=0,matchedScores=0,matchedContributions=0,matchedRebuiltRecords=0
     const records=new Map(orig.map(id=>[id,[0,0,0]]))
+    const decidedRecords=new Map(orig.map(id=>[id,[0,0,0]]))
+    let sourceTiebreaks=0, matchedTiebreaks=0
     for(const p of source.periods.filter(p=>p.ended)) for(const m of p.matchups) {
       if(!m.away?.teamId || !m.home?.teamId || !(m.away.gamesPlayed>0 || m.home.gamesPlayed>0))continue
       games++
       const a=external(m.away.teamId),b=external(m.home.teamId)
       const f=stored.get([p.period,...[a,b].sort()].join('|'))
       if(f && close(f.teamA===a?f.scoreA:f.scoreB,m.away.score) && close(f.teamB===b?f.scoreB:f.scoreA,m.home.score))matchedScores++
+      let winner
+      if(m.away.score===m.home.score){
+        for(const rule of league.settings.fantrax_settings?.publicRules?.matchupTies||[]){
+          const categoryName=/^Ahead in specific scoring category\s*-\s*(.+)$/i.exec(rule)?.[1]
+          const c=m.categories?.find(c=>c.name===categoryName)
+          if(!c || !c.home?.outcome)break
+          if(c.home.outcome==='TIE' && c.away?.outcome==='TIE')continue
+          winner=c.home.outcome==='WIN'?m.home.teamId:c.away?.outcome==='WIN'?m.away.teamId:null
+          break
+        }
+        if(winner){sourceTiebreaks++;if(f?.winnerTeamId===external(winner))matchedTiebreaks++}
+      }
       for(const [side,other] of [['away','home'],['home','away']]) {
         const team=m[side]
         const record=records.get(team.teamId)
         record[team.score>m[other].score?0:team.score<m[other].score?1:2]++
+        const withTiebreak=decidedRecords.get(team.teamId)
+        withTiebreak[winner ? (winner===team.teamId?0:1) : team.score>m[other].score?0:team.score<m[other].score?1:2]++
         if (!Array.isArray(m.categories) || !m.categories.length)continue
         const tally=m.categories.reduce((sum,c)=>{const stat=c[side];return sum+(stat?.outcome==='WIN'?1:stat?.outcome==='TIE'?0.5:Number(stat?.points??0))},0)
         if(close(tally,team.score))matchedContributions++
@@ -185,6 +232,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const dividedTeams=orig.filter(id=>Boolean(source.info.teamInfo[id].division))
     const divisionMatches=dividedTeams.filter(id=>groupNames.get(replay.names.get(id))===source.info.teamInfo[id].division).length
     const divisionPass=!divisionTop || divisions?.playoffRule==='top_seeds' && dividedTeams.length===orig.length && divisionMatches===orig.length
+    const simulatedBracket=await exerciseBracket(season.id,expected,divisionTop,reseed==='yes')
     const displayed=await screen('/api/redraft/standings?seasonId='+season.id,cookie)
     const displayedByName=new Map(displayed.rosters.map(r=>[r.teamName,r]))
     const displayRanks=replay.rows.map(t=>({row:displayedByName.get(replay.names.get(t.teamId)),source:t}))
@@ -211,16 +259,17 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const evidence={index,sport,leagueId,field:league.playoffTeams,playoffStart:league.playoffStartWeek,currentPeriod:season.currentWeek,closed,
       backfill,teams:teams.length,sourceTeams:orig.length,matchedRecords,matchedRank,availablePF,matchedPF,matchedRebuiltRecords,
       sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,screenRecords,screenGames,uniqueGames,
-      games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,policyPass,divisionPass,divisionMatches,
+      games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,policyPass,divisionPass,divisionMatches,simulatedBracket,
+      sourceTiebreaks,matchedTiebreaks,matchedDecidedRecords:replay.rows.filter(t=>decidedRecords.get(t.teamId)?.join('-')===t.points).length,
       rules:policy && {reseed:policy.reseed,divisionWinners:policy.divisionWinners,keeperType:policy.keeperType,
         standingsTies:policy.standingsTies,matchupTies:policy.matchupTies,playoffTies:policy.playoffTies},
       scoringRules:payload.settings.scoringRules.length,scoringGaps:payload.settings.raw.scoringGaps||[],
       sourceManagerFields:Object.keys(Object.values(source.info.teamInfo)[0]).filter(k=>/owner|manager|user/i.test(k)),
       champion:resolveFantraxChampionTeamId(payload),warnings:result.incompleteSteps?.map(w=>w.code)||[]}
-    evidence.pass=backfill==='complete' && settingsPass && policyPass && divisionPass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
+    evidence.pass=backfill==='complete' && settingsPass && policyPass && divisionPass && simulatedBracket.pass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
       games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
-      facts.length===games && evidence.champion===null
+      facts.length===games && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
     return evidence.pass
   } finally {

@@ -43,7 +43,7 @@ import {
   type ResolvedRoster,
 } from './fantraxApi'
 
-import { fetchFantraxPublicRules, type FantraxPublicRules } from './fantraxPublicRules'
+import { fantraxCategoryTieWinner, fetchFantraxPublicRules, type FantraxPublicRules } from './fantraxPublicRules'
 
 export type FantraxImportOutcome =
   | {
@@ -533,7 +533,11 @@ export async function importFantraxLeague(args: {
      * distinguishes the two (`asNumber(matchup.awayScore, null) ?? undefined`),
      * so a null week arrives as "no score on file" instead of a scoreless tie.
      */
-    matchups: schedule.rows as unknown as object,
+    matchups: schedule.rows.map(row => {
+      if (!row.played || row.awayScore !== row.homeScore || !row.categoryOutcomes?.length) return row
+      const winner = fantraxCategoryTieWinner(row.isPlayoff ? effectiveRules?.playoffTies : effectiveRules?.matchupTies, row.categoryOutcomes)
+      return winner ? { ...row, tiebreakWinnerId: winner } : row
+    }) as unknown as object,
     /* The export's groups, the stored draft board and the derived moves — see above. */
     transactions: history as unknown as object,
   }

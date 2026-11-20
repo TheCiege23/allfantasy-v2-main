@@ -141,8 +141,8 @@ export function resolveFantraxChampionTeamId(payload: FantraxImportPayload): str
     for (const matchup of week.matchups) {
       if (!matchup.isPlayoff) continue
       if (matchup.points1 == null || matchup.points2 == null) continue
-      if (matchup.points1 === matchup.points2) continue
-      const firstWon = matchup.points1 > matchup.points2
+      if (matchup.points1 === matchup.points2 && !matchup.tiebreakWinnerId) continue
+      const firstWon = matchup.points1 === matchup.points2 ? matchup.tiebreakWinnerId === matchup.teamId1 : matchup.points1 > matchup.points2
       winners.push(firstWon ? matchup.teamId1 : matchup.teamId2)
       lost.add(firstWon ? matchup.teamId2 : matchup.teamId1)
     }
@@ -331,7 +331,7 @@ async function persistFantraxSeasonWarehouseFacts(args: {
             ? matchup.points1 > matchup.points2
               ? matchup.teamId1
               : matchup.teamId2
-            : null,
+            : matchup.tiebreakWinnerId ?? null,
         season,
       },
     })

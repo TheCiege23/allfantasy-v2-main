@@ -48,6 +48,7 @@ interface FantraxImportScheduleWeek {
   matchups: Array<{
     teamId1: string
     teamId2: string
+    tiebreakWinnerId?: string
     points1?: number
     points2?: number
     isPlayoff?: boolean

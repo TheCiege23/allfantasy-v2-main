@@ -10,7 +10,7 @@
  * the real schema would reject (an unknown field, a missing required column, a duplicate unique key)
  * throws here too instead of quietly succeeding.
  *
- * `$queryRaw` / `$executeRaw` return empty results; a simulation that depends on raw SQL is out of scope.
+ * The invite-code lookup is evaluated against the simulated League table. Other raw SQL returns empty results.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -717,8 +717,14 @@ export function createInMemoryPrisma(): InMemoryPrisma {
         }
       }
       if (prop === '$queryRaw' || prop === '$queryRawUnsafe') {
-        return async (query: unknown) => {
-          rawQueries.push(String((query as { strings?: string[] })?.strings?.join('?') ?? query))
+        return async (query: unknown, ...params: unknown[]) => {
+          const sql = Array.isArray(query) ? query.join('?') : String((query as { strings?: string[] })?.strings?.join('?') ?? query)
+          rawQueries.push(sql)
+          if (sql.replace(/\s+/g, ' ').trim() === "SELECT id FROM leagues WHERE lower(btrim(settings->>'inviteCode')) = lower(?) LIMIT 1") {
+            const code = String(params[0] ?? '').trim().toLowerCase()
+            const league = (tables.get('League') ?? []).find(r => typeof r.settings?.inviteCode === 'string' && r.settings.inviteCode.trim().toLowerCase() === code)
+            return league ? [{id: league.id}] : []
+          }
           return []
         }
       }

@@ -185,6 +185,8 @@ export type FantraxScheduleRow = {
    */
   awayScore: number | null
   homeScore: number | null
+  categoryOutcomes?: Array<{ name: string; winnerTeamId: string | null }>
+  tiebreakWinnerId?: string
   /** True only when Fantrax reported at least one game played on either side. */
   played: boolean
 }
@@ -782,7 +784,7 @@ export type FantraxMatchupSide = {
 
 export type FantraxPeriodScore = {
   period: number
-  matchups: Array<{ away: FantraxMatchupSide; home: FantraxMatchupSide }>
+  matchups: Array<{ away: FantraxMatchupSide; home: FantraxMatchupSide; categoryOutcomes?: FantraxScheduleRow['categoryOutcomes'] }>
 }
 
 function parseMatchupSide(raw: unknown): FantraxMatchupSide | null {
@@ -896,7 +898,15 @@ export async function getFantraxMatchupScores(
       if (Object.keys(pair.away).length) away.categories = pair.away
       if (Object.keys(pair.home).length) home.categories = pair.home
     }
-    matchups.push({ away, home })
+    const categoryOutcomes = away.score === home.score && Array.isArray(raw.categories) ? raw.categories.flatMap<{ name: string; winnerTeamId: string | null }>(c => {
+      if (!c || typeof c.name !== 'string' || c.name.length > 100) return []
+      const a = c.away?.outcome, h = c.home?.outcome
+      if (a === 'TIE' && h === 'TIE') return [{name:c.name, winnerTeamId:null}]
+      if (a === 'WIN' && h === 'LOSS') return [{name:c.name, winnerTeamId:away.teamId}]
+      if (h === 'WIN' && a === 'LOSS') return [{name:c.name, winnerTeamId:home.teamId}]
+      return []
+    }) : []
+    matchups.push({ away, home, ...(categoryOutcomes.length ? {categoryOutcomes} : {}) })
   }
 
   return {
@@ -1000,7 +1010,8 @@ export function applyFantraxScores(
       const played = forAway.gamesPlayed > 0 || forHome.gamesPlayed > 0
       if (!played) return row
 
-      return { ...row, awayScore: forAway.score, homeScore: forHome.score, played: true }
+      return { ...row, awayScore: forAway.score, homeScore: forHome.score, played: true,
+        ...(pairing.categoryOutcomes?.length ? { categoryOutcomes: pairing.categoryOutcomes } : {}) }
     }
     return row
   })
