@@ -9,6 +9,8 @@ import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
 import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
+import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
+import { GuillotineMatchupScreen } from './NativeGuillotineScreens'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { Card, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
@@ -120,6 +122,8 @@ export function NativeMatchupScreen(props: ScreenProps) {
       </Card>
     </div></RedraftScreen>
   }
+  // Guillotine has no opponent: the tab is the week's scores against the chop line.
+  if (isNativeGuillotineLeague(props.league)) return <RedraftScreen identity={rd}><GuillotineMatchupScreen {...props} /></RedraftScreen>
   return <RedraftScreen identity={rd}>{isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}</RedraftScreen>
 }
 
