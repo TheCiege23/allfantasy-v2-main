@@ -28,6 +28,7 @@ import { redraftHolderOtherThan } from './redraftRosterHolder'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
+import { recordChopReleaseClaim } from '@/lib/guillotine/choppedReleases'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
@@ -598,6 +599,13 @@ async function processWaiverClaimsForLeagueLocked(
     // Survivor Guilly wrote faabBalance itself, above; every other native league copies it across.
     if (faabSpent != null && league.leagueVariant !== 'survivor_guillotine') {
       await copyGenericFaabToRedraft(prisma, [claim.rosterId])
+    }
+
+    // A Guilly award on a chopped team's player: record who won him and the bid. Never fails the award.
+    if (league.guillotineMode) {
+      await recordChopReleaseClaim({ leagueId, playerId: addId, rosterId: claim.rosterId, winningBid: faabSpent }).catch((error) => {
+        console.error('[waiver-process] chop release claim not recorded', { leagueId, claimId: claim.id, error: error instanceof Error ? error.message : String(error) })
+      })
     }
 
     rosteredByPlayer.set(addId, claim.rosterId)

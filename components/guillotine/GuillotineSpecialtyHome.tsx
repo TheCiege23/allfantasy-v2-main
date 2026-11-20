@@ -149,8 +149,13 @@ export function GuillotineSpecialtyHome({
           headline={headline}
           blurb="One league-wide points race. The lowest score each week is chopped and that roster drops to waivers. Last team standing wins."
           actions={[
-            { label: 'Set lineup', href: lineupHref, primary: true, testId: 'guillotine-hero-lineup' },
-            { label: 'Waivers', href: waiversHref, testId: 'guillotine-hero-waivers' },
+            // A chopped manager has no roster to set and cannot bid: neither button is offered.
+            ...(myChopped
+              ? []
+              : [
+                  { label: 'Set lineup', href: lineupHref, primary: true, testId: 'guillotine-hero-lineup' },
+                  { label: 'Waivers', href: waiversHref, testId: 'guillotine-hero-waivers' },
+                ]),
             ...(home?.lastChop ? [{ label: 'See the chop', href: '#guillotine-chop', testId: 'guillotine-hero-chop' }] : []),
           ]}
           clock={<SpecialtyCountdown label="Chop locks in" target={home?.nextChopAt} caption={chopCaption} />}
