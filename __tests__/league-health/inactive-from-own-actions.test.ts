@@ -166,6 +166,9 @@ describe('the hub headline agrees with the table', () => {
     const table = await getLeagueManagerHealth('L1')
     expect(hub.metrics.inactiveTeams).toBe(1)
     expect(hub.metrics.inactiveTeams).toBe(table.inactiveCount)
+    // The flag's graded record applies only where the flag reads this clock (the learning loop, 2026-11-20).
+    expect(hub.nativeLeague).toBe(true)
+    expect(buildCommissionerHealthSnapshot({ league: clocked[1]!, now: new Date(), source: 'database' }).nativeLeague).toBe(false)
     // The imported league is untouched: both rosters were synced yesterday.
     expect(clocked[1]).toBe(imported)
     // A failed read changes nothing rather than calling everyone active.

@@ -7,6 +7,7 @@
  */
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
 import type { CommissionerHealthDecisionDeps } from './decision'
+import type { CommissionerHealthLearning } from './rules'
 
 function newId(): string {
   return (
@@ -18,9 +19,11 @@ function newId(): string {
 /** Production decision deps. Recommender = the built deterministic snapshot (wrap-fidelity memo). */
 export function buildProductionCommissionerHealthDecisionDeps(
   memo: CommissionerLeagueHealthSnapshot,
+  learned?: CommissionerHealthLearning,
 ): CommissionerHealthDecisionDeps {
   return {
     evaluate: async () => memo, // wrap-fidelity: reuse the assembler's snapshot, no recompute
     newId,
+    ...(learned ? { learned } : {}),
   }
 }
