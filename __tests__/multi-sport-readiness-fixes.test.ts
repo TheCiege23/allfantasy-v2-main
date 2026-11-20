@@ -63,6 +63,42 @@ describe('multisport scoring readiness', () => {
     }
     expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: 'DE' }], [{ ...row, position: 'OLB' }]).links).toEqual([])
   })
+
+  /*
+   * 2026-11-19: 366 rostered Fantrax ids had one same-name identity and it was Rolling Insights-only (no
+   * CFBD id), each backed by an RI row agreeing on name, school and position (Dwight Johnson, OL, Vanderbilt
+   * stands in for Lamar's here — the schools resolve the same way).
+   */
+  describe('RI-only identities', () => {
+    const riRow = { id: 'r1', canonicalName: 'Dwight Johnson', currentTeam: 'Vanderbilt University', position: 'OL', cfbdId: null, fantraxId: null, rollingInsightsId: '9001' }
+    const ref = { fantraxId: '06974', name: 'Johnson, Dwight', team: 'Vanderbilt', position: 'OL' }
+    const proof = new Map([['9001', { name: 'Dwight Johnson', team: 'Vanderbilt University', position: 'OL' }]])
+
+    it('links one, keyed by RI id, when its RI row agrees', () => {
+      const plan = planNcaafFantraxIdentityLinks([ref], [riRow], [], {}, proof)
+      expect(plan.riLinks).toEqual([{ id: 'r1', fantraxId: '06974', rollingInsightsId: '9001' }])
+      expect(plan.links).toEqual([])
+    })
+    it('refuses without an RI row, or when the RI row disagrees on name, school or position', () => {
+      expect(planNcaafFantraxIdentityLinks([ref], [riRow], [], {}, new Map()).riLinks).toEqual([])
+      for (const bad of [{ name: 'Dwayne Johnson' }, { team: 'University of Miami' }, { position: 'WR' }]) {
+        const disagree = new Map([['9001', { ...proof.get('9001')!, ...bad }]])
+        expect(planNcaafFantraxIdentityLinks([ref], [riRow], [], {}, disagree).riLinks, JSON.stringify(bad)).toEqual([])
+      }
+    })
+    it('never prefers it over a CFBD-backed identity of the same name and school', () => {
+      const cfbd = { ...riRow, id: 'c1', cfbdId: '42', rollingInsightsId: null }
+      const plan = planNcaafFantraxIdentityLinks([ref], [riRow, cfbd], [], {}, proof)
+      expect(plan.links).toEqual([{ id: 'c1', fantraxId: '06974', cfbdId: '42' }])
+      expect(plan.riLinks).toEqual([])
+    })
+    it('refuses two agreeing RI-only identities, and changes nothing when no proof is passed', () => {
+      const twin = { ...riRow, id: 'r2', rollingInsightsId: '9002' }
+      const both = new Map([...proof, ['9002', proof.get('9001')!]])
+      expect(planNcaafFantraxIdentityLinks([ref], [riRow, twin], [], {}, both).riLinks).toEqual([])
+      expect(planNcaafFantraxIdentityLinks([ref], [riRow]).riLinks).toEqual([])
+    })
+  })
 })
 
  it('maps captured college defensive fields without guessing assisted tackles or forced fumbles', () => {
