@@ -75,7 +75,8 @@ export async function GET(req: NextRequest) {
       const sourceGate = await assertLeagueMember(sourceSeason.leagueId, userId)
       if (!sourceGate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: sourceGate.status })
       const imported = await loadFantraxNativePresentation(sourceSeason)
-      const matchup = imported?.matchups.find(row => row.id === matchupId)
+      const matchup = imported?.matchups.find(row => row.id === matchupId) ??
+        imported?.matchups.find(row => matchupId.split(':').length === 4 && row.id.startsWith(`${matchupId}:`))
       return matchup ? NextResponse.json({ matchup, source: 'fantrax', readOnly: true }) : NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
     if (!m) return NextResponse.json({ error: 'Not found' }, { status: 404 })

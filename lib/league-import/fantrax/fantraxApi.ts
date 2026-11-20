@@ -698,7 +698,7 @@ export type FantraxStandingRow = {
   wins: number
   losses: number
   ties: number
-  pointsFor: number
+  pointsFor: number | null
   winPercentage: number | null
   gamesBack: number | null
 }
@@ -749,7 +749,8 @@ export async function getFantraxStandings(
         wins: num(w),
         losses: num(l),
         ties: num(t),
-        pointsFor: num(row.totalPointsFor),
+        pointsFor: row.totalPointsFor != null && String(row.totalPointsFor).trim() && Number.isFinite(Number(row.totalPointsFor))
+          ? Number(row.totalPointsFor) : null,
         winPercentage: Number.isFinite(Number(row.winPercentage)) ? Number(row.winPercentage) : null,
         gamesBack: Number.isFinite(Number(row.gamesBack)) ? Number(row.gamesBack) : null,
       }

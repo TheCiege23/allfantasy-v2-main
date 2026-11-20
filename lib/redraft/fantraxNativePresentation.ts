@@ -10,6 +10,11 @@ const stableJson = (v: any): string => JSON.stringify(v, (_, value) => value && 
 export function projectFantraxHistory(input: { seasonId: string; leagueId: string; info: Pick<FantraxLeagueInfo, 'scoringPeriods' | 'playoffs'>; rows: FantraxScheduleRow[]; teamIds: Record<string, string>; rosters: any[]; sourceActualTeamPeriods?: Set<string>; now?: Date }) {
   const position = resolveFantraxSeasonPosition(input.info as FantraxLeagueInfo, input.now ?? new Date())
   const periods = input.info.scoringPeriods ?? []
+  const homeCounts = new Map<string, number>()
+  for (const row of input.rows) {
+    const key = `${row.week}:${row.homeTeamId}`
+    homeCounts.set(key, (homeCounts.get(key) ?? 0) + 1)
+  }
   const matchups = input.rows.flatMap(row => {
     const home = input.rosters.find(r => r.id === input.teamIds[row.homeTeamId]), away = input.rosters.find(r => r.id === input.teamIds[row.awayTeamId])
     if (!home || !away || home.id === away.id) return []
@@ -17,7 +22,9 @@ export function projectFantraxHistory(input: { seasonId: string; leagueId: strin
     const complete = Boolean(period?.endDate && new Date(period.endDate).getTime() < (input.now ?? new Date()).getTime())
     const scored = row.played && row.homeScore != null && row.awayScore != null
     const actualsAvailable = input.sourceActualTeamPeriods?.has(`${row.week}:${row.homeTeamId}`) && input.sourceActualTeamPeriods?.has(`${row.week}:${row.awayTeamId}`)
-    return [{ id: `fantrax:${input.seasonId}:${row.week}:${row.homeTeamId}`, seasonId: input.seasonId, leagueId: input.leagueId, week: row.week, type: row.isPlayoff ? 'playoff' : 'regular', homeRosterId: home.id, awayRosterId: away.id, homeRoster: home, awayRoster: away, homeScore: scored ? row.homeScore : null, awayScore: scored ? row.awayScore : null, status: scored ? complete ? 'final' : 'live' : 'scheduled', isMedianMatchup: false, source: 'fantrax', readOnly: true, scoringEvidence: { teamScores: 'fantrax', individualSourceScores: actualsAvailable ? 'available' : 'unavailable', message: actualsAvailable ? 'Verified Fantrax individual actual points are imported for both teams in this period.' : 'Fantrax provides team totals for this period; individual source scores are unavailable.' }, periodStart: period?.startDate ?? null, periodEnd: period?.endDate ?? null }]
+    const homeKey = `${row.week}:${row.homeTeamId}`
+    const fixtureKey = (homeCounts.get(homeKey) ?? 0) > 1 ? `${homeKey}:${row.awayTeamId}` : homeKey
+    return [{ id: `fantrax:${input.seasonId}:${fixtureKey}`, seasonId: input.seasonId, leagueId: input.leagueId, week: row.week, type: row.isPlayoff ? 'playoff' : 'regular', homeRosterId: home.id, awayRosterId: away.id, homeRoster: home, awayRoster: away, homeScore: scored ? row.homeScore : null, awayScore: scored ? row.awayScore : null, status: scored ? complete ? 'final' : 'live' : 'scheduled', isMedianMatchup: false, source: 'fantrax', readOnly: true, scoringEvidence: { teamScores: 'fantrax', individualSourceScores: actualsAvailable ? 'available' : 'unavailable', message: actualsAvailable ? 'Verified Fantrax individual actual points are imported for both teams in this period.' : 'Fantrax provides team totals for this period; individual source scores are unavailable.' }, periodStart: period?.startDate ?? null, periodEnd: period?.endDate ?? null }]
   })
   const firstPlayoffPeriod = input.info.playoffs?.used ? Number(input.info.playoffs.firstPlayoffPeriod) : null
   const playoffStartWeek = firstPlayoffPeriod && Number.isInteger(firstPlayoffPeriod) && firstPlayoffPeriod > 1 ? firstPlayoffPeriod : null
@@ -68,7 +75,9 @@ export async function syncFantraxNativePresentation(leagueId: string, info: Fant
 
 type PresentationSeason = { id: string; leagueId: string; season: number }
 
-async function loadImportedSoccerPresentation(season: PresentationSeason, snapshotId: string, settings: Record<string, unknown>, now: Date) {
+type PublishedStanding = { rosterId: string; rank: number; wins: number; losses: number; ties: number; pointsFor: number | null }
+
+async function loadImportedSnapshotPresentation(season: PresentationSeason, snapshotId: string, settings: Record<string, unknown>, now: Date) {
   const calendar = record(settings.fantrax_settings)
   const [snapshot, rosters, links] = await Promise.all([
     prisma.fantraxLeague.findUnique({ where: { id: snapshotId }, select: { season: true, matchups: true, standings: true } }),
@@ -105,18 +114,31 @@ async function loadImportedSoccerPresentation(season: PresentationSeason, snapsh
     seasonId: season.id, leagueId: season.leagueId, rosters, rows, teamIds, now,
     info: { scoringPeriods: calendar.scoringPeriods, playoffs: calendar.playoffs },
   })
-  return projected.matchups.length ? projected : null
+  const publishedStandings: PublishedStanding[] = []
+  for (const value of snapshot.standings) {
+    const team = record(value)
+    const rosterId = teamIds[team.fantraxTeamId]
+    if (rosterId && Number.isSafeInteger(team.rank) && team.rank > 0 &&
+      [team.wins, team.losses, team.ties].every(n => Number.isSafeInteger(n) && n >= 0)) {
+      publishedStandings.push({ rosterId, rank: team.rank, wins: team.wins, losses: team.losses, ties: team.ties,
+        pointsFor: Number.isFinite(team.pointsFor) ? team.pointsFor : null })
+    }
+  }
+  return projected.matchups.length ? { ...projected, publishedStandings } : null
 }
 
 export async function loadFantraxNativePresentation(season: PresentationSeason, now = new Date()) {
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true, platformLeagueId: true, sport: true, settings: true, season: true } })
   if (league?.platform?.toLowerCase() !== 'fantrax' || league.season !== season.season) return null
   const soccer = league.sport?.toUpperCase() === 'SOCCER'
-  if (!soccer && !isNcaafSport(String(league.sport))) return null
   const s = record(league.settings)
+  if (!soccer && !isNcaafSport(String(league.sport))) {
+    return league.platformLeagueId && Array.isArray(s.fantrax_settings?.scoringPeriods) && s.fantrax_settings.scoringPeriods.length
+      ? loadImportedSnapshotPresentation(season, league.platformLeagueId, s, now) : null
+  }
   const scoringPeriods = s.fantrax_scoring_periods ?? s.fantrax_settings?.scoringPeriods
   if (!Array.isArray(s.fantrax_schedule) || !Array.isArray(scoringPeriods)) {
-    return soccer && league.platformLeagueId ? loadImportedSoccerPresentation(season, league.platformLeagueId, s, now) : null
+    return soccer && league.platformLeagueId ? loadImportedSnapshotPresentation(season, league.platformLeagueId, s, now) : null
   }
   const rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id } })
   const sourceActualTeamPeriods = new Set<string>()
@@ -138,7 +160,7 @@ export async function loadFantraxNativePresentation(season: PresentationSeason, 
 }
 
 /** Standard head-to-head standings from finalized source results, never persisted as native actuals. */
-export function projectFantraxStandings(rosters: any[], matchups: ReturnType<typeof projectFantraxHistory>['matchups']) {
+export function projectFantraxStandings(rosters: any[], matchups: ReturnType<typeof projectFantraxHistory>['matchups'], published?: PublishedStanding[]) {
   const totals = new Map(rosters.map(r => [r.id, { ...r, wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0, playoffSeed: null }]))
   const pointsForCounted = new Set<string>()
   const weeklyPointsAgainst = createWeeklyPointsAgainst()
@@ -155,5 +177,10 @@ export function projectFantraxStandings(rosters: any[], matchups: ReturnType<typ
     }
   }
   for (const [id, against] of weeklyPointsAgainst.totals()) { const t = totals.get(id); if (t) t.pointsAgainst = against }
+  if (published?.length === totals.size && new Set(published.map(p => p.rosterId)).size === totals.size && published.every(p => totals.has(p.rosterId))) {
+    return [...published].sort((a,b) => a.rank-b.rank).map(p => ({
+      ...totals.get(p.rosterId), wins: p.wins, losses: p.losses, ties: p.ties, currentRank: p.rank, pointsFor: p.pointsFor,
+    }))
+  }
   return [...totals.values()].sort((a,b) => b.wins-a.wins || a.losses-b.losses || b.pointsFor-a.pointsFor)
 }

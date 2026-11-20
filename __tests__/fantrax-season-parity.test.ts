@@ -4,6 +4,10 @@ import type { FantraxImportPayload } from '@/lib/league-import/adapters/fantrax/
 import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 import { fantraxStarterSlot } from '@/lib/league-import/fantrax/fantraxProSports'
+import { projectFantraxStandings } from '@/lib/redraft/fantraxNativePresentation'
+import { normalizeNbaGameStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { normalizeMlbGameStats } from '@/lib/scoring-runtime/mlbStatNormalization'
+import { playoffFinalWeek } from '@/lib/playoff-runtime/playoffFit'
 import { scoredFantraxMatchups, resolveFantraxChampionTeamId } from '@/lib/league-import/fantrax/FantraxHistoricalBackfillService'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
@@ -22,6 +26,7 @@ describe('published Fantrax first-season calendars', () => {
       expect(FantraxLeagueMapper.map(source(sport,teams,start,last))).toMatchObject({
         playoff_team_count: teams, playoff_teams: teams, playoff_start_week: start, regular_season_length: start-1, current_week: 2,
       })
+      expect(playoffFinalWeek({ teams, playoffStartWeek: start, weeksPerRound: 1 })).toBe(last)
     })
   it('preserves an explicit no-playoffs league', () => {
     const input = source('MLB',12,23,26)
@@ -51,5 +56,26 @@ describe('published Fantrax first-season calendars', () => {
   it('keeps the occupied NFL flex slot when an eligible athlete plays several positions', () => {
     expect(['RWT','SFX','ID','DE'].map(code=>fantraxStarterSlot('NFL',code))).toEqual(['FLEX','SUPER_FLEX','IDP_FLEX','DE'])
     expect(fantraxStarterSlot('NFL','UNKNOWN')).toBeUndefined()
+  })
+  it('uses the official records when source scoreboards tie and the standings award a winner', () => {
+    const teams = [{ id: 'a' }, { id: 'b' }]
+    const schedule = [{ status:'final', type:'regular', week:1, homeRosterId:'a', awayRosterId:'b', homeScore:6.5, awayScore:6.5 }]
+    const table = projectFantraxStandings(teams, schedule as never, [
+      { rosterId:'a', rank:2, wins:0, losses:1, ties:0, pointsFor:null },
+      { rosterId:'b', rank:1, wins:1, losses:0, ties:0, pointsFor:null },
+    ])
+    expect(table[0]).toMatchObject({id:'b', currentRank:1, wins:1, ties:0, pointsFor:null})
+  })
+  it('maps sport-specific weights onto stat keys produced by the game feed', () => {
+    const info=(group:string,codes:string[]) => ({scoringSystem:{ scoringCategorySettings:[{group:{code:group},
+      configs:codes.map(code=>({scoringCategory:{code},points:1}))}]}} as FantraxLeagueInfo)
+    const basket=info('BASKETBALL_PLAYER',['INDIVIDUAL_FREE_THROWS_MADE','INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES','INDIVIDUAL_TRIPLE_DOUBLES'])
+    const nba=normalizeNbaGameStats({stats:{points:15,rebounds:12,assists:11,free_throws_made:4}}).stats
+    expect(fantraxScoringRules(basket,'nba').rules.map(r=>nba[r.stat_key])).toEqual([4,1,1])
+    expect(fantraxScoringRules(basket,'ncaab').gaps).toHaveLength(3)
+    const batting=normalizeMlbGameStats({group:'batting',stats:{IBB:1,SO:2}}).stats
+    expect(fantraxScoringRules(info('BASEBALL_HITTING',['INDIVIDUAL_INTENTIONAL_WALKS','INDIVIDUAL_STRIKE_OUTS'])).rules.map(r=>batting[r.stat_key])).toEqual([1,2])
+    const pitching=normalizeMlbGameStats({group:'pitching',stats:{BS:1}}).stats
+    expect(fantraxScoringRules(info('BASEBALL_PITCHING',['INDIVIDUAL_BLOWN_SAVES'])).rules.map(r=>pitching[r.stat_key])).toEqual([1])
   })
 })

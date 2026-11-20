@@ -108,7 +108,7 @@ describe('playoff fields: odd sizes and up to 32 teams', () => {
   })
 
   it.each([
-    [10, 3], [10, 5], [12, 6], [11, 7], [12, 9], [16, 11], [34, 13], [34, 14], [36, 16], [160, 32],
+    [10, 3], [10, 5], [12, 6], [11, 7], [12, 8], [12, 9], [16, 11], [36, 12], [34, 13], [34, 14], [36, 16], [160, 32],
   ])('a %i-team league with a %i-team field gives the byes to the top seeds and crowns a champion', (leagueTeams, playoffTeams) => {
     const run = playToChampion(leagueTeams, playoffTeams)
     const byes = firstRoundByesForTeams(playoffTeams)

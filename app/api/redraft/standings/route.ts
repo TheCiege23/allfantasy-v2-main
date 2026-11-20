@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
   })
 
   const imported = await loadFantraxNativePresentation(season)
-  if (imported && !season.medianGame) return NextResponse.json({ rosters: projectFantraxStandings(rosters, imported.matchups), source: 'fantrax', readOnly: true, dataStatus: imported.matchups.some(m => m.status === 'final') ? 'scored' : 'No finalized Fantrax results yet.', incompleteMatchups: imported.incompleteMatchups })
+  if (imported && !season.medianGame) {
+    const published = 'publishedStandings' in imported && Array.isArray(imported.publishedStandings) ? imported.publishedStandings : undefined
+    return NextResponse.json({ rosters: projectFantraxStandings(rosters, imported.matchups, published), source: 'fantrax', readOnly: true,
+      dataStatus: imported.matchups.some(m => m.status === 'final') ? 'scored' : 'No finalized Fantrax results yet.', incompleteMatchups: imported.incompleteMatchups })
+  }
 
   const countedMatchups = await prisma.redraftMatchup.count({
     where: {

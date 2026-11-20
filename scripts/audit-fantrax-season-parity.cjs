@@ -10,6 +10,23 @@ const { resolveFantraxChampionTeamId } = require('../lib/league-import/fantrax/F
 const publicFetch = global.fetch
 const api = 'https://www.fantrax.com/fxea/general/'
 const sports = ['NBA', 'MLB', 'NFL', 'NCAAB', 'NHL']
+const stagingOrigin='https://league-lifecycle-rc-1694980a-redraft-qa.up.railway.app'
+async function signIn(login,password) {
+  const csrf=await publicFetch(stagingOrigin+'/api/auth/csrf',{redirect:'error'})
+  if(!csrf.ok)throw Error('QA sign-in CSRF '+csrf.status)
+  const cookie=csrf.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')
+  const csrfToken=(await csrf.json()).csrfToken
+  const r=await publicFetch(stagingOrigin+'/api/auth/callback/credentials',{method:'POST',redirect:'manual',
+    headers:{cookie,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrfToken,login,password,json:'true',callbackUrl:stagingOrigin})})
+  const session=r.headers.getSetCookie().filter(c=>c.includes('session-token')).map(c=>c.split(';')[0]).join('; ')
+  if(!session)throw Error('Staging QA login did not create a session ('+r.status+')')
+  return session
+}
+async function screen(route,cookie) {
+  const r=await publicFetch(stagingOrigin+route,{redirect:'error',headers:{cookie},signal:AbortSignal.timeout(90000)})
+  if(!r.ok)throw Error('Staging '+route.split('?')[0]+' returned '+r.status)
+  return r.json()
+}
 const close = (a,b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a-b) < 0.0001
 async function read(endpoint, id, params = {}) {
   const query = new URLSearchParams({ leagueId: id, ...params })
@@ -70,7 +87,7 @@ function replayTransport(source,sport,key) {
     return Response.json(data)
   }}
 }
-async function runCase(userId,sport,id,index,runId) {
+async function runCase(userId,sport,id,index,runId,cookie) {
   const source=await capture(id), key='parity-'+runId+'-'+index
   const replay=replayTransport(source,sport,key)
   const orig=[...replay.names.keys()]
@@ -94,7 +111,7 @@ async function runCase(userId,sport,id,index,runId) {
     const [league,teams,season,facts] = await Promise.all([
       prisma.league.findUniqueOrThrow({where:{id:leagueId},select:{playoffStartWeek:true,playoffTeams:true,settings:true}}),
       prisma.leagueTeam.findMany({where:{leagueId},select:{externalId:true,teamName:true,currentRank:true,wins:true,losses:true,ties:true,pointsFor:true}}),
-      prisma.redraftSeason.findFirstOrThrow({where:{leagueId},select:{currentWeek:true,totalWeeks:true,playoffStartWeek:true,status:true}}),
+      prisma.redraftSeason.findFirstOrThrow({where:{leagueId},select:{id:true,currentWeek:true,totalWeeks:true,playoffStartWeek:true,status:true}}),
       prisma.matchupFact.findMany({where:{leagueId},select:{teamA:true,teamB:true,weekOrPeriod:true,scoreA:true,scoreB:true,winnerTeamId:true}}),
     ])
     const byName=new Map(teams.map(t=>[t.teamName,t]))
@@ -145,6 +162,24 @@ async function runCase(userId,sport,id,index,runId) {
       if(records.get(t.teamId)?.join('-')===t.points)matchedRebuiltRecords++
     }
     const expected=source.info.playoffs
+    const displayed=await screen('/api/redraft/standings?seasonId='+season.id,cookie)
+    const displayedByName=new Map(displayed.rosters.map(r=>[r.teamName,r]))
+    const displayRanks=replay.rows.map(t=>({row:displayedByName.get(replay.names.get(t.teamId)),source:t}))
+    const screenRecords=displayRanks.filter(({row,source:t})=>row && row.currentRank===t.rank &&
+      [row.wins,row.losses,row.ties].join('-')===t.points && (t.totalPointsFor==null?row.pointsFor==null:close(row.pointsFor,t.totalPointsFor))).length
+    let screenGames=0,uniqueGames=0
+    for(const p of source.periods.filter(p=>p.ended)){
+      const board=await screen('/api/redraft/matchup?seasonId='+season.id+'&week='+p.period,cookie)
+      const fixtures=new Map((board.matchups||[]).map(g=>[[g.homeRoster.teamName,g.awayRoster.teamName].sort().join('|'),g]))
+      uniqueGames+=new Set((board.matchups||[]).map(g=>g.id)).size
+      for(const m of p.matchups){
+        if(!m.home?.teamId || !m.away?.teamId || !(m.home.gamesPlayed>0||m.away.gamesPlayed>0))continue
+        const home=replay.names.get(m.home.teamId),away=replay.names.get(m.away.teamId)
+        const g=fixtures.get([home,away].sort().join('|'))
+        if(g?.status==='final' && close(g.homeRoster.teamName===home?g.homeScore:g.awayScore,m.home.score) &&
+          close(g.awayRoster.teamName===away?g.awayScore:g.homeScore,m.away.score))screenGames++
+      }
+    }
     const closed=source.periods.filter(p=>p.ended).length
     const settingsPass=league.playoffTeams===expected.numPlayoffTeams && league.playoffStartWeek===expected.firstPlayoffPeriod &&
       league.settings.regular_season_length===expected.lastRegularSeasonPeriod && season.playoffStartWeek===expected.firstPlayoffPeriod &&
@@ -152,14 +187,15 @@ async function runCase(userId,sport,id,index,runId) {
       season.currentWeek===(source.periods.length?source.periods.at(-1).period:0)
     const evidence={index,sport,leagueId,field:league.playoffTeams,playoffStart:league.playoffStartWeek,currentPeriod:season.currentWeek,closed,
       backfill,teams:teams.length,sourceTeams:orig.length,matchedRecords,matchedRank,availablePF,matchedPF,matchedRebuiltRecords,
-      sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,
+      sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,screenRecords,screenGames,uniqueGames,
       games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,
       scoringRules:payload.settings.scoringRules.length,scoringGaps:payload.settings.raw.scoringGaps||[],
       sourceManagerFields:Object.keys(Object.values(source.info.teamInfo)[0]).filter(k=>/owner|manager|user/i.test(k)),
       champion:resolveFantraxChampionTeamId(payload),warnings:result.incompleteSteps?.map(w=>w.code)||[]}
     evidence.pass=backfill==='complete' && settingsPass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
-      games===matchedScores && facts.length===games && evidence.champion===null
+      games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
+      facts.length===games && evidence.champion===null
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
     return evidence.pass
   } finally {
@@ -173,10 +209,14 @@ async function main(){
   const cases=(process.env.QA_FANTRAX_CASES||'').split(',').map(x=>x.split('='))
   if(!cases.length || cases.some(([sport,id])=>!sports.includes(sport)||!/^\w{16}$/.test(id)))throw Error('Expected SPORT=leagueId cases')
   const runId=randomUUID().slice(0,8)
-  const user=await prisma.appUser.create({data:{username:'qa-parity-'+runId},select:{id:true}})
+  const password=randomUUID()+randomUUID()
+  const username='qa-parity-'+runId
+  const passwordHash=await require('bcryptjs').hash(password,10)
+  const user=await prisma.appUser.create({data:{username,passwordHash,emailVerified:new Date()},select:{id:true}})
+  const cookie=await signIn(username,password)
   let passed=true
   for(const [i,[sport,id]] of cases.entries()){
-    try {if(!await runCase(user.id,sport,id,i,runId))passed=false}
+    try {if(!await runCase(user.id,sport,id,i,runId,cookie))passed=false}
     catch(e){console.error('FANTRAX_PARITY_ERROR '+JSON.stringify({index:i,message:String(e.message).slice(0,900)}));passed=false}
   }
   if(!passed)process.exitCode=1

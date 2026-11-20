@@ -76,6 +76,13 @@ const CATEGORY_KEYS: Record<string, string[]> = {
  * tests/fixtures/fantrax/{nba,nhl,nfl}-public-2026.json.
  */
 const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
+  BASEBALL_HITTING: {
+    INDIVIDUAL_INTENTIONAL_WALKS: ['ibb'],
+    INDIVIDUAL_STRIKE_OUTS: ['bat_so'],
+  },
+  BASEBALL_PITCHING: {
+    INDIVIDUAL_BLOWN_SAVES: ['bs'],
+  },
   BASKETBALL_PLAYER: {
     INDIVIDUAL_THREE_POINTERS_MADE: ['threes'],
     INDIVIDUAL_POINTS: ['pts'],
@@ -132,6 +139,12 @@ const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
 
 /** Groups whose codes must never fall back to the baseball/football table above. */
 const NO_FALLBACK_GROUP = /^(BASKETBALL|HOCKEY|SOCCER)_/
+
+const NBA_STAT_KEYS: Record<string, string[]> = {
+  INDIVIDUAL_FREE_THROWS_MADE: ['ftm'],
+  INDIVIDUAL_TRIPLE_DOUBLES: ['trpl_dbl'],
+  INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES: ['dbl_dbl'],
+}
 
 /** Position-specific reception values map to a bonus, keyed by position code. */
 const RECEPTION_BONUS_BY_POSITION: Record<string, string> = {
@@ -256,7 +269,7 @@ export function parseFantraxSoccerScoring(
  * tight ends 2.5 a catch. The default is subtracted to get the 0.5 that is
  * actually the premium.
  */
-export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResult {
+export function fantraxScoringRules(info: FantraxLeagueInfo, sport?: string): FantraxScoringResult {
   const configs = readConfigs(info)
   const rules: FantraxScoringRule[] = []
   const gaps: string[] = []
@@ -306,6 +319,7 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
 
     const group = config.group ?? ''
     const keys =
+      (sport?.toLowerCase() === 'nba' && group === 'BASKETBALL_PLAYER' ? NBA_STAT_KEYS[code] : undefined) ??
       GROUP_CATEGORY_KEYS[group]?.[code] ?? (NO_FALLBACK_GROUP.test(group) ? undefined : CATEGORY_KEYS[code])
     if (!keys) {
       gaps.push(`${config.scoringCategory?.name ?? code} has no equivalent here, so it is not scored`)

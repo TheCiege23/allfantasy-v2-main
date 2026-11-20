@@ -387,7 +387,7 @@ export async function importFantraxLeague(args: {
    * the league's own calendar decides. Other sports are unchanged.
    */
   const season = fantraxImportSeason(info.data, best.sport)
-  const scoring = fantraxScoringRules(info.data)
+  const scoring = fantraxScoringRules(info.data, best.sport)
 
   const fantraxUser = refreshTarget ? null : await prisma.fantraxUser.upsert({
     where: { fantraxUsername: mine.teamName },
