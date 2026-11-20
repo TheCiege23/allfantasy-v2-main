@@ -134,6 +134,14 @@ vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
 }))
 vi.mock('@/lib/waivers/recentFormProjection', () => ({ projectFromRecentForm: vi.fn(async () => new Map()) }))
 
+// This fixture exercises the season-rate fallback. The shared-board pricing cases
+// have their own suite. Keep the fallback independent of the default database client.
+vi.mock('@/lib/sport-values/leagueValueBoard', async (original) => ({
+  ...await original<typeof import('@/lib/sport-values/leagueValueBoard')>(),
+  loadLeagueValueBoard: async () => ({ kind: 'not_board_sport' }),
+}))
+
+import '@/lib/waivers/seasonRateWaiverBoard'
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
 
 const load = () => loadWaiverBoard({ prisma: prismaDouble as never, leagueId: 'L1', userId: 'u1' })
