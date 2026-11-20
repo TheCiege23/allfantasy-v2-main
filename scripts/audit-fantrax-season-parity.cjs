@@ -350,6 +350,23 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       facts.length===games && scheduled.conflicting===0 && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
     try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie,source,replay)}
     catch(error){evidence.native={created:false,reason:String(error.message).slice(0,260)}}
+    if(!evidence.native.created && sourcePlayers){
+      const ids=[...new Set(Object.values(source.rosters).flatMap(t=>t.rosterItems.map(p=>p.id)))]
+      const nativeKey=sport==='NFL'?'sleeperId':'rollingInsightsId'
+      const links=await prisma.playerIdentityMap.findMany({where:{sport,fantraxId:{in:ids}},select:{fantraxId:true,sleeperId:true,rollingInsightsId:true,canonicalName:true,position:true}})
+      const known=new Set(links.map(p=>p.fantraxId)), verified=new Set(links.filter(p=>p[nativeKey]&&p.position&&p.canonicalName).map(p=>p.fantraxId))
+      evidence.native.identityCoverage={distinct:ids.length,verified:verified.size,missingProviderLink:ids.filter(id=>!known.has(id)).length,missingNativeDetails:known.size-verified.size}
+      if(sport==='NFL'){
+        const {getPlayersBySport}=require('../lib/sleeper-client.ts'),{matchSharedFantraxPlayers}=require('../lib/player-identity/fantraxSharedPlayerIds.ts')
+        const {getCachedFantraxPlayerIds}=require('../lib/league-import/fantrax/fantraxPlayerDirectoryCache.ts')
+        const fan=await getCachedFantraxPlayerIds('NFL'), players=await getPlayersBySport('nfl')
+        if(fan.ok){
+          const direct=matchSharedFantraxPlayers(ids.filter(id=>!verified.has(id)).map(i=>fan.data[i]).filter(Boolean),Object.values(players))
+          const targets=await prisma.playerIdentityMap.findMany({where:{sport,sleeperId:{in:direct.map(p=>p.player.player_id)}},select:{sleeperId:true,fantraxId:true}})
+          evidence.native.sharedIds={unresolvedWithTwoIds:direct.length,matchingNativeIdentity:targets.length,nativeTargetHasProviderLink:targets.filter(t=>!!t.fantraxId).length}
+        }
+      }
+    }
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
     return evidence.pass
   } finally {
@@ -358,10 +375,24 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     if(snapshotId)await prisma.fantraxLeague.updateMany({where:{id:snapshotId,appUserId:userId,sourceLeagueId:key},data:{sourceLeagueId:null}})
   }
 }
+async function waitForWebCommit(){
+  const expected=process.env.QA_STAGING_WEB_COMMIT
+  if(!expected)return
+  if(!/^[a-f0-9]{40}$/.test(expected))throw Error('Invalid expected staging revision')
+  const until=Date.now()+30*60*1000
+  while(Date.now()<until){
+    try{const res=await publicFetch(stagingOrigin+'/api/af-debug/sha',{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(12000)})
+      if(res.ok && (await res.json()).sha===expected)return
+    }catch{}
+    await new Promise(resolve=>setTimeout(resolve,15000))
+  }
+  throw Error('Staging web did not reach the requested revision')
+}
 async function main(){
   if(process.env.RAILWAY_ENVIRONMENT_NAME!=='redraft-qa')throw Error('Use the redraft-qa staging worker')
   const cases=(process.env.QA_FANTRAX_CASES||'').split(',').map(x=>x.split('='))
   if(!cases.length || cases.some(([sport,id])=>!sports.includes(sport)||!/^\w{16}$/.test(id)))throw Error('Expected SPORT=leagueId cases')
+  await waitForWebCommit()
   const runId=randomUUID().slice(0,8)
   const password=randomUUID()+randomUUID()
   const username='qa-parity-'+runId
