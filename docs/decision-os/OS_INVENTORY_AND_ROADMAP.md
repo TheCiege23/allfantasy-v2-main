@@ -206,7 +206,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
 | Lineup | ~86 | ~80 | ~80 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠: graded start/sit is reported, not fed back into the optimizer |
 | Commissioner | ~85 | ~85 | ~93 | The hub-prime PR makes Cron n/a. User stays ⚠: the hub shows the snapshot but never the decision (`decisionOsShadow` has no reader, and is built without the learned inactive record) |
-| Manager Psychology | ~90 | ~63 | ~63 | Feed ❌: no `OsFactSource` for manager records — the packet loads the whole league's history fresh on every manager question. Kernel ⚠: `'psychology'` declared, never used |
+| Manager Psychology | ~90 | ~63 | ~93 | Feed ❌ → ✅ and Kernel ⚠ → ✅ in this change: manager records read through the `psychology` feed (below). Cron ⚠ stays: ESPN/MFL waivers and Fantrax trades refresh only at import or upload (a provider-quota decision) |
 | Decision OS hub | ~86 | ~79 | ~86 | Operability ⚠ → ✅ in this build: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own |
 
 **Stale or false claims this re-score corrected** (each checked in code):
@@ -239,14 +239,21 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
   minutes, user-scoped) through `createWaiverOsLoaders`, derived by the same `loadWaiverWorldFacts` on a miss. "No
   roster resolved" is never cached. The user-facing `/api/ai/waivers/recommend` still reads live, so the screen never
   shows a FAAB balance up to five minutes old.
+- **Manager records read through the `psychology` feed** (`lib/decision-os/manager-records-os`, ranked item 3). Every
+  manager question — the packet's `managerRecords` slice and the `get_manager_record` tool — rebuilt the whole league's
+  trades, waiver claims, FAAB and drafts. The default view (every leaguemate but you) is held five minutes per viewer.
+  ⚠ Membership is proved on EVERY call, before the entry is read; the Competitive Edge gate stays in the caller; the
+  entry is per viewer because your own FAAB is read through your roster; a single team's record and the commissioner's
+  whole directory still build live; an unavailable result is never cached. Facts only — no label, score or prediction
+  is stored, and this is not the retired `psychology-os`.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
 | # | Build | Moves | Size |
 |---|---|---|---|
 | ✅ | The waiver decision reads through the feed — **done in this change** (below) | Waiver Kernel → ✅ (~100) | S |
-| 2 | Provider drafts in manager records: credit current-season draft facts to the team's current owner; earlier seasons named as unattributed, the Sleeper shape | Psychology data, user-visible | M |
-| 3 | A manager-record feed (`OsFactSource` on `createOsFeed('psychology')`, membership/plan/viewer filtering kept at read time), refreshed on the `?intel=1` tick | Psychology Feed, Kernel, Cron → ✅ (~100); a whole-league load off every manager turn | M |
+| 2 | Provider drafts in manager records. ⚠ **Needs a read-only production check first**: whether each provider's `dw_draft_facts.managerId` equals its `league_teams.externalId`, and whether earlier seasons can be tied to their owners. Crediting the current season alone gives every manager one draft, under the record's two-draft floor, so it would say nothing but a count; and a wrong id match states false facts about a named leaguemate | Psychology data, user-visible | M–L |
+| ✅ | A manager-record feed — **done in this change** (below). Not refreshed on a schedule: the entry is per viewer, so it is warm exactly when its viewer is asking | Psychology Feed, Kernel → ✅ (~93) | M |
 | 4 | League value boards cached in Value OS (a league-level board source read by the packet, the card and Waivers) | Value Kernel → ✅ (~100) | M |
 | 5 | The graded trade inbox reads through Trade OS; read `tradeSettingsSource` or delete it | Trade Kernel → ✅ | M |
 | 6 | Small truths: `sport: () => 'NFL'` on the four waiver/trade sources; `transactions` missing from `IMPORT_SCOPES`; the projection warm's calendar-year season; `servedFrom: 'store'` hard-coded on live reads; the dead `buildPsychologyGroundingLines` call | honesty, no axis | S each |
