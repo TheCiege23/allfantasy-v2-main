@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildImportedBestBallTab, importedBestBallNote } from '@/lib/bestball/importedBestBallTab'
+import { settingWords } from '@/app/league/[leagueId]/tabs/BestBallTab'
 
 const teams = [
   { externalId: '1', teamName: 'BS & The Duch', ownerName: 'bs' },
@@ -76,8 +77,22 @@ describe('the tab and the handler use it only for an imported league with nothin
     expect(handler).toMatch(/^\s*if \(weeksAvailable\.length === 0 && resolveWriteAuthority\(league\.platform\) !== 'NATIVE'\) \{$/m)
     expect(handler).toMatch(/^\s*source: 'imported',$/m)
   })
+  it('the tab asks for no week first, so the server opens it on the latest scored week', () => {
+    expect(tab).toMatch(/^\s*const \[week, setWeek\] = useState<number \| null>\(null\)$/m)
+    expect(tab).toContain("bestball${week == null ? '' : `?week=${week}`}")
+  })
+
   it('the tab shows the note and does not print "0 counted" on an imported card', () => {
     expect(tab).toContain('data-testid="bestball-imported-note"')
     expect(tab).toMatch(/data\.source === 'imported' \? null : <div className="text-\[11px\] text-white\/40">\{lineup\.starters\.length\} counted<\/div>/)
+  })
+})
+
+describe('settingWords', () => {
+  it('prints a stored setting as words', () => {
+    expect(settingWords('season_long')).toBe('Season long')
+    expect(settingWords('snake')).toBe('Snake')
+    expect(settingWords('cumulative')).toBe('Cumulative')
+    expect(settingWords(null)).toBe('—')
   })
 })
