@@ -204,7 +204,7 @@ only, like every mark here: production tables were not read.
 | Lineup | ~75 | ~86 | Chimmy ⚠→✅: My Team's best lineup in every sport that has one, and in the packet. Kernel ⚠ stays |
 | Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
 | Draft | ~57 | ~93 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed ⚠→✅: the engine reads its rules through Draft OS (60 s); Cron ⚠→n/a (a 60 s entry is warm only while a draft runs, as League OS). Engine ⚠ stays (no outcome stage) |
-| Commissioner | ~52 | ~85 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag. Cron, User ⚠ stay |
+| Commissioner | ~52 | ~93 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag; Cron ⚠→n/a (a five-minute entry warmed when the hub is opened). User ⚠ stays: the hub now shows the snapshot Chimmy reads, but not what the decision learned |
 | Decision OS hub | ~50 | ~86 | Serialization, operability, the learning loop, routing and assembly ⚠→✅ — see the hub, learning-loop and routing notes below. Multi-model stays ❌ by the owner's decision |
 
 ⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
@@ -334,6 +334,21 @@ import, five-minute TTL. ⚠ USER-scoped on purpose: with dynasty signals on, th
 viewer's (`dynastyHealthReads.ts`), so a league-scoped entry would tell a co-commissioner another's team is theirs.
 Commissioner access is still proved on every request before the read. Not done: no scheduled warm (nothing shows one
 is needed at a five-minute TTL), and the hub screen still builds its own snapshot live.
+
+**Commissioner OS, 2026-11-20 — the hub screen's snapshot is the one Chimmy reads.** Both halves of the "not done"
+above, closed by one change. The hub builds the health snapshot live for its own page (`lib/core-app/commissionerHub.ts`),
+and Chimmy read a separately derived cached one — up to five minutes apart, so a commissioner could open the hub and ask
+Chimmy and get two different counts. The hub now hands what it built to the fact (`primeCommissionerHealthSnapshot`,
+over a new kernel `OsFeed.prime`), after its own commissioner check, not awaited and never throwing; Chimmy's next read
+inside five minutes serves exactly the screen's numbers. Opening the hub is also the warm, which is when the entry is
+about to be read, so no scheduled job is added. ⚠ Only a snapshot the derivation itself would produce is stored: built
+from the database (never the dashboard fallback, which is assembled from the caller's league metadata), with dynasty
+signals whenever the league uses them (the same `usesDynastyBackground` test both sides apply), for the league it is
+keyed on; the kernel never stores a null fact. Cron ⚠ → n/a; Commissioner ~85 → ~93 by code. ⚠ User stays ⚠ (the
+fresh re-score's stricter reading): one snapshot is not the decision, and the hub still does not say what the
+decision learned from the graded inactive flag. ⚠ "By
+code" still means what it says everywhere in this file: the 13 Commissioner OS UI namespaces' production
+`commissioner_os_live_ready_*` rows are a separate, owner-set switch and were not read.
 
 **Manager Psychology (facts only), 2026-11-20 — leaguemates' records are in the packet, behind the plan.** They
 reached Chimmy only through the paid `get_manager_record` tool, so a manager question the model did not route to the
