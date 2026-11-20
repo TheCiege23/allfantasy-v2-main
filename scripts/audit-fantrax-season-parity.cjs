@@ -342,12 +342,19 @@ async function main(){
   const college=require('../lib/player-identity/ingestNcaabFantraxIdentities.ts')
   const refresh={NBA:pro.ingestNbaFantraxIdentities,NHL:pro.ingestNhlFantraxIdentities,NCAAB:college.ingestNcaabFantraxIdentities}
   for(const sport of new Set(cases.map(([sport])=>sport))){
+    const registry=require('../lib/sports-data/multiSportIdentityMap.ts')
+    const feedPlayers=await prisma.sportsPlayer.count({where:{sport,source:'rolling_insights'}})
+    const registryRun=feedPlayers ? await registry.backfillIdentityMapForSport(sport,{limit:20000}):null
+    if(sport==='NFL' && feedPlayers){
+      const {backfillSleeperIds}=require('../lib/player-match/sleeperIdentitySync.ts')
+      await backfillSleeperIds({sport,deadlineAt:Date.now()+120000}).catch(()=>null)
+    }
     const native=sport==='NFL'?{sleeperId:{not:null}}:{rollingInsightsId:{not:null}}
     const nativeIdentities=await prisma.playerIdentityMap.count({where:{sport,...native}})
-    const feedPlayers=await prisma.sportsPlayer.count({where:{sport}})
+    const registryErrors=registryRun?.errors?.length??0
     const link=refresh[sport] && nativeIdentities ? await refresh[sport]().catch(()=>({error:'Identity refresh failed'})):null
     const linked=await prisma.playerIdentityMap.count({where:{sport,...native,fantraxId:{not:null}}})
-    console.log('FANTRAX_DIRECTORY '+JSON.stringify({sport,nativeIdentities,feedPlayers,linked,updated:link?.updated||0,refreshError:link?.error||null}))
+    console.log('FANTRAX_DIRECTORY '+JSON.stringify({sport,nativeIdentities,feedPlayers,registryErrors,linked,updated:link?.updated||0,refreshError:link?.error||null}))
   }
   let passed=true
   for(const [i,[sport,id]] of cases.entries()){
