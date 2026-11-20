@@ -5,12 +5,18 @@ import { classifyRiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import { dailyTeamCode, readDailyTeamNames } from '@/lib/redraft/dailyTeamIdentity'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import type { SGProviderSport } from './providerCatalog'
 
 export type SGScheduledGame = { externalId: string; homeTeam: string; awayTeam: string; startTime: Date; week: number }
 /** A published future slate has no weekly stats yet; an unknown or started slate must still be fetched. */
 export function sgNflWeekAwaitingKickoff(games: readonly (SGScheduledGame & { status: string })[], now: Date): boolean {
   return games.length > 0 && games.every(game => game.status === 'scheduled' && game.startTime.getTime() > now.getTime())
+}
+/** Only skip a daily feed when its published slate has not started. Unknown slates still fetch. */
+export function sgNbaDateAwaitingTipoff(games: readonly (SGScheduledGame & { status: string })[], date: string, now: Date): boolean {
+  const slate = games.filter(game => easternCalendarDay(game.startTime)?.toISOString().slice(0, 10) === date)
+  return sgNflWeekAwaitingKickoff(slate, now)
 }
 export function sgScheduleRows(sport: SGProviderSport, season: number, raw: unknown[], teamIds: ReadonlyMap<string, string>, normalizeTeam: (name: string) => string) {
   const knownTeams = new Set([...teamIds.values()].map(normalizeTeam))

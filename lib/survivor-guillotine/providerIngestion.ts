@@ -7,7 +7,7 @@ import { ingestRollingInsightsGameLogs } from '@/lib/sports-data/survivorNbaGame
 import { pendingStatCorrectionDates } from '@/lib/sports-data/statCoverage'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { syncSGProviderCatalog, type SGProviderSport } from './providerCatalog'
-import { sgNflWeekAwaitingKickoff, syncSGProviderSchedule } from './providerSchedule'
+import { sgNbaDateAwaitingTipoff, sgNflWeekAwaitingKickoff, syncSGProviderSchedule } from './providerSchedule'
 import { syncSGNflWeek } from './providerNflSnapshot'
 import { saveSGProviderHealth } from './providerHealth'
 
@@ -56,7 +56,9 @@ export async function ingestSGProviderData(args: SGIngestRequest) {
       return { ok: true, sport: args.sport, season, catalog, scheduledGames: schedule.games, snapshots, waitingForWeeks }
     }
     const today = easternCalendarDay(now)!.toISOString().slice(0, 10)
-    const dates = args.date ? [args.date] : [...new Set([today, ...[1, 2].map(days => easternCalendarDay(new Date(now.getTime() - days * 86400_000))!.toISOString().slice(0, 10)), ...await pendingStatCorrectionDates(prisma, 'NBA', now, 2)])]
+    const requestedDates = args.date ? [args.date] : [...new Set([today, ...[1, 2].map(days => easternCalendarDay(new Date(now.getTime() - days * 86400_000))!.toISOString().slice(0, 10)), ...await pendingStatCorrectionDates(prisma, 'NBA', now, 2)])]
+    const waitingForDates = requestedDates.filter(date => sgNbaDateAwaitingTipoff(schedule.rows, date, now))
+    const dates = requestedDates.filter(date => !waitingForDates.includes(date))
     if (dates.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)))) throw Error('Invalid NBA game date')
     const result = await ingestRollingInsightsGameLogs({ sport: 'NBA', dates, persistSchedule: true, expectedSeason: season,
       reportGames: true, batchPlayerWrites: true, protectOfficialNba: true, shouldStop: () => Date.now() - now.getTime() > 180_000 })
@@ -77,7 +79,7 @@ export async function ingestSGProviderData(args: SGIngestRequest) {
     if ((result.errors.length && !official.length) || unresolved || missing.length) throw Error(`NBA snapshot incomplete: ${result.errors.length} errors, ${unresolved} unresolved players, ${missing.length} missing complete boxes`)
     await saveSGProviderHealth(args.sport, season, { checkedAt: new Date().toISOString(), status: 'healthy' })
     return { ok: true, sport: args.sport, season, catalog, scheduledGames: schedule.games, dates, games: result.games, lines: result.lines,
-      written: result.written + official.reduce((sum,game)=>sum+game.lines,0), expectedGames: expected.length, gameResults, officialRecoveries: official, primaryErrors: result.errors }
+      written: result.written + official.reduce((sum,game)=>sum+game.lines,0), expectedGames: expected.length, gameResults, officialRecoveries: official, primaryErrors: result.errors, waitingForDates }
   } catch (error) {
     // Only owned messages leave the job. Provider URLs/tokens never enter its HTTP response.
     const message = error instanceof Error && !/https?:|token|password/i.test(error.message) ? error.message.slice(0, 180) : 'Provider ingestion failed'

@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import { sgCatalogRows } from '@/lib/survivor-guillotine/providerCatalog'
-import { sgNflWeekAwaitingKickoff, sgScheduleRows } from '@/lib/survivor-guillotine/providerSchedule'
+import { sgNbaDateAwaitingTipoff, sgNflWeekAwaitingKickoff, sgScheduleRows } from '@/lib/survivor-guillotine/providerSchedule'
 import { sgNflSnapshotRows } from '@/lib/survivor-guillotine/providerNflSnapshot'
 const ids = new Map([['1','KC'],['2','BUF']])
 const game = { season_type:'Regular Season',season:2026,game_ID:'g',game_time:'2026-10-25T17:00:00Z',home_team_ID:1,away_team_ID:2,week:7,status:'Final' }
 describe('live provider normalization', () => {
+ it('waits for a known future NBA slate, while unknown, started, and final slates still fetch',()=>{
+  const [future]=sgScheduleRows('NBA',2026,[{...game,status:'Scheduled'}],ids,x=>x)
+  const before=new Date('2026-10-25T16:00:00Z'),after=new Date('2026-10-25T18:00:00Z')
+  expect(sgNbaDateAwaitingTipoff([future],'2026-10-25',before)).toBe(true)
+  expect(sgNbaDateAwaitingTipoff([future],'2026-10-25',after)).toBe(false)
+  expect(sgNbaDateAwaitingTipoff([future],'2026-10-24',before)).toBe(false)
+  expect(sgNbaDateAwaitingTipoff([{...future,status:'final'}],'2026-10-25',before)).toBe(false)
+ })
  it('waits only for a known future NFL slate, never an unknown or started slate',()=>{
   const [future]=sgScheduleRows('NFL',2026,[{...game,status:'Scheduled'}],ids,x=>x)
   const before=new Date('2026-10-25T16:00:00Z'),after=new Date('2026-10-25T18:00:00Z')
