@@ -119,6 +119,7 @@ function isSpec(value: unknown): value is ChimmyActionSpec {
   if (s.kind === 'queue') {
     return (
       typeof s.sessionId === 'string' &&
+      (s.rosterId == null || typeof s.rosterId === 'string') &&
       (s.addAt === 'top' || s.addAt === 'bottom') &&
       typeof s.baseFingerprint === 'string' &&
       Array.isArray(s.removeKeys) &&

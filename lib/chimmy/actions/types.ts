@@ -88,6 +88,7 @@ export type ChimmyActionSpec =
       kind: 'queue'
       /** The draft session the card was made for; the confirm refuses if another draft is now current. */
       sessionId: string
+      rosterId?: string | null
       add: QueueAddSpec[]
       addAt: 'top' | 'bottom'
       /** `queueNameKey`s of players to take out. */

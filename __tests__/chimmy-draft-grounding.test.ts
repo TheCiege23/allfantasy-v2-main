@@ -21,6 +21,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     draftSession: { findUnique: mocks.sessionFindUnique, findFirst: mocks.sessionFindUnique },
     draftPick: { findMany: mocks.pickFindMany, count: mocks.pickCount },
+    league: { findUnique: vi.fn(async () => ({ settings: {} })) },
     leagueTeam: { findFirst: mocks.teamFindFirst },
     draftQueue: { findUnique: mocks.queueFindUnique },
     userProfile: { findUnique: mocks.profileFindUnique },

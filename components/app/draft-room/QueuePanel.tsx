@@ -26,6 +26,7 @@ type QueuePanelProps = {
   >
   canDraft: boolean
   onRemove: (index: number) => void
+  onClear?: () => void
   onReorder: (fromIndex: number, toIndex: number) => void
   onDraftFromQueue?: (entry: QueueEntry) => void
   onAiReorder?: () => void
@@ -62,6 +63,7 @@ export function QueuePanel({
   playerMetaById,
   canDraft,
   onRemove,
+  onClear,
   onReorder,
   onDraftFromQueue,
   onAiReorder,
@@ -173,6 +175,11 @@ export function QueuePanel({
         <div className="flex items-center gap-2">
           <ListOrdered className="h-3.5 w-3.5 text-[#8b91a7]" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
+          {onClear && queue.length > 0 && !mirroredFromSleeper && (
+            <button type="button" className="text-xs text-white/70 hover:text-white" onClick={onClear}>
+              Clear queue
+            </button>
+          )}
         </div>
         <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
           <input

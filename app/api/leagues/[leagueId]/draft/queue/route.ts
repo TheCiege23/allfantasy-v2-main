@@ -4,12 +4,12 @@
  */
 
 import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
-import { actingTeamRefusal, requestedRosterIdFrom, resolveViewingRoster, resolveActingRoster } from '@/lib/league/viewerTeams'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { mergeAiManageDraftQueuePreference } from '@/lib/live-draft-engine/draftQueueAiPreferences'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
@@ -31,7 +31,8 @@ export async function GET(
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { queue, removedUnavailable } = await loadDraftQueueForUser(leagueId, userId)
+  const rosterId = await getCurrentUserRosterIdForLeague(leagueId, userId, requestedRosterIdFrom(req))
+  const { queue, removedUnavailable } = await loadDraftQueueForUser(leagueId, userId, { rosterId })
   return NextResponse.json({
     leagueId,
     queue,
@@ -64,8 +65,8 @@ export async function PUT(
    * lib/draft-room/saveDraftQueue.ts, shared with a confirmed Chimmy queue card. Checked BEFORE the
    * AF Pro preference write below, so a refused queue changes nothing at all.
    */
-  const team = await resolveViewingRoster(leagueId,userId,requestedRosterIdFrom(req,body))
-  const prepared = await prepareDraftQueueSave(leagueId, queue,team?.rosterId)
+  const rosterId = await getCurrentUserRosterIdForLeague(leagueId, userId, requestedRosterIdFrom(req, body))
+  const prepared = await prepareDraftQueueSave(leagueId, queue, rosterId)
   if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
 
   if (typeof body.aiManageDraftQueueEnabled === 'boolean') {
@@ -78,7 +79,7 @@ export async function PUT(
       )
     }
     // The preference is stored on a team: the manager's own, or the named one of several.
-    const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req, body), { allowCoOwner: false })
+    const acting = await resolveActingRoster(leagueId, userId, rosterId, { allowCoOwner: false })
     if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
     const roster = acting.ok
       ? await prisma.roster.findFirst({ where: { id: acting.rosterId, leagueId }, select: { id: true, settings: true } })
@@ -97,7 +98,7 @@ export async function PUT(
   }
 
   // Saved to the queue of the team the room is about for this manager.
-  await persistDraftQueue(await draftQueueKeyForUser(leagueId, userId), prepared.prepared)
+  await persistDraftQueue(await draftQueueKeyForUser(leagueId, userId, rosterId), prepared.prepared)
 
   return NextResponse.json({
     ok: true,

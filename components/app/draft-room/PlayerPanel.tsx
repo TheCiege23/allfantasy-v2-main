@@ -147,6 +147,7 @@ export type PlayerPanelProps = {
   useAiAdp?: boolean
   onUseAiAdpChange?: (value: boolean) => void
   loading?: boolean
+  loadingMessage?: string
   /** When true, Chimmy ADP is enabled but no data (show message, keep sort controls working) */
   aiAdpUnavailable?: boolean
   /** Optional message when Chimmy ADP is enabled but unavailable */
@@ -392,6 +393,7 @@ function PlayerPanelInner({
   useAiAdp = false,
   onUseAiAdpChange,
   loading = false,
+  loadingMessage = 'Loading player pool...',
   aiAdpUnavailable = false,
   aiAdpUnavailableMessage = null,
   aiAdpStaleWarning = false,
@@ -1341,7 +1343,7 @@ function PlayerPanelInner({
               className="py-3 text-center text-sm text-white/65"
               data-testid="draft-pool-loading-message"
             >
-              Loading player pool...
+              {loadingMessage}
             </p>
             {Array.from({ length: 8 }).map((_, i) => (
               <div

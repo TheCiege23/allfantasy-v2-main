@@ -1,4 +1,6 @@
-import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { queuePicksInPool } from '@/lib/league/player-pools/policy'
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -330,11 +332,11 @@ async function loadLottery(
  * UPDATING the row; a planning screen must not change draft state because someone
  * opened it, so the same pure clean-up runs here in memory only.
  */
-async function loadPreparedQueue(sessionId: string, userId: string): Promise<SectionState<PreparedQueue>> {
+async function loadPreparedQueue(leagueId: string, sessionId: string, userId: string, rosterId: string | null): Promise<SectionState<PreparedQueue>> {
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const row = await prisma.draftQueue.findUnique({
-    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
+    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForUser(leagueId, userId, rosterId) } },
     select: { order: true },
   })
   const order = row?.order
@@ -342,7 +344,8 @@ async function loadPreparedQueue(sessionId: string, userId: string): Promise<Sec
   const named = raw.filter((e) => typeof e?.playerName === 'string' && e.playerName.trim().length > 0)
   if (named.length === 0) return unavailable('you have not queued any players for this draft yet')
 
-  const drafted = await prisma.draftPick.findMany({ where: { sessionId }, select: { playerName: true } })
+  const picks = await prisma.draftPick.findMany({ where: { sessionId }, select: { playerName: true, rosterId: true } })
+  const drafted = queuePicksInPool(picks, await loadPlayerPools(leagueId), rosterId)
   const { queue } = removeDraftedPlayersFromQueue(dedupeQueueEntries(named), normalizeDraftedNameSet(drafted))
   if (queue.length === 0) return unavailable('every player you queued has already been drafted')
 
@@ -1213,7 +1216,7 @@ export async function getDraftHqData(
     available: false, reason: 'Analysis requires data bound to this individual draft',
   }
 
-  const queue = await loadPreparedQueue(session.id, userId).catch(() => ({
+  const queue = await loadPreparedQueue(leagueId, session.id, userId, mySlotEntry?.rosterId ?? null).catch(() => ({
     available: false as const,
     reason: 'your queue could not be read right now',
   }))

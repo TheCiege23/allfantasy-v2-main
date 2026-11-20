@@ -122,7 +122,8 @@ export async function getCurrentUserRosterIdsForLeague(
 export async function getCurrentUserRosterIdForLeague(
   leagueId: string,
   userId: string | undefined,
-  requestedRosterId?: string | null
+  requestedRosterId?: string | null,
+  board?: { status: string; draftType?: string; currentPick?: { rosterId: string } | null },
 ): Promise<string | null> {
   const rosterIds = await getCurrentUserRosterIdsForLeague(leagueId, userId)
   if (rosterIds.length <= 1) return rosterIds[0] ?? null
@@ -130,8 +131,14 @@ export async function getCurrentUserRosterIdForLeague(
   // is up), else the team they last switched to, else the first.
   const requested = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
   if (requested && rosterIds.includes(requested)) return requested
+  // A board read already resolved traded picks and the on-clock team for every viewer.
+  const onClock = board
+    ? board.draftType !== 'auction' && (board.status === 'in_progress' || board.status === 'paused')
+      ? board.currentPick?.rosterId ?? null
+      : null
+    : resolveOnClockRosterIdForLeague(leagueId).catch(() => null)
   const [onClockRosterId, rememberedRosterIds] = await Promise.all([
-    resolveOnClockRosterIdForLeague(leagueId).catch(() => null),
+    onClock,
     rememberedActiveTeamIds(),
   ])
   return chooseDraftRosterId({ rosterIds, onClockRosterId, rememberedRosterIds })

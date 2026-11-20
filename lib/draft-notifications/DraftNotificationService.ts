@@ -595,7 +595,7 @@ async function buildDraftStartingEmailsByUser(
     if (slot == null) continue
     // A failed queue read must not render the "your queue is empty" warning
     // for a queue we simply could not see — that member keeps the plain email.
-    const loaded = await loadDraftQueueForUser(leagueId, userId, { queueKey: teamScopedKey(roster) }).catch(() => null)
+    const loaded = await loadDraftQueueForUser(leagueId, userId, { queueKey: teamScopedKey(roster), rosterId: roster.id }).catch(() => null)
     if (!loaded) continue
     out.set(
       userId,

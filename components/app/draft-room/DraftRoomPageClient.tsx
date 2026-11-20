@@ -607,13 +607,25 @@ export function DraftRoomPageClient({
       : 'Loading player pool...'
   const effectiveDraftSport = draftPool?.sport ?? sport
 
+  const viewerPoolPicks = useMemo(() => {
+    const picks = session?.picks ?? []
+    const pools = session?.rosterPlayerPools
+    const rosterId = session?.currentUserRosterId
+    if (!pools || !rosterId) return picks
+    return picks.filter(p => pools[p.rosterId] === pools[rosterId])
+  }, [session])
+  const queueDraftedNames = useMemo(
+    () => new Set(viewerPoolPicks.map(p => normalizeDraftedPlayerName(p.playerName))),
+    [viewerPoolPicks],
+  )
   const poolPicks = useMemo(() => {
+    if (session?.currentUserRosterId && !(isCommissioner && draftUISettings?.executionMode === 'offline')) return viewerPoolPicks
     const picks = session?.picks ?? []
     const pools = session?.rosterPlayerPools
     const rosterId = session ? resolveEffectiveCurrentPick(session)?.rosterId ?? session.currentUserRosterId : null
     if (!pools || !rosterId) return picks
     return picks.filter(p => pools[p.rosterId] === pools[rosterId])
-  }, [session])
+  }, [session, viewerPoolPicks, isCommissioner, draftUISettings?.executionMode])
   const draftedNames = useMemo(
     () =>
       new Set(
@@ -2900,7 +2912,7 @@ export function DraftRoomPageClient({
         const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/queue`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ queue: limitedQueue }),
+          body: JSON.stringify({ queue: limitedQueue, rosterId: currentUserRosterId }),
         })
         const data = await res.json().catch(() => ({}))
         if (res.ok && Array.isArray(data.queue)) {
@@ -2913,13 +2925,12 @@ export function DraftRoomPageClient({
       }
       await fetchQueue()
     },
-    [leagueId, draftQueueSizeLimit, fetchQueue],
+    [leagueId, draftQueueSizeLimit, fetchQueue, currentUserRosterId],
   )
 
   const handleRemoveFromQueue = useCallback(
     (index: number) => {
-      const drafted = new Set(session?.picks?.map((p) => normalizeDraftedPlayerName(p.playerName)) ?? [])
-      const filtered = queue.filter((e) => !drafted.has(normalizeDraftedPlayerName(e.playerName)))
+      const filtered = queue.filter((e) => !queueDraftedNames.has(normalizeDraftedPlayerName(e.playerName)))
       const entry = filtered[index]
       if (!entry) return
       const idxInQueue = queue.findIndex((e) => e.playerName === entry.playerName && e.position === entry.position)
@@ -2928,7 +2939,7 @@ export function DraftRoomPageClient({
       setQueue(next)
       handleQueueSave(next)
     },
-    [queue, session?.picks, handleQueueSave],
+    [queue, queueDraftedNames, handleQueueSave],
   )
 
   const handleClearQueue = useCallback(() => {
@@ -2938,8 +2949,7 @@ export function DraftRoomPageClient({
 
   const handleReorderQueue = useCallback(
     (fromIndex: number, toIndex: number) => {
-      const drafted = new Set(session?.picks?.map((p) => normalizeDraftedPlayerName(p.playerName)) ?? [])
-      const filtered = queue.filter((e) => !drafted.has(normalizeDraftedPlayerName(e.playerName)))
+      const filtered = queue.filter((e) => !queueDraftedNames.has(normalizeDraftedPlayerName(e.playerName)))
       if (fromIndex < 0 || fromIndex >= filtered.length) return
       // Reorder within the visible (non-drafted) sub-list
       const reordered = [...filtered]
@@ -2950,7 +2960,7 @@ export function DraftRoomPageClient({
       let reorderedIdx = 0
       const next = queue
         .map((e) => {
-          if (drafted.has(normalizeDraftedPlayerName(e.playerName))) return e
+          if (queueDraftedNames.has(normalizeDraftedPlayerName(e.playerName))) return e
           if (reorderedIdx >= reordered.length) return undefined
           return reordered[reorderedIdx++]
         })
@@ -2958,13 +2968,12 @@ export function DraftRoomPageClient({
       setQueue(next)
       handleQueueSave(next)
     },
-    [queue, session?.picks, handleQueueSave],
+    [queue, queueDraftedNames, handleQueueSave],
   )
 
   const handleAiReorderQueue = useCallback(async () => {
     const requestAiExplanation = Boolean(draftUISettings?.aiQueueReorderEnabled && aiQueueReorderEnabled)
-    const drafted = new Set(session?.picks?.map((p) => normalizeDraftedPlayerName(p.playerName)) ?? [])
-    const filtered = queue.filter((e) => !drafted.has(normalizeDraftedPlayerName(e.playerName)))
+    const filtered = queue.filter((e) => !queueDraftedNames.has(normalizeDraftedPlayerName(e.playerName)))
     if (filtered.length < 2) return
     setAiReorderLoading(true)
     setAiReorderExplanation(null)
@@ -2973,7 +2982,7 @@ export function DraftRoomPageClient({
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/queue/ai-reorder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ queue: filtered, aiExplanation: requestAiExplanation }),
+        body: JSON.stringify({ queue: filtered, rosterId: currentUserRosterId, aiExplanation: requestAiExplanation }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok && Array.isArray(data.reordered)) {
@@ -2991,7 +3000,8 @@ export function DraftRoomPageClient({
   }, [
     leagueId,
     queue,
-    session?.picks,
+    currentUserRosterId,
+    queueDraftedNames,
     handleQueueSave,
     draftUISettings?.aiQueueReorderEnabled,
     aiQueueReorderEnabled,
@@ -3031,16 +3041,16 @@ export function DraftRoomPageClient({
   )
 
   const queueFiltered = useMemo(
-    () => queue.filter((e) => !draftedNames.has(normalizeDraftedPlayerName(e.playerName))),
-    [queue, draftedNames],
+    () => queue.filter((e) => !queueDraftedNames.has(normalizeDraftedPlayerName(e.playerName))),
+    [queue, queueDraftedNames],
   )
   const draftIntelQueue = useMemo(
     () =>
       (draftIntel?.queue ?? []).map((entry) => ({
         ...entry,
-        isTaken: draftedNames.has(normalizeDraftedPlayerName(entry.playerName)),
+        isTaken: queueDraftedNames.has(normalizeDraftedPlayerName(entry.playerName)),
       })),
-    [draftIntel?.queue, draftedNames]
+    [draftIntel?.queue, queueDraftedNames]
   )
   const slotOrder = session?.slotOrder ?? []
   const aiManagedRosterIds = useMemo(() => {
@@ -4236,7 +4246,6 @@ export function DraftRoomPageClient({
     ]
   )
 
-  const lastPrunedQueueRef = useRef<string>('')
   useEffect(() => {
     if (autoPickEnabled) return
     if (!autoPickFromQueue && !awayMode) return
@@ -4249,18 +4258,6 @@ export function DraftRoomPageClient({
     if (!aiQueueReorderEnabled) return
     setAiQueueReorderEnabled(false)
   }, [draftUISettings?.aiQueueReorderEnabled, aiQueueReorderEnabled])
-
-  useEffect(() => {
-    if (!session?.picks?.length || queue.length === 0) return
-    const drafted = new Set(session.picks.map((p) => normalizeDraftedPlayerName(p.playerName)))
-    const filtered = queue.filter((e) => !drafted.has(normalizeDraftedPlayerName(e.playerName)))
-    if (filtered.length >= queue.length) return
-    const key = filtered.map((e) => e.playerName).join(',')
-    if (lastPrunedQueueRef.current === key) return
-    lastPrunedQueueRef.current = key
-    setQueue(filtered)
-    handleQueueSave(filtered)
-  }, [session?.picks?.length, queue, handleQueueSave])
 
   const autoPickFiredRef = useRef<string>('')
   useEffect(() => {

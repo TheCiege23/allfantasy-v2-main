@@ -226,7 +226,7 @@ export async function GET(
     }
 
     const [currentUserRosterId, viewerAutopick, poolReadiness] = await Promise.all([
-      getCurrentUserRosterIdForLeague(leagueId, userId),
+      getCurrentUserRosterIdForLeague(leagueId, userId, undefined, shared.snapshot),
       getViewerAutopickPreference(shared.snapshot.id, userId),
       dedupeInFlight(`draft:session-pool-readiness:${leagueId}`, () => getDraftPoolReadiness(leagueId)).catch(() => ({
         warm: false,

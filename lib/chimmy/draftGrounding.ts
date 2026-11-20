@@ -1,4 +1,6 @@
-import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { queuePicksInPool } from '@/lib/league/player-pools/policy'
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -171,16 +173,20 @@ type SessionRow = {
 export async function readViewerDraftQueue(
   sessionId: string,
   userId: string,
-  draftedNames: ReadonlyArray<{ playerName: string }>,
+  picks: Array<{ playerName: string; rosterId: string }>,
+  leagueId: string,
+  rosterId: string | null,
 ): Promise<QueuedPlayer[] | null> {
   try {
     const row = await prisma.draftQueue.findUnique({
-      where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
+      where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForUser(leagueId, userId, rosterId) } },
       select: { order: true },
     })
     const raw = Array.isArray(row?.order) ? (row!.order as unknown as QueueEntry[]) : []
     const named = raw.filter((e) => typeof e?.playerName === 'string' && e.playerName.trim().length > 0)
-    const { queue } = removeDraftedPlayersFromQueue(dedupeQueueEntries(named), normalizeDraftedNameSet([...draftedNames]))
+    if (!named.length) return []
+    const picksInViewerPool = queuePicksInPool(picks, await loadPlayerPools(leagueId), rosterId)
+    const { queue } = removeDraftedPlayersFromQueue(dedupeQueueEntries(named), normalizeDraftedNameSet(picksInViewerPool))
     return queue.map((e) => ({ playerName: e.playerName.trim(), position: e.position?.trim() || null, team: e.team ?? null }))
   } catch {
     return null
@@ -337,7 +343,7 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
       lines.push('Draft order has not been set yet — do not state anyone\'s pick position.')
     }
     if (mine) lines.push(`THIS USER drafts from slot ${mine.slot}.`)
-    const queue = await readViewerDraftQueue(session.id, userId, allPicks)
+    const queue = await readViewerDraftQueue(session.id, userId, allPicks, leagueId, identity.rosterId)
     if (queue && queue.length > 0) lines.push(viewerQueueLine(queue))
     lines.push(
       'Answer questions about settings, order and scheduling. Do NOT recommend specific picks as though the draft were underway.',
@@ -489,7 +495,7 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
 
   // ── The viewer's side: their picks and their queue (owner's spec, 2026-11-16) ───────────────
   if (mine || myPicks.length > 0) lines.push(viewerPicksLine(myPicks, session.teamCount))
-  const queue = await readViewerDraftQueue(session.id, userId, allPicks)
+  const queue = await readViewerDraftQueue(session.id, userId, allPicks, leagueId, identity.rosterId)
   if (queue) lines.push(viewerQueueLine(queue))
 
   /* The auction engine's read for this user: max legal bid, the call on the player up, targets. */

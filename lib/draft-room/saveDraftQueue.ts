@@ -1,6 +1,6 @@
 import 'server-only'
 import { loadPlayerPools } from '@/lib/league/player-pools/load'
-import { picksInPool } from '@/lib/league/player-pools/policy'
+import { queuePicksInPool } from '@/lib/league/player-pools/policy'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeDraftQueueSizeLimit } from '@/lib/draft-defaults/DraftQueueLimitResolver'
@@ -77,7 +77,7 @@ export async function prepareDraftQueueSave(leagueId: string, queue: unknown[], 
   }
 
   const pools = await loadPlayerPools(leagueId)
-  const unavailable = !pools ? draftSession.picks : rosterId ? [...picksInPool(draftSession.picks,pools,rosterId)] : []
+  const unavailable = queuePicksInPool(draftSession.picks, pools, rosterId)
   const draftedNames = normalizeDraftedNameSet(unavailable)
   const cleaned = removeDraftedPlayersFromQueue(normalized, draftedNames)
   return { ok: true, prepared: { sessionId: draftSession.id, queue: cleaned.queue, removedCount: cleaned.removedCount, queueSizeLimit } }

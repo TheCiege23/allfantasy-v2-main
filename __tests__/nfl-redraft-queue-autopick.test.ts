@@ -63,7 +63,7 @@ describe('Queue PUT route — hygiene chain', () => {
 
   it('the route delegates the whole chain to the shared save, validating before any write', () => {
     // Saved under the key of the team the room is about (the manager's own id with one team).
-    expect(routeSrc).toMatch(/const prepared = await prepareDraftQueueSave\(leagueId, queue\)[\s\S]+?await persistDraftQueue\(await draftQueueKeyForUser\(leagueId, userId\), prepared\.prepared\)/)
+    expect(routeSrc).toMatch(/const prepared = await prepareDraftQueueSave\(leagueId, queue, rosterId\)[\s\S]+?await persistDraftQueue\(await draftQueueKeyForUser\(leagueId, userId, rosterId\), prepared\.prepared\)/)
     expect(routeSrc).not.toMatch(/prisma\.draftQueue\.upsert/)
   })
 
@@ -97,7 +97,7 @@ describe('Queue PUT route — hygiene chain', () => {
   })
 
   it('GET returns leagueId, queue, and removedUnavailable so the client can banner', () => {
-    expect(routeSrc).toMatch(/loadDraftQueueForUser\(leagueId, userId\)/)
+    expect(routeSrc).toMatch(/loadDraftQueueForUser\(leagueId, userId, \{ rosterId \}\)/)
     expect(routeSrc).toMatch(/removedUnavailable,/)
   })
 })

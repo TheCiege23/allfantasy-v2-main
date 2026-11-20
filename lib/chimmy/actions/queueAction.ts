@@ -2,7 +2,9 @@ import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { queuePicksInPool } from '@/lib/league/player-pools/policy'
+import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { normalizeDraftedNameSet } from '@/lib/draft-queue-engine'
 import { persistDraftQueue, prepareDraftQueueSave } from '@/lib/draft-room/saveDraftQueue'
@@ -84,13 +86,15 @@ export async function proposeDraftQueueChange(args: {
   const session = await prisma.draftSession.findFirst({
     where: { leagueId: args.leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, picks: { select: { playerName: true } } },
+    select: { id: true, status: true, picks: { select: { playerName: true, rosterId: true } } },
   })
   if (!session) return { ok: false, text: 'This league has no draft, so there is no queue to change.' }
   if (session.status === 'completed') return { ok: false, text: 'This draft is over, so the queue no longer does anything. Nothing was prepared.' }
 
-  const current = await readQueue(session.id, await draftQueueKeyForUser(args.leagueId, args.userId))
-  const drafted = normalizeDraftedNameSet(session.picks)
+  const rosterId = await getCurrentUserRosterIdForLeague(args.leagueId, args.userId)
+  const current = await readQueue(session.id, await draftQueueKeyForUser(args.leagueId, args.userId, rosterId))
+  const pools = await loadPlayerPools(args.leagueId)
+  const drafted = normalizeDraftedNameSet(queuePicksInPool(session.picks, pools, rosterId))
   const notes: string[] = []
 
   // ── Who to add: the room's own pool, never the model's spelling ──────────────────────────────
@@ -142,7 +146,7 @@ export async function proposeDraftQueueChange(args: {
   }
 
   // The room's own save checks, dry-run: a card that could not save is never shown.
-  const check = await prepareDraftQueueSave(args.leagueId, next)
+  const check = await prepareDraftQueueSave(args.leagueId, next, rosterId)
   if (!check.ok) return { ok: false, text: `That queue could not be saved (${check.error}). Nothing was prepared.` }
   const kept = new Set(check.prepared.queue.map((e) => queueNameKey(e.playerName)))
   const cut = add.filter((p) => !kept.has(queueNameKey(p.playerName)))
@@ -156,7 +160,7 @@ export async function proposeDraftQueueChange(args: {
   const signed = signChimmyActionToken({
     userId: args.userId,
     leagueId: args.leagueId,
-    spec: { kind: 'queue', sessionId: session.id, add, addAt, removeKeys, baseFingerprint: queueFingerprint(current) },
+    spec: { kind: 'queue', sessionId: session.id, rosterId, add, addAt, removeKeys, baseFingerprint: queueFingerprint(current) },
     now,
   })
   if (!signed) return { ok: false, text: 'Confirm cards are unavailable right now, so nothing was prepared. The user can change the queue in their draft room.' }
@@ -209,11 +213,13 @@ export async function executeQueueAction(payload: ChimmyActionTokenPayload, user
   if (!session || session.id !== spec.sessionId) return { ok: false, message: 'A different draft is current now, so nothing was saved. Ask Chimmy again.' }
   if (session.status === 'completed') return { ok: false, message: 'This draft is over, so nothing was saved.' }
 
-  const queueKey = await draftQueueKeyForUser(payload.leagueId, userId)
+  const rosterId = await getCurrentUserRosterIdForLeague(payload.leagueId, userId, spec.rosterId)
+  if (spec.rosterId !== undefined && spec.rosterId !== rosterId) return { ok: false, message: CHANGED }
+  const queueKey = await draftQueueKeyForUser(payload.leagueId, userId, rosterId)
   const current = await readQueue(session.id, queueKey)
   if (queueFingerprint(current) !== spec.baseFingerprint) return { ok: false, message: CHANGED }
 
-  const prepared = await prepareDraftQueueSave(payload.leagueId, applyQueueOps(current, spec))
+  const prepared = await prepareDraftQueueSave(payload.leagueId, applyQueueOps(current, spec), rosterId)
   if (!prepared.ok) return { ok: false, message: `Nothing was saved: ${prepared.error}` }
   await persistDraftQueue(queueKey, prepared.prepared)
 

@@ -732,7 +732,7 @@ export async function buildSessionSnapshot(
       ? await getViewerAutopickPreference(session.id, viewerUserId)
       : null,
     currentUserRosterId: viewerUserId
-      ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId).catch(() => null)) ?? undefined
+      ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId, undefined, { status: session.status, draftType: session.draftType, currentPick }).catch(() => null)) ?? undefined
       : undefined,
   }
 }

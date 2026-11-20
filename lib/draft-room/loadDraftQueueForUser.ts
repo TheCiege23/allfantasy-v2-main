@@ -2,6 +2,9 @@
  * Shared draft queue load for current user — used by GET /draft/queue and live-sync bundle.
  */
 
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { queuePicksInPool } from '@/lib/league/player-pools/policy'
+import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import { prisma } from '@/lib/prisma'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
@@ -12,7 +15,7 @@ export async function loadDraftQueueForUser(
   leagueId: string,
   userId: string,
   /** The queue to read when the caller already knows the team (lib/league/rosterManager.ts `teamScopedKey`). */
-  opts: { queueKey?: string | null } = {},
+  opts: { queueKey?: string | null; rosterId?: string | null } = {},
 ): Promise<{
   queue: QueueEntry[]
   removedUnavailable: number
@@ -23,7 +26,7 @@ export async function loadDraftQueueForUser(
     select: {
       id: true,
       picks: {
-        select: { playerName: true },
+        select: { playerName: true, rosterId: true },
       },
     },
   })
@@ -32,16 +35,19 @@ export async function loadDraftQueueForUser(
   }
 
   // Each team has its own queue: a manager's first team under their user id, a further team under its own key.
-  const queueKey = opts.queueKey || (await draftQueueKeyForUser(leagueId, userId))
+  const rosterId = opts.rosterId === undefined ? await getCurrentUserRosterIdForLeague(leagueId, userId) : opts.rosterId
+  const queueKey = opts.queueKey || (await draftQueueKeyForUser(leagueId, userId, rosterId))
   const row = await prisma.draftQueue.findUnique({
     where: { sessionId_userId: { sessionId: draftSession.id, userId: queueKey } },
   })
   const rawOrder = (row?.order as unknown as QueueEntry[]) ?? []
-  const draftedNames = normalizeDraftedNameSet(draftSession.picks)
+  if (!rawOrder.length) return { queue: [], removedUnavailable: 0 }
+  const pools = await loadPlayerPools(leagueId)
+  const draftedNames = normalizeDraftedNameSet(queuePicksInPool(draftSession.picks, pools, rosterId))
   const cleaned = removeDraftedPlayersFromQueue(dedupeQueueEntries(rawOrder), draftedNames)
   if (row && cleaned.removedCount > 0) {
-    await prisma.draftQueue.update({
-      where: { sessionId_userId: { sessionId: draftSession.id, userId: queueKey } },
+    await prisma.draftQueue.updateMany({
+      where: { id: row.id, updatedAt: row.updatedAt },
       data: { order: cleaned.queue as never, updatedAt: new Date() },
     })
   }

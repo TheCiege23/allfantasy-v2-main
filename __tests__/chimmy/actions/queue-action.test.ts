@@ -22,7 +22,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: vi.fn(async () => ({ name: 'Dynasty Ten', sport: 'NFL', season: 2026 })) },
   },
 }))
-vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: h.access }))
+vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: h.access, getCurrentUserRosterIdForLeague: vi.fn(async () => "qa-roster") }))
 vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({ getWarmDraftPoolSnapshotFast: h.warm }))
 vi.mock('@/lib/draft-room/saveDraftQueue', () => ({ prepareDraftQueueSave: h.prepare, persistDraftQueue: h.persist }))
 
@@ -113,6 +113,7 @@ describe('proposeDraftQueueChange', () => {
       add: [{ playerName: 'Jaylen Waddle', position: 'WR', team: 'MIA', playerId: 'p-waddle' }],
       addAt: 'top',
       removeKeys: [],
+      rosterId: "qa-roster",
       baseFingerprint: queueFingerprint(QUEUE),
     })
     // The client reader accepts it (so the tray and drawer render it).

@@ -22,6 +22,11 @@ export function picksInPool<T extends { rosterId: string }>(picks: readonly T[],
   return picks.filter(p => poolOf(pools, p.rosterId) === pool)
 }
 
+export function queuePicksInPool<T extends { rosterId: string }>(picks: T[], pools: PlayerPools, rosterId?: string | null): T[] {
+  if (!pools) return picks
+  return rosterId ? [...picksInPool(picks, pools, rosterId)] : []
+}
+
 export function teamPoolResolver(settings: unknown): (teamId: string) => string {
   const scope = readPlayerPoolScope(settings)
   const assignments = readDivisionConfig(settings).teamAssignments

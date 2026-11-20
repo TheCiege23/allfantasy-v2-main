@@ -14,7 +14,7 @@
 
 import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import { loadPlayerPools } from '@/lib/league/player-pools/load'
-import { picksInPool } from '@/lib/league/player-pools/policy'
+import { queuePicksInPool } from '@/lib/league/player-pools/policy'
 import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -64,6 +64,8 @@ export async function POST(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
+  const currentUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId, requestedRosterIdFrom(req, body))
+  const queueKey = await draftQueueKeyForUser(leagueId, userId, currentUserRosterId)
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
   const wantsAiExplanation = Boolean(body.aiExplanation ?? body.ai_explanation ?? false)
   let queue: QueueEntry[] = Array.isArray(body.queue) ? body.queue : []
@@ -76,14 +78,13 @@ export async function POST(
     })
     if (draftSessionProbe) {
       const row = await prisma.draftQueue.findUnique({
-        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId: await draftQueueKeyForUser(leagueId, userId) } },
+        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId: queueKey } },
       })
       const order = (row?.order as unknown as QueueEntry[]) ?? []
       queue = order.filter(Boolean)
     }
   }
 
-  const currentUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
   const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -97,8 +98,7 @@ export async function POST(
   const queueSizeLimit = normalizeDraftQueueSizeLimit(draftConfig?.queue_size_limit)
   const normalizedQueue = dedupeQueueEntries(normalizeQueueEntries(queue, queueSizeLimit))
   const pools = await loadPlayerPools(leagueId)
-  const team = pools ? await resolveViewingRoster(leagueId,userId,requestedRosterIdFrom(req,body)) : null
-  const draftedNames = normalizeDraftedNameSet(!pools ? draftSession.picks : team ? [...picksInPool(draftSession.picks,pools,team.rosterId)] : [])
+  const draftedNames = normalizeDraftedNameSet(queuePicksInPool(draftSession.picks, pools, currentUserRosterId))
   const cleanedQueue = removeDraftedPlayersFromQueue(normalizedQueue, draftedNames)
   queue = cleanedQueue.queue
   if (queue.length < 2) {
@@ -139,7 +139,7 @@ export async function POST(
   )
 
   // The preference lives on a team: the named one when the manager holds it, else their first.
-  const prefsTeam = await resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(req, body), { allowCoOwner: false })
+  const prefsTeam = await resolveViewingRoster(leagueId, userId, currentUserRosterId, { allowCoOwner: false })
   const rosterPrefs = prefsTeam
     ? await prisma.roster.findFirst({ where: { id: prefsTeam.rosterId, leagueId }, select: { settings: true } })
     : null
@@ -155,7 +155,6 @@ export async function POST(
   })
 
   if (plan.mode === 'persist' && plan.persistOrder) {
-    const queueKey = await draftQueueKeyForUser(leagueId, userId)
     await prisma.draftQueue.upsert({
       where: { sessionId_userId: { sessionId: draftSession.id, userId: queueKey } },
       create: {

@@ -38,7 +38,7 @@ describe('draft session polling', () => {
     let finish!: () => void
     const entered = new Promise<void>(resolve => { reading = resolve })
     const blocked = new Promise<void>(resolve => { finish = resolve })
-    const board = { id: 'session', status: 'in_progress', picks: [], viewerAutopick: null }
+    const board = { id: 'session', status: 'in_progress', draftType: 'snake', currentPick: { rosterId: 'on-clock' }, picks: [], viewerAutopick: null }
     mock.snapshot.mockImplementationOnce(async () => { reading(); await blocked; return board })
     mock.snapshot.mockResolvedValueOnce({ ...board, picks: [{overall: 1}] })
     for (const id of ['alice', 'bob', 'alice']) mock.auth.mockResolvedValueOnce({user:{id}})
@@ -51,6 +51,8 @@ describe('draft session polling', () => {
     await vi.waitFor(() => expect(mock.access).toHaveBeenCalledTimes(2))
     finish()
     const [a, b] = await Promise.all([alice, bob].map(async req => (await req).json()))
+    expect(mock.roster).toHaveBeenCalledWith('league', 'alice', undefined, board)
+    expect(mock.roster).toHaveBeenCalledWith('league', 'bob', undefined, board)
     expect(mock.snapshot).toHaveBeenCalledTimes(1)
     expect(mock.snapshot).toHaveBeenCalledWith('league', expect.any(Date))
     expect(a.session).toMatchObject({currentUserRosterId:'roster-alice', viewerAutopick:{enabled:true}})
