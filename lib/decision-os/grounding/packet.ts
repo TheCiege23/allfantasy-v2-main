@@ -34,6 +34,8 @@ import {
   type RosterLeagueProjection,
   type RosterProjectionBasis,
 } from './rosterLeagueProjections'
+import { renderRosterBoardValues } from './rosterBoardValues'
+import { isBoardValueSport, loadLeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import { loadRosterValueGradeSliceCached, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
@@ -253,6 +255,13 @@ export interface DecisionOsGroundingPacket {
    * Asked for on lineup questions only; bounded by the packet's deadline.
    */
   myTeamLineup?: GroundedSlice<string>
+
+  /**
+   * NBA / MLB / NHL: the asker's roster on the league's own value board — the trade grade's price, rest-of-season value
+   * over the best free agent (`rosterBoardValues.ts`). These sports have no market slice, so until 2026-11-20 their
+   * values reached Chimmy only through a per-player tool call. Asked for whenever values are; NFL is not_requested.
+   */
+  rosterBoardValues?: GroundedSlice<string>
 
   /**
    * R3.3 (2.2) — "Where am I weak?" in value terms: this roster's positions ranked against the
@@ -984,6 +993,16 @@ export async function buildDecisionOsGroundingPacket(
         )
       : Promise.resolve(null)
 
+  /* The league's value board for a board sport (NBA/MLB/NHL). It needs no roster, so it loads in the first wave. */
+  const pBoard =
+    want.values && !marketKill && leagueId && args.userId && isBoardValueSport(args.sport)
+      ? kick(
+          'rosterBoardValues',
+          // A board read that throws is a stated gap, never a rejected packet.
+          loadLeagueValueBoard(leagueId).catch(() => ({ kind: 'unavailable' as const, sport: 'NBA' as const, reason: 'The league’s value board could not be read just now.' })),
+        )
+      : Promise.resolve(null)
+
   const pCommissioner =
     leagueId && args.userId && !commishKill
       ? kick(
@@ -1575,6 +1594,26 @@ export async function buildDecisionOsGroundingPacket(
     ? present(leagueMetrics, { servedFrom: 'store', conclusive: verdictFor('lineupDecision') })
     : undefined
 
+  /* The roster on the league's value board: the board loaded in the first wave; pricing it is pure and instant. */
+  let rosterBoardValues: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.values && marketKill && isBoardValueSport(args.sport)) rosterBoardValues = absent<string>(marketKill)
+  else if (want.values && leagueId && args.userId && isBoardValueSport(args.sport)) {
+    const board = await pBoard
+    if (board) {
+      const r = renderRosterBoardValues(board, contextFacts?.roster?.value ?? null)
+      if (r.kind === 'ok') {
+        rosterBoardValues = present(r.text, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+      } else if (r.kind === 'unavailable') {
+        rosterBoardValues = absent<string>({
+          reason: 'not_computed',
+          detail: r.reason,
+          remedy: 'Ask about one player and the value tool reads the board directly.',
+        })
+      }
+    }
+    // A board that did not load in time is stamped late below.
+  }
+
   let myTeamLineup: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
   if (want.myTeamLineup && leagueId && args.userId) {
     const out = await pMyTeamLineup
@@ -1611,6 +1650,7 @@ export async function buildDecisionOsGroundingPacket(
   projections = stamp('projections', projections)
   rosterProjections = stamp('rosterProjections', rosterProjections)
   myTeamLineup = stamp('myTeamLineup', myTeamLineup)
+  rosterBoardValues = stamp('rosterBoardValues', rosterBoardValues)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
   portfolio = stamp('portfolio', portfolio)
@@ -1639,6 +1679,7 @@ export async function buildDecisionOsGroundingPacket(
       : []),
     ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
     ['myTeamLineup', myTeamLineup as GroundedSlice<unknown>],
+    ['rosterBoardValues', rosterBoardValues as GroundedSlice<unknown>],
   ]
 
   return {
@@ -1661,6 +1702,7 @@ export async function buildDecisionOsGroundingPacket(
     idpKickerValues,
     rosterProjections,
     myTeamLineup,
+    rosterBoardValues,
     rosterValueGrade,
     gaps: collectGaps(slices),
     meta: {
