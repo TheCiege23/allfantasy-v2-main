@@ -202,7 +202,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
 | Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
 | Player Value | ~93 | ~90 | ~90 | Kernel ⚠: NBA/MLB/NHL/NCAAB/soccer boards are read live outside the kernel. User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
-| Trade | ~86 | ~79 | ~79 | Kernel ⚠: the graded inbox does not read the feed (only the env-gated proposals route does). Engine ⚠ and Cron ⚠ as before |
+| Trade | ~86 | ~79 | ~83 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule) in this change: the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. A reclassification, not new capability (below). Engine ⚠ and Cron ⚠ as before |
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
 | Lineup | ~86 | ~80 | ~80 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠: graded start/sit is reported, not fed back into the optimizer |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
@@ -271,6 +271,21 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
   - ⚠ The "everyone is quiet" case (a fact about the league, usually the offseason) does not cite the record.
   - ⚠ Not a card: the decision's risk scores (churn, dispute, abandonment) are still not shown on the hub — the
     re-scope's point, and an owner call if they ever should be.
+- **The graded trade inbox and Trade OS** (ranked item 5). Read before building, and the item as written was wrong:
+  the inbox does not grade from Trade OS's `TradeWorldFacts` (record, points, FAAB, settings) but from the league's
+  canonical world, through `evaluateStoredTrade`, the same path as every trade screen. That world must be loaded live:
+  `checkRosters` tests each offered player against `world.rosters`, so a stored copy would pass a player already
+  traded away and grade a deal that can no longer be made, and its `Date` fields would not survive the JSON store.
+  So Trade's Kernel is **n/a, not ⚠** — the rule Lineup's Feed and Kernel already follow. ⚠ A reclassification: it
+  moves the mark (~79 → ~83) without new capability, and it is written down so it can be challenged.
+  - **What changed for users:** the inbox graded up to three offers one after another and re-resolved the same
+    league's world for each (league, teams, rosters, performances — four queries an offer), inside the packet's
+    first-wave deadline. It loads it once per build now (`lib/decision-os/trade/sharedWorld.ts`); each evaluation
+    gets its own `structuredClone`, so no offer can change another's input, and a miss is retried rather than
+    shared. Same league, same request, same rows: the grades are unchanged. It also makes the owner decision
+    "grade more than 3 pending offers" cheaper — the world is no longer paid per offer.
+  - **`tradeSettingsSource` and `loadTradeLeagueFacts` are deleted.** Nothing read the league-level entry; the
+    env-gated proposals route reads the three-minute roster entry, which stays.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
@@ -280,7 +295,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | 2 | Provider drafts in manager records. ⚠ **Needs a read-only production check first**: whether each provider's `dw_draft_facts.managerId` equals its `league_teams.externalId`, and whether earlier seasons can be tied to their owners. Crediting the current season alone gives every manager one draft, under the record's two-draft floor, so it would say nothing but a count; and a wrong id match states false facts about a named leaguemate | Psychology data, user-visible | M–L |
 | ✅ | A manager-record feed — **done in this change** (below). Not refreshed on a schedule: the entry is per viewer, so it is warm exactly when its viewer is asking | Psychology Feed, Kernel → ✅ (~93) | M |
 | 4 | League value boards cached in Value OS. ⚠ **Re-sized to L after reading it (2026-11-20):** the board carries `ReadonlyMap`s (`rosterIndex`, `replacementByPosition`, the dynasty context) that `domain_os_facts` cannot store as JSON without a custom codec, and a baseball board is ~1,500 players (~450 KB per league per write). A per-process share of the built board is the cheaper latency win, but does not move the Kernel axis | Value Kernel → ✅ (~100) | L |
-| 5 | The graded trade inbox reads through Trade OS; read `tradeSettingsSource` or delete it | Trade Kernel → ✅ | M |
+| ✅ | The graded trade inbox and Trade OS — **settled in this change** (below): the inbox must not read a stored world, so Kernel is n/a; the inbox loads the world once per build instead of once per offer; the unread `tradeSettingsSource` is deleted | Trade Kernel → n/a (~83) | S |
 | ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
 | ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
 | — | **Owner decision:** league-scored projections for NBA/NHL/MLB points leagues (category leagues have no points) | Projection Chimmy → ✅ | M |

@@ -83,12 +83,16 @@ describe('buildPendingTradeDecisionContext', () => {
 
   it('evaluates each proposal through the one engine, as the asker, on its own surface', async () => {
     await buildPendingTradeDecisionContext('lg1', 'user-1')
-    expect(mocks.evaluate).toHaveBeenCalledWith({
-      leagueId: 'lg1',
-      ref: { kind: 'redraft', proposalId: 'prop-1' },
-      userId: 'user-1',
-      surface: 'chimmy-pending',
-    })
+    expect(mocks.evaluate).toHaveBeenCalledWith(
+      {
+        leagueId: 'lg1',
+        ref: { kind: 'redraft', proposalId: 'prop-1' },
+        userId: 'user-1',
+        surface: 'chimmy-pending',
+      },
+      // One league world per build, shared across the offers (`sharedWorld.ts`).
+      { resolveWorld: expect.any(Function) },
+    )
   })
 
   it('relays the one grade, both letters, the values, this week’s lineup and the receipt', async () => {
