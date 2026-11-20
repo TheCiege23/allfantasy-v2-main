@@ -29,7 +29,9 @@
   width: min(calc(100% - 32px), 440px);
   margin: 0;
   padding-right: 48px;
-  z-index: 40;
+  /* Above the floating theme toggle (fixed, z-40, bottom-right), which otherwise sat on top of the
+     dismiss button on a phone; the toggle is reachable again once the prompt is dismissed. */
+  z-index: 41;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 .af-join-app-prompt p {
