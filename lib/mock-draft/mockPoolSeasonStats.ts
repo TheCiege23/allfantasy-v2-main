@@ -17,6 +17,7 @@ import {
 } from '@/lib/draft/analytics/nfl-rolling-insights-draft-analytics'
 import { nflDraftSeasonLine } from '@/lib/draft-room/nflDraftSeasonLine'
 import { loadStoredDraftSeasonStats } from '@/lib/draft-room/storedDraftSeasonStats'
+import { attachTeamDefenseStats, loadNflTeamDefenseSeason } from '@/lib/draft-room/nflTeamDefenseSeason'
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
@@ -57,17 +58,20 @@ export function mergeSeasonStatsIntoEntry<T>(entry: T, fields: MockSeasonStatFie
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
-async function nflFields(entries: Row[], scoring: string | null | undefined): Promise<Array<MockSeasonStatFields | null>> {
+async function nflFields(
+  entries: Row[],
+  scoring: string | null | undefined,
+): Promise<{ fields: Array<MockSeasonStatFields | null>; season: number }> {
   const keys = entries.map((e) => {
     const nk = canonicalName(str(e.name) ?? '')
     const pk = (str(e.position) ?? '').toLowerCase()
     const sid = str(e.sleeperId) ?? str(e.playerId)
     return { nk, pk, sleeperCandidate: sid }
   })
-  const { identityByPoolKey } = await loadRollingInsightsSeasonByDraftPoolKey({ rows: keys })
-  if (identityByPoolKey.size === 0) return entries.map(() => null)
-
   const statsYear = Number(defaultNflPlayerStatsSeason())
+  const { identityByPoolKey } = await loadRollingInsightsSeasonByDraftPoolKey({ rows: keys })
+  if (identityByPoolKey.size === 0) return { fields: entries.map(() => null), season: statsYear }
+
   const riIds = [...new Set([...identityByPoolKey.values()].map((v) => v.rollingInsightsPlayerId))]
   const detailById = await loadRollingInsightsStatsDetailByPlayerIds(riIds, {
     candidateSeasons: [String(statsYear), String(statsYear - 1)],
@@ -76,7 +80,7 @@ async function nflFields(entries: Row[], scoring: string | null | undefined): Pr
   const { buildLeagueStatScorer } = await import('@/lib/redraft/scoringEngine')
   const scorer = buildLeagueStatScorer({ sport: 'NFL', settings: { sportConfig: { scoringPreset: mockScoringPreset(scoring) } } })
 
-  return entries.map((e, i) => {
+  const fields = entries.map((e, i) => {
     const idn = identityByPoolKey.get(`${keys[i]!.nk}|${keys[i]!.pk}`)
     const d = idn ? detailById.get(idn.rollingInsightsPlayerId) : null
     if (!d) return null
@@ -101,6 +105,7 @@ async function nflFields(entries: Row[], scoring: string | null | undefined): Pr
       statSeason: line.season ?? null,
     }
   })
+  return { fields, season }
 }
 
 async function storedFields(sport: 'NBA' | 'NHL' | 'MLB', entries: Row[]): Promise<Array<MockSeasonStatFields | null>> {
@@ -125,12 +130,14 @@ export async function attachSeasonStatsToMockPool<T>(
   const rows = entries as unknown as Row[]
   if (!rows.length) return entries
   try {
-    const fields =
-      sport === 'NFL'
-        ? await nflFields(rows, options.scoring)
-        : sport === 'NBA' || sport === 'NHL' || sport === 'MLB'
-          ? await storedFields(sport, rows)
-          : null
+    if (sport === 'NFL') {
+      const { fields, season } = await nflFields(rows, options.scoring)
+      const withPlayers = entries.map((entry, i) => mergeSeasonStatsIntoEntry(entry, fields[i]))
+      // Team defenses (DEF rows): the live pool's SACK / INT / TD / PA/G, same season.
+      const defense = await loadNflTeamDefenseSeason(season).catch(() => new Map())
+      return attachTeamDefenseStats(withPlayers, defense)
+    }
+    const fields = sport === 'NBA' || sport === 'NHL' || sport === 'MLB' ? await storedFields(sport, rows) : null
     if (!fields) return entries
     return entries.map((entry, i) => mergeSeasonStatsIntoEntry(entry, fields[i]))
   } catch (error) {
