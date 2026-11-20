@@ -21,20 +21,24 @@ export async function ingestNcaabFantraxIdentities(dryRun = false, forceRefresh 
         rollingInsightsId: true, fantraxId: true } }),
     prisma.sportsPlayer.findMany({ where: { sport: 'NCAAB', source: 'rolling_insights' },
       select: { externalId: true, name: true, position: true, team: true } }),
-    prisma.sportsTeam.findMany({ where: { sport: 'NCAAB' }, select: { name: true, shortName: true } }),
+    // source + externalId: Rolling Insights rows win within a shared code, and RI team ids resolve MER/UNH per game.
+    prisma.sportsTeam.findMany({ where: { sport: 'NCAAB' }, select: { name: true, shortName: true, source: true, externalId: true } }),
     prisma.$queryRaw<Array<{ player_id: string }>>`
       SELECT DISTINCT e.value #>> '{}' AS player_id
       FROM leagues l JOIN rosters r ON r."leagueId"=l.id
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r."playerData"->'players','[]'::jsonb)) e(value)
       WHERE l.sport::text='NCAAB' AND l.platform='fantrax'`,
-    prisma.playerGameStat.groupBy({ by: ['playerId', 'team'], where: {
+    // One game id per (player, team): enough to resolve a code two schools share (MER, UNH) from the game's
+    // Rolling Insights team ids. A player appears for one school under one code, so any of his games will do.
+    prisma.playerGameStat.groupBy({ by: ['playerId', 'team'], _min: { gameId: true }, where: {
       sportType: 'NCAAB', season: currentScheduleSeason(), source: 'rolling_insights_live',
       gameDate: { lte: new Date() }, team: { not: null },
       normalizedStatMap: { path: ['stats', 'minutes'], gt: 0 },
     } }),
   ])
+  const appearances = currentAppearances.map(row => ({ playerId: row.playerId, team: row.team, gameId: row._min.gameId }))
   const plan = planNcaabFantraxIdentityLinks({ refs: Object.values(map.data), identities,
-    sourcePlayers, teams, currentAppearances, rosterIds: new Set(rosterRows.map(row => row.player_id)) })
+    sourcePlayers, teams, currentAppearances: appearances, rosterIds: new Set(rosterRows.map(row => row.player_id)) })
   const byId = new Map(identities.map(row => [row.id, row]))
   const guardedLinks = plan.links.map(link => {
     const prior = byId.get(link.id)!
