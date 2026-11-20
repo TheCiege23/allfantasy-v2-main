@@ -15,10 +15,17 @@
  *     `defense_fumble_recoveries` made one 2025 defense look like it recovered 28 fumbles; read
  *     this way every 2025 team totals 4–12.
  *
- * Fantasy points (PTS / AVG) stay empty too: DST scoring needs per-game points-allowed tiers, and
- * this file only has season totals (see `nflDraftSeasonLine`, which refuses the same).
+ *   - PTS / AVG: fantasy points, scored ONE GAME AT A TIME — DST scoring needs each game's
+ *     points-allowed tier, which a season total cannot give. The games are the whole-team defense
+ *     rows in `player_game_stats` (playerId = the club code, Sleeper's weekly team line: 2025 holds
+ *     exactly 32 x 17), normalized by `normalizeNflTeamDefenseWeeklyStats` — the same normalizer
+ *     live leagues score a DEF week with — and scored by the caller's scorer (the league's own rules
+ *     in the live room, the mock's PPR / Half / Standard setting in a mock). No scorer, no points.
+ *     Checked against Sleeper's own per-game total on the same row: identical where the rules
+ *     agree (BAL 2025 week 2: 15 and 15).
  */
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { normalizeNflTeamDefenseWeeklyStats } from '@/lib/scoring-runtime/nflStatNormalization'
 import { playerFumbleRecoveries } from '@/lib/providers/rollingInsightsFumbleRecoveries'
 
 export interface TeamDefenseLine {
@@ -26,6 +33,9 @@ export interface TeamDefenseLine {
   dst_interceptions: number
   dst_td: number
   dst_fumble_recoveries: number
+  /** Fantasy points over the season's scored games, and per game; null with no scorer or no games. */
+  dst_fantasy_points: number | null
+  dst_fantasy_points_per_game: number | null
   /** Null when the schedule has no scored games for the team that season. */
   dst_points_allowed_per_game: number | null
   games: number
@@ -53,13 +63,66 @@ export interface ScoredGameRow {
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
+/** One whole-team defense game line (`player_game_stats`, playerId = club code). */
+export interface TeamDefenseGameRow {
+  playerId: string
+  weekOrRound: number
+  normalizedStatMap: unknown
+  statPayload: unknown
+}
+
+export type TeamDefenseScorer = (stats: Record<string, number>, position?: string | null) => number
+
+/** Pure: each team's fantasy points over its games, scored game by game; one row per team-week. */
+export function scoreTeamDefenseGames(
+  rows: readonly TeamDefenseGameRow[],
+  score: TeamDefenseScorer,
+): Map<string, { points: number; games: number }> {
+  const out = new Map<string, { points: number; games: number }>()
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const team = normalizeTeamAbbrev(row.playerId)
+    if (!team) continue
+    const key = `${team}|${row.weekOrRound}`
+    if (seen.has(key)) continue
+    const raw = isObject(row.normalizedStatMap) && Object.keys(row.normalizedStatMap).length ? row.normalizedStatMap : row.statPayload
+    const stats = normalizeNflTeamDefenseWeeklyStats(raw)
+    if (stats.def_points_allowed === undefined) {
+      // Sleeper's lines leave zero values out, so a SHUTOUT has no `pts_allow` at all (SEA 2025
+      // week 13: no points-allowed key, 32 points on Sleeper's own total). A line marked played
+      // (`gp` >= 1) without it allowed 0; a line with neither has not been played.
+      const gp = isObject(raw) ? raw.gp : undefined
+      if (!(typeof gp === 'number' && gp >= 1)) continue
+      stats.def_points_allowed = 0
+    }
+    seen.add(key)
+    const points = score(stats, 'DEF')
+    if (!Number.isFinite(points)) continue
+    const total = out.get(team) ?? { points: 0, games: 0 }
+    total.points += points
+    total.games += 1
+    out.set(team, total)
+  }
+  return out
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+
 /** Pure: team totals from defenders' season rows and the season's scored games. */
-export function summarizeTeamDefense(defenders: readonly DefenderSeasonRow[], games: readonly ScoredGameRow[]): TeamDefenseByTeam {
+export function summarizeTeamDefense(
+  defenders: readonly DefenderSeasonRow[],
+  games: readonly ScoredGameRow[],
+  fantasy?: Map<string, { points: number; games: number }> | null,
+): TeamDefenseByTeam {
   const out: TeamDefenseByTeam = new Map()
   const lineFor = (team: string) => {
     let line = out.get(team)
     if (!line) {
-      line = { dst_sacks: 0, dst_interceptions: 0, dst_td: 0, dst_fumble_recoveries: 0, dst_points_allowed_per_game: null, games: 0 }
+      line = {
+        dst_sacks: 0, dst_interceptions: 0, dst_td: 0, dst_fumble_recoveries: 0,
+        dst_fantasy_points: null, dst_fantasy_points_per_game: null,
+        dst_points_allowed_per_game: null, games: 0,
+      }
       out.set(team, line)
     }
     return line
@@ -100,9 +163,23 @@ export function summarizeTeamDefense(defenders: readonly DefenderSeasonRow[], ga
     line.dst_points_allowed_per_game = a.games > 0 ? Math.round((a.points / a.games) * 10) / 10 : null
   }
 
+  for (const [team, f] of fantasy ?? []) {
+    if (f.games <= 0) continue
+    const line = lineFor(team)
+    line.dst_fantasy_points = Math.round(f.points * 10) / 10
+    line.dst_fantasy_points_per_game = Math.round((f.points / f.games) * 10) / 10
+  }
+
   for (const line of out.values()) line.dst_sacks = Math.round(line.dst_sacks * 10) / 10
   return out
 }
+
+/** Club codes a whole-team defense row may use as its playerId (current and older spellings). */
+const NFL_TEAM_CODES_AND_ALIASES = [
+  'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND',
+  'JAX', 'JAC', 'KC', 'LAC', 'LAR', 'LA', 'LV', 'OAK', 'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI',
+  'PIT', 'SEA', 'SF', 'TB', 'TEN', 'WAS', 'WSH',
+]
 
 const isDefenseUnit = (position: unknown) => {
   const p = String(position ?? '').trim().toUpperCase()
@@ -127,16 +204,23 @@ export function attachTeamDefenseStats<T>(entries: T[], byTeam: TeamDefenseByTea
     const { games: _games, ...columns } = line
     const merged: Record<string, unknown> = { ...stats }
     for (const [k, v] of Object.entries(columns)) if (typeof v === 'number') merged[k] = v
+    // PTS and AVG read the generic keys every NFL row uses.
+    if (line.dst_fantasy_points != null) merged.pts = line.dst_fantasy_points
+    if (line.dst_fantasy_points_per_game != null) merged.fantasyPointsPerGame = line.dst_fantasy_points_per_game
     return { ...row, display: { ...display, stats: merged } } as T
   })
 }
 
 /** Server: one season's team defense lines from Postgres. Empty (not an error) when nothing is stored. */
-export async function loadNflTeamDefenseSeason(season: number | string): Promise<TeamDefenseByTeam> {
+export async function loadNflTeamDefenseSeason(
+  season: number | string,
+  /** Scores one DEF game; without it PTS / AVG stay empty. */
+  score?: TeamDefenseScorer | null,
+): Promise<TeamDefenseByTeam> {
   const year = Number(season)
   if (!Number.isInteger(year)) return new Map()
   const { prisma } = await import('@/lib/prisma')
-  const [defenders, games] = await Promise.all([
+  const [defenders, games, teamGames] = await Promise.all([
     prisma.playerSeasonStats.findMany({
       where: {
         sport: 'NFL',
@@ -151,6 +235,18 @@ export async function loadNflTeamDefenseSeason(season: number | string): Promise
       where: { sport: 'NFL', season: year, week: { gte: 1, lte: 18 }, homeScore: { not: null }, awayScore: { not: null } },
       select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, startTime: true },
     }),
+    score
+      ? prisma.playerGameStat.findMany({
+          where: {
+            sportType: { in: ['NFL', 'nfl'] },
+            season: year,
+            weekOrRound: { gte: 1, lte: 18 },
+            playerId: { in: NFL_TEAM_CODES_AND_ALIASES },
+          },
+          select: { playerId: true, weekOrRound: true, normalizedStatMap: true, statPayload: true },
+          orderBy: { weekOrRound: 'asc' },
+        })
+      : Promise.resolve([] as TeamDefenseGameRow[]),
   ])
-  return summarizeTeamDefense(defenders, games)
+  return summarizeTeamDefense(defenders, games, score ? scoreTeamDefenseGames(teamGames, score) : null)
 }

@@ -134,7 +134,9 @@ export async function attachSeasonStatsToMockPool<T>(
       const { fields, season } = await nflFields(rows, options.scoring)
       const withPlayers = entries.map((entry, i) => mergeSeasonStatsIntoEntry(entry, fields[i]))
       // Team defenses (DEF rows): the live pool's SACK / INT / TD / PA/G, same season.
-      const defense = await loadNflTeamDefenseSeason(season).catch(() => new Map())
+      const { buildLeagueStatScorer } = await import('@/lib/redraft/scoringEngine')
+      const scorer = buildLeagueStatScorer({ sport: 'NFL', settings: { sportConfig: { scoringPreset: mockScoringPreset(options.scoring) } } })
+      const defense = await loadNflTeamDefenseSeason(season, scorer).catch(() => new Map())
       return attachTeamDefenseStats(withPlayers, defense)
     }
     const fields = sport === 'NBA' || sport === 'NHL' || sport === 'MLB' ? await storedFields(sport, rows) : null
