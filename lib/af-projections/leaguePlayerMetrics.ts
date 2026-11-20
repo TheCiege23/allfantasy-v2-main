@@ -4,6 +4,7 @@ import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import { loadAfNflWeek, nflComponentRates } from './nflLeagueWeek'
 import { extractSeasonAggregate } from './core'
 import { prisma } from '@/lib/prisma'
+import { sharedRead } from './sharedReadCache'
 import { isSupportedSport } from '@/lib/sport-scope'
 import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -127,15 +128,20 @@ async function loadCollegeBasketballRates(season: number, settings: unknown): Pr
   })
 }
 
-async function loadFootballRates(league: {
-  sport: string
-  season: number
-  platform: string | null
-  settings: unknown
-}): Promise<LeaguePlayerMetricRate[]> {
-  const { sport, season } = league
-  const scoring = sport === 'NCAAF' ? ncaafTradeScoringRules(league) : extractScoringSettings(league.settings)
-  if (!scoring) return []
+type FootballSeasonRow = { playerId: string; playerName: string; position: string; rates: Record<string, number> }
+
+/**
+ * A football season's AF rate rows, the same for every league of that sport and season: read and filtered once,
+ * then scored per league. /core's rail asks for every league the user holds on every render, and re-reading this
+ * season per league held the web process at 100% (`./sharedReadCache.ts`). Treat the rows as read-only.
+ */
+export const FOOTBALL_SEASON_ROWS_TTL_MS = 5 * 60_000
+
+function loadFootballSeasonRows(sport: string, season: number): Promise<FootballSeasonRow[]> {
+  return sharedRead('football-season-rows', `${sport}:${season}`, FOOTBALL_SEASON_ROWS_TTL_MS, () => readFootballSeasonRows(sport, season))
+}
+
+async function readFootballSeasonRows(sport: string, season: number): Promise<FootballSeasonRow[]> {
   const rows = await prisma.aFProjectionSnapshot.findMany({
     where: { sport, season, week: null, eventId: null },
     select: { playerId: true, playerName: true, position: true, adjustmentFactors: true },
@@ -162,7 +168,22 @@ async function loadFootballRates(league: {
     const rates = sport === 'NFL' && factors && typeof factors === 'object' && !Array.isArray(factors)
       ? nflComponentRates(factors) : field(factors, 'perGameRates')
     if (!rates) return []
-    const scored = sport === 'NCAAF' ? scoreNcaafProjection(rates, scoring, row.position) : computeLeagueProjectedPoints(rates, scoring)
+    return [{ playerId: row.playerId, playerName: row.playerName, position: row.position, rates: rates as Record<string, number> }]
+  })
+}
+
+async function loadFootballRates(league: {
+  sport: string
+  season: number
+  platform: string | null
+  settings: unknown
+}): Promise<LeaguePlayerMetricRate[]> {
+  const { sport, season } = league
+  const scoring = sport === 'NCAAF' ? ncaafTradeScoringRules(league) : extractScoringSettings(league.settings)
+  if (!scoring) return []
+  const rows = await loadFootballSeasonRows(sport, season)
+  return rows.flatMap((row) => {
+    const scored = sport === 'NCAAF' ? scoreNcaafProjection(row.rates, scoring, row.position) : computeLeagueProjectedPoints(row.rates, scoring)
     if (!scored || !Number.isFinite(scored.points)) return []
     return [{ playerId: row.playerId, playerName: row.playerName, position: row.position, perGame: scored.points }]
   })
