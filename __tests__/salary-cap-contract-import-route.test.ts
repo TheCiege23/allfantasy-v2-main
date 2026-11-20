@@ -32,14 +32,17 @@ vi.mock('@/lib/prisma', () => {
       league: { findUnique: vi.fn(async () => h.league) },
       roster: {
         findMany: vi.fn(async () => [
-          { id: 'r1', platformUserId: 'o1', playerData: { players: ['p1', 'p2'] } },
-          { id: 'r2', platformUserId: 'o2', playerData: { players: ['p3'] } },
+          // The commissioner's own team: its live row is keyed by their AllFantasy account, and a
+          // dead duplicate from an older import still sits under the provider's manager id.
+          { id: 'r1-dead', platformUserId: 'o1', playerData: { source_team_id: '1', imported_at: '2026-09-17T00:00:00Z', players: ['p9'] } },
+          { id: 'r1', platformUserId: 'u-commish', playerData: { source_team_id: '1', imported_at: '2026-11-20T00:00:00Z', players: ['p1', 'p2'] } },
+          { id: 'r2', platformUserId: 'o2', playerData: { source_team_id: '2', imported_at: '2026-11-20T00:00:00Z', players: ['p3'] } },
         ]),
       },
       leagueTeam: {
         findMany: vi.fn(async () => [
-          { teamName: 'Gridiron Kings', ownerName: 'Sam', platformUserId: 'o1' },
-          { teamName: 'Cap Casualties', ownerName: 'Alex', platformUserId: 'o2' },
+          { id: 't1', externalId: '1', teamName: 'Gridiron Kings', ownerName: 'Sam', platformUserId: 'o1', claimedByUserId: null },
+          { id: 't2', externalId: '2', teamName: 'Cap Casualties', ownerName: 'Alex', platformUserId: 'o2', claimedByUserId: null },
         ]),
       },
       sportsPlayerRecord: {

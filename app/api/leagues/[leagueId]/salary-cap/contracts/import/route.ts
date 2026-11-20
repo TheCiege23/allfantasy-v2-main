@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { getSalaryCapConfig, isSalaryCapLeague } from '@/lib/salary-cap/SalaryCapLeagueConfig'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { logAction } from '@/server/services/auditService'
 import {
@@ -49,16 +50,22 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!text.trim()) return NextResponse.json({ error: 'Paste your contract rows: team, player, salary, years.' }, { status: 400 })
   if (text.length > MAX_TEXT_BYTES) return NextResponse.json({ error: 'That sheet is too large to read in one go.' }, { status: 413 })
 
-  // Teams by the names a commissioner would write, and who is on each roster right now.
-  const [rosters, leagueTeams] = await Promise.all([
+  // Teams by the names a commissioner would write, each with the ONE roster the shared rule gives it
+  // (lib/leagues/rosterTeamIdentity.ts). A join on the owner key misses the importer's own team, whose
+  // roster is keyed by their AllFantasy account, and can land on a dead duplicate row.
+  const [allRosters, leagueTeams] = await Promise.all([
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
-    prisma.leagueTeam.findMany({ where: { leagueId }, select: { teamName: true, ownerName: true, platformUserId: true } }),
+    prisma.leagueTeam.findMany({ where: { leagueId }, select: { id: true, externalId: true, teamName: true, ownerName: true, platformUserId: true, claimedByUserId: true } }),
   ])
-  const teamByOwner = new Map(leagueTeams.filter((t) => t.platformUserId).map((t) => [t.platformUserId as string, t]))
-  const teams: CapTeam[] = rosters.map((r) => {
-    const t = r.platformUserId ? teamByOwner.get(r.platformUserId) : undefined
-    return { rosterId: r.id, names: [t?.teamName, t?.ownerName] }
-  })
+  const rosterByTeam = resolveRostersForTeams(leagueTeams, allRosters, (t) => [t.platformUserId, t.claimedByUserId, t.externalId])
+  const rosters: typeof allRosters = []
+  const teams: CapTeam[] = []
+  for (const t of leagueTeams) {
+    const r = rosterByTeam.get(t.externalId)
+    if (!r) continue
+    rosters.push(r)
+    teams.push({ rosterId: r.id, names: [t.teamName, t.ownerName] })
+  }
   const sport = String(league.sport ?? 'NFL').toUpperCase()
   const idsByRoster = rosters.map((r) => ({ rosterId: r.id, ids: getRosterPlayerIds(r.playerData) }))
   const allIds = [...new Set(idsByRoster.flatMap((r) => r.ids))]
