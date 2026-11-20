@@ -13,6 +13,11 @@ import { getFantasyCalcChartDbFirst, readFantasyCalcValuesFromDb } from '@/lib/f
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { collapseSamePersonRows } from '@/lib/data/samePersonRows'
+import {
+  providerIdentityColumn,
+  resolveProviderRosterPlayers,
+  type ResolvedProviderPlayer,
+} from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -666,6 +671,22 @@ async function onePersonNamed(
   return kept.length === 1 ? kept[0]! : null
 }
 
+/**
+ * A non-Sleeper league's roster id (Fantrax, ESPN, Fleaflicker, MFL) as the identity it names, or null.
+ * Sleeper is not handled here: its ids are the records' own keys. Never throws — an identity read that
+ * fails leaves the name search to settle the player, as it did for a typed name.
+ */
+export async function identifyProviderRosterId(
+  id: string,
+  platform: string,
+  sport: string,
+  resolve: typeof resolveProviderRosterPlayers = resolveProviderRosterPlayers,
+): Promise<ResolvedProviderPlayer | null> {
+  if (!providerIdentityColumn(platform)) return null
+  const hits = await resolve(platform, [id], sport).catch(() => null)
+  return hits?.get(id) ?? null
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -687,6 +708,13 @@ export async function resolveAssets(
     /** Where each team's next-draft picks are projected to land — see `loadPickSlotProjection`. */
     pickSlots?: PickSlotProjection | null
     combinedPickQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => Promise<number | null>
+    /**
+     * The league's platform (`fantrax`, `espn`, …). A roster player's `playerId` from such a league is
+     * that platform's own id, read through its `PlayerIdentityMap` column — see `identifyProviderRosterId`.
+     */
+    platform?: string | null
+    /** Injectable for tests; defaults to the real `PlayerIdentityMap` read. */
+    resolveProviderIds?: typeof resolveProviderRosterPlayers
   },
 ): Promise<{
   /** One line per pick priced by its original owner's projected finish ("2027 1st projected early (62%)"). */
@@ -903,9 +931,37 @@ export async function resolveAssets(
       continue
     }
 
-    if (!row && !raw.playerId && !raw.providerIdentity && displayName.length >= 2) {
+    /*
+     * 🛑 A NON-SLEEPER ROSTER ID USED TO END HERE AS "COULD NOT RESOLVE" (2026-11-19). The Trade Center
+     * sends a roster player's `playerId` as the league's own id — a Fantrax id in a Fantrax league — and
+     * `getPlayer` keys records by Sleeper-shaped ids, so it missed. The name search below was then
+     * skipped because a `playerId` was present, and an NHL Fantrax trade (Hughes for Montour + Hintz)
+     * was refused before the NHL points grader, which reads Fantrax ids itself, ever ran. The id is
+     * now read through the platform's `PlayerIdentityMap` column (the rule the roster list already
+     * uses to show the names), and a miss falls back to the name, as a typed name does.
+     */
+    let identityPosition: string | null = null
+    if (!row && !providerSleeperId && !raw.providerIdentity && raw.playerId?.trim() && args.platform) {
+      const hit = await identifyProviderRosterId(raw.playerId.trim(), args.platform, args.effectiveSport, args.resolveProviderIds)
+      if (hit) {
+        identityPosition = hit.position
+        displayName = hit.name || displayName
+        if (hit.sleeperId) {
+          const bySleeper = (await getPlayer(hit.sleeperId, { sport: args.effectiveSport })) as SportsPlayerRecord | null
+          if (bySleeper && valuePositionsAgree(hit.position, bySleeper.position)) row = bySleeper
+        }
+      }
+    }
+    if (!row && !raw.providerIdentity && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
-      const exact = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      const named = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      /*
+       * The identity's position separates namesakes (two Sebastian Ahos: a C and a D). It only ever
+       * narrows: sources label hockey forwards differently (C / LW / RW / F), so a filter that empties
+       * the list is a labelling disagreement, not evidence, and the unfiltered rows stand.
+       */
+      const byPosition = identityPosition ? named.filter(p => valuePositionsAgree(identityPosition, p.position)) : named
+      const exact = byPosition.length > 0 ? byPosition : named
       row = (exact.length === 1 ? exact[0] : await onePersonNamed(exact, args.effectiveSport)) as SportsPlayerRecord | null
     }
     if (!row) {
