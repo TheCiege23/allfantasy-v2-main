@@ -58,10 +58,14 @@ describe('who is offered the App Store app (lib/platform/iosAppStore.ts)', () =>
 })
 
 describe('the Smart App Banner (app/layout.tsx)', () => {
-  it('names the app in the root metadata', async () => {
+  // Safari reads apple-itunes-app only from <head>. Next 15 streams the `metadata` object into <body> for
+  // ordinary browsers, so the tag must be rendered by the layout (React hoists it into <head>), not set as
+  // `itunes` metadata, which shipped once and showed no banner.
+  it('renders the tag in the layout, not as streamed metadata', async () => {
     const fs = await import('node:fs')
     const src = fs.readFileSync('app/layout.tsx', 'utf8')
-    expect(src).toMatch(/^\s*itunes: \{ appId: APP_STORE_APP_ID \},/m)
+    expect(src).toMatch(/^\s*<meta name="apple-itunes-app" content=\{`app-id=\$\{APP_STORE_APP_ID\}`\} \/>/m)
+    expect(src).not.toMatch(/^\s*itunes:/m)
   })
 })
 
