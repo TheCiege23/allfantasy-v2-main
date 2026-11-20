@@ -11,6 +11,8 @@
  * counter, not a flag, so two holders cannot release each other's hold. The next link the reader
  * clicks still picks up the new build — a navigation they chose.
  */
+import { useEffect } from 'react'
+
 let holds = 0
 
 export function holdUnsavedWork(): () => void {
@@ -25,4 +27,9 @@ export function holdUnsavedWork(): () => void {
 
 export function hasUnsavedWork(): boolean {
   return holds > 0
+}
+
+/** Hold while `active` is true. Call it unconditionally, above any early return. */
+export function useHoldUnsavedWork(active: boolean): void {
+  useEffect(() => (active ? holdUnsavedWork() : undefined), [active])
 }

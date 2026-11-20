@@ -6,7 +6,6 @@ import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { useMessages } from '@/components/i18n/useMessages'
 import { railRowMessages } from '@/lib/core-app/messages/railRow'
 import { platformLabel } from '@/lib/core-app/platformLinks'
-import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RailMatchupSummary, RailSideProjectionSummary, RailStandingSummary } from './AfCoreShell'
 import type { LiveRailScore } from './useLiveRailScores'
@@ -76,11 +75,8 @@ export function mergeRailMatchup(
  * their team name, and their points underneath — the score once the week is played, and this
  * league's projected total either way. The opponent mirrors it on the other side of the "VS".
  *
- * ⚠ ONE PROJECTION, NOT TWO (user call, 2026-10-30). The row used to carry the provider line and
- * AllFantasy's engine side by side under SCORE / SLPR / AF headers. The list is a glance surface;
- * the engine's number still lives on the matchup screen, where it has room to be explained.
- * The projection kept is the provider's line re-scored under THIS league's rules when that could
- * be done (`afProjected`), else the provider's own — the same number the SLPR column showed.
+ * The league row shows the shared AF weekly total and the number of starters it covers.
+ * A legacy row containing only provider estimates has no AF total to display.
  *
  * ⚠ THE AVATAR IS THE MANAGER'S, NOT THE LEAGUE'S. The league crest is already the 42px mark at
  * the head of the row; repeating it here would say nothing. The loader resolves both sides'
@@ -118,11 +114,11 @@ function RailSide({
    * that dash as partial read like a third state. Partial means "some of the lineup", which is
    * the only case the mark has anything to add.
    */
+  const projected = projection?.afEngine ?? null
+  const pricedFrom = projection?.afEngineFrom ?? 0
   const partial =
     projection != null &&
-    projection.pricedFrom > 0 &&
-    projection.pricedFrom < projection.starterCount
-  const projected = projection?.afProjected ?? projection?.projected ?? null
+    projected != null && pricedFrom > 0 && pricedFrom < projection.starterCount
 
   return (
     <span
@@ -130,14 +126,7 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       data-leading={leading ? 'true' : undefined}
-      title={projection
-        ? msg.sideTitle(
-            PROJECTION_PROVIDER_LABEL,
-            projection.pricedFrom,
-            projection.starterCount,
-            projection.afProjected == null,
-          )
-        : undefined}
+      title={projection ? msg.sideTitle(projected == null ? null : pricedFrom, projection.starterCount) : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
         <LeagueMark src={avatarUrl} letter={initial} />

@@ -68,13 +68,13 @@ const NHL_TEAMS: Record<string, string[]> = {
 
 /** Fantrax club abbreviations paired with Rolling Insights team IDs from its EPL schedule. */
 const EPL_TEAMS: Record<string, string[]> = {
-  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth'], BHA: ['3', 'Brighton & Hove Albion'],
+  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth', 'Bournemouth'], BHA: ['3', 'Brighton & Hove Albion', 'Brighton and Hove Albion'],
   CHE: ['6', 'Chelsea'], CRY: ['7', 'Crystal Palace'], EVE: ['8', 'Everton'], FUL: ['9', 'Fulham'],
-  LIV: ['12', 'Liverpool'], MCI: ['13', 'Manchester City'], MUN: ['14', 'Manchester United'],
-  NEW: ['15', 'Newcastle United'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
+  LIV: ['12', 'Liverpool', 'Liverpool FC'], MCI: ['13', 'Manchester City', 'MNC'], MUN: ['14', 'Manchester United', 'MAN'],
+  NEW: ['15', 'Newcastle United', 'Newcastle'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
   WHU: ['19', 'West Ham United', 'West Ham'],
-  BRF: ['24', 'Brentford'], NOT: ['25', 'Nottingham Forest'], IPS: ['26', 'Ipswich Town'],
-  LEE: ['67', 'Leeds United'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
+  BRF: ['24', 'Brentford', 'BRE'], NOT: ['25', 'Nottingham Forest', 'NFO'], IPS: ['26', 'Ipswich Town'],
+  LEE: ['67', 'Leeds United', 'LUFC'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
 }
 
 const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
@@ -124,10 +124,61 @@ const TEAM_ALIASES = Object.fromEntries(
   ]),
 ) as Record<ProFantraxSport, Map<string, string>>
 
+/**
+ * Generational suffixes, dropped on BOTH sides. Fantrax writes "Jackson, Jaren" where the registry
+ * holds "Jaren Jackson Jr." — measured 2026-11-19, 11 of 24 unlinked rostered NBA ids in production
+ * were exactly this (Jaren Jackson, Michael Porter, Trey Murphy, Dereck Lively, GG Jackson…). A father
+ * and son both active on one team stays safe: the ambiguity count refuses two candidates.
+ */
+const SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v'])
+
+/** "First Last" words with accents, punctuation and a trailing suffix removed. Fantrax writes "Last, First". */
+function nameWords(value: string): string[] {
+  const parts = value.split(',')
+  const ordered = parts.length === 2 ? `${parts[1]} ${parts[0]}` : value
+  const words = ordered.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '').split(/[\s-]+/).filter(Boolean)
+  while (words.length > 2 && SUFFIXES.has(words[words.length - 1]!)) words.pop()
+  return words
+}
+
 /** Fantrax writes "Last, First"; our registry writes "First Last". */
-function nameKey(value: string) { const parts = value.split(','); return compact(parts.length === 2 ? `${parts[1]} ${parts[0]}` : value) }
+function nameKey(value: string) { return nameWords(value).join('') }
+
+/** Surname key and given name, for the nickname pass. */
+function nameSplit(value: string): { first: string; last: string } | null {
+  const words = nameWords(value)
+  return words.length >= 2 ? { first: words[0]!, last: words.slice(1).join('') } : null
+}
+
+/**
+ * "Mitch" for "Mitchell", "Matt" for "Matthew": one given name a prefix (3+ letters) of the other.
+ * Measured 2026-11-19: Mitch Marner and Matt Coronato were unlinked for exactly this. Used only in a
+ * second pass, after the exact name found nothing, and still bound by team, role and one candidate.
+ */
+function nicknameOf(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+  return short.length >= 3 && short !== long && long.startsWith(short)
+}
+
+/**
+ * Hockey's second split, used ONLY to break a tie between candidates that already agree on name, team
+ * and skater/goalie: two Elias Petterssons play for Vancouver, a C and a D. Never used to refuse a
+ * single candidate — sources disagree on forward labels, and the odd player converts between F and D.
+ */
+function nhlLine(position: string | null): 'forward' | 'defense' | null {
+  const parts = tokens(position)
+  const d = parts.some(p => ['D', 'LD', 'RD'].includes(p))
+  const f = parts.some(p => ['C', 'LW', 'RW', 'W', 'F'].includes(p))
+  return d === f ? null : d ? 'defense' : 'forward'
+}
 
 /** The canonical team code for a sport, or undefined when the label is not a team we recognise. */
+export function proRolesAgree(sport: ProFantraxSport, slot: string | null, position: string | null): boolean {
+  const requested = RULES[sport].roles(slot)
+  return !requested.length || RULES[sport].roles(position).some(role => requested.includes(role))
+}
+
 export function proTeamCode(sport: ProFantraxSport, label: string | null | undefined): string | undefined {
   return TEAM_ALIASES[sport].get(compact(label ?? ''))
 }
@@ -137,7 +188,12 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
   const rules = RULES[sport]
   const teamAliases = TEAM_ALIASES[sport]
   const byName = new Map<string, ProIdentityRow[]>()
-  for (const row of identities) { const key = nameKey(row.canonicalName); byName.set(key, [...(byName.get(key) ?? []), row]) }
+  const bySurname = new Map<string, ProIdentityRow[]>()
+  for (const row of identities) {
+    const key = nameKey(row.canonicalName); byName.set(key, [...(byName.get(key) ?? []), row])
+    const split = nameSplit(row.canonicalName)
+    if (split) bySurname.set(split.last, [...(bySurname.get(split.last) ?? []), row])
+  }
   const proposed: Array<{ id: string; fantraxId: string; rollingInsightsId: string }> = []
   const existingSourceIds = new Set(identities.map(row => row.fantraxId).filter(Boolean))
   let unmatched = 0, ambiguous = 0, unchanged = 0, conflicts = 0
@@ -145,7 +201,20 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
     const sourceTeam = teamAliases.get(compact(ref.team ?? ''))
     const sourceRoles = rules.roles(ref.position)
     if (!ref.fantraxId || !sourceTeam || !sourceRoles.length) { unmatched++; continue }
-    const candidates = (byName.get(nameKey(ref.name)) ?? []).filter(row => row.rollingInsightsId && teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam && rules.roles(row.position).some(role => sourceRoles.includes(role)))
+    const fits = (row: ProIdentityRow) => Boolean(row.rollingInsightsId) && teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam && rules.roles(row.position).some(role => sourceRoles.includes(role))
+    let candidates = (byName.get(nameKey(ref.name)) ?? []).filter(fits)
+    if (!candidates.length) {
+      const split = nameSplit(ref.name)
+      candidates = split ? (bySurname.get(split.last) ?? []).filter(row => {
+        const other = nameSplit(row.canonicalName)
+        return other !== null && nicknameOf(split.first, other.first) && fits(row)
+      }) : []
+    }
+    if (candidates.length > 1 && sport === 'NHL') {
+      const line = nhlLine(ref.position)
+      const sameLine = line ? candidates.filter(row => nhlLine(row.position) === line) : []
+      if (sameLine.length === 1) candidates = sameLine
+    }
     if (!candidates.length) { unmatched++; continue }
     if (candidates.length !== 1) { ambiguous++; continue }
     const row = candidates[0]!

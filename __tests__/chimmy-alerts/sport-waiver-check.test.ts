@@ -206,9 +206,9 @@ describe('the picks', () => {
     expect(selectSportWaiverPicks(section('NBA', rows, { basis: 'weekly_projection' }), NBA, all(['A']))).toEqual([])
     expect(selectSportWaiverPicks(section('NBA', rows, { basis: null }), NBA, all(['A']))).toEqual([])
     expect(selectSportWaiverPicks(section('NHL', rows), NBA, all(['A']))).toEqual([])
-    // A soccer rule someone adds by mistake still sends nothing: soccer has no producer.
+    // Soccer now has a per-game producer and follows the same sport gate.
     const soccerRule = { ...NBA, sport: 'SOCCER' } as unknown as SportWaiverAlertRule
-    expect(selectSportWaiverPicks(section('SOCCER', rows), soccerRule, all(['A']))).toEqual([])
+    expect(selectSportWaiverPicks(section('SOCCER', rows), soccerRule, all(['A']))).toHaveLength(1)
     expect(selectSportWaiverPicks(section('NBA', rows), NBA, all(['A']))).toHaveLength(1)
   })
 

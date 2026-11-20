@@ -291,6 +291,17 @@ function renderDecision(o: Record<string, unknown>): string[] {
 function renderItem(item: unknown): string | null {
   if (item == null || typeof item !== 'object') return null
   const o = item as Record<string, unknown>
+  if (typeof o.metricUnit === 'string' && typeof o.perGame === 'number') {
+    return [
+      `${String(o.playerName)} (#${String(o.rank)} overall, #${String(o.positionRank)} ${String(o.position)})`,
+      `${o.perGame.toFixed(2)} ${o.metricUnit} per game`,
+      typeof o.weekly === 'number' ? `${o.weekly.toFixed(2)} for week ${String(o.metricWeek)}` : null,
+      typeof o.fullSeason === 'number' ? `${o.fullSeason.toFixed(2)} full season${o.fullSeasonBasis === 'standard_season' ? ' based on standard season length' : ''}` : null,
+      typeof o.restOfSeason === 'number' ? `${o.restOfSeason.toFixed(2)} rest of season` : null,
+      typeof o.tradeValue === 'number' ? `AF trade value ${o.tradeValue.toFixed(2)} ${String(o.tradeValueUnit ?? '')}`.trim() : null,
+      typeof o.dynastyTradeValue === 'number' ? `AF dynasty trade value ${o.dynastyTradeValue.toFixed(2)}` : null,
+    ].filter(Boolean).join(' · ')
+  }
 
   /*
    * RosterLeagueProjection — the asker's roster under THIS league's scoring (`rosterLeagueProjections.ts`).
@@ -535,6 +546,19 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Market player values', packet.marketValues as GroundedSlice<unknown>],
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
+    ...(packet.leaguePlayerMetrics?.present && packet.leaguePlayerMetrics.value
+      ? [[
+          'AF league player metrics',
+          {
+            ...packet.leaguePlayerMetrics,
+            value: packet.leaguePlayerMetrics.value.rows.map((row) => ({
+              ...row,
+              metricUnit: packet.leaguePlayerMetrics?.value?.unit,
+              metricWeek: packet.leaguePlayerMetrics?.value?.week,
+            })),
+          } as GroundedSlice<unknown>,
+        ] as [string, GroundedSlice<unknown>]]
+      : []),
     /*
      * The asker's roster under this league's scoring — the number My Team shows. Named so the model prefers it over
      * the canonical rows above for anyone on this roster.
@@ -543,8 +567,6 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
-    // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
-    ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
     /*
      * R2 — decisions bridged from the live engines (waiver, commissioner health).
      *

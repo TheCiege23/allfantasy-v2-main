@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { MyTeamData } from '@/lib/core-app/myTeam'
 import type { WeekPlan } from '@/lib/core-app/teamPlan'
 import { isEligibleForSlot } from '@/lib/core-app/rosterSlots'
+import { useHoldUnsavedWork } from '@/lib/core-app/unsavedWork'
 
 type LegacyPlan = {slots:Record<string,string>;note:string}
 export default function TeamWeekPlanner({data,automatic}:{data:MyTeamData;automatic:boolean}) {
@@ -15,7 +16,10 @@ export default function TeamWeekPlanner({data,automatic}:{data:MyTeamData;automa
   const [plan,setPlan]=useState<WeekPlan|null>(null),[legacy,setLegacy]=useState<Record<string,LegacyPlan>>({})
   const [loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[status,setStatus]=useState(''),[ready,setReady]=useState(false)
   const noteId=useId()
-  const request=useRef(0),dirty=useRef(false)
+  const request=useRef(0),dirty=useRef(false),[unsaved,setUnsaved]=useState(false)
+  const markDirty=(v:boolean)=>{dirty.current=v;setUnsaved(v)}
+  // Edits not yet saved to the account: no deploy reload while they are (lib/core-app/unsavedWork).
+  useHoldUnsavedWork(unsaved)
   const validWeek=Number.isInteger(Number(week)) && Number(week)>=1 && Number(week)<=30
   const key=`af-week-plans:${data.league.id}:${data.nativeLineup?.rosterId ?? (data.team.available?data.team.data.teamName:'unclaimed')}`
   const url=`/api/core/team-plan?league=${encodeURIComponent(data.league.id)}&week=${encodeURIComponent(week)}`
@@ -23,7 +27,7 @@ export default function TeamWeekPlanner({data,automatic}:{data:MyTeamData;automa
   useEffect(()=>{try{const v=JSON.parse(localStorage.getItem(key) ?? '{}');setLegacy(v && typeof v==='object' && !Array.isArray(v)?v:{})}catch{setLegacy({})}},[key])
   useEffect(()=>{
     const sequence=++request.current,controller=new AbortController()
-    dirty.current=false;setReady(false);setPlan(null);setNote('');setSlots({});setStatus('')
+    markDirty(false);setReady(false);setPlan(null);setNote('');setSlots({});setStatus('')
     if(!scope || !validWeek){setLoading(false);return}
     setLoading(true)
     fetch(url,{cache:'no-store',signal:controller.signal}).then(async r=>{if(!r.ok)throw new Error();return r.json()}).then(body=>{
@@ -35,7 +39,7 @@ export default function TeamWeekPlanner({data,automatic}:{data:MyTeamData;automa
   const players=[...(data.starters.available?data.starters.data.flatMap(s=>s.player?[s.player]:[]):[]),...(data.bench.available?data.bench.data:[])]
   async function loadSaved(){
     const sequence=++request.current;setLoading(true);setReady(false)
-    try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error();const body=await r.json();if(sequence!==request.current)return;setPlan(body.plan);setNote(body.plan?.deleted?'':body.plan?.note??'');setSlots(body.plan?.deleted?{}:body.plan?.slots??{});dirty.current=false;setReady(true);setStatus('')}
+    try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error();const body=await r.json();if(sequence!==request.current)return;setPlan(body.plan);setNote(body.plan?.deleted?'':body.plan?.note??'');setSlots(body.plan?.deleted?{}:body.plan?.slots??{});markDirty(false);setReady(true);setStatus('')}
     catch{if(sequence===request.current)setStatus(feedback('Could not reload the saved plan.','No se pudo volver a cargar el plan.'))}finally{if(sequence===request.current)setLoading(false)}
   }
   async function save(remove=false){
@@ -45,7 +49,7 @@ export default function TeamWeekPlanner({data,automatic}:{data:MyTeamData;automa
       const body=await r.json();if(sequence!==request.current)return
       if(r.status===409){setReady(false);setStatus(feedback('Another device changed this plan. Your edits remain here; reload the saved plan before saving again.','Otro dispositivo cambió este plan. Tus cambios siguen aquí; carga el plan guardado antes de volver a guardar.'));return}
       if(!r.ok)throw new Error()
-      setPlan(body.plan);dirty.current=false;if(remove){setNote('');setSlots({})}
+      setPlan(body.plan);markDirty(false);if(remove){setNote('');setSlots({})}
       setStatus(remove?feedback('Plan removed from your account.','Plan eliminado de tu cuenta.'):feedback('Saved to your account. This is a tentative plan; your submitted lineup has not changed.','Guardado en tu cuenta. Es un plan provisional; tu alineación enviada no ha cambiado.'))
     }catch{if(sequence===request.current)setStatus(feedback('Could not save. Your edits remain here; check your connection and retry.','No se pudo guardar. Tus cambios siguen aquí; comprueba la conexión y reintenta.'))}finally{setSaving(false)}
   }
@@ -55,10 +59,10 @@ export default function TeamWeekPlanner({data,automatic}:{data:MyTeamData;automa
     {scope?<p>{text('Season','Temporada')} {scope.season} · {text('Tentative plan','Plan provisional')}</p>:<p role="status">{text('A verified roster and season are required to sync a plan.','Se requiere una plantilla y temporada verificadas para sincronizar un plan.')}</p>}
     <label>{copy('Planning week')}<input type="number" min="1" max="30" value={week} disabled={saving} onChange={e=>setWeek(e.target.value)}/></label>
     {loading && <p role="status">{text('Loading saved plan…','Cargando plan guardado…')}</p>}
-    {!automatic && data.starters.available && <div className="af-tw-filters">{data.starters.data.map((s,i)=><label key={i}>{s.slotLabel}<select disabled={loading||saving} value={slots[String(i)]??''} onChange={e=>{dirty.current=true;setSlots(v=>({...v,[String(i)]:e.target.value}))}}><option value="">{copy('Unplanned')}</option>{players.filter(p=>isEligibleForSlot(s.slotLabel,p.position)).map(p=><option key={p.sleeperId} value={p.sleeperId} disabled={Object.entries(slots).some(([k,id])=>k!==String(i)&&id===p.sleeperId)}>{p.name}</option>)}</select></label>)}</div>}
-    <label htmlFor={noteId}>{copy('Acquisitions, contingency plans, and reminders')}</label><textarea id={noteId} disabled={loading||saving} maxLength={2000} rows={3} value={note} onChange={e=>{dirty.current=true;setNote(e.target.value)}}/>
+    {!automatic && data.starters.available && <div className="af-tw-filters">{data.starters.data.map((s,i)=><label key={i}>{s.slotLabel}<select disabled={loading||saving} value={slots[String(i)]??''} onChange={e=>{markDirty(true);setSlots(v=>({...v,[String(i)]:e.target.value}))}}><option value="">{copy('Unplanned')}</option>{players.filter(p=>isEligibleForSlot(s.slotLabel,p.position)).map(p=><option key={p.sleeperId} value={p.sleeperId} disabled={Object.entries(slots).some(([k,id])=>k!==String(i)&&id===p.sleeperId)}>{p.name}</option>)}</select></label>)}</div>}
+    <label htmlFor={noteId}>{copy('Acquisitions, contingency plans, and reminders')}</label><textarea id={noteId} disabled={loading||saving} maxLength={2000} rows={3} value={note} onChange={e=>{markDirty(true);setNote(e.target.value)}}/>
     <div className="af-tw-links"><button type="button" className="af-btn" disabled={!scope||!validWeek||!ready||loading||saving||new Set(Object.values(slots).filter(Boolean)).size!==Object.values(slots).filter(Boolean).length} onClick={()=>save()}>{copy('Save personal plan')}</button><button type="button" className="af-btn" disabled={!ready||loading||saving||!plan||plan.deleted} onClick={()=>save(true)}>{copy('Remove plan')}</button>{scope&&validWeek&&<button type="button" className="af-btn" disabled={loading||saving} onClick={loadSaved}>{text('Reload saved plan (replaces edits)','Cargar plan guardado (reemplaza cambios)')}</button>}</div>
-    {old&&<p><button type="button" className="af-btn" disabled={loading||saving||!ready} onClick={()=>{setNote(typeof old.note==='string'?old.note:'');setSlots(old.slots&&typeof old.slots==='object'?old.slots:{});dirty.current=true;setStatus(feedback('Device-local plan copied into the editor. Review it, then save explicitly to your account.','Plan de este dispositivo copiado al editor. Revísalo y guárdalo explícitamente en tu cuenta.'))}}>{text('Review plan from this device','Revisar plan de este dispositivo')}</button></p>}
+    {old&&<p><button type="button" className="af-btn" disabled={loading||saving||!ready} onClick={()=>{setNote(typeof old.note==='string'?old.note:'');setSlots(old.slots&&typeof old.slots==='object'?old.slots:{});markDirty(true);setStatus(feedback('Device-local plan copied into the editor. Review it, then save explicitly to your account.','Plan de este dispositivo copiado al editor. Revísalo y guárdalo explícitamente en tu cuenta.'))}}>{text('Review plan from this device','Revisar plan de este dispositivo')}</button></p>}
     <p role="status">{status?JSON.parse(status)[es?1:0]:''}</p><p>{copy('Each player can occupy only one planned slot. IR and taxi moves require provider eligibility.')}</p>
   </details>
 }

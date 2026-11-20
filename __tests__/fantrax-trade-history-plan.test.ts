@@ -166,3 +166,16 @@ describe('the reasons read in Spanish on the Commissioner Hub', () => {
     expect(hubCopy('3 trades added.', 'es')).toBe('Se agregaron 3 intercambios.')
   })
 })
+
+it.each([
+  ['NFL', 'PHI', 'WR'], ['NBA', 'BOS', 'PG'], ['NHL', 'BOS', 'C'], ['MLB', 'BOS', 'SP'],
+  ['NCAAF', 'Illinois', 'WR'], ['NCAAB', 'Duke', 'PG'], ['SOCCER', 'Arsenal', 'GK'],
+] as const)('retains both verified player IDs for a completed %s trade', (sport, team, position) => {
+  const identities = ['One', 'Two'].map((name, i) => ({ fantraxId: 'p' + i, canonicalName: 'Athlete ' + name, currentTeam: team, position }))
+  const line = (name: string, from: string, to: string) =>
+    ['Athlete ' + name, team, position, from, to, '0', 'Mon Nov 16, 2026, 7:57PM', '10'].map(x => '"' + x + '"').join(',')
+  const trades = csv(line('One', 'Harbor Owls', 'Mesa Comets'), line('Two', 'Mesa Comets', 'Harbor Owls'))
+  const result = planFantraxTradeHistoryImport({ sport, trades, teams: TEAMS, identities })
+  expect(result.refused).toEqual([])
+  expect(result.ready[0]?.fact.adds).toEqual({ p0: '202', p1: '101' })
+})

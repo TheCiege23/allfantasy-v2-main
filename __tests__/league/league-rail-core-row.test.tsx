@@ -72,9 +72,9 @@ describe('LeagueRailRow', () => {
     expect(getByText('Hoop Dreams')).toBeTruthy()
     const mine = container.querySelector('.af-rail-row-side:not([data-side="them"])')!
     expect(mine.querySelector('.af-rail-row-score')?.textContent).toBe('88.4')
-    // The league-scored provider line only; the AF engine total (115.0) stays on the matchup screen.
-    expect([...mine.querySelectorAll('.af-rail-row-projected')].map(n => n.textContent)).toEqual(['proj112.3'])
-    expect(container.textContent).not.toContain('115.0')
+    // The league rail and the matchup screen show the same AF total.
+    expect([...mine.querySelectorAll('.af-rail-row-projected')].map(n => n.textContent)).toEqual(['proj115.0'])
+    expect(container.textContent).not.toContain('112.3')
     expect(container.querySelector('.af-rail-row-vs')?.textContent).toBe('VS')
     expect(container.querySelector('.af-rail-row-side[data-side="them"] .af-rail-row-score')?.textContent).toBe('79.2')
     expect(container.querySelector('.af-platform-chip')?.textContent).toBe('Sleeper')

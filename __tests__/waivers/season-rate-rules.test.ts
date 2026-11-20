@@ -31,10 +31,8 @@ describe('waiverSportPlan — a producer, or the reason there is none', () => {
     }
   })
 
-  it('gives Soccer, and any sport it does not know, a stated reason instead of a blank', () => {
-    const soccer = waiverSportPlan('SOCCER')
-    expect(soccer.kind).toBe('none')
-    expect(soccer.kind === 'none' && soccer.reason).toMatch(/serves no soccer player season stats/)
+  it('uses the league value board for soccer and gives unknown sports a stated reason', () => {
+    expect(waiverSportPlan('SOCCER')).toMatchObject({ kind: 'per_game', basis: 'league_value_board' })
     const other = waiverSportPlan('CRICKET')
     expect(other.kind === 'none' && other.reason).toMatch(/No projection engine produces CRICKET player values/)
   })

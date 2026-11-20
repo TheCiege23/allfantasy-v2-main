@@ -17,13 +17,9 @@ function ordinal(n: number): string {
 
 export const railRowMessages = defineMessages({
   en: {
-    /* RailSide — the projection tooltip. `genericPpr` is "afProjected == null". */
-    sideTitle: (provider: string, pricedFrom: number, starterCount: number, genericPpr: boolean): string =>
-      `Weekly baseline projection — ${provider}’s projection from ${pricedFrom} of ${starterCount} starters${
-        genericPpr
-          ? ', generic PPR because this league’s scoring could not be re-scored'
-          : ', re-scored with this league’s settings'
-      } · live score is shown separately`,
+    sideTitle: (pricedFrom: number | null, starterCount: number): string => pricedFrom == null
+      ? 'Weekly baseline projection unavailable · live score is shown separately'
+      : `Weekly baseline projection from AllFantasy for ${pricedFrom} of ${starterCount} starters under this league’s scoring · live score is shown separately`,
     /* The small label in front of each side's projected total. */
     projShort: 'proj',
     /* RailStanding */
@@ -126,12 +122,9 @@ export const railRowMessages = defineMessages({
     matchupNotAvailable: 'Matchup not available yet',
   },
   es: {
-    sideTitle: (provider, pricedFrom, starterCount, genericPpr) =>
-      `Proyección base semanal — proyección de ${provider} con ${pricedFrom} de ${starterCount} titulares${
-        genericPpr
-          ? ', PPR genérico porque no se pudo recalcular con la puntuación de esta liga'
-          : ', recalculada con la configuración de esta liga'
-      } · el marcador en vivo se muestra aparte`,
+    sideTitle: (pricedFrom, starterCount) => pricedFrom == null
+      ? 'Proyección base semanal no disponible · el marcador en vivo se muestra aparte'
+      : `Proyección base semanal de AllFantasy con ${pricedFrom} de ${starterCount} titulares según la puntuación de esta liga · el marcador en vivo se muestra aparte`,
     projShort: 'proy',
     noHeadToHead: 'sin enfrentamiento directo: posición aún no medible',
     tiedPrefix: 'E-',

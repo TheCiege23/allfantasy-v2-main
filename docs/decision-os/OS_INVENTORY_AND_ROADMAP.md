@@ -133,8 +133,8 @@ learning loop ⚠ · multi-model ❌ · operability ⚠.
 | 6 | Trade reach: summarize offers past 3; provider trades/drafts in manager records | S–M |
 | 7 | Learning loop: outcomes calibrate waiver/trade/commissioner advice | L — **waiver + trade shipped 2026-11-19** (see note below) |
 | 8 | Draft: one engine in the draft room; a pick before the draft | M — **shipped 2026-11-19** (see note below) |
-| 9 | Three-brain: schedule `runManagedIntelligence` or retire `savedAnalysis` | M |
-| 10 | Cleanup: retired label engine in `import-players` / `fantasy-os-exec-sync` | S |
+| 9 | Three-brain: schedule `runManagedIntelligence` or retire `savedAnalysis` | M — **retired 2026-11-19, owner's call** (see note below) |
+| 10 | Cleanup: retired label engine in `import-players` / `fantasy-os-exec-sync` | S — **done 2026-11-19, fully retired** (see note below) |
 
 **Item 7, 2026-11-19 — what shipped and what did not.** The ledger's graded record (bench check, waiver panel #1
 pickup, trade letters) now goes back beside the call it grades: a Trade Center grade shows how deals graded that letter
@@ -154,6 +154,29 @@ in an auction, or when the draft cannot be read. *A pick before the draft:* off 
 the user's OWN next turn, with the players ADP has going in the picks before it left out (`planForOwnPick.ts`, opt-in
 `planForOwnTurn`). It used to rank the pick on the clock, which before the draft is overall pick 1. The pick outlook
 and the shadow compare stay on the current board, and a planned pick is not written to the forward-test recorder.
+
+**Item 9, 2026-11-19 — retired, the owner's choice over scheduling it.** Nothing ever produced a three-brain run
+(`runManagedIntelligence` had no caller), so every reader of a saved analysis found nothing: the `savedAnalysis`
+packet slice (an entitlement-checked read on every Chimmy turn), and `attachSavedAnalysis` in the waiver engine,
+trade proposals and the Commissioner Hub (an indexed count per request, batched in the hub). All four are removed,
+with the slice's feed flag and loader; the maintenance cron no longer runs the three-brain refresh/reconcile
+drains, so `DECISION_OS_MAINTENANCE_ENABLED` does nothing there now. Scheduling it instead would have meant 3–4
+model calls per league per tool on every refresh. The library under `lib/decision-os/three-brain/` stays, unused;
+`aiAuthorityPolicy` is still read by Chimmy's answer contract. Live Chimmy still takes the first usable model
+answer (`ResponseAggregator.ts`), so the hub's multi-model axis stays ❌ by decision rather than by omission.
+
+**Item 10, 2026-11-19 — the profile engine is fully retired, and "retired" was wrong when this list was written.**
+The re-score called the manager profiles retired, but five live readers still used them: drama detection and
+relationship-insight storylines (a "behavior heat" boost built from personality scores), the relationship panel's
+profile tile, War Room's opponent-tendencies GET (no caller in the app), the legacy trade managers endpoint's
+`psychology` field (no screen read it), and the commissioner radar's platform-wide max query (computed and thrown
+away: the fingerprints it scaled were already empty). All five are gone, with both cron writers and the panel's
+`runProfiles` option, and the `manager-psych` freshness row. Storylines now rank on rivalry and drama facts alone.
+🛑 One thing had to STAY: the profile rotation's prelude was the only scheduled writer of new Sleeper trades into
+`dw_transaction_facts` after import (Trade Center history, Competitive Edge, manager records and receipts read it).
+It now runs on its own as `lib/league-import/sleeper/sleeperTradeFactRotation.ts` on the same `?intel=1` tick
+(heartbeat `cron-sleeper-trade-facts`), 24 leagues a fire in a stateless order so nothing can wedge the line.
+The `manager_psych_profiles` table and `lib/psychological-profiles/` stay; the trade-fact ingest still lives there.
 
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.

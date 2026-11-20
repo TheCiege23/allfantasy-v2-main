@@ -69,7 +69,7 @@ export function createNcaafLeagueGrader(
         const line = perGameByRosterId.get(player.rosterPlayerId)
         const position = line?.position ?? player.position
         return line && position ? [{
-          id: player.rosterPlayerId, name: player.name, position, perGame: line.perGame, aliases: [], sampleGames: null,
+          id: player.rosterPlayerId, name: player.name, position, perGame: line.perGame, tradeMarket: line.tradeMarket, aliases: [], sampleGames: null,
         }] : []
       })
       const classYears = await (eligibility ??= (deps.loadClassYears ?? loadNcaafClassYears)(

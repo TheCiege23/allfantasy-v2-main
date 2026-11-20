@@ -7,7 +7,6 @@ import { shouldRunCommissionerHealthShadow, shouldRunCommissionerHealthLive, run
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { toCommissionerHealthCard, type CommissionerHealthCard } from '@/lib/decision-os/commissioner-health/healthCardAdapter'
 import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
-import { attachSavedAnalysis, leaguesWithSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
@@ -1162,39 +1161,15 @@ export async function getCommissionerHubHealthForUser(
     let enrichedCount = 0
 
     if (isLive) {
-      // ONE query for the whole fan-out, not one per league. The map below is an UNBOUNDED
-      // Promise.all across every league the user has; calling attachSavedAnalysis inside it
-      // unconditionally would issue N concurrent counts, and this repo has already taken a
-      // production Postgres OOM (53200) from an unbounded per-league fan-out. Resolving the cheap
-      // gate once means the expensive read runs only for leagues that can actually produce
-      // something -- none of them while AI spend is disabled. Fails closed to an empty set.
-      const liveLeagueIds: string[] = []
-      for (const snap of snapshots) {
-        if (snap && snap.source === 'database') liveLeagueIds.push(snap.leagueId)
-      }
-      const analysisLeagueIds = await leaguesWithSavedAnalysis(prisma, userId, liveLeagueIds)
-
+      // The saved three-brain analysis was retired 2026-11-19 (re-score build item 9): nothing produced one, so
+      // the batched count that gated it here found nothing on every hub load.
       await Promise.all(
         snapshots.map(async (snapshot, i) => {
           if (!snapshot || snapshot.source !== 'database') return
           try {
             const shadow = await runCommissionerHealthShadow({ userId, snapshot })
             if (shadow.ran && shadow.result) {
-              // Attach a saved three-brain analysis when one exists. `knownHasRun` skips the
-              // per-league count the batch above already answered. Authority for
-              // commissioner.league.health is explanation_only, so this can change the
-              // explanation string and nothing else.
-              let decision = shadow.result.decision
-              if (analysisLeagueIds.has(snapshot.leagueId)) {
-                const attached = await attachSavedAnalysis({
-                  decision,
-                  leagueId: snapshot.leagueId,
-                  userId,
-                  tool: 'manager_intelligence',
-                  knownHasRun: true,
-                })
-                decision = attached.decision
-              }
+              const decision = shadow.result.decision
               snapshots[i] = {
                 ...snapshot,
                 decisionOsShadow: {
@@ -1233,20 +1208,12 @@ export async function getCommissionerHubHealthForUser(
           try {
             const shadow = await runCommissionerHealthShadow({ userId, snapshot: target })
             if (shadow.ran && shadow.result) {
-              // ONE league here, not a fan-out, so the plain call is right -- its own indexed
-              // count is the cheap gate and there is nothing to batch.
-              const attached = await attachSavedAnalysis({
-                decision: shadow.result.decision,
-                leagueId: target.leagueId,
-                userId,
-                tool: 'manager_intelligence',
-              })
               snapshots[shadowTargetIndex] = {
                 ...target,
                 decisionOsShadow: {
                   decisionId: shadow.result.decision.decision_id,
                   parityPassed: shadow.result.parity?.passed ?? null,
-                  card: toCommissionerHealthCard(attached.decision),
+                  card: toCommissionerHealthCard(shadow.result.decision),
                 },
               }
             }

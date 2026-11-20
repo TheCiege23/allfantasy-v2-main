@@ -29,7 +29,6 @@ interface DramaScoreInput {
   upsetMagnitude?: number
   playoffSwing?: number
   recencyWeight?: number
-  managerBehaviorHeat?: number
   leagueGraphHeat?: number
 }
 
@@ -56,8 +55,6 @@ export function calculateDramaScore(input: DramaScoreInput): number {
     input.playoffSwing != null ? Math.min(1.12, 1 + Math.abs(input.playoffSwing) / 1.6) : 1
   const recencyBoost =
     input.recencyWeight != null ? Math.min(1.1, Math.max(0.92, input.recencyWeight)) : 1
-  const behaviorHeatBoost =
-    input.managerBehaviorHeat != null ? Math.min(1.08, 1 + input.managerBehaviorHeat / 400) : 1
   const graphHeatBoost =
     input.leagueGraphHeat != null ? Math.min(1.08, 1 + input.leagueGraphHeat / 420) : 1
 
@@ -70,7 +67,6 @@ export function calculateDramaScore(input: DramaScoreInput): number {
     upsetBoost *
     playoffBoost *
     recencyBoost *
-    behaviorHeatBoost *
     graphHeatBoost
   return Math.max(0, Math.min(100, Math.round(raw * 10) / 10))
 }

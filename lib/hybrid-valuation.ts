@@ -12,6 +12,7 @@ import { leagueValueForPlayer, valuePositionsAgree, type TradePlayerIdentity } f
 import type { LeagueNamedValue } from './league-values/leagueTradeValues';
 
 export interface ValuationContext {
+  afLeagueMarketBook?: ReturnType<typeof import('./core-app/valueBook').valueBookFor>;
   leagueValueBySleeperId?: ReadonlyMap<string, LeagueNamedValue>;
   leagueUnpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>;
   leagueUnpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>;
@@ -55,6 +56,7 @@ export interface AssetValue {
 }
 
 export interface PricedAsset {
+  valueAsOf?: string;
   name: string;
   type: 'player' | 'pick';
   value: number;
@@ -86,6 +88,7 @@ export interface PricedAsset {
   source:
     | 'excel'
     | 'fantasycalc'
+    | 'allfantasy'
     | 'curve'
     | 'idp-vorp'
     | 'kicker-flat'

@@ -1,3 +1,5 @@
+import { leagueRosterForecasts } from '@/lib/af-projections/leagueRosterForecasts'
+import { leagueIdColumn, resolveRosterIdsToKeys, type LeagueIdColumn } from '@/lib/waivers/seasonRatePool'
 import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
@@ -171,6 +173,25 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         console.warn("[waiver-wire/players] daily-sport outlook failed", error instanceof Error ? error.message : String(error))
       }
     }
+
+    // The pool uses several provider ID spaces, independent of the platform hosting the league.
+    const groups = new Map<LeagueIdColumn, Map<string, number[]>>()
+    available.forEach((p, i) => {
+      const source = String(p.metadata?.source ?? '').toLowerCase()
+      const column = p.sleeper_id ? leagueIdColumn('sleeper', String(league.sport)) :
+        source === 'rolling_insights' ? 'rollingInsightsId' : (source === 'cfbd' || source === 'college_football_data') ? 'cfbdId' : source ? leagueIdColumn(source, String(league.sport)) : null
+      const id = p.sleeper_id ?? p.external_source_id
+      if (!id || !column) return
+      const group = groups.get(column) ?? new Map<string, number[]>()
+      group.set(String(id), [...(group.get(String(id)) ?? []), i])
+      groups.set(column, group)
+    })
+    const canonical = Array<string | null>(available.length).fill(null)
+    await Promise.all([...groups].map(async ([column, group]) => {
+      const keys = await resolveRosterIdsToKeys(prisma, String(league.sport), column, [...group.keys()]).catch(() => new Map<string, string>())
+      for (const [id, key] of keys) for (const i of group.get(id) ?? []) canonical[i] = key
+    }))
+    priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })
 
     // Prospects go AFTER every pool player: no projection, ADP or rank exists for them. A failed
     // universe read leaves the list as it was. Position / team filters apply to them as to the pool.

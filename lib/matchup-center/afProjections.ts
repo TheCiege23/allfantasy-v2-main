@@ -1,4 +1,5 @@
 import 'server-only'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { afEngineForLeague, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
@@ -13,6 +14,7 @@ import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
  * is shown as missing; it is never replaced with the provider's.
  */
 export async function loadMatchupAfProjections(args: {
+  leagueId?: string
   playerIds: readonly string[]
   season: number
   week: number
@@ -21,6 +23,14 @@ export async function loadMatchupAfProjections(args: {
   leagueSettings: unknown
 }): Promise<Map<string, number>> {
   const out = new Map<string, number>()
+  if (args.leagueId) {
+    const board = await loadLeaguePlayerMetrics({ leagueId: args.leagueId, week: args.week, rosterIds: args.playerIds,
+      limit: args.playerIds.length, includeTradeValues: false }).catch(() => null)
+    if (board?.season === args.season && board.unit === 'fantasy points') {
+      for (const row of board.rows) if (row.rosterPlayerId && row.weekly != null) out.set(row.rosterPlayerId, row.weekly)
+    }
+    return out
+  }
   if (rosterIdSpaceOf(args.platform, args.sport as Parameters<typeof rosterIdSpaceOf>[1]) !== 'sleeper') return out
   const ids = [...new Set(args.playerIds.filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id)))]
   if (ids.length === 0) return out

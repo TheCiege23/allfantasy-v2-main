@@ -66,13 +66,13 @@ vi.mock('@/lib/prisma', () => ({
 
 /* Per-player prices, so both sides can start the same NUMBER of players and still differ. */
 const PRICES: Record<string, number> = { a: 10, b: 10, c: 6, d: 6 }
-vi.mock('@/lib/core-app/playerProjections', () => ({
-  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 2 })),
-  lookupProjections: vi.fn(async (ids: string[]) =>
-    new Map(ids.filter((id) => PRICES[id] != null).map((id) => [id, { projectedPoints: PRICES[id] }])),
-  ),
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => ({
+    sport: 'NFL', season: 2026, week, unit: 'fantasy points',
+    rows: (db.claimed[0]?.league as { platform?: string })?.platform === 'sleeper'
+      ? rosterIds.filter(id => PRICES[id] != null).map(rosterPlayerId => ({ rosterPlayerId, weekly: PRICES[rosterPlayerId] })) : [],
+  }),
 }))
-
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 
 const NOW = new Date('2026-09-17T12:00:00Z')

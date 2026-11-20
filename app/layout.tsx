@@ -20,6 +20,7 @@ import { buildSeoMeta } from '@/lib/seo';
 import { resolveServerDataMode, THEME_SYSTEM_RESOLVED_COOKIE_KEY } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import { IOS_APP_HTML_FLAG_SCRIPT, IOS_APP_UA_TEST_JS } from '@/lib/platform/iosApp';
+import { APP_STORE_APP_ID } from '@/lib/platform/iosAppStore';
 import { AD_OPT_OUT_TEST_JS } from '@/lib/privacy/adMeasurementOptOut';
 import './globals.css';
 
@@ -79,6 +80,9 @@ export const metadata: Metadata = {
     apple: '/icons/icon-192.png',
   },
   manifest: metadataManifestPath,
+  // Safari on iPhone shows its own "Get the app" banner ("Open" once installed). WKWebView never renders it,
+  // so the app itself is unaffected. lib/platform/iosAppStore.ts holds the id.
+  itunes: { appId: APP_STORE_APP_ID },
   robots: {
     index: true,
     follow: true,

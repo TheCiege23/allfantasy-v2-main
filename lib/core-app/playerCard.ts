@@ -17,6 +17,7 @@ import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
 import { getRosteredMarket } from './rosteredMarket'
 import { boardPlayerValue, isBoardValueSport, loadLeagueValueBoard, type BoardPlayerValue } from '@/lib/sport-values/leagueValueBoard'
+import { loadLeaguePlayerMetrics, type LeaguePlayerMetric, type LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
@@ -459,6 +460,8 @@ export type PlayerCardData = {
   injuryFeed: SectionState<PlayerCardInjuryFeed>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
+  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue'>
+    & Pick<LeaguePlayerMetrics, 'week' | 'unit'>
   /**
    * Whether the signed-in reader follows him across every league (2026-09-14).
    *
@@ -1924,9 +1927,13 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
    * beside everything else. The id tried first is the one the league's rosters speak (Sleeper's NBA id,
    * or a native league's Rolling Insights id); the board falls back to his name only when no id matches.
    */
+  const leagueMatches = String(leagueBookRow?.sport ?? '').trim().toUpperCase() === sportKey
+  const leagueValueBoard = req.leagueId && leagueMatches && isBoardValueSport(sportKey)
+    ? loadLeagueValueBoard(req.leagueId)
+    : undefined
   const boardValuePromise: Promise<SectionState<PlayerCardBoardValue> | null> =
-    req.leagueId && isBoardValueSport(sportKey) && String(leagueBookRow?.sport ?? '').trim().toUpperCase() === sportKey
-      ? loadLeagueValueBoard(req.leagueId)
+    leagueValueBoard
+      ? leagueValueBoard
           .then((b) =>
             boardPlayerValue(b, {
               playerId: player.sleeperId ?? (player.source === 'rolling_insights' ? player.externalId : null),
@@ -1936,6 +1943,12 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           )
           .catch(() => unavailable('This league’s value board could not be read just now.'))
       : Promise.resolve(null)
+  const afLeagueMetricsPromise = req.leagueId && req.userId && leagueMatches
+    ? loadLeaguePlayerMetrics({
+      leagueId: req.leagueId, playerName: player.name, limit: 2,
+      valueBoard: leagueValueBoard,
+    }).catch(() => null)
+    : Promise.resolve(null)
 
   // prettier-ignore
   const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league, future, afEngine] = await Promise.all([
@@ -1998,6 +2011,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   ])
 
   const boardValue = await boardValuePromise
+  const afMetrics = await afLeagueMetricsPromise
+  const afRow = afMetrics?.rows.length === 1 ? afMetrics.rows[0] : null
 
   const own = ownershipBoard && player.sleeperId ? ownershipBoard.byPlayerId.get(player.sleeperId) : undefined
   const ownership: SectionState<PlayerCardOwnership> = !nflCard
@@ -2143,6 +2158,14 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
         unavailable('No record of when this sport was last checked.'),
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league: league && boardValue ? { ...league, boardValue } : league,
+    ...(afRow && afMetrics ? {
+      afLeagueProjection: {
+        rank: afRow.rank, positionRank: afRow.positionRank, perGame: afRow.perGame,
+        weekly: afRow.weekly, fullSeason: afRow.fullSeason, fullSeasonBasis: afRow.fullSeasonBasis, restOfSeason: afRow.restOfSeason,
+        week: afMetrics.week, unit: afMetrics.unit,
+        tradeValue: afRow.tradeValue, tradeValueUnit: afRow.tradeValueUnit, dynastyTradeValue: afRow.dynastyTradeValue,
+      },
+    } : {}),
     ...(follow ? { follow } : {}),
     ...(dynastyMarker ? { dynastyMarker } : {}),
   }

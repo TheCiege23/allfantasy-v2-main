@@ -184,6 +184,49 @@ describe('DB-first identity links for NBA and NHL', () => {
     const plan = planProFantraxIdentityLinks('NHL', Object.values(nhl.playerMap), [row('kuch', 'Nikita Kucherov', 'Tampa Bay Lightning', 'RW')])
     expect(plan.links).toEqual([{ id: 'kuch', fantraxId: 'syn-nhl-02', rollingInsightsId: 'ri-kuch' }])
   })
+
+  /*
+   * The unlinked rostered ids in production, 2026-11-19 — each case is a real player who was unlinked
+   * for exactly this reason (names and teams as both sides store them).
+   */
+  it('ignores a generational suffix Fantrax drops (Jaren Jackson Jr., Trey Murphy III)', () => {
+    const plan = planProFantraxIdentityLinks('NBA', [
+      { fantraxId: '04qrj', name: 'Jackson, Jaren', team: 'UTA', position: 'C' },
+      { fantraxId: '05uir', name: 'Murphy, Trey', team: 'NOP', position: 'SF' },
+    ], [row('jjj', 'Jaren Jackson Jr.', 'UTAH JAZZ', 'PF'), row('t3', 'Trey Murphy III', 'NEW ORLEANS PELICANS', 'SG')])
+    expect(plan.links.map((l) => [l.id, l.fantraxId])).toEqual([['jjj', '04qrj'], ['t3', '05uir']])
+  })
+  it('refuses a father and son who share a team once the suffix is dropped', () => {
+    const plan = planProFantraxIdentityLinks('NBA', [{ fantraxId: 'x', name: 'Hardaway, Tim', team: 'DEN', position: 'SG' }],
+      [row('jr', 'Tim Hardaway Jr.', 'DEN', 'SG'), row('sr', 'Tim Hardaway Sr.', 'DEN', 'SG')])
+    expect(plan.links).toEqual([])
+    expect(plan.ambiguous).toBe(1)
+  })
+  it('links a nickname to the full given name on the same team (Mitch Marner, Matt Coronato)', () => {
+    const plan = planProFantraxIdentityLinks('NHL', [
+      { fantraxId: '03jvu', name: 'Marner, Mitch', team: 'VGK', position: 'RW' },
+      { fantraxId: '05ran', name: 'Coronato, Matt', team: 'CGY', position: 'RW' },
+    ], [row('marner', 'Mitchell Marner', 'VEGAS GOLDEN KNIGHTS', 'RW'), row('cor', 'Matthew Coronato', 'CALGARY FLAMES', 'RW')])
+    expect(plan.links.map((l) => [l.id, l.fantraxId])).toEqual([['marner', '03jvu'], ['cor', '05ran']])
+  })
+  it('never takes a nickname across teams, or a mere shared surname', () => {
+    const ref = { fantraxId: 'x', name: 'Marner, Mitch', team: 'TOR', position: 'RW' }
+    expect(planProFantraxIdentityLinks('NHL', [ref], [row('m', 'Mitchell Marner', 'VEGAS GOLDEN KNIGHTS', 'RW')]).links).toEqual([])
+    const sam = { fantraxId: 'y', name: 'Reinhart, Sam', team: 'FLA', position: 'C' }
+    expect(planProFantraxIdentityLinks('NHL', [sam], [row('r', 'Max Reinhart', 'FLA', 'C')]).links).toEqual([])
+  })
+  it('separates two Vancouver Elias Petterssons by forward and defence', () => {
+    const plan = planProFantraxIdentityLinks('NHL', [
+      { fantraxId: '048x9', name: 'Pettersson, Elias', team: 'VAN', position: 'C' },
+      { fantraxId: 'ep-d', name: 'Pettersson, Elias', team: 'VAN', position: 'D' },
+    ], [row('ep40', 'Elias Pettersson', 'VANCOUVER CANUCKS', 'C'), row('ep25', 'Elias Pettersson', 'VANCOUVER CANUCKS', 'D')])
+    expect(plan.links.map((l) => [l.id, l.fantraxId])).toEqual([['ep40', '048x9'], ['ep25', 'ep-d']])
+  })
+  it('still refuses a forward/defence label disagreement when it is the only candidate it would break', () => {
+    const ref = { fantraxId: 'x', name: 'Pettersson, Elias', team: 'VAN', position: 'LW' }
+    const plan = planProFantraxIdentityLinks('NHL', [ref], [row('a', 'Elias Pettersson', 'VAN', 'D'), row('b', 'Elias Pettersson', 'VAN', 'D')])
+    expect(plan.links).toEqual([])
+  })
 })
 
 describe('import UI', () => {

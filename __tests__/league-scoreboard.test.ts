@@ -7,12 +7,13 @@ const { matchupFindMany, teamFindMany, rosterFindMany, projFindMany } = vi.hoist
   projFindMany: vi.fn(),
 }))
 
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: projFindMany }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     weeklyMatchup: { findMany: matchupFindMany },
     leagueTeam: { findMany: teamFindMany },
     roster: { findMany: rosterFindMany },
-    fantasyProjection: { findMany: projFindMany, findFirst: vi.fn() },
+
   },
 }))
 
@@ -48,14 +49,10 @@ function fourTeams() {
 
 /** Every starter priced at 10 generic / component line that scores 12. */
 function pricedAll() {
-  projFindMany.mockImplementation(async ({ where }: never) => {
-    const ids: string[] = (where as { playerId: { in: string[] } }).playerId.in
-    return ids.map((id) => ({
-      playerId: id,
-      projectedPoints: 10,
-      stats: { name: id, stats: { rec: 2, pass_td: 1 } },
-    }))
-  })
+  projFindMany.mockImplementation(async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => ({
+    season: 2026, week, unit: 'fantasy points',
+    rows: rosterIds.map(rosterPlayerId => ({ rosterPlayerId, weekly: 6 })),
+  }))
 }
 
 beforeEach(() => {
@@ -172,15 +169,10 @@ describe('getLeagueScoreboard', () => {
       { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     fourTeams()
-    projFindMany.mockResolvedValue([
-      // Scores 6 under { rec: 1, pass_td: 4 }.
-      { playerId: 'u1-a', projectedPoints: 10, stats: { stats: { rec: 2, pass_td: 1 } } },
-      // A defender: generic 0 and no component line. Was counted as a PRICED zero.
-      { playerId: 'u1-b', projectedPoints: 0, stats: { name: 'LB' } },
-      { playerId: 'u2-a', projectedPoints: 10, stats: { stats: { rec: 2, pass_td: 1 } } },
-      // A stat line the rules have no key for. Was counted at its generic 10.
-      { playerId: 'u2-b', projectedPoints: 10, stats: { stats: { def_int: 1 } } },
-    ])
+    projFindMany.mockResolvedValue({ season: 2026, week: 1, unit: 'fantasy points', rows: [
+      { rosterPlayerId: 'u1-a', weekly: 6 }, { rosterPlayerId: 'u1-b', weekly: null },
+      { rosterPlayerId: 'u2-a', weekly: 6 },
+    ] })
 
     const sb = await getLeagueScoreboard(BASE)
     const [yours, theirs] = sb!.games[0].teams
@@ -198,7 +190,7 @@ describe('getLeagueScoreboard', () => {
       { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     fourTeams()
-    pricedAll()
+    projFindMany.mockResolvedValue({ season: 2026, week: 1, unit: 'fantasy points', rows: [] })
 
     const sb = await getLeagueScoreboard({ ...BASE, scoringSettings: { sack_yds: 2 } })
     expect(sb!.games[0].teams[0].projected).toBeNull()
@@ -236,11 +228,9 @@ describe('getLeagueScoreboard', () => {
       { platformUserId: 'u2', playerData: { starters: ['y1', 'y2'] } },
     ])
     // Only three of the four starters are priced.
-    projFindMany.mockResolvedValue([
-      { playerId: 'x1', projectedPoints: 10, stats: { stats: { rec: 2 } } },
-      { playerId: 'x2', projectedPoints: 10, stats: { stats: { rec: 2 } } },
-      { playerId: 'y1', projectedPoints: 10, stats: { stats: { rec: 2 } } },
-    ])
+    projFindMany.mockResolvedValue({ season: 2026, week: 1, unit: 'fantasy points',
+      rows: ['x1', 'x2', 'y1'].map(rosterPlayerId => ({ rosterPlayerId, weekly: 2 })),
+    })
 
     const sb = await getLeagueScoreboard(BASE)
     expect(sb!.games[0].margin).toBeNull()
@@ -365,11 +355,12 @@ describe('getLeagueScoreboard — a foreign-id roster is never priced as Sleeper
 
   it('Fleaflicker: no stranger projections, no totals, no win probability', async () => {
     collidingBoard('fleaflicker')
+    projFindMany.mockResolvedValue({ season: 2026, week: 1, unit: 'fantasy points', rows: [] })
     const sb = await getLeagueScoreboard(BASE)
     const [a, b] = sb!.games[0].teams
     expect([a.projected, b.projected]).toEqual([null, null])
     expect(sb!.games[0].winProbability).toBeNull()
-    expect(projFindMany).not.toHaveBeenCalled()
+    expect(projFindMany).toHaveBeenCalledWith(expect.objectContaining({ leagueId: BASE.leagueId, rosterIds: ['6038', '6039', '7001', '7002'] }))
   })
 
   it('CONTROL: the same ids in a Sleeper league ARE priced', async () => {

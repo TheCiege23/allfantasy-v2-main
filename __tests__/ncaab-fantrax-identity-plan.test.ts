@@ -34,3 +34,25 @@ describe('Fantrax NCAAB identity bridge', () => {
       identities: [{ ...identity, fantraxId: 'owned' }] }).links).toEqual([])
   })
 })
+
+describe('school abbreviations confirmed by current games', () => {
+  const refs = ['Alpha', 'Bravo', 'Charlie', 'Delta'].map((name, i) => ({ fantraxId: 'f' + i, name, team: 'Rdr', position: 'G' }))
+  const identities = refs.map((r, i) => ({ ...identity, id: 'i' + i, normalizedName: r.name.toLowerCase(), rollingInsightsId: 'r' + i }))
+  const sourcePlayers = refs.map((r, i) => ({ ...args.sourcePlayers[0]!, name: r.name, externalId: 'r' + i }))
+  const currentAppearances = identities.map(p => ({ playerId: p.id, team: 'Rider' }))
+  const input = { ...args, refs, identities, sourcePlayers, currentAppearances, rosterIds: new Set(['f3']) }
+  it('accepts an exact current player on the agreed school and rejects a missing or conflicting box', () => {
+    expect(planNcaabFantraxIdentityLinks(input).links).toEqual([{ id: 'i3', fantraxId: 'f3', rollingInsightsId: 'r3' }])
+    expect(planNcaabFantraxIdentityLinks({ ...input, currentAppearances: currentAppearances.slice(0, 3) }).links).toEqual([])
+    expect(planNcaabFantraxIdentityLinks({ ...input, currentAppearances: [...currentAppearances, { playerId: 'i3', team: 'OTHER' }] }).links).toEqual([])
+  })
+  it('requires independent athletes, one school and an unambiguous current identity', () => {
+    expect(planNcaabFantraxIdentityLinks({ ...input, refs: refs.slice(2) }).links).toEqual([])
+    expect(planNcaabFantraxIdentityLinks({ ...input, teams: [...args.teams, { shortName: 'O', name: 'Other' }],
+      identities: identities.map((p,i) => i ? p : { ...p, currentTeam: 'Other' }),
+      sourcePlayers: sourcePlayers.map((p,i) => i ? p : { ...p, team: 'Other' }),
+      currentAppearances: currentAppearances.map((p,i) => i ? p : { ...p, team: 'O' }),
+    }).links).toEqual([])
+    expect(planNcaabFantraxIdentityLinks({ ...input, refs: [...refs, { ...refs[3]!, fantraxId: 'other-id' }] }).links).toEqual([])
+  })
+})

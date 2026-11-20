@@ -39,6 +39,11 @@ export type ResolvedProviderPlayer = {
   sport: string
   /** The Sleeper id this identity links to, when it has one — what NFL pricing keys on. */
   sleeperId?: string | null
+  /**
+   * The Rolling Insights id, when it has one. Outside the NFL it is the link that reaches a
+   * `sports_players` record (`<SPORT>:<id>`); Fantrax-linked NBA/NHL/college identities carry no Sleeper id.
+   */
+  rollingInsightsId?: string | null
 }
 
 const IDENTITY_COLUMNS = ['espnId', 'fantraxId', 'fleaflickerId', 'mflId'] as const
@@ -77,6 +82,7 @@ export async function resolveProviderRosterPlayers(
       currentTeam: true,
       sport: true,
       sleeperId: true,
+      rollingInsightsId: true,
       espnId: true,
       fantraxId: true,
       fleaflickerId: true,
@@ -119,6 +125,7 @@ export async function resolveProviderRosterPlayers(
       imageUrl: toImageUrl(portrait?.imageUrl),
       sport: row.sport,
       sleeperId: row.sleeperId ?? null,
+      rollingInsightsId: row.rollingInsightsId ?? null,
     })
   }
   for (const [key, count] of matches) {
