@@ -241,8 +241,12 @@ export type LedgerRecordView = {
   bench: { you: TrackRecordLine | null; everyone: (TrackRecordLine & { gainPerCall: number | null }) | null } | null
   /** The waiver panel's #1 pickup: how many averaged 10+ PPR over their window. */
   pickups: { you: PickupLine | null; everyone: (PickupLine & { vsDrop: number; beatDrop: number }) | null } | null
-  /** Letters with enough graded redraft deals, A first. Empty → null. */
-  trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number }> | null
+  /**
+   * Letters with enough graded redraft deals, A first. Empty → null. `aheadPct` is the share of the letter's
+   * deals (ties left out) whose graded side out-scored what it gave; null on a snapshot written before
+   * 2026-11-19, which stored no split.
+   */
+  trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
 }
 
 const nat = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
@@ -292,7 +296,9 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
   const letters = TRADE_LETTERS.flatMap((letter) => {
     const t = ledger.trades?.byLetter?.[letter]
     if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.netPerWeek !== 'number' || !Number.isFinite(t.netPerWeek)) return []
-    return [{ letter, n: nat(t.n), netPerWeek: round1(t.netPerWeek) }]
+    const ahead = nat(t.ahead)
+    const decided = ahead + nat(t.behind)
+    return [{ letter, n: nat(t.n), netPerWeek: round1(t.netPerWeek), aheadPct: decided > 0 ? Math.round((100 * ahead) / decided) : null }]
   })
 
   if (!bench && !pickups && letters.length === 0) return null
@@ -326,6 +332,7 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
       if (!t || typeof t !== 'object') return null
       const x = t as Record<string, unknown>
       if (!TRADE_LETTERS.includes(x.letter as TradeLetter) || typeof x.n !== 'number' || typeof x.netPerWeek !== 'number') return null
+      if (x.aheadPct != null && !(typeof x.aheadPct === 'number' && x.aheadPct >= 0 && x.aheadPct <= 100)) return null
     }
   }
   if (bench == null && pickups == null && trades == null) return null

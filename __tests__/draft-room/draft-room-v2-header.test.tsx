@@ -60,13 +60,28 @@ describe('room v2 header', () => {
     expect(screen.queryByTestId('draft-topbar-up-in')).toBeNull()
   })
 
-  it('Ask Chimmy calls the page handler, and is absent without one', () => {
-    const onOpenChimmy = vi.fn()
-    const { rerender } = render(<DraftTopBar {...live} onOpenChimmy={onOpenChimmy} />)
-    fireEvent.click(screen.getByTestId('draft-topbar-ask-chimmy'))
-    expect(onOpenChimmy).toHaveBeenCalledTimes(1)
-    rerender(<DraftTopBar {...live} />)
+  it('the gear opens draft settings for everyone; Ask Chimmy is gone from the header (2026-11-19)', () => {
+    const onOpenDraftRoomSettings = vi.fn()
+    const { rerender } = render(<DraftTopBar {...live} isCommissioner={false} onOpenChimmy={vi.fn()} onOpenDraftRoomSettings={onOpenDraftRoomSettings} />)
     expect(screen.queryByTestId('draft-topbar-ask-chimmy')).toBeNull()
+    fireEvent.click(screen.getByTestId('draft-topbar-settings'))
+    expect(onOpenDraftRoomSettings).toHaveBeenCalledTimes(1)
+    rerender(<DraftTopBar {...live} />)
+    expect(screen.queryByTestId('draft-topbar-settings')).toBeNull()
+  })
+
+  it('a paused clock reads Paused and is not a Resume button; Resume is the one pill', () => {
+    const onResume = vi.fn()
+    render(<DraftTopBar {...live} isCommissioner draftStatus="paused" timerStatus="paused" onResume={onResume} onPause={vi.fn()} />)
+    expect(screen.queryByTestId('draft-topbar-resume-draft')).toBeNull()
+    expect(screen.getByTestId('draft-topbar-clock').tagName).toBe('DIV')
+    fireEvent.click(screen.getByTestId('draft-topbar-resume-pill'))
+    expect(onResume).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows no league auto-pick pill (it lives in Draft settings)', () => {
+    render(<DraftTopBar {...live} onToggleAutoPick={vi.fn()} />)
+    expect(screen.queryByTestId('draft-topbar-autopick-pill')).toBeNull()
   })
 
   it('moves the sound toggle into the room menu', () => {

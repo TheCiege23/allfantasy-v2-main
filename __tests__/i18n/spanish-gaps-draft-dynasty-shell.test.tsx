@@ -107,11 +107,12 @@ function renderTopBar() {
 }
 
 const TOP_BAR_EN = [
-  '3 managers online', 'Value +2.5', 'Stack', 'Bye conflict', 'Click to resume the draft. Time remaining is restored from when it was paused.',
-  'Resume draft', 'Resume the draft', 'Toggle autopick: when enabled, will auto-pick when timer expires', 'Auto-pick ', 'Auto ',
+  // 2026-11-19: the clock no longer resumes, and league auto-pick moved to Draft settings.
+  '3 managers online', 'Value +2.5', 'Stack', 'Bye conflict',
+  'Resume the draft',
   'Mute timer beeps (10s / 5s / final)', 'Draft options', 'Copy Invite Link', 'Your friends can join via this link',
   'Big Screen Mode', 'Read-only board view for casting to a TV.', 'Set Draft Order', 'Set or edit the draft order',
-  '2 pending trades', 'Refresh timer, queue, and board state', 'Draft Room Preferences', 'Room timer, automation, and presentation',
+  '2 pending trades', 'Refresh timer, queue, and board state', 'Draft Room Preferences',
   'Commissioner control center', 'Commissioner Control Center', 'Start, pause, resume, picks, and automation',
   'Resume Draft', 'Restart the draft timer', 'Run Chimmy pick', 'Trigger the orphan team drafter for the current pick',
   'Reset Timer', 'Undo Pick', 'Sync issue', 'Draft session poll failed several times in a row. The room keeps your last good snapshot; polls retry automatically.',
@@ -121,20 +122,19 @@ describe('draft room top bar', () => {
   it('English: every translated string reads exactly as before', () => {
     renderTopBar()
     expectAll(readable(), TOP_BAR_EN)
-    expect(screen.getByTestId('draft-topbar-autopick-pill').textContent).toBe('Auto-pick Auto Off')
+    expect(screen.queryByTestId('draft-topbar-autopick-pill')).toBeNull()
   })
 
   it('Spanish: the hints, tooltips and the whole overflow menu are translated', () => {
     lang.language = 'es'
     renderTopBar()
     const text = readable()
-    expectNone(text, TOP_BAR_EN.filter((s) => !['Auto-pick ', 'Auto '].includes(s)))
+    expectNone(text, TOP_BAR_EN)
     expectAll(text, [
       '3 mánagers en línea', 'Copiar enlace de invitación', 'Modo pantalla grande', 'Fijar orden del draft',
       '2 intercambios pendientes', 'Centro de control del comisionado', 'Reanudar draft', 'Reiniciar temporizador',
       'Deshacer pick', 'Desincronizado', 'Opciones del draft', 'Choque de descanso', 'Valor +2.5',
     ])
-    expect(screen.getByTestId('draft-topbar-autopick-pill').textContent).toBe('Auto-pick Auto No')
   })
 
   it('Spanish: the running-clock and on-the-clock states are translated too', () => {

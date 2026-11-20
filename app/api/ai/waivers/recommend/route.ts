@@ -158,7 +158,8 @@ export async function POST(request: Request) {
       insufficientData: recommendations.length === 0 && (unpriced || !result.decision),
       recommendations,
       rosterNeeds,
-      leagueContext: { leagueId, ...context },
+      // The sport lets the panel decide whether the ledger's NFL record belongs beside this list.
+      leagueContext: { leagueId, sport: facts.sport, ...context },
       generatedAt,
       meta: { dataGaps, mode },
     })

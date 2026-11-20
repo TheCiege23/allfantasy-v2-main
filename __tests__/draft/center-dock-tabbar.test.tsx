@@ -13,12 +13,12 @@ import { DraftCenterDockTabBar } from '@/components/app/draft-room/DraftCenterDo
 const labels = () => screen.getAllByRole('tab').map((t) => t.textContent)
 
 describe('DraftCenterDockTabBar', () => {
-  it('shows Intel outside an auction and Commish Edit to a commissioner', () => {
+  it('reads Queue, Chimmy, Chat (+ Commish Edit for a commissioner); Intel and AF Legacy merged into Chimmy (2026-11-19)', () => {
     const { unmount } = render(<DraftCenterDockTabBar active="queue" onSelect={vi.fn()} showIntel showCommish redraftSnake={false} />)
-    expect(labels()).toEqual(['Queue', 'Intel', 'Chat', 'AF Legacy', 'Commish Edit'])
+    expect(labels()).toEqual(['Queue', 'Chimmy', 'Chat', 'Commish Edit'])
     unmount()
     render(<DraftCenterDockTabBar active="queue" onSelect={vi.fn()} showIntel={false} showCommish={false} redraftSnake={false} />)
-    expect(labels()).toEqual(['Queue', 'Chat', 'AF Legacy'])
+    expect(labels()).toEqual(['Queue', 'Chimmy', 'Chat'])
   })
 
   it('keeps the room’s test ids, marks the active tab and reports a click', () => {
@@ -61,7 +61,7 @@ describe('room v2 tablet panel tabs (portrait, 768–1023px)', () => {
         testIdBase="draft-tablet"
       />,
     )
-    expect(labels()).toEqual(['Players', 'Queue', 'Intel', 'Chat', 'AF Legacy'])
+    expect(labels()).toEqual(['Players', 'Queue', 'Chimmy', 'Chat'])
     expect(screen.getByTestId('draft-tablet-dock-tabbar')).toBeTruthy()
     expect(screen.getByTestId('draft-tablet-tab-players').getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('draft-tablet-tab-queue').getAttribute('aria-selected')).toBe('false')

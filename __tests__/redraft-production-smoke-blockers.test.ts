@@ -107,10 +107,10 @@ describe('redraft production smoke blockers', () => {
     expect(draftChat).not.toContain('bottomRef.current?.scrollIntoView')
   })
 
-  it('War Room is visible inside the draft room dock and popup', () => {
-    expect(draftRightDock).toContain("id: 'war_room', label: 'AF Legacy'")
-    expect(draftRightDock).toContain('warRoomBody?: ReactNode')
-    expect(draftRoomClient).toContain('warRoomBody=')
+  it('War Room is visible inside the draft room (Chimmy tab "Board read") and popup', () => {
+    // 2026-11-19: the AF Legacy tab folded into the Chimmy tab as "Board read".
+    expect(draftRightDock).not.toContain("id: 'war_room'")
+    expect(draftRoomClient).toContain('data-testid="draft-chimmy-board-read"')
     expect(draftRoomClient).toContain('<DraftTeamPanel {...draftTeamPanelProps} />')
     expect(draftRoomClient).toContain('War Room')
   })

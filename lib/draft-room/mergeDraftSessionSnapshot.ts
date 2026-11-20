@@ -292,6 +292,9 @@ export function isStaleDraftSessionSnapshot(
 const VIEWER_SESSION_KEYS = [
   'currentUserRosterId',
   'orphanRosterIds',
+  // Changes when a manager switches auto-pick on or off, which moves no pick — so it must be
+  // applied even when the board surface is unchanged, or the AUTO badge lags a whole pick.
+  'autoDraftRosterIds',
   'aiManagerEnabled',
   'orphanDrafterMode',
   'orphanAiProviderAvailable',
@@ -347,6 +350,7 @@ export function mergeDraftSessionSnapshot(
         }
         continue
       }
+      if (Array.isArray(nv) && Array.isArray(pv) && nv.length === pv.length && nv.every((v, i) => v === pv[i])) continue
       if (nv !== undefined && nv !== pv) {
         if (out === prev) out = { ...prev }
         ;(snapshotRecord(out) as Record<string, unknown>)[key] = nv

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Lock, Music2 } from 'lucide-react'
 import { musicBus } from '@/components/app-music/musicBus'
 import { YOUTUBE_STATIONS } from '@/lib/draft-music/youtube'
@@ -66,9 +67,19 @@ type Props = {
   draftStatus: string | null | undefined
   /** The playlist from the room's draft settings poll; undefined until the room has read it. */
   livePlaylist?: DraftPlaylist | null
+  /**
+   * Top-bar mode (2026-11-19): a small music button with a popover instead of a full-width row.
+   * The row cost a line of board on every screen even with nothing playing. While a song PLAYS the
+   * 200x200 player row still appears, portalled under the top bar into `#${MUSIC_ROW_ANCHOR_ID}`,
+   * because YouTube will not play in anything smaller.
+   */
+  compact?: boolean
 }
 
-export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist }: Props) {
+/** Where the playing-row is portalled in compact mode. The room renders an empty div with this id. */
+export const MUSIC_ROW_ANCHOR_ID = 'draft-room-music-row-anchor'
+
+export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist, compact = false }: Props) {
   const snap = useSyncExternalStore(musicBus.subscribe, musicBus.getSnapshot, musicBus.getServerSnapshot)
   const available = Boolean(snap.ready && musicBus.actions())
   const [info, setInfo] = useState<Info | null>(null)
@@ -99,6 +110,22 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
   const playing = snap.yt
   const inRow = Boolean(playing && available)
   const slotRef = useRef<HTMLDivElement | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+  // Looked up after mount: the anchor sits below the top bar, so it does not exist yet while the
+  // top bar (where this renders) is first rendering.
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (compact) setAnchor(document.getElementById(MUSIC_ROW_ANCHOR_ID))
+  }, [compact, inRow])
+  // Compact popover: a tap outside closes it, like the room's other menus.
+  useEffect(() => {
+    if (!compact || !open || inRow) return
+    const onDown = (e: PointerEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [compact, open, inRow])
 
   // Report where the slot is, every frame, as the chat's Music tab does: the room can still shift (the top bar wraps,
   // "More" opens) without the slot resizing. Leaving the room or stopping hands the player back to the corner.
@@ -314,98 +341,155 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
     </button>
   )
 
+  const playingRow = (
+    <div className="flex items-stretch gap-2" data-testid="draft-room-music-in-row">
+      {/* The player is laid over this box by AppMusicDock; the box itself is only its place. */}
+      <div ref={slotRef} className="h-[200px] w-[200px] shrink-0 rounded-[10px] bg-black" aria-hidden data-testid="draft-room-music-slot" />
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 py-0.5">
+        <div className="leading-tight">
+          <p className="flex items-center gap-1.5 text-xs font-semibold" data-testid="draft-room-music-title">
+            <Music2 className="h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
+            <span className="line-clamp-2">{title}</span>
+          </p>
+          <p className="mt-1 line-clamp-3 text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
+        </div>
+        {/* Stacked beside the slot on a phone; side by side under the title where there is room. */}
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+          {stopButton}
+          {moreButton}
+        </div>
+      </div>
+    </div>
+  )
+
+  const idleRow = (
+    <div className="flex items-center gap-2">
+      <Music2 className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden />
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="truncate text-xs font-semibold" data-testid="draft-room-music-title">{title}</p>
+        <p className="truncate text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
+      </div>
+      {playing ? (
+        stopButton
+      ) : playlist ? (
+        <button key="play-playlist" type="button" className={primary} disabled={!available} onClick={playPlaylist} data-testid="draft-room-music-play-playlist">
+          Play
+        </button>
+      ) : (
+        <button key="play-station" type="button" className={primary} disabled={!available || !pick} onClick={playPick} data-testid="draft-room-music-play-station">
+          Play
+        </button>
+      )}
+      {compact ? null : moreButton}
+    </div>
+  )
+
+  const moreSection = (
+    <div id="draft-room-music-more" className={`flex flex-col gap-2 pb-1 ${compact ? 'pt-1' : 'mt-1.5 border-t border-white/10 pt-2'}`}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <label className="w-full text-[11px] text-white/65 sm:w-auto" htmlFor="draft-room-music-station">
+          {playlist ? 'Or play something else' : 'Station'}
+        </label>
+        <select id="draft-room-music-station" className={select} value={pick} onChange={(e) => setPick(e.target.value)} disabled={!available}>
+          {YOUTUBE_STATIONS.map((s) => (
+            <option key={s.id} value={s.id}>{s.label}</option>
+          ))}
+        </select>
+        <button type="button" className={quiet} disabled={!available || !pick} onClick={playPick} data-testid="draft-room-music-play-pick">
+          Play this
+        </button>
+      </div>
+
+      {info?.isCommissioner ? (
+        info.canSet ? (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="draft-room-music-editor">
+            <label className="w-full text-[11px] text-white/65" htmlFor="draft-room-music-playlist">
+              Draft playlist — offered to every member while the draft runs. It plays only for those who tap Play.
+            </label>
+            <select id="draft-room-music-playlist" className={select} value={choice} onChange={(e) => setChoice(e.target.value)}>
+              <option value="">No playlist</option>
+              {YOUTUBE_STATIONS.map((s) => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
+            <button type="button" className={primary} disabled={saving} onClick={() => void save()} data-testid="draft-room-music-save">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        ) : (
+          <p className="flex flex-wrap items-center gap-2 text-[12px] text-white/75" data-testid="draft-room-music-locked">
+            <Lock className="h-3.5 w-3.5 text-amber-300" aria-hidden />
+            A draft playlist for the whole room comes with AF Commissioner or AF Supreme.
+            <a href="/commissioner-upgrade" className="font-semibold text-cyan-300 underline-offset-2 hover:underline">
+              See plans
+            </a>
+          </p>
+        )
+      ) : null}
+    </div>
+  )
+
+  const noteEl = note ? <p className="pb-1 text-[11px] text-white/70" role="status" data-testid="draft-room-music-note">{note}</p> : null
+
+  if (compact) {
+    const playingSection = inRow ? (
+      <section
+        className="shrink-0 border-b border-white/10 bg-cyan-500/[0.05] px-3 py-1.5 text-white"
+        aria-label="Draft room music"
+        data-testid="draft-room-music"
+      >
+        {playingRow}
+        {open ? moreSection : null}
+        {noteEl}
+      </section>
+    ) : null
+    return (
+      <>
+        <div className="relative" ref={popoverRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen((v) => !v)
+              setNote(null)
+            }}
+            aria-expanded={open}
+            aria-label={playing ? `Music: playing ${playing.label}` : 'Music for the draft'}
+            title={playing ? `Playing ${playing.label}` : 'Music'}
+            data-testid="draft-room-music-toggle"
+            data-playing={playing ? 'true' : 'false'}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95 ${
+              playing ? 'border-cyan-300/50 bg-cyan-500/20 text-cyan-100' : 'border-white/12 bg-[#7180a8]/20 text-white/85 hover:bg-[#7b89af]/30'
+            }`}
+          >
+            <Music2 className="h-4 w-4" aria-hidden />
+          </button>
+          {open && !inRow ? (
+            <section
+              className="absolute right-0 top-10 z-[60] w-[min(22rem,calc(100vw-24px))] max-sm:fixed max-sm:inset-x-3 max-sm:top-[4.5rem] max-sm:w-auto rounded-2xl border border-white/12 bg-[#1d2638] p-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+              aria-label="Draft room music"
+              data-testid="draft-room-music"
+            >
+              {idleRow}
+              {moreSection}
+              {noteEl}
+            </section>
+          ) : null}
+        </div>
+        {/* Never inside the top bar: wait the one tick until the anchor below it is found. */}
+        {playingSection && anchor ? createPortal(playingSection, anchor) : null}
+      </>
+    )
+  }
+
   return (
     <section
       className="shrink-0 border-b border-white/10 bg-cyan-500/[0.05] px-3 py-1.5 text-white"
       aria-label="Draft room music"
       data-testid="draft-room-music"
     >
-      {inRow ? (
-        <div className="flex items-stretch gap-2" data-testid="draft-room-music-in-row">
-          {/* The player is laid over this box by AppMusicDock; the box itself is only its place. */}
-          <div ref={slotRef} className="h-[200px] w-[200px] shrink-0 rounded-[10px] bg-black" aria-hidden data-testid="draft-room-music-slot" />
-          <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 py-0.5">
-            <div className="leading-tight">
-              <p className="flex items-center gap-1.5 text-xs font-semibold" data-testid="draft-room-music-title">
-                <Music2 className="h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
-                <span className="line-clamp-2">{title}</span>
-              </p>
-              <p className="mt-1 line-clamp-3 text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
-            </div>
-            {/* Stacked beside the slot on a phone; side by side under the title where there is room. */}
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-              {stopButton}
-              {moreButton}
-            </div>
-          </div>
-        </div>
-      ) : (
-      <div className="flex items-center gap-2">
-        <Music2 className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden />
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-xs font-semibold" data-testid="draft-room-music-title">{title}</p>
-          <p className="truncate text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
-        </div>
-        {playing ? (
-          stopButton
-        ) : playlist ? (
-          <button key="play-playlist" type="button" className={primary} disabled={!available} onClick={playPlaylist} data-testid="draft-room-music-play-playlist">
-            Play
-          </button>
-        ) : (
-          <button key="play-station" type="button" className={primary} disabled={!available || !pick} onClick={playPick} data-testid="draft-room-music-play-station">
-            Play
-          </button>
-        )}
-        {moreButton}
-      </div>
-      )}
-
-      {open ? (
-        <div id="draft-room-music-more" className="mt-1.5 flex flex-col gap-2 border-t border-white/10 pt-2 pb-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <label className="w-full text-[11px] text-white/65 sm:w-auto" htmlFor="draft-room-music-station">
-              {playlist ? 'Or play something else' : 'Station'}
-            </label>
-            <select id="draft-room-music-station" className={select} value={pick} onChange={(e) => setPick(e.target.value)} disabled={!available}>
-              {YOUTUBE_STATIONS.map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
-            </select>
-            <button type="button" className={quiet} disabled={!available || !pick} onClick={playPick} data-testid="draft-room-music-play-pick">
-              Play this
-            </button>
-          </div>
-
-          {info?.isCommissioner ? (
-            info.canSet ? (
-              <div className="flex flex-wrap items-center gap-1.5" data-testid="draft-room-music-editor">
-                <label className="w-full text-[11px] text-white/65" htmlFor="draft-room-music-playlist">
-                  Draft playlist — offered to every member while the draft runs. It plays only for those who tap Play.
-                </label>
-                <select id="draft-room-music-playlist" className={select} value={choice} onChange={(e) => setChoice(e.target.value)}>
-                  <option value="">No playlist</option>
-                  {YOUTUBE_STATIONS.map((s) => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-                <button type="button" className={primary} disabled={saving} onClick={() => void save()} data-testid="draft-room-music-save">
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            ) : (
-              <p className="flex flex-wrap items-center gap-2 text-[12px] text-white/75" data-testid="draft-room-music-locked">
-                <Lock className="h-3.5 w-3.5 text-amber-300" aria-hidden />
-                A draft playlist for the whole room comes with AF Commissioner or AF Supreme.
-                <a href="/commissioner-upgrade" className="font-semibold text-cyan-300 underline-offset-2 hover:underline">
-                  See plans
-                </a>
-              </p>
-            )
-          ) : null}
-        </div>
-      ) : null}
-      {note ? <p className="pb-1 text-[11px] text-white/70" role="status" data-testid="draft-room-music-note">{note}</p> : null}
+      {inRow ? playingRow : idleRow}
+      {open ? moreSection : null}
+      {noteEl}
     </section>
   )
 }
