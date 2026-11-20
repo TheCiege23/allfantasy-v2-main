@@ -4,6 +4,8 @@ import type { FantraxImportPayload } from '@/lib/league-import/adapters/fantrax/
 import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 
 import { createStateFromImportedLeague } from '@/lib/create-league-v2/import-template'
+import { matchSharedFantraxPlayers } from '@/lib/player-identity/fantraxSharedPlayerIds'
+import type { SleeperPlayer } from '@/lib/sleeper-client'
 import { getEffectiveLeagueType } from '@/lib/create-league-v2/state'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
@@ -72,6 +74,15 @@ describe('published Fantrax first-season calendars', () => {
       expect(body.teamCount).toBe(34)
       expect(normalizeConceptToFormat(String(body.concept))).toEqual({ formatId: type, aliasTags: ['idp'] })
     } finally { fetch.mockRestore() }
+  })
+  it('requires two independent player IDs with a unique athlete in both directions', () => {
+    const radar='abc12345-1234-4123-8123-000011112222'
+    const player = {player_id:'native', sportradar_id:radar, rotowire_id:41} as SleeperPlayer
+    const ref = {fantraxId:'provider',name:'Player, One',team:'BUF',position:'WR',sportRadarId:radar.toUpperCase(),rotowireId:'41'}
+    expect(matchSharedFantraxPlayers([ref],[player])).toEqual([{fantraxId:'provider',player}])
+    expect(matchSharedFantraxPlayers([{...ref,rotowireId:'42'}],[player])).toEqual([])
+    expect(matchSharedFantraxPlayers([ref],[player,{...player,player_id:'second',rotowire_id:42}])).toEqual([])
+    expect(matchSharedFantraxPlayers([ref,{...ref,fantraxId:'duplicate'}],[player])).toEqual([])
   })
   it('preserves an explicit no-playoffs league', () => {
     const input = source('MLB',12,23,26)

@@ -423,6 +423,9 @@ export async function getDraftPicks(draftId: string, opts?: SleeperReadOptions):
 }
 
 export interface SleeperPlayer {
+  sportradar_id?: string | null;
+  rotowire_id?: string | number | null;
+  birth_date?: string | null;
   player_id: string;
   first_name: string;
   last_name: string;

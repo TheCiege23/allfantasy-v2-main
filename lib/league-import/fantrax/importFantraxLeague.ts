@@ -26,6 +26,7 @@ import {
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { linkNflFantraxIdentities } from '@/lib/player-identity/linkNflFantraxIdentities'
+import { linkSharedFantraxPlayers } from '@/lib/player-identity/fantraxSharedPlayerIds'
 import { resolveFantraxIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { fantraxScoringRules, isFantraxSoccerScoring, type FantraxScoringRule } from './fantraxScoring'
 import { fantraxImportSeason, isFantraxSplitSeasonSport, usesFantraxPeriodCalendar } from './fantraxProSports'
@@ -573,17 +574,21 @@ export async function importFantraxLeague(args: {
    * map read above; link this league's rostered and drafted players (by id first, then exact name +
    * team + position — `nflFantraxIdentityPlan.ts`). Never fails the import.
    */
-  if (best.sport === 'nfl' && nflRaw?.ok) {
-    const nflMap = nflRaw.data as Record<string, FantraxPlayerRef | undefined>
+  const sharedDirectory = best.sport === 'nfl' ? nflRaw : best.sport === 'nba' ? nbaRaw : null
+  if (sharedDirectory?.ok && (best.sport === 'nfl' || best.sport === 'nba')) {
+    const playerMap = sharedDirectory.data as Record<string, FantraxPlayerRef | undefined>
     const leaguePlayerIds = new Set([
       ...resolved.flatMap((r) => r.players.map((p) => p.fantraxId)),
       ...(boardOnFile?.picks ?? []).map((p) => p.playerId),
     ])
     const refs = [...leaguePlayerIds].flatMap((id) => {
-      const ref = nflMap[id]
+      const ref = playerMap[id]
       return ref ? [{ ...ref, fantraxId: String(ref.fantraxId ?? id) }] : []
     })
-    await linkNflFantraxIdentities(refs)
+    await linkSharedFantraxPlayers(best.sport === 'nfl' ? 'NFL' : 'NBA', refs).catch(() => {
+      console.warn('[fantrax] Shared player ID reconciliation was unavailable')
+    })
+    if (best.sport === 'nfl') await linkNflFantraxIdentities(refs)
   }
 
   return {

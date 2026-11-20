@@ -345,6 +345,14 @@ async function main(){
     const registry=require('../lib/sports-data/multiSportIdentityMap.ts')
     const feedPlayers=await prisma.sportsPlayer.count({where:{sport,source:'rolling_insights'}})
     const registryRun=feedPlayers ? await registry.backfillIdentityMapForSport(sport,{limit:feedPlayers}):null
+    if(sport==='NBA' && feedPlayers){
+      const {refreshSleeperPlayerRows}=require('../lib/sleeper/refreshSleeperPlayerRows.ts')
+      const {reconcileSleeperNbaIdentities}=require('../lib/player-identity/reconcileSleeperNbaIdentities.ts')
+      const until=Date.now()+180000
+      const isExhausted=()=>Date.now()>=until
+      await refreshSleeperPlayerRows({sport,limit:feedPlayers,isExhausted})
+      await reconcileSleeperNbaIdentities({limit:feedPlayers,isExhausted})
+    }
     if(sport==='NFL' && feedPlayers){
       const {backfillSleeperIds}=require('../lib/player-match/sleeperIdentitySync.ts')
       await backfillSleeperIds({sport,deadlineAt:Date.now()+120000}).catch(()=>null)
