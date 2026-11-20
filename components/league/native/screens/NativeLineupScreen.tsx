@@ -908,14 +908,25 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
       <ScreenHead eyebrow={`${league.name} · My team`} title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
-        <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>
+        {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
+        {league.bestBallMode ? null : <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>}
         <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
-        <button type="button" className="nls-btn" data-variant="primary" disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
+        <button type="button" className="nls-btn" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
           Optimize lineup
         </button>
       </ScreenHead>
 
       <Segmented label="Team view" value={tab} onChange={setTab} options={[{ id: 'lineup', label: 'Lineup' }, { id: 'roster', label: 'Full roster' }]} />
+
+      {/*
+        A best ball manager landed on a lineup to arrange and an Optimize button, with nothing saying
+        that neither changes a score: the week's best legal lineup is counted automatically.
+      */}
+      {league.bestBallMode ? (
+        <p className="nls-empty" role="note" data-testid="lineup-best-ball-note">
+          Best ball: you don&apos;t set a lineup. Each week your highest-scoring legal lineup is counted automatically, whoever is in these slots. See the Best Ball tab for the players that counted.
+        </p>
+      ) : null}
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !data ? <p className="nls-empty" role="status">Loading your roster…</p> : null}

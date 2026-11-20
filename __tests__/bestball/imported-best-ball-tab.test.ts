@@ -125,3 +125,12 @@ describe('settingWords', () => {
     expect(settingWords(null)).toBe('—')
   })
 })
+
+describe('the Team tab in a best ball league', () => {
+  const lineup = readFileSync(join(process.cwd(), 'components/league/native/screens/NativeLineupScreen.tsx'), 'utf8')
+  it('says the lineup is automatic, and offers neither Optimize nor Propose trade', () => {
+    expect(lineup).toContain('data-testid="lineup-best-ball-note"')
+    expect(lineup).toMatch(/\{league\.bestBallMode \? null : <button type="button" className="nls-btn" onClick=\{\(\) => onSelectTab\('trades'\)\}>Propose trade<\/button>\}/)
+    expect(lineup).toMatch(/data-variant="primary" hidden=\{Boolean\(league\.bestBallMode\)\}/)
+  })
+})
