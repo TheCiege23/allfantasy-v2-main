@@ -19,7 +19,7 @@ const nameKey = (value: string) => { const parts = value.split(','); return norm
  * joins both groups. Offence keeps its exact labels: an RB and a WR of one name are two people.
  */
 const POSITION_GROUPS: Record<string, readonly string[]> = {
-  QB: ['QB'], RB: ['RB'], FB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], P: ['P'],
+  QB: ['QB'], RB: ['RB'], FB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], PK: ['K'], P: ['P'],
   DB: ['DB'], CB: ['DB'], S: ['DB'], SS: ['DB'], FS: ['DB'],
   DL: ['DL'], DE: ['DL'], DT: ['DL'], NT: ['DL'],
   LB: ['LB'], OLB: ['LB'], ILB: ['LB'], MLB: ['LB'],
@@ -68,13 +68,64 @@ export function planNcaafFantraxIdentityLinks(refs: FantraxPlayerRef[], identiti
   const proposed: Proposed[] = []
   const existing = new Set(identities.map(row => row.fantraxId).filter(Boolean))
   let unmatched = 0, ambiguous = 0, conflicts = 0, unchanged = 0
+  // A CFBD-backed identity always wins; an RI-only one is considered only when there is none.
+  const admissible = (rows: NcaafIdentityRow[]) => {
+    const cfbd = rows.filter(row => row.cfbdId)
+    return cfbd.length || !riProof ? cfbd : rows.filter(row => !row.cfbdId && riAgrees(row))
+  }
+  const letters = (v: string) => v.replace(/[^a-z]/g, '')
+  const split = (key: string) => { const words = key.split(' ').filter(Boolean); return words.length >= 2 ? { initial: words[0]![0]!, given: letters(words[0]!), last: letters(words.slice(1).join('')) } : null }
+  /*
+   * Given names that name one person: equal once punctuation is gone (D'Nas / DNas, Jai'Mier / Jaimier), or
+   * sharing a 3+ letter start (Danny / Daniel, Sam / Samuel). A shared initial alone is NOT enough — the
+   * first dry run of this rule paired Gavin Jones with Gabe Jones on one offensive line.
+   */
+  const sameGiven = (a: string, b: string) => {
+    if (a === b) return true
+    let n = 0
+    while (n < a.length && n < b.length && a[n] === b[n]) n++
+    return n >= 3
+  }
+  const bySurname = new Map<string, NcaafIdentityRow[]>()
+  for (const row of identities) { const s = split(nameKey(row.canonicalName)); if (s) bySurname.set(s.last, [...(bySurname.get(s.last) ?? []), row]) }
+  // How many Fantrax players share a name (or a surname + initial) at one school: the source side of uniqueness.
+  const refSchool = new Map<FantraxPlayerRef, string>()
+  const refCounts = new Map<string, number>()
   for (const ref of refs) {
-    const name = nameKey(ref.name), team = resolveSchool(providerSchoolAliases[exactKey(ref.team)] ?? ref.team), roles = positions(ref.position)
+    const team = resolveSchool(providerSchoolAliases[exactKey(ref.team)] ?? ref.team)
+    refSchool.set(ref, team)
+    const name = nameKey(ref.name), s = split(name)
+    if (!team || !name) continue
+    for (const key of [`n:${name}|${team}`, ...(s ? [`s:${s.last}|${s.initial}|${team}`] : [])]) refCounts.set(key, (refCounts.get(key) ?? 0) + 1)
+  }
+  for (const ref of refs) {
+    const name = nameKey(ref.name), team = refSchool.get(ref) ?? '', roles = positions(ref.position)
     if (!ref.fantraxId || !name || !team || !roles.length) { unmatched++; continue }
-    const named = (byName.get(name) ?? []).filter(row => nameKey(row.canonicalName) === name && resolveSchool(row.currentTeam) === team && positions(row.position).some(p => roles.includes(p)))
-    let candidates = named.filter(row => row.cfbdId)
-    // A CFBD-backed identity always wins; the RI-only one is considered only when there is none.
-    if (!candidates.length && riProof) candidates = named.filter(row => !row.cfbdId && riAgrees(row))
+    const fitsRole = (row: NcaafIdentityRow) => positions(row.position).some(p => roles.includes(p))
+    const sameName = (byName.get(name) ?? []).filter(row => nameKey(row.canonicalName) === name)
+    const atSchool = sameName.filter(row => resolveSchool(row.currentTeam) === team)
+    let candidates = admissible(atSchool.filter(fitsRole))
+    /*
+     * Position as a TIE-BREAKER for a name that is unique on both sides (2026-11-19: 118 rostered players
+     * matched name and school but not position group — Romel Stevens, Arkansas State, WR/LB; Preston
+     * Zinter, Rice, DL/TE: college players change position). Only when the registry holds exactly one
+     * identity of that name ANYWHERE and Fantrax lists exactly one player of that name at that school.
+     */
+    if (!candidates.length && sameName.length === 1 && atSchool.length === 1 && refCounts.get(`n:${name}|${team}`) === 1) {
+      candidates = admissible(atSchool)
+    }
+    /*
+     * Surname + first initial, for a name the registry does not hold at all (83 rostered players:
+     * JuJu/Jewelous Walls, UCLA; Jaden/Jaeden Ricketts, Ohio State; Zeke/Zeek Jackson, Wake Forest). The
+     * school's ONLY identity with that surname and initial, in the player's position group, and the ONLY
+     * Fantrax player with that surname and initial at that school. A different initial never matches.
+     */
+    const s = split(name)
+    if (!candidates.length && !sameName.length && s && refCounts.get(`s:${s.last}|${s.initial}|${team}`) === 1) {
+      const pool = (bySurname.get(s.last) ?? []).filter(row => resolveSchool(row.currentTeam) === team && split(nameKey(row.canonicalName))?.initial === s.initial)
+      const other = pool.length === 1 ? split(nameKey(pool[0]!.canonicalName)) : null
+      if (other && sameGiven(s.given, other.given) && fitsRole(pool[0]!)) candidates = admissible(pool)
+    }
     if (!candidates.length) { unmatched++; continue }
     if (candidates.length !== 1) { ambiguous++; continue }
     const row = candidates[0]!
@@ -143,6 +194,18 @@ export function verifiedFantraxSchoolAliases(refs: FantraxPlayerRef[], identitie
     const athletes=bySchool.get(school)??new Set<string>();athletes.add(row.cfbdId);bySchool.set(school,athletes);claims.set(code,bySchool)
   }
   const aliases:Record<string,string>={}
-  for (const [code,schools] of claims) if (schools.size===1) {const [school,athletes]=[...schools][0]!;if(athletes.size>=3)aliases[code]=school}
+  /*
+   * Unanimous with three anchors, OR a clear supermajority: at least 10 anchors on one school and at least
+   * 85% of all of them. Measured 2026-11-19: 21 FBS codes (RUT 78 Rutgers vs 3 others, WVU 61 vs 3, UGA,
+   * Fla, Ark, TxTch, SCar…) were never learned because ONE or two anchors disagreed — players whose Fantrax
+   * listing still shows the school they transferred from, while their CFBD games show the new one. One
+   * stale listing vetoing 78 agreeing, game-verified players left ~200 rostered players unlinkable.
+   */
+  for (const [code,schools] of claims) {
+    const ranked=[...schools].sort((a,b)=>b[1].size-a[1].size)
+    const [school,athletes]=ranked[0]!
+    const total=ranked.reduce((n,[,ids])=>n+ids.size,0)
+    if (schools.size===1 ? athletes.size>=3 : athletes.size>=10 && athletes.size>=0.85*total) aliases[code]=school
+  }
   return aliases
 }

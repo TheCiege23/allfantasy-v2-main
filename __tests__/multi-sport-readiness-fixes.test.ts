@@ -56,12 +56,42 @@ describe('multisport scoring readiness', () => {
       expect(planNcaafFantraxIdentityLinks([{ ...ref, position: fantrax }], [{ ...row, position: registry }]).links, `${fantrax}/${registry}`).toHaveLength(1)
     }
   })
-  it('still refuses a same-named player in another position group', () => {
+  it('still refuses a same-named player in another position group when the name is not unique', () => {
+    // A second John Smith elsewhere makes the name common, so position must agree.
     const row = { id: 'p1', canonicalName: 'John Smith', currentTeam: 'Vanderbilt University', position: 'WR', cfbdId: '42', fantraxId: null }
+    const elsewhere = { ...row, id: 'p2', currentTeam: 'University of Miami', cfbdId: '43' }
     for (const fantrax of ['RB', 'DB', 'LB', 'QB']) {
-      expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: fantrax }], [row]).links, fantrax).toEqual([])
+      expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: fantrax }], [row, elsewhere]).links, fantrax).toEqual([])
     }
-    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: 'DE' }], [{ ...row, position: 'OLB' }]).links).toEqual([])
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: 'DE' }], [{ ...row, position: 'OLB' }, elsewhere]).links).toEqual([])
+  })
+
+  // 2026-11-19 production cases, each standing for a class of still-unlinked rostered players.
+  it('lets position only break a tie when the name is unique on both sides (Romel Stevens WR/LB)', () => {
+    const row = { id: 'p1', canonicalName: 'Romel Stevens', currentTeam: 'Vanderbilt University', position: 'LB', cfbdId: '42', fantraxId: null }
+    const ref = { fantraxId: 'fx1', name: 'Stevens, Romel', team: 'Vanderbilt', position: 'WR' }
+    expect(planNcaafFantraxIdentityLinks([ref], [row]).links).toEqual([{ id: 'p1', fantraxId: 'fx1', cfbdId: '42' }])
+    // Two Fantrax players of that name at the school: refused.
+    expect(planNcaafFantraxIdentityLinks([ref, { ...ref, fantraxId: 'fx2', position: 'LB' }], [row]).links.filter((l) => l.fantraxId === 'fx1')).toEqual([])
+  })
+  it('matches a variant spelling of a name the registry does not hold (D\'Nas / DNas, Danny / Daniel)', () => {
+    const row = { id: 'p1', canonicalName: "D'Nas White", currentTeam: 'Vanderbilt University', position: 'DL', cfbdId: '42', fantraxId: null }
+    const ref = { fantraxId: 'fx1', name: 'White, DNas', team: 'Vanderbilt', position: 'DE' }
+    expect(planNcaafFantraxIdentityLinks([ref], [row]).links).toEqual([{ id: 'p1', fantraxId: 'fx1', cfbdId: '42' }])
+    const daniel = { ...row, canonicalName: 'Daniel Garvin', position: 'CB' }
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Garvin, Danny', team: 'Vanderbilt', position: 'CB' }], [daniel]).links).toHaveLength(1)
+  })
+  it('refuses a shared initial alone, another position group, or a second candidate on either side', () => {
+    const gabe = { id: 'p1', canonicalName: 'Gabe Jones', currentTeam: 'Vanderbilt University', position: 'OL', cfbdId: '42', fantraxId: null }
+    const gavin = { fantraxId: 'fx1', name: 'Jones, Gavin', team: 'Vanderbilt', position: 'OL' }
+    expect(planNcaafFantraxIdentityLinks([gavin], [gabe]).links).toEqual([])
+    const jewelous = { ...gabe, canonicalName: 'Jewelous Walls', position: 'LB' }
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Walls, JuJu', team: 'Vanderbilt', position: 'LB' }], [jewelous]).links).toEqual([])
+    const daniel = { ...gabe, canonicalName: 'Daniel Garvin', position: 'CB' }
+    const danny = { fantraxId: 'fx1', name: 'Garvin, Danny', team: 'Vanderbilt', position: 'CB' }
+    expect(planNcaafFantraxIdentityLinks([{ ...danny, position: 'WR' }], [daniel]).links).toEqual([])
+    expect(planNcaafFantraxIdentityLinks([danny], [daniel, { ...daniel, id: 'p2', canonicalName: 'Dante Garvin', cfbdId: '43' }]).links).toEqual([])
+    expect(planNcaafFantraxIdentityLinks([danny, { ...danny, fantraxId: 'fx2', name: 'Garvin, Dan' }], [daniel]).links).toEqual([])
   })
 
   /*
