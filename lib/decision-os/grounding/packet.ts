@@ -248,6 +248,13 @@ export interface DecisionOsGroundingPacket {
   rosterProjections?: GroundedSlice<RosterLeagueProjection[]>
 
   /**
+   * My Team's best lineup for the asker this week — the exact text Chimmy's lineup tool returns
+   * (`lib/chimmy/myTeamLineupGrounding.ts`), so the packet and the tool can never disagree (2026-11-20 re-score push).
+   * Asked for on lineup questions only; bounded by the packet's deadline.
+   */
+  myTeamLineup?: GroundedSlice<string>
+
+  /**
    * R3.3 (2.2) — "Where am I weak?" in value terms: this roster's positions ranked against the
    * rest of the league by market value. Bridges `getRosterGrade` (`lib/core-app/rosterGrade.ts`),
    * the same playbook R2 used for the four live decision engines rather than re-deriving the math.
@@ -606,6 +613,13 @@ export interface GroundingPacketArgs {
      * fixing. Unasked, it stays `not_requested` and never renders.
      */
     waiverDecision?: boolean
+    /**
+     * My Team's best lineup for the asker (default OFF). On lineup questions only: it loads My Team's data, which is
+     * real work, so it is opt-in and races the packet's deadline like every first-wave read — a late or failed load
+     * becomes a gap for this slice alone. Not the retired `lineupDecision` (a 37 s engine): this is the one
+     * optimizer My Team already runs, read the same way the lineup tool reads it.
+     */
+    myTeamLineup?: boolean
   }
   /**
    * Receives the waiver engine's claims when `want.waiverDecision` runs it — the side channel Chimmy
@@ -954,6 +968,20 @@ export async function buildDecisionOsGroundingPacket(
   const pRosterBasis: Promise<RosterProjectionBasis | null> =
     want.projections && !projectionKill && leagueId && args.userId
       ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport }))
+      : Promise.resolve(null)
+
+  /*
+   * My Team's best lineup, on lineup questions. First wave, under the packet's deadline. The ledger call is NOT
+   * recorded from here: the lineup tool records it when it answers, and recording twice would grade one call twice.
+   */
+  const pMyTeamLineup =
+    want.myTeamLineup && leagueId && args.userId
+      ? kick(
+          'myTeamLineup',
+          import('@/lib/chimmy/myTeamLineupGrounding')
+            .then((m) => m.buildMyTeamLineupContext({ leagueId, userId: args.userId! }))
+            .catch(() => ({ fallback: 'no_my_team' as const })),
+        )
       : Promise.resolve(null)
 
   const pCommissioner =
@@ -1547,6 +1575,22 @@ export async function buildDecisionOsGroundingPacket(
     ? present(leagueMetrics, { servedFrom: 'store', conclusive: verdictFor('lineupDecision') })
     : undefined
 
+  let myTeamLineup: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.myTeamLineup && leagueId && args.userId) {
+    const out = await pMyTeamLineup
+    if (typeof out === 'string') {
+      myTeamLineup = present(out, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    } else if (out && out.fallback === 'no_my_team') {
+      myTeamLineup = absent<string>({
+        reason: 'not_computed',
+        detail: 'My Team could not load this lineup, so its best-lineup answer is not here.',
+        remedy: 'The lineup tool answers from the weekly projections instead and says so.',
+      })
+    }
+    // `not_nfl` (a non-NFL league with no My Team optimizer, e.g. a category league) stays not_requested: the
+    // sport's own tool answers, by design, and that is not a gap. A late read is stamped below.
+  }
+
   /*
    * A slice whose read ran out of budget says so, instead of a reason that sends someone looking at the wrong
    * system ("rules could not be resolved", "engine did not return"). Only absent slices are restamped.
@@ -1566,6 +1610,7 @@ export async function buildDecisionOsGroundingPacket(
   devyValues = stamp('devyValues', devyValues)
   projections = stamp('projections', projections)
   rosterProjections = stamp('rosterProjections', rosterProjections)
+  myTeamLineup = stamp('myTeamLineup', myTeamLineup)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
   portfolio = stamp('portfolio', portfolio)
@@ -1593,6 +1638,7 @@ export async function buildDecisionOsGroundingPacket(
       ? [['leaguePlayerMetrics', leaguePlayerMetrics] as [string, GroundedSlice<unknown>]]
       : []),
     ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
+    ['myTeamLineup', myTeamLineup as GroundedSlice<unknown>],
   ]
 
   return {
@@ -1614,6 +1660,7 @@ export async function buildDecisionOsGroundingPacket(
     commissionerHealthDecision,
     idpKickerValues,
     rosterProjections,
+    myTeamLineup,
     rosterValueGrade,
     gaps: collectGaps(slices),
     meta: {

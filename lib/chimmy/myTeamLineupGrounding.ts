@@ -31,7 +31,33 @@ import type { ChatStartCall } from './tools/chimmyTools'
 
 export type MyTeamLineupDeps = { load: (leagueId: string, userId: string) => Promise<MyTeamData | null> }
 
-const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => getMyTeamData(leagueId, userId) }
+/*
+ * ONE MY TEAM LOAD PER TURN (2026-11-20). A lineup question now asks for this answer twice: the grounding packet's
+ * `myTeamLineup` slice and the lineup tool the model calls. Both read through here, so the load is shared for a
+ * minute per (league, user): the second caller gets the same data rather than paying for My Team again. The text is
+ * still rebuilt per caller (it is cheap), so the tool's ledger callback runs exactly as before. A failed load is not
+ * kept.
+ */
+const LOAD_TTL_MS = 60_000
+const LOAD_MAX = 200
+const loads = new Map<string, { at: number; p: Promise<MyTeamData | null> }>()
+function loadShared(leagueId: string, userId: string): Promise<MyTeamData | null> {
+  const key = `${leagueId}:${userId}`
+  const now = Date.now()
+  const hit = loads.get(key)
+  if (hit && now - hit.at < LOAD_TTL_MS) return hit.p
+  if (loads.size >= LOAD_MAX) loads.delete(loads.keys().next().value!)
+  const p = getMyTeamData(leagueId, userId)
+  loads.set(key, { at: now, p })
+  p.catch(() => loads.delete(key))
+  return p
+}
+/** Test hook. */
+export function __resetMyTeamLoadsForTests(): void {
+  loads.clear()
+}
+
+const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => loadShared(leagueId, userId) }
 
 const BENCH_SHOWN = 6
 

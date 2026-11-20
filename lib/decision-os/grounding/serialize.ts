@@ -51,6 +51,9 @@ const MAX_ITEMS = 8
 const ROSTER_PROJECTIONS_SLICE = "Your roster this week (this league's scoring)"
 const MAX_ITEMS_BY_SLICE: Readonly<Record<string, number>> = { [ROSTER_PROJECTIONS_SLICE]: 30 }
 
+/** My Team's best lineup — the lineup tool's own text, whole: a lineup cut short reads as complete. */
+const MY_TEAM_LINEUP_SLICE = 'Best lineup (My Team)'
+
 /** Trim a prose slice so one long saved analysis cannot crowd out every other fact. */
 const MAX_PROSE = 1200
 
@@ -64,7 +67,7 @@ const MAX_PROSE = 1200
  */
 // Measured 2026-09-28: a 22-team survivor league with long team names is ~1,960 characters before
 // the values, trade-ledger and history lines (~500-600 more). 3200 leaves room; 2600 did not.
-const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200 }
+const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200, [MY_TEAM_LINEUP_SLICE]: 3200 }
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10)
@@ -571,6 +574,8 @@ export function serializeDecisionOsGroundingForPrompt(
      * the canonical rows above for anyone on this roster.
      */
     [ROSTER_PROJECTIONS_SLICE, packet.rosterProjections as GroundedSlice<unknown>],
+    // On lineup questions: the same best lineup the My Team screen and the lineup tool give (2026-11-20).
+    [MY_TEAM_LINEUP_SLICE, packet.myTeamLineup as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
