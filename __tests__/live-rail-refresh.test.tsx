@@ -123,3 +123,34 @@ describe('the poll follows the shell refresh policy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+/*
+ * ⚠ The route scores a Sleeper league only when it is a current NFL league; anything else came back
+ * "unavailable" on every poll and showed "Updates delayed". Measured 2026-11-19: 62 requests in 163s.
+ */
+describe('only leagues the route can score are polled', () => {
+  const polledIds = () => fetchMock.mock.calls.flatMap(([url]) => new URL(String(url), 'http://x').searchParams.getAll('league'))
+
+  it('skips a Sleeper league known to be another sport, keeps NFL and unknown sports', async () => {
+    renderHook(() => useLiveRailScores([
+      { id: 'nfl', name: 'A', platform: 'sleeper', mark: 'A', sport: 'NFL' },
+      { id: 'nba', name: 'B', platform: 'sleeper', mark: 'B', sport: 'NBA' },
+      { id: 'cfb', name: 'C', platform: 'sleeper', mark: 'C', sport: 'NCAAF' },
+      { id: 'unknown', name: 'D', platform: 'sleeper', mark: 'D' },
+    ], true, GAME_DAY))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(polledIds().sort()).toEqual(['nfl', 'unknown'])
+  })
+
+  it('still polls a native league with a live row, whatever its sport', async () => {
+    renderHook(() => useLiveRailScores([{ id: 'native-nba', name: 'N', platform: 'manual', mark: 'N', sport: 'NBA' }], true, GAME_DAY, ['native-nba']))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(polledIds()).toEqual(['native-nba'])
+  })
+
+  it('with only other-sport Sleeper leagues, sends nothing at all', async () => {
+    renderHook(() => useLiveRailScores([{ id: 'nhl', name: 'H', platform: 'sleeper', mark: 'H', sport: 'NHL' }], true, GAME_DAY))
+    await act(async () => { await vi.advanceTimersByTimeAsync(GAME_DAY * 3) })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
