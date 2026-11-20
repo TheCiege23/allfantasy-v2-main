@@ -49,7 +49,15 @@ import {
  * under a header that said "(3)" — so Chimmy told them they had three trades waiting. Now up to `MAX_LISTED` are read,
  * the most urgent `MAX_GRADED` are graded, the rest are named, and the count is the real one.
  */
-const MAX_GRADED = 3
+const MIN_GRADED = 3
+/**
+ * Up to this many are graded when time allows (owner's call, 2026-11-20: "grade more than 3"). The block is built
+ * inside the packet's first-wave deadline (2,400 ms), and a block that misses it reaches Chimmy as nothing at all, so
+ * an offer past the first `MIN_GRADED` is started only while the build is inside `EXTRA_GRADING_BUDGET_MS`. The graded
+ * offers are always the soonest-expiring prefix, and the header states how many there are.
+ */
+const MAX_GRADED = 6
+export const EXTRA_GRADING_BUDGET_MS = 1200
 /** Offers read per answer; past this the block says there may be more, rather than implying the inbox is complete. */
 export const MAX_LISTED = 10
 
@@ -113,6 +121,8 @@ export type PendingTradeDeps = {
   evaluate: typeof evaluateStoredTrade
   /** The league's canonical world, loaded ONCE per build and handed to every evaluation as its own copy. */
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
+  /** The clock the extra-grading budget is measured on. */
+  now: () => number
   /** Told the letters the one trade engine gave, so the chat route can hold the answer to them. */
   onGrade?: (grade: ChimmyTradeGrade) => void
 }
@@ -204,6 +214,7 @@ const defaultDeps: PendingTradeDeps = {
   findStoredOffers: (leagueId, userId, limit) => findStoredPendingOffers(leagueId, userId, limit),
   evaluate: evaluateStoredTrade,
   resolveWorld: (leagueId) => resolveCanonicalWorld(leagueId),
+  now: () => Date.now(),
 }
 
 /**
@@ -398,6 +409,7 @@ export async function buildPendingTradeDecisionContext(
 ): Promise<string | null> {
   if (!leagueId || !userId) return null
   const d: PendingTradeDeps = { ...defaultDeps, ...deps }
+  const startedAt = d.now()
 
   let proposals: PendingProposal[]
   try {
@@ -436,14 +448,18 @@ export async function buildPendingTradeDecisionContext(
   const total = items.length
   const atCap = total >= MAX_LISTED
 
-  const lines: string[] = [
-    total > MAX_GRADED
-      ? `PENDING INCOMING TRADES (${atCap ? `at least ${total}` : total}) — awaiting this user's answer. The ${MAX_GRADED} expiring soonest are graded below; the others are listed without a grade. Use ONLY these numbers and letters.`
-      : `PENDING INCOMING TRADES (${total}) — awaiting this user's answer. Use ONLY these numbers and letters.`,
-  ]
+  const lines: string[] = []
+  /*
+   * How far down the soonest-expiring list grading reaches. The first MIN_GRADED always; then one more at a time while
+   * the build is inside its budget — once it is past, every later offer is named without a grade, so the graded set
+   * stays a prefix and the header below can state it exactly.
+   */
+  let gradedUpTo = 0
 
   for (const [i, it] of items.entries()) {
-    const graded = i < MAX_GRADED
+    const graded =
+      gradedUpTo === i && (i < MIN_GRADED || (i < MAX_GRADED && d.now() - startedAt < EXTRA_GRADING_BUDGET_MS))
+    if (graded) gradedUpTo = i + 1
     if (it.kind === 'proposal') {
       const p = it.p
       const from = p.proposerRoster?.teamName ?? p.proposerRoster?.ownerName ?? 'another manager'
@@ -500,6 +516,11 @@ export async function buildPendingTradeDecisionContext(
       lines.push('  Grade: evaluation failed. Do not substitute your own grade.')
     }
   }
+  lines.unshift(
+    total > gradedUpTo
+      ? `PENDING INCOMING TRADES (${atCap ? `at least ${total}` : total}) — awaiting this user's answer. The ${gradedUpTo} expiring soonest are graded below; the others are listed without a grade. Use ONLY these numbers and letters.`
+      : `PENDING INCOMING TRADES (${total}) — awaiting this user's answer. Use ONLY these numbers and letters.`,
+  )
   if (atCap) {
     lines.push(`  …there may be more than ${MAX_LISTED} offers waiting; the trade inbox lists them all. Do not say this is every offer.`)
   }

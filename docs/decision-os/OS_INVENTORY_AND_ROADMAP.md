@@ -198,7 +198,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | OS | +10% push | Re-scored on `main` | After the queued PRs | What changed the mark |
 |---|---|---|---|---|
 | League | 100 | 100 | 100 | — (the §0.47 two-rules-readers gap is real but is not an axis) |
-| Projection | 100 | ~93 | ~93 | Chimmy ⚠: league-scored roster projections exist for NFL only; NBA/NHL/MLB get canonical rows labelled "NOT this league" |
+| Projection | 100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this change: NBA, NHL, MLB, college basketball and soccer points leagues are league-scored in Chimmy now, on the league value board My Team reads (owner's call, below). Category leagues have no points and say so |
 | Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
 | Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
 | Player Value | ~93 | ~90 | ~90 | Kernel ⚠: NBA/MLB/NHL/NCAAB/soccer boards are read live outside the kernel. User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
@@ -286,6 +286,26 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
     "grade more than 3 pending offers" cheaper — the world is no longer paid per offer.
   - **`tradeSettingsSource` and `loadTradeLeagueFacts` are deleted.** Nothing read the league-level entry; the
     env-gated proposals route reads the three-minute roster entry, which stays.
+- **NBA, NHL, MLB, college basketball and soccer points leagues get their roster in Chimmy under the league's own
+  points** (owner's call, 2026-11-20; college basketball and soccer on the owner's later "use your recommendation"). A projection question ("how many points will my team score?") in these sports reached Chimmy with only
+  the canonical rows — AllFantasy's default scoring, labelled "NOT this league" — while My Team, the Trade Center and
+  the value answer priced the same players on the league's own value board. `rosterProjections` now reads that board
+  for these sports through `loadLeaguePlayerMetrics`, the call My Team makes for the same roster: each player's
+  per-game rate under this league's points, times his games this week where the schedule is known. One source, so
+  the per-game number is the same in all four places.
+  - Not a component re-score: these sports' stat names do not match a rulebook's, and a partial match drops stats
+    silently (every rebound, in a default NBA rulebook — `waiverSportBasis.ts`). The board already bridges them.
+  - Labelled as what it is: a season rate, not a game-by-game forecast (rest days and changed roles are not in it),
+    and a daily league's My Team prices one day where this prices the week. A player off the board is said in words,
+    never 0; unknown games give no week total.
+  - A category league has no points: no new rows, and the slice says why (`not_requested`). Access is checked before
+    the board is read, as the packet's league-metrics slice does; NFL is untouched.
+- **Chimmy's trade inbox grades up to six offers, not three** (owner's "grade more than 3", 2026-11-20). The block is
+  built inside the packet's first-wave deadline (2,400 ms), and a block that misses it reaches Chimmy as nothing, so
+  the rule is time-bounded rather than a bigger number: the three expiring soonest are always graded, as before, and
+  each further offer (up to six) is started only while the build is inside `EXTRA_GRADING_BUDGET_MS` (1,200 ms). The
+  graded offers are always the soonest-expiring prefix, and the header states exactly how many — never a fixed "3".
+  The shared league world above is what makes the extra offers affordable.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
@@ -298,8 +318,9 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | ✅ | The graded trade inbox and Trade OS — **settled in this change** (below): the inbox must not read a stored world, so Kernel is n/a; the inbox loads the world once per build instead of once per offer; the unread `tradeSettingsSource` is deleted | Trade Kernel → n/a (~83) | S |
 | ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
 | ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
-| — | **Owner decision:** league-scored projections for NBA/NHL/MLB points leagues (category leagues have no points) | Projection Chimmy → ✅ | M |
-| — | **Owner decision:** let graded trades move letters; grade more than 3 pending offers (latency) | Trade Engine | M / S |
+| ✅ | League-scored projections for every board sport's points leagues (NBA, NHL, MLB, college basketball, soccer) — **owner said yes, done in this change** (below). Category leagues have no points and keep the canonical rows | Projection Chimmy → ✅ (~100) | M |
+| ✅ | Grade more than 3 pending offers — **owner said yes, done in this change** (below): up to 6, time-bounded inside the packet deadline | Trade, user-visible | S |
+| ⏸ | Let graded trades move letters — **declined for now** (owner's "use your recommendation", 2026-11-20): the letter IS the trade decision, and waivers and start/sit use their records to tune confidence, never to change the call. It needs a record validated as predictive first; the record already shows beside every grade | Trade Engine stays ⚠ | M |
 | — | **Migration:** draft advice learns from graded tips | Draft Engine → ✅ (~100) | L |
 
 **THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
