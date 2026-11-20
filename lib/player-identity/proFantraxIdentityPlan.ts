@@ -77,7 +77,8 @@ const EPL_TEAMS: Record<string, string[]> = {
   LEE: ['67', 'Leeds United', 'LUFC'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
 }
 
-const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
+// IF: the registry's generic infielder label (Danny Serretti, Taitn Gray: 2B/1B on Fantrax, IF here).
+const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'IF', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
 const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'GF', 'FC', 'UT', 'UTIL']
 const NHL_SKATER = ['C', 'LW', 'RW', 'W', 'F', 'D', 'LD', 'RD']
 
@@ -250,6 +251,18 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
       const onTeam = split ? (bySurname.get(split.last) ?? []).filter(row => teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam) : []
       const other = onTeam.length === 1 ? nameSplit(onTeam[0]!.canonicalName) : null
       if (split && other && other.first[0] === split.first[0] && refSurnameTeam.get(`${split.last}|${sourceTeam}`) === 1 && fits(onTeam[0]!)) candidates = onTeam
+    }
+    /*
+     * A player who CHANGED CLUB since our record was written: offseason trades and loans (2026-11-19: 492
+     * MLB and 17 Premier League players on a club — Dillon Tate TOR→LAA, Vince Velasquez CHC→KC, Harvey
+     * Elliott). Only when the name is held by exactly ONE identity in the sport (linked ones counted) and
+     * listed exactly once in Fantrax's whole directory, minor leaguers and "(N/A)" included — so a common
+     * name never moves — and only for a compatible role. MLB and soccer only: NBA/NHL keep the pinned
+     * "never crosses a team" decision (`tests/fantrax-nba-nhl-import.test.ts`), and had no such case left.
+     */
+    if (!candidates.length && (sport === 'MLB' || sport === 'SOCCER')) {
+      const named = byName.get(key) ?? []
+      if (named.length === 1 && refNames.get(key) === 1 && named[0]!.rollingInsightsId && rules.roles(named[0]!.position).some(role => sourceRoles.includes(role))) candidates = named
     }
     if (candidates.length > 1 && sport === 'NHL') {
       const line = nhlLine(ref.position)
