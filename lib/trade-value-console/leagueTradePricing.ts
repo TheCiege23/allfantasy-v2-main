@@ -970,7 +970,13 @@ export async function resolveAssets(
         }
       }
     }
-    if (!row && !raw.providerIdentity && displayName.length >= 2) {
+    /*
+     * ⚠ A SELECTED ID THAT MISSES IS NEVER REPLACED BY A NAME HIT (`__tests__/values/player-value-identity.test.ts`):
+     * a typed or search-picked id that resolves to nothing must not turn into whichever namesake the name
+     * search returns. The one exception is an id the platform's identity map has already identified —
+     * then the name searched is the IDENTITY's, proven by that id, not a guess.
+     */
+    if (!row && !raw.providerIdentity && (!raw.playerId?.trim() || identity) && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
       const named = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
       /*

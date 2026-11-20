@@ -119,11 +119,12 @@ describe('a Fantrax roster id in the trade analyzer', () => {
     expect(out.unresolved).toEqual([])
   })
 
-  it('resolves by name when the id is unknown to the identity map too', async () => {
+  it('never replaces an id the identity map does not know with a name hit', async () => {
+    // The standing rule in `__tests__/values/player-value-identity.test.ts`: a missing selected id is not
+    // swapped for whichever namesake the search returns. Only an identity-proven name is searched.
     searchRows.list = [record('NHL:montour', 'Brandon Montour', 'D', 'SEA')]
     const out = await resolveNhl({ playerId: 'fx-unknown', name: 'Brandon Montour' }, { platform: 'fantrax', resolveProviderIds: identities({}) })
-    expect(out.unresolved).toEqual([])
-    expect(out.lines[0]).toMatchObject({ playerId: 'NHL:montour' })
+    expect(out.unresolved).toEqual(['Brandon Montour'])
   })
 
   it('still reports a player nobody can find as unresolved', async () => {
