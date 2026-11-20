@@ -56,3 +56,48 @@ describe('school abbreviations confirmed by current games', () => {
     expect(planNcaabFantraxIdentityLinks({ ...input, refs: [...refs, { ...refs[3]!, fantraxId: 'other-id' }] }).links).toEqual([])
   })
 })
+
+/* The rostered ids still unlinked in production on 2026-11-19, one case per class. */
+describe('Fantrax NCAAB: the remaining unlinked classes', () => {
+  const rider = (over: Partial<NcaabIdentity> & { name: string }, ri: string) => {
+    const id: NcaabIdentity = { id: `ri-${ri}`, normalizedName: over.name.toLowerCase(), position: 'G', currentTeam: 'RIDER UNIVERSITY',
+      rollingInsightsId: ri, fantraxId: null, ...over }
+    return { id, source: { externalId: ri, name: over.name, position: id.position, team: id.currentTeam } }
+  }
+  const run = (refs: Array<{ fantraxId: string; name: string; team: string; position: string }>, people: Array<ReturnType<typeof rider>>, extra: NcaabIdentity[] = []) =>
+    planNcaabFantraxIdentityLinks({ refs, identities: [...people.map((x) => x.id), ...extra], sourcePlayers: people.map((x) => x.source),
+      teams: [{ name: 'Rider University', shortName: 'Rider' }, { name: 'Tulane University', shortName: 'Tul' }], rosterIds: new Set(refs.map((r) => r.fantraxId)) }).links
+
+  it("ignores apostrophes Fantrax drops (OConnor / Collin O'Connor)", () => {
+    expect(run([{ fantraxId: 'f1', name: 'OConnor, Collin', team: 'Rider', position: 'G' }], [rider({ name: "Collin O'Connor" }, '1')])).toHaveLength(1)
+  })
+  it('does not require the registry and its RI row to agree on the G/F/C label', () => {
+    const p = rider({ name: 'Donovan Rakotonanahary' }, '2'); p.source.position = 'F'
+    expect(run([{ fantraxId: 'f2', name: 'Rakotonanahary, Donovan', team: 'Rider', position: 'G' }], [p])).toHaveLength(1)
+  })
+  it('matches a spelling the registry does not hold (Kordelius / Kordel), never an initial alone', () => {
+    expect(run([{ fantraxId: 'f3', name: 'Jefferson, Kordelius', team: 'Rider', position: 'G' }], [rider({ name: 'Kordel Jefferson' }, '3')])).toHaveLength(1)
+    expect(run([{ fantraxId: 'f3', name: 'Jones, Gavin', team: 'Rider', position: 'F' }], [rider({ name: 'Gabe Jones' }, '3')])).toEqual([])
+    expect(run([{ fantraxId: 'f3', name: 'Jefferson, Kordelius', team: 'Rider', position: 'G' }],
+      [rider({ name: 'Kordel Jefferson' }, '3'), rider({ name: 'Mike Jefferson' }, '4')])).toEqual([])
+  })
+  it('links a transfer only when the name is unique on both sides (JoJo Moore, Tulane / Oral Roberts)', () => {
+    const moore = rider({ name: 'JoJo Moore' }, '5')
+    const ref = { fantraxId: 'f5', name: 'Moore, JoJo', team: 'Tul', position: 'G' }
+    expect(run([ref], [moore])).toEqual([{ id: 'ri-5', fantraxId: 'f5', rollingInsightsId: '5' }])
+    // A namesake anywhere — even one already linked to another Fantrax id — or a second Fantrax JoJo Moore.
+    expect(run([ref], [moore], [{ ...moore.id, id: 'other', currentTeam: 'DUKE UNIVERSITY', fantraxId: 'taken' }])).toEqual([])
+    expect(run([ref, { ...ref, fantraxId: 'f6', team: 'Rider' }], [moore]).filter((l) => l.fantraxId === 'f5')).toEqual([])
+  })
+  it('learns a school code no linked player can teach yet, from three unique-name players', () => {
+    const villa = (p: ReturnType<typeof rider>) => ({ ...p, id: { ...p.id, currentTeam: 'VILLANOVA UNIVERSITY' }, source: { ...p.source, team: 'VILLANOVA UNIVERSITY' } })
+    const anchors = ['Ann Alpha', 'Ben Beta', 'Cal Gamma'].map((n, i) => villa(rider({ name: n }, `v${i}`)))
+    // The target has a namesake at another school, so it cannot be an anchor itself.
+    const target = villa(rider({ name: 'Dee Delta' }, 'v9'))
+    const namesake: NcaabIdentity = { ...target.id, id: 'elsewhere', currentTeam: 'DUKE UNIVERSITY', rollingInsightsId: null }
+    const ref = (p: ReturnType<typeof rider>, i: string) => ({ fantraxId: i, name: p.source.name.split(' ').reverse().join(', '), team: 'Vill', position: 'G' })
+    const targetRef = ref(target, 'xt')
+    expect(run([...anchors.map((a, i) => ref(a, `x${i}`)), targetRef], [...anchors, target], [namesake]).some((l) => l.fantraxId === 'xt')).toBe(true)
+    expect(run([...anchors.slice(0, 2).map((a, i) => ref(a, `x${i}`)), targetRef], [...anchors.slice(0, 2), target], [namesake]).some((l) => l.fantraxId === 'xt')).toBe(false)
+  })
+})
