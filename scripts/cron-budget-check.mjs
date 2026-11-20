@@ -48,7 +48,8 @@ const SLOW_TIER_WORKFLOW = join('.github', 'workflows', 'cron-slow-tier.yml')
  * still headroom to fix it rather than at the moment jobs start being dropped.
  * Raise it consciously, in a commit that says why.
  */
-const CEILING = 60
+// One dedicated slot for the hourly college watchlist in the Railway registry.
+const CEILING = 61
 
 const reportOnly = process.argv.includes('--report')
 const root = process.cwd()
