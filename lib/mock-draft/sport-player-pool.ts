@@ -7,6 +7,7 @@ import type { PoolPlayerRecord } from '@/lib/sport-teams/types'
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 import { loadNbaSurvivorRosterEligibility, nbaSurvivorPlayerIdMatches, type NbaRosterEligibility } from '@/lib/draft-room/nbaSurvivorRosterEligibility'
 import { loadLatestAveragedAdpRowsFromDb } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
+import { COLLEGE_MOCK_POSITIONS, orderCollegeMockPool } from '@/lib/mock-draft/collegeMockPoolOrder'
 
 export type SportAwareDraftPlayer = DraftPlayer & {
   sport: LeagueSport
@@ -63,6 +64,7 @@ export async function loadSportAwareDraftPlayerPool(params: {
   format?: 'redraft' | 'dynasty'
 }): Promise<SportAwareDraftPlayer[]> {
   const sport = normalizeToSupportedSport(params.sport)
+  if (sport === 'NCAAF') return loadCollegeMockPool(params.limit)
   const fetchLimit = sport === 'NBA' ? 5000 : params.limit
   const rows = params.leagueId
     ? await getPlayerPoolForLeague(params.leagueId, sport, { limit: fetchLimit })
@@ -90,6 +92,35 @@ export async function loadSportAwareDraftPlayerPool(params: {
       age: player.age ?? null,
     }))
     .filter((player) => Boolean(player.name))
+}
+
+/**
+ * College football: QB / RB / WR / TE only, ordered by this season's production
+ * (collegeMockPoolOrder.ts). Each position is read whole, because the shared pool's own order for
+ * NCAAF is stale ADP and then the alphabet, so any cut it makes drops the players that matter.
+ * If the college stats cannot be read, the same positions come back in the pool's order.
+ */
+async function loadCollegeMockPool(limit: number): Promise<SportAwareDraftPlayer[]> {
+  const byPosition = await Promise.all(
+    COLLEGE_MOCK_POSITIONS.map((position) => getPlayerPoolForSport('NCAAF', { limit: 20_000, position })),
+  )
+  const rows = byPosition.flat().map((player) => ({ ...player, name: player.full_name }))
+  const { getDevyStatsByNameFromDb } = await import('@/lib/devy/devyPlayerReads')
+  const byName = await getDevyStatsByNameFromDb().catch((error) => {
+    console.warn('[mock-draft/pool] college stats unavailable; college pool left in pool order', { error: String(error) })
+    return new Map()
+  })
+  return orderCollegeMockPool(rows, byName, limit).map((player, index) => ({
+    name: player.full_name,
+    position: String(player.position).trim().toUpperCase(),
+    team: player.team_abbreviation ?? null,
+    adp: index + 1,
+    value: Math.max(1, limit - index),
+    playerId: player.external_source_id ?? player.player_id,
+    sport: 'NCAAF' as LeagueSport,
+    source: 'sports-player-pool' as const,
+    age: player.age ?? null,
+  }))
 }
 
 export function toSyntheticAdpEntries(players: SportAwareDraftPlayer[]): ADPEntry[] {
