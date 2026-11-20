@@ -215,9 +215,16 @@ export function DraftChatPanel({
   const typingRoom = leagueId ? (leagueChatSync ? `league:${leagueId}` : `league:${leagueId}:draft`) : null
   const signalTyping = useTypingSignal(disabled ? null : typingRoom)
   const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
+  /* Same people typing → keep the same array: a new [] every poll re-rendered the whole chat every
+     4 seconds for nothing, and raced the composer's @-suggestions. */
+  const setTypingIfChanged = useCallback((next: Array<{ userId: string; name: string }>) => {
+    setTyping((prev) =>
+      prev.length === next.length && prev.every((p, i) => p.userId === next[i]!.userId && p.name === next[i]!.name) ? prev : next,
+    )
+  }, [])
   useEffect(() => {
     if (!typingRoom || disabled) {
-      setTyping([])
+      setTypingIfChanged([])
       return
     }
     let alive = true
@@ -225,10 +232,10 @@ export function DraftChatPanel({
       void fetch(`/api/shared/chat/threads/${encodeURIComponent(typingRoom)}/typing`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d: { typing?: Array<{ userId: string; name: string }> } | null) => {
-          if (alive) setTyping(Array.isArray(d?.typing) ? d!.typing! : [])
+          if (alive) setTypingIfChanged(Array.isArray(d?.typing) ? d!.typing! : [])
         })
         .catch(() => {
-          if (alive) setTyping([])
+          if (alive) setTypingIfChanged([])
         })
     }
     read()
@@ -237,7 +244,7 @@ export function DraftChatPanel({
       alive = false
       window.clearInterval(t)
     }
-  }, [typingRoom, disabled])
+  }, [typingRoom, disabled, setTypingIfChanged])
 
   const nameForUserId = useCallback(
     (id: string): string | null => messages.find((m) => m.senderUserId === id)?.from ?? null,
