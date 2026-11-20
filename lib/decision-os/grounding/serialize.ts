@@ -1,5 +1,6 @@
 import { isCanonicalLeagueRules, renderLeagueRules } from './leagueRulesText'
 import { isImportAssertions, renderImportAssertions } from './importAssertionsText'
+import { isMatchupSlice, isRosterSlice, isStandingsSlice, renderMatchupSlice, renderRosterSlice, renderStandingsSlice } from './contextSliceText'
 import type { DecisionOsGroundingPacket, GroundedSlice } from './packet'
 
 /**
@@ -131,6 +132,15 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   if (isImportAssertions(value)) return renderImportAssertions(value)
 
   /*
+   * The three most-asked context slices, field by field (hub serialization, 2026-11-20). Through `renderObject` the
+   * roster printed "starters: 10 items (not itemised here)", the standings "rows: 12 items", and the matchup was cut
+   * after 8 fields. Keyed on the slice name AND the shape, so an unexpected payload still falls through.
+   */
+  if (name === 'Matchup' && isMatchupSlice(value)) return renderMatchupSlice(value)
+  if (name === 'Roster' && isRosterSlice(value)) return renderRosterSlice(value)
+  if (name === 'Standings' && isStandingsSlice(value)) return renderStandingsSlice(value)
+
+  /*
    * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
    *
    * `renderValue` handled strings and arrays. All EIGHT `contextFacts` slices are plain objects,
@@ -208,9 +218,18 @@ const SKIP_KEYS = new Set(['leagueId', 'teamId', 'yourTeamId', 'opponentTeamId',
  */
 function renderObject(o: Record<string, unknown>): string[] {
   const rows: string[] = []
+  /*
+   * 🛑 A FIELD PAST THE CAP IS NAMED, NEVER SILENTLY DROPPED (hub serialization, 2026-11-20). The cap stopped the loop
+   * and said nothing, which is how the import slice's parity and coverage, and the matchup's playoff fields, went
+   * missing without a trace. The model is now told which fields exist but are not shown, so it can call the tool.
+   */
+  const dropped: string[] = []
   for (const [k, v] of Object.entries(o)) {
-    if (rows.length >= MAX_ITEMS) break
     if (SKIP_KEYS.has(k) || v == null) continue
+    if (rows.length >= MAX_ITEMS) {
+      dropped.push(k)
+      continue
+    }
 
     if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
       rows.push(`    ${k}: ${typeof v === 'number' ? fmt(v) : String(v)}`)
@@ -242,6 +261,9 @@ function renderObject(o: Record<string, unknown>): string[] {
 
     // ⚠ PRESENT, NOT SUMMARISED. See the header: descending is what makes a dump possible.
     rows.push(`    ${k}: present`)
+  }
+  if (dropped.length) {
+    rows.push(`    (+${dropped.length} more field${dropped.length === 1 ? '' : 's'} not shown here: ${dropped.slice(0, 8).join(', ')}${dropped.length > 8 ? ', …' : ''} — ask the matching tool for them)`)
   }
   return rows
 }
@@ -369,8 +391,10 @@ function renderItem(item: unknown): string | null {
    * dropping the points, which are the entire reason a projection is in the packet. An existing
    * test caught it; the branches are ordered least-specific-last for exactly this reason.
    */
-  if (typeof o.playerId === 'string' && typeof o.points !== 'number' && ('playerName' in o || 'position' in o)) {
-    const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : null
+  if (typeof o.playerId === 'string' && typeof o.points !== 'number' && ('playerName' in o || 'name' in o || 'position' in o)) {
+    // `RosterPlayerLite` carries `name`, not `playerName` (2026-11-20): reading only `playerName` dropped every one.
+    const who =
+      typeof o.playerName === 'string' && o.playerName ? o.playerName : typeof o.name === 'string' && o.name ? o.name : null
     if (!who) return null
     return o.position ? `${who} (${String(o.position)})` : who
   }

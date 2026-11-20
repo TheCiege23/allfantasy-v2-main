@@ -89,6 +89,22 @@ export type DecisionOsFeed =
    * rest of the packet, with a stated gap.
    */
   | 'waiverDecision'
+  /*
+   * THE FIVE SLICES THE 2026-11-20 +10% PUSH ADDED, each with its own switch (hub re-score, operability). Each one
+   * does real work per turn — a My Team load, a value board, up to three trade grades, a draft decision, a league's
+   * manager records — so an operator must be able to shed any one of them without a deploy and without losing
+   * the others. Killed, the slice is a `disabled` gap and the matching Chimmy tool still answers.
+   */
+  /** My Team's best lineup on lineup questions (`lib/chimmy/myTeamLineupGrounding.ts`). */
+  | 'myTeamLineup'
+  /** NBA/MLB/NHL roster values on the league's board. Also off whenever `marketValues` is. */
+  | 'rosterBoardValues'
+  /** The graded trades waiting on the asker, on trade questions. */
+  | 'pendingTrades'
+  /** The draft board and Draft OS's pick, on draft questions. */
+  | 'draftBoard'
+  /** Leaguemates' records (Competitive Edge), on manager questions. */
+  | 'managerRecords'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -104,6 +120,11 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'idpKickerValues',
   'rosterValueGrade',
   'waiverDecision',
+  'myTeamLineup',
+  'rosterBoardValues',
+  'pendingTrades',
+  'draftBoard',
+  'managerRecords',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'
