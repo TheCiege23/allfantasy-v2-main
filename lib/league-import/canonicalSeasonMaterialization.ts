@@ -19,6 +19,7 @@ import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, type DailySeasonSport } 
 import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
 import { NCAAB_CONFIG } from '@/lib/sportConfig/configs/ncaab'
 import { usesFantraxPeriodCalendar } from './fantrax/fantraxProSports'
+import { rosterSourceTeamId } from './importedRosterIdentity'
 
 /** Sports whose imported leagues get a season on the canonical tables. */
 const MATERIALIZED_SPORTS = new Set<string>(['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB'])
@@ -121,6 +122,8 @@ export async function materializeRedraftSeasonForImportedLeague(
     where: { leagueId },
     select: {
       id: true,
+      externalId: true,
+      claimedByUserId: true,
       ownerName: true,
       teamName: true,
       avatarUrl: true,
@@ -163,13 +166,34 @@ export async function materializeRedraftSeasonForImportedLeague(
       })
     : await prisma.redraftSeason.create({ data: seasonData })
 
+  const ownerCounts = new Map<string, number>()
+  for (const team of teams) {
+    if (team.platformUserId) ownerCounts.set(team.platformUserId, (ownerCounts.get(team.platformUserId) ?? 0) + 1)
+  }
+  const savedRosters = existing && fantraxPeriodSeason ? await prisma.redraftRoster.findMany({
+    where: { seasonId: season.id },
+    select: { ownerId: true, teamName: true, legacyRoster: { select: { playerData: true } } },
+  }) : []
+  const savedKeys = new Set(savedRosters.map(r => r.ownerId))
+  const savedByTeam = new Map(savedRosters.flatMap(r => {
+    const id = rosterSourceTeamId(r.legacyRoster?.playerData)
+    return id ? [[id, r.ownerId] as const] : []
+  }))
+  const attachedKeys = new Set(savedByTeam.values())
+  const legacyTeam = new Map(savedRosters.filter(r => !r.legacyRoster).map(r => [r.ownerId, r.teamName]))
   const rosters = await Promise.all(
     teams.map((t) => {
+      const shared = fantraxPeriodSeason && !!t.platformUserId && (ownerCounts.get(t.platformUserId) ?? 0) > 1
+      const existingKey = savedByTeam.get(t.externalId) ?? (savedKeys.has(t.id) ? t.id : null)
+      const keyInUse = !!t.platformUserId && attachedKeys.has(t.platformUserId) && existingKey !== t.platformUserId
+      const useTeamKey = keyInUse || (shared && (!legacyTeam.has(t.platformUserId!) || legacyTeam.get(t.platformUserId!) !== t.teamName))
+      const ownerId = existingKey ?? (useTeamKey ? t.id : t.platformUserId || t.id)
+      const manager = fantraxPeriodSeason && t.claimedByUserId !== undefined ? { managerUserId: t.claimedByUserId } : {}
       const data = {
         seasonId: season.id,
         leagueId,
-        // The reconciler links a managerless roster by team using its source identity.
-        ownerId: t.platformUserId || t.id,
+        ownerId,
+        ...manager,
         ownerName: t.ownerName,
         teamName: t.teamName,
         avatarUrl: t.avatarUrl,
@@ -183,7 +207,7 @@ export async function materializeRedraftSeasonForImportedLeague(
         ? prisma.redraftRoster.upsert({
             where: { seasonId_ownerId: { seasonId: season.id, ownerId: data.ownerId } },
             create: data,
-            update: {},
+            update: manager,
           })
         : prisma.redraftRoster.create({ data })
     }),

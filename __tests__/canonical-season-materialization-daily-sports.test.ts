@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   rosterCreate: vi.fn(),
   seasonUpsert: vi.fn(),
   rosterUpsert: vi.fn(),
+  savedRosters: vi.fn(),
   reconcile: vi.fn(),
   materializePlayers: vi.fn(),
 }))
@@ -25,7 +26,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: mocks.leagueFindUnique },
     leagueTeam: { findMany: mocks.teamFindMany },
     redraftSeason: { findUnique: mocks.seasonFindUnique, create: mocks.seasonCreate, upsert: mocks.seasonUpsert },
-    redraftRoster: { create: mocks.rosterCreate, upsert: mocks.rosterUpsert },
+    redraftRoster: { create: mocks.rosterCreate, upsert: mocks.rosterUpsert, findMany: mocks.savedRosters },
   },
 }))
 vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks', () => ({ reconcileRosterRedraftLinks: mocks.reconcile }))
@@ -40,6 +41,7 @@ const createdSeason = () => mocks.seasonCreate.mock.calls[0]?.[0]?.data
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.seasonFindUnique.mockResolvedValue(null)
+  mocks.savedRosters.mockResolvedValue([])
   mocks.teamFindMany.mockResolvedValue([
     { id: 'team-1', platformUserId: 'fantrax-user:a', ownerName: 'A', teamName: 'Team 001', avatarUrl: null, wins: 0, losses: 0, ties: 0, pointsFor: 0, currentRank: 1 },
     { id: 'team-2', platformUserId: 'fantrax-manager:b', ownerName: 'B', teamName: 'Team 002', avatarUrl: null, wins: 0, losses: 0, ties: 0, pointsFor: 0, currentRank: 2 },
@@ -86,6 +88,14 @@ describe('the playoff week when the provider names none', () => {
 })
 
 describe('Fantrax period-based seasons', () => {
+  it('keeps two season rosters and reuses the existing franchise link when their manager is the same',async()=>{
+    mocks.leagueFindUnique.mockResolvedValue({...league('NFL',14),platform:'fantrax',settings:{fantrax_settings:{lastPeriod:17}}})
+    mocks.teamFindMany.mockResolvedValue(['a','b'].map(id=>({id,externalId:id,teamName:id,platformUserId:'shared',claimedByUserId:'manager'})))
+    mocks.seasonFindUnique.mockResolvedValue({id:'season'})
+    mocks.savedRosters.mockResolvedValue([{ownerId:'shared',teamName:'old name',legacyRoster:{playerData:{source_team_id:'b'}}}])
+    await materializeRedraftSeasonForImportedLeague('NFL-league')
+    expect(mocks.rosterUpsert.mock.calls.map(([x])=>[x.create.teamName,x.create.ownerId,x.create.managerUserId])).toEqual([['a','a','manager'],['b','shared','manager']])
+  })
   it.each(['SOCCER', 'NCAAB'])('%s uses the source calendar and retries roster creation', async (sport) => {
     mocks.leagueFindUnique.mockResolvedValue({
       ...league(sport, null),

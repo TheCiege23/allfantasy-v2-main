@@ -437,6 +437,7 @@ export function rulesWithPlayoffTeamOverride(
           : 'guaranteed'
         : 'none',
       tiebreakerRules: state.settings.tiebreakers,
+      gameTiebreakers: state.settings.gameTiebreakers,
       byeRules: state.settings.firstRoundByes > 0 ? 'top_seed_byes' : null,
       reseedBehavior: state.settings.reseedAfterEachRound ? 'reseed_after_each_round' : null,
       standingsTiebreakers: state.settings.tiebreakers,

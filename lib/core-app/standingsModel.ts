@@ -647,6 +647,8 @@ type OrderCtx = {
 /** Negative = `a` ranks higher on this one key; 0 = level on it (or it cannot be measured). */
 function compareOnKey(a: OrderRow, b: OrderRow, tb: Tiebreaker, ctx: OrderCtx): number {
   switch (tb) {
+    case 'wins':
+      return b.record.wins - a.record.wins
     case 'points_for':
       return b.pointsFor - a.pointsFor
     case 'head_to_head': {

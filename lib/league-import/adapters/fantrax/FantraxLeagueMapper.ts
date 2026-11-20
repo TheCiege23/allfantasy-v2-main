@@ -6,6 +6,8 @@ import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
 import type { NormalizedLeagueSettings } from '../../types'
 import type { FantraxImportPayload } from './types'
 import type { FantraxPlayoffs } from '../../fantrax/fantraxApi'
+import type { FantraxPublicRules } from '../../fantrax/fantraxPublicRules'
+import { firstRoundByesForTeams, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 
 function positiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
@@ -23,6 +25,7 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
       (source.league.isDevy ? 'devy' : source.league.sport === 'NCAAF' ? 'college' : null)
     const seasonState = source.settings?.raw?.seasonState
     const calendar = source.settings?.raw
+    const policy = calendar?.publicRules as FantraxPublicRules | undefined
     const playoffs = calendar?.playoffs as FantraxPlayoffs | null | undefined
     const playoffStart = playoffs?.used === true ? positiveInteger(playoffs.firstPlayoffPeriod) : undefined
     const playoffTeams = playoffs?.used === false ? 0
@@ -49,7 +52,18 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
        */
       rosterSize: source.settings?.rosterSize ?? null,
       scoring: inferredScoring,
-      isDynasty: source.league.isDevy,
+      isDynasty: Boolean(source.league.isDevy || policy?.keeperType === 'dynasty'),
+      ...(policy?.keeperType ? { league_type: policy.keeperType, is_keeper: policy.keeperType === 'keeper' } : {}),
+      ...(policy?.standingsOrder ? { tiebreaker_order: policy.standingsOrder } : {}),
+      ...(playoffs?.used && typeof policy?.reseed === 'boolean' ? {
+        playoff_seeding_rule: policy.reseed ? 'reseed' : 'record_then_points',
+        playoff_structure: {
+          ...(playoffTeams ? { playoff_team_count: playoffTeams, first_round_byes: firstRoundByesForTeams(playoffTeams), total_rounds: playoffRoundsForTeams(playoffTeams) } : {}),
+          ...(playoffStart ? { playoff_start_week: playoffStart } : {}),
+          seeding_rules: policy.reseed ? 'reseed' : 'record_then_points',
+          reseed_behavior: policy.reseed ? 'reseed_after_each_round' : 'fixed_bracket',
+        },
+      } : {}),
       // Same fix as Sleeper/ESPN/Yahoo/MFL: `League.status` has no DB default,
       // so a missing value here leaves imported leagues invisible on Dashboard.
       // A live league with no rostered players or made picks has not drafted yet.

@@ -43,6 +43,8 @@ import {
   type ResolvedRoster,
 } from './fantraxApi'
 
+import { fetchFantraxPublicRules, type FantraxPublicRules } from './fantraxPublicRules'
+
 export type FantraxImportOutcome =
   | {
       ok: true
@@ -61,6 +63,7 @@ export type FantraxImportOutcome =
       sourceSettings: {
         scoringSystem: Record<string, unknown> | null
         rosterInfo: Record<string, unknown>
+        publicRules?: FantraxPublicRules
         lastPeriod?: number
         firstPlayoffPeriod?: number
         scoringPeriods?: FantraxLeagueInfo['scoringPeriods']
@@ -224,7 +227,7 @@ export async function importFantraxLeague(args: {
    * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
    * map that fails to load fails soft below, exactly like the others.
    */
-  const [rosters, standings, cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst, schedule, draft, pickInventory] = await Promise.all([
+  const [rosters, standings, cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst, schedule, draft, pickInventory, publicRules] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     directoryFor('CFB'),
@@ -238,6 +241,7 @@ export async function importFantraxLeague(args: {
     /* Future-season picks and who holds them. Fails soft like the board: a league still imports
        without them, and a failed read keeps the inventory already on file. */
     Promise.resolve().then(() => getFantraxDraftPicks(args.leagueId)).catch(() => null),
+    fetchFantraxPublicRules(args.leagueId),
   ])
   let [cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw] = [cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst]
   /*
@@ -481,6 +485,10 @@ export async function importFantraxLeague(args: {
     observedAt,
   })
 
+  const savedRules = recordOf(prior?.transactions).fantraxPublicRules
+  const effectiveRules = publicRules ?? (savedRules && typeof savedRules === 'object' && !Array.isArray(savedRules) ? savedRules as FantraxPublicRules : null)
+  if (effectiveRules) history.fantraxPublicRules = effectiveRules
+  else delete history.fantraxPublicRules
   const payload = {
     appUserId: args.appUserId,
     /*
@@ -594,6 +602,7 @@ export async function importFantraxLeague(args: {
     sourceSettings: {
       scoringSystem: info.data.scoringSystem ?? null,
       rosterInfo: info.data.rosterInfo,
+      ...(effectiveRules ? { publicRules: effectiveRules } : {}),
       ...fantraxTeamDivisions(info.data),
       ...fantraxPeriodCalendar(info.data),
     },

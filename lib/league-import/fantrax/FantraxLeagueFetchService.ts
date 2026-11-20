@@ -1021,6 +1021,8 @@ export async function fetchFantraxLeagueForImport(
         isDevy: leagueRecord.isDevy,
         sport: leagueRecord.sport,
         teamCount: leagueRecord.teamCount,
+        ...(isRecord(leagueRecord.transactions) && isRecord(leagueRecord.transactions.fantraxPublicRules)
+          ? { publicRules: leagueRecord.transactions.fantraxPublicRules } : {}),
         ...(sourceSettings ?? {}),
         seasonState: sourceSeasonState,
         /* Categories the mapper could not place. Surfaced as coverage rather

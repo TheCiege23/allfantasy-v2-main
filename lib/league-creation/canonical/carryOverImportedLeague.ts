@@ -332,6 +332,10 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     }
     playerPicksBySlot.push(rosterPicks)
   }
+  const sourceSettings = asRecord(source.settings)
+  const publicRules = asRecord(asRecord(sourceSettings.fantrax_settings).publicRules)
+  const importedPlayoffs = asRecord(sourceSettings.playoff_structure)
+  const importedSeeding = publicRules.reseed === true ? 'reseed' : publicRules.reseed === false ? 'record_then_points' : null
   const importedDivisions = parseStandingsDivisions(source.settings)
   let divisionConfig: LeagueDivisionConfig | undefined
   if (importedDivisions) {
@@ -345,7 +349,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     divisionConfig = {
       ...readDivisionConfig(target.settings), count: keys.length,
       names: keys.map((key) => importedDivisions.names[key]!), teamAssignments,
-      playoffRule: 'none' as const, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString(),
+      playoffRule: publicRules.divisionWinners === 'top_seeds' ? 'top_seeds' : 'none', lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString(),
     }
     const check = validateDivisionSetup(divisionConfig, [...nativeTeamByProviderId.values()])
     if (!check.ok) refuse('Imported divisions need commissioner review: ' + check.error)
@@ -397,9 +401,19 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     await tx.scoringSettingsSnapshot.updateMany({ where: { leagueId: args.targetLeagueId }, data: { scoringMode: mlbScoring.scoringMode, scoringFormat: 'custom', effectiveRules: mlbScoring.scoringSettings as Prisma.InputJsonValue, overrides: mlbScoring.categoryPoints } })
   }
   await tx.league.update({ where: { id: args.targetLeagueId }, data: {
+    ...(importedSeeding ? { playoffSeedingRule: importedSeeding,
+      ...(typeof importedPlayoffs.playoff_team_count === 'number' ? { playoffTeams: importedPlayoffs.playoff_team_count } : {}),
+      ...(typeof importedPlayoffs.playoff_start_week === 'number' ? { playoffStartWeek: importedPlayoffs.playoff_start_week } : {}),
+    } : {}),
     ...(mlbScoring?.scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
     settings: {
       ...asRecord(target.settings),
+      ...(importedSeeding ? {
+        playoff_structure: { ...asRecord(asRecord(target.settings).playoff_structure), ...importedPlayoffs },
+        playoffSettings: { ...asRecord(asRecord(target.settings).playoffSettings), ...asRecord(sourceSettings.playoffSettings) },
+      } : {}),
+      ...(Object.keys(publicRules).length ? { fantrax_public_rules: publicRules } : {}),
+      ...(Array.isArray(publicRules.standingsOrder) ? { tiebreaker_order: publicRules.standingsOrder } : {}),
       ...(divisionConfig ? { [DIVISION_CONFIG_KEY]: divisionConfig } : {}),
       ...(multiTeamManagersSupported(target) && (hasSharedManager || readAllowMultiTeamManagers(source.settings))
         ? { [ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY]: true } : {}),

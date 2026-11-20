@@ -28,6 +28,7 @@ export type NflRedraftPlayoffRulesInput = {
     seedingRules?: string | null
     tiebreakerRules?: string[] | null
     byeRules?: string | null
+    gameTiebreakers?: string[]
     reseedBehavior?: string | null
     standingsTiebreakers?: string[] | null
     /**
@@ -130,6 +131,7 @@ type NflRedraftPlayoffSettings = {
    * bye ends that round. Null for the natural bracket, which keeps the fixed tree below.
    */
   byePlan: number[] | null
+  gameTiebreakers?: string[]
   reseedAfterEachRound: boolean
   /** A winners-advance consolation bracket (`lowerBracket === 'consolation'`). */
   consolationEnabled: boolean
@@ -485,6 +487,7 @@ function resolveSettings(input: {
     divisionWinnersTopSeeds: divisionRule === 'top_seeds',
     pointsOnlySeeding: isPointsOnlySeeding(input.rules.playoffs.seedingRules),
     tiebreakers,
+    ...(input.rules.playoffs.gameTiebreakers?.length ? { gameTiebreakers: input.rules.playoffs.gameTiebreakers } : {}),
     customTiebreakers: customOrder(input.rules),
     seriesLengths: input.rules.playoffs.seriesLengths ? [...input.rules.playoffs.seriesLengths] : null,
     supported: supportWarnings.length === 0,
@@ -1270,7 +1273,7 @@ function activeChampionshipRound(rounds: NflRedraftPlayoffRoundState[]): NflRedr
   return rounds.find((round) => round.status === 'active') ?? rounds.find((round) => round.matchups.some((matchup) => !matchupDecided(matchup))) ?? null
 }
 
-function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {
+function resolveWinner(matchup: NflRedraftPlayoffMatchupState, gameTiebreakers?: string[]): {
   winnerRosterId: string | null
   loserRosterId: string | null
   blockedReason: string | null
@@ -1309,6 +1312,9 @@ function resolveWinner(matchup: NflRedraftPlayoffMatchupState): {
   }
   if (matchup.homeScore > matchup.awayScore) return { winnerRosterId: matchup.homeRosterId, loserRosterId: matchup.awayRosterId, blockedReason: null }
   if (matchup.awayScore > matchup.homeScore) return { winnerRosterId: matchup.awayRosterId, loserRosterId: matchup.homeRosterId, blockedReason: null }
+  if (gameTiebreakers?.length && gameTiebreakers[0]?.toLowerCase() !== 'highest seed') {
+    return { winnerRosterId: null, loserRosterId: null, blockedReason: 'Tied playoff score needs the league tiebreaker: ' + gameTiebreakers.join(', ') + '.' }
+  }
   if (matchup.homeSeed != null && matchup.awaySeed != null && matchup.homeSeed !== matchup.awaySeed) {
     const homeWinsTie = matchup.homeSeed < matchup.awaySeed
     return {
@@ -1764,14 +1770,14 @@ function fillNextRound(input: {
 type GameResolution = { matchup: NflRedraftPlayoffMatchupState; winnerRosterId: string; loserRosterId: string | null }
 
 /** Decide every game in a group, or report why not. Nothing is written until the whole group is decided. */
-function resolveGames(matchups: NflRedraftPlayoffMatchupState[]): {
+function resolveGames(matchups: NflRedraftPlayoffMatchupState[], gameTiebreakers?: string[]): {
   blocked: Array<{ matchupId: string; reason: string }>
   resolutions: GameResolution[]
 } {
   const blocked: Array<{ matchupId: string; reason: string }> = []
   const resolutions: GameResolution[] = []
   for (const matchup of matchups) {
-    const resolved = resolveWinner(matchup)
+    const resolved = resolveWinner(matchup, gameTiebreakers)
     if (!resolved.winnerRosterId) {
       blocked.push({ matchupId: matchup.matchupId, reason: resolved.blockedReason ?? 'Matchup is not ready.' })
       continue
@@ -1875,8 +1881,8 @@ export function advanceNflRedraftPlayoffRound(input: {
   const mainGames = activeRound
     ? [...activeRound.matchups, ...(activeRound === finalRound && thirdPlace ? [thirdPlace] : [])]
     : []
-  const main = activeRound ? resolveGames(mainGames) : null
-  const lower = activeLower ? resolveGames(activeLower.matchups) : null
+  const main = activeRound ? resolveGames(mainGames, input.state.settings.gameTiebreakers) : null
+  const lower = activeLower ? resolveGames(activeLower.matchups, input.state.settings.gameTiebreakers) : null
   const mainReady = Boolean(main && main.blocked.length === 0)
   const lowerReady = Boolean(lower && lower.blocked.length === 0)
 

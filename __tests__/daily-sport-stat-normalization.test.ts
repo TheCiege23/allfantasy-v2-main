@@ -322,6 +322,7 @@ describe('real vendor keys from the committed /live fixtures', () => {
     const { stats, unmappedKeys } = normalizeNbaGameStats(NBA_BOX)
     expect(stats).not.toHaveProperty('minutes')
     expect(unmappedKeys).toContain('minutes')
-    expect(unmappedKeys).toContain('fouls')
+    expect(unmappedKeys).not.toContain('fouls')
+    expect(stats.personal_fouls).toBeTypeOf('number')
   })
 })

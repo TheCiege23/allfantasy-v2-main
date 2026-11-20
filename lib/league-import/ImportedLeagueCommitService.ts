@@ -173,6 +173,7 @@ export function buildTier0LeagueColumnPatch(
   // Playoffs
   setIfNum('playoffStartWeek', l.playoff_start_week)
   setIfNum('playoffTeams', l.playoff_teams)
+  setIfStr('playoffSeedingRule', l.playoff_seeding_rule)
 
   // Reserve + taxi
   setIfNum('irSlots', l.reserve_slots)

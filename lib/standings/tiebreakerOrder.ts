@@ -25,12 +25,13 @@
 
 export const TIEBREAKER_ORDER_KEY = 'tiebreaker_order'
 
-const TIEBREAKER_KEYS = ['head_to_head', 'points_for', 'points_against', 'all_play', 'coin_flip'] as const
+const TIEBREAKER_KEYS = ['head_to_head', 'points_for', 'points_against', 'all_play', 'coin_flip', 'wins'] as const
 export type TiebreakerKey = (typeof TIEBREAKER_KEYS)[number]
 
 const KNOWN: ReadonlySet<string> = new Set(TIEBREAKER_KEYS)
 
 export const TIEBREAKER_LABELS: Record<TiebreakerKey, { en: string; es: string }> = {
+  wins: { en: 'Most wins', es: 'Más victorias' },
   head_to_head: { en: 'Head-to-head', es: 'Enfrentamiento directo' },
   points_for: { en: 'Points for', es: 'Puntos a favor' },
   points_against: { en: 'Fewest points against', es: 'Menos puntos en contra' },

@@ -101,6 +101,14 @@ function playToChampion(leagueTeams: number, playoffTeams: number) {
 }
 
 describe('playoff fields: odd sizes and up to 32 teams', () => {
+  it('leaves a tied playoff game open when the imported league breaks ties by its bench', () => {
+    const rules=rulesFor(4,4)
+    rules.playoffs.gameTiebreakers=['Best Bench players']
+    const state=buildNflRedraftPlayoffRuntimeState({leagueId:'l',seasonId:'s',season:2026,week:14,rules,teams:teamsFor(4)})
+    state.bracket=generateNflRedraftPlayoffBracket({state}).bracket
+    for(const game of state.bracket.rounds[0]!.matchups){game.homeScore=10; game.awayScore=10}
+    expect(advanceNflRedraftPlayoffRound({state})).toMatchObject({ok:false,code:'TIE_UNRESOLVED'})
+  })
   it('allows a 32-team field', () => {
     expect(MAX_PLAYOFF_TEAMS).toBe(32)
     expect(playoffRoundsForTeams(32)).toBe(5)

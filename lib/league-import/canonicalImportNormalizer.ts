@@ -554,6 +554,7 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
     },
     playoffSettings: {
       playoffTeams,
+      ...(typeof normalized.league.playoff_seeding_rule === 'string' ? { seedingRule: normalized.league.playoff_seeding_rule } : {}),
       playoffStartWeek:
         typeof (normalized.league as Record<string, unknown>).playoff_start_week === 'number'
           ? Number((normalized.league as Record<string, unknown>).playoff_start_week)

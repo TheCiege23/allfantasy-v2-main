@@ -244,6 +244,7 @@ export type CanonicalLeagueRules = {
     byeRules: string | null
     reseedBehavior: string | null
     standingsTiebreakers: string[]
+    gameTiebreakers?: string[]
     /** Commissioner bye plan, `League.settings.playoff_bye_plan` (see lib/playoff-brackets/byePlan.ts). */
     byePlan: number[] | null
     /** The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts), or null for the default. */
@@ -443,6 +444,8 @@ export function buildCanonicalLeagueRulesFromResolved({
   generatedAt = new Date(),
 }: CanonicalLeagueRulesInput): CanonicalLeagueRules {
   const settings = recordOrEmpty(league.settings)
+  const providerRules = recordOrEmpty(settings.fantrax_public_rules ?? recordOrEmpty(settings.fantrax_settings).publicRules)
+  const gameTiebreakers = Array.isArray(providerRules.playoffTies) ? providerRules.playoffTies.filter((x): x is string => typeof x === 'string') : []
   const draftSettings = league.leagueSettings ?? {}
   const enabledLeagueSettings = collectEnabledKeys(league as unknown as JsonRecord, COMMISSIONER_INTELLIGENCE_SETTINGS)
   const enabledDraftSettings = collectEnabledKeys(draftSettings as JsonRecord, DRAFT_INTELLIGENCE_SETTINGS)
@@ -571,6 +574,7 @@ export function buildCanonicalLeagueRulesFromResolved({
       byeRules: playoffConfig?.bye_rules ?? null,
       reseedBehavior: playoffConfig?.reseed_behavior ?? null,
       standingsTiebreakers: playoffConfig?.standings_tiebreakers ?? [],
+      ...(gameTiebreakers.length ? { gameTiebreakers } : {}),
       byePlan: Array.isArray(settings.playoff_bye_plan) ? settings.playoff_bye_plan.map((v) => Number(v)) : null,
       customTiebreakers: readTiebreakerOrder(settings),
     },

@@ -80,6 +80,10 @@ const NBA_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
   // ⚠ `three_pointS_made`, not `three_pointERS_made`. The guessed spelling was
   // one letter out, which scores every made three as nothing.
   threes: ['three_points_made', 'threes', 'tpm', 'fg3m', '3pm'],
+  personal_fouls: ['fouls', 'personal_fouls', 'pf'],
+  twos: ['two_points_made', 'fg2m', '2pm'],
+  two_attempts: ['two_points_attempted', 'fg2a', '2pa'],
+  three_attempts: ['three_points_attempted', 'fg3a', '3pa'],
   fgm: ['field_goals_made', 'fgm', 'FGM'], //                    measured: field_goals_made
   ftm: ['free_throws_made', 'ftm', 'FTM'],
   fga: ['field_goals_attempted', 'fga', 'FGA'],
@@ -256,6 +260,12 @@ export function normalizeNbaGameStats(raw: unknown): NormalizedGameStats {
   const doubles = countDoubleDigitCategories(result.stats)
   if (doubles >= 2) result.stats.dbl_dbl = 1
   if (doubles >= 3) result.stats.trpl_dbl = 1
+  if (doubles >= 4) result.stats.quad_dbl = 1
+  const { stats } = result
+  if (stats.twos == null && stats.fgm != null && stats.threes != null) stats.twos = Math.max(0, stats.fgm - stats.threes)
+  if (stats.fta != null && stats.ftm != null) stats.ft_missed = Math.max(0, stats.fta - stats.ftm)
+  if (stats.three_attempts != null && stats.threes != null) stats.three_missed = Math.max(0, stats.three_attempts - stats.threes)
+  if (stats.two_attempts != null && stats.twos != null) stats.two_missed = Math.max(0, stats.two_attempts - stats.twos)
 
   return result
 }

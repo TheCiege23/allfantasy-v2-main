@@ -54,7 +54,11 @@ async function capture(id) {
     if (data.period!==p.number || !Array.isArray(data.matchups)) throw Error('Missing source period '+p.number)
     periods.push({...data,ended:Date.parse(p.endDate)<Date.now()})
   }
-  return { info, standings, periods, rosters }
+  const rulesUrl = 'https://www.fantrax.com/newui/fantasy/leagueRulesSummary.go?leagueId='
+  const summary = await publicFetch(rulesUrl + encodeURIComponent(id), { signal: AbortSignal.timeout(20000) })
+  if (!summary.ok) throw Error('Missing public league rules')
+  const rulesHtml = await summary.text()
+  return { info, standings, periods, rosters, rulesUrl, rulesHtml }
 }
 function replayTransport(source,sport,key) {
   const ids=Object.keys(source.info.teamInfo)
@@ -75,6 +79,7 @@ function replayTransport(source,sport,key) {
   }
   return { names,rows, fetch:async(input,init)=>{
     const href=typeof input==='string'?input:input.url || String(input)
+    if (href === source.rulesUrl + key) return new Response(source.rulesHtml, {headers:{'content-type':'text/html'}})
     if(!href.startsWith(api))return publicFetch(input,init)
     const u=new URL(href),ep=u.pathname.split('/').at(-1)
     let data
@@ -88,7 +93,7 @@ function replayTransport(source,sport,key) {
   }}
 }
 async function runCase(userId,sport,id,index,runId,cookie) {
-  const source=await capture(id), key='parity-'+runId+'-'+index
+  const source=await capture(id), key='qa'+runId+String(index).padStart(6,'0')
   const replay=replayTransport(source,sport,key)
   const orig=[...replay.names.keys()]
   global.fetch=replay.fetch
@@ -162,6 +167,24 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       if(records.get(t.teamId)?.join('-')===t.points)matchedRebuiltRecords++
     }
     const expected=source.info.playoffs
+    const ruleText=source.rulesHtml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')
+    const reseed=/Reseed each playoff round\s*:\s*(Yes|No)/i.exec(ruleText)?.[1]?.toLowerCase()
+    const keeperType=/Keeper league Type\s*:\s*(Dynasty|Keeper|Redraft)/i.exec(ruleText)?.[1]?.toLowerCase()
+    const divisionTop=/Playoff Seeding\s*:+\s*Division winners get top seeds/i.test(ruleText)
+    const policy=league.settings.fantrax_settings?.publicRules
+    const policyPass=!!reseed && policy?.reseed===(reseed==='yes') && policy.keeperType===keeperType &&
+      (policy.divisionWinners==='top_seeds')===divisionTop && !!policy.standingsTies?.length &&
+      !!policy.matchupTies?.length && !!policy.playoffTies?.length && !!policy.standingsOrder?.length &&
+      JSON.stringify(policy.standingsOrder)===JSON.stringify(league.settings.tiebreaker_order) &&
+      (!keeperType || league.settings.league_type===keeperType) &&
+      league.settings.playoff_structure?.reseed_behavior===(reseed==='yes'?'reseed_after_each_round':'fixed_bracket')
+    const { loadSeasonRosterDivisions } = require('../lib/league/divisions/loadLeagueDivisions.ts')
+    const seasonRosters = await prisma.redraftRoster.findMany({where:{seasonId:season.id},select:{id:true,ownerId:true,teamName:true}})
+    const divisions=await loadSeasonRosterDivisions(leagueId,seasonRosters)
+    const groupNames=new Map(seasonRosters.map(r=>[r.teamName,divisions?.byRoster.get(r.id)?.name]))
+    const dividedTeams=orig.filter(id=>Boolean(source.info.teamInfo[id].division))
+    const divisionMatches=dividedTeams.filter(id=>groupNames.get(replay.names.get(id))===source.info.teamInfo[id].division).length
+    const divisionPass=!divisionTop || divisions?.playoffRule==='top_seeds' && dividedTeams.length===orig.length && divisionMatches===orig.length
     const displayed=await screen('/api/redraft/standings?seasonId='+season.id,cookie)
     const displayedByName=new Map(displayed.rosters.map(r=>[r.teamName,r]))
     const displayRanks=replay.rows.map(t=>({row:displayedByName.get(replay.names.get(t.teamId)),source:t}))
@@ -188,11 +211,13 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     const evidence={index,sport,leagueId,field:league.playoffTeams,playoffStart:league.playoffStartWeek,currentPeriod:season.currentWeek,closed,
       backfill,teams:teams.length,sourceTeams:orig.length,matchedRecords,matchedRank,availablePF,matchedPF,matchedRebuiltRecords,
       sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,screenRecords,screenGames,uniqueGames,
-      games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,
+      games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,policyPass,divisionPass,divisionMatches,
+      rules:policy && {reseed:policy.reseed,divisionWinners:policy.divisionWinners,keeperType:policy.keeperType,
+        standingsTies:policy.standingsTies,matchupTies:policy.matchupTies,playoffTies:policy.playoffTies},
       scoringRules:payload.settings.scoringRules.length,scoringGaps:payload.settings.raw.scoringGaps||[],
       sourceManagerFields:Object.keys(Object.values(source.info.teamInfo)[0]).filter(k=>/owner|manager|user/i.test(k)),
       champion:resolveFantraxChampionTeamId(payload),warnings:result.incompleteSteps?.map(w=>w.code)||[]}
-    evidence.pass=backfill==='complete' && settingsPass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
+    evidence.pass=backfill==='complete' && settingsPass && policyPass && divisionPass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
       games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
       facts.length===games && evidence.champion===null

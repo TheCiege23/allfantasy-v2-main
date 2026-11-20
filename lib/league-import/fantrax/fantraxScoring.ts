@@ -141,6 +141,12 @@ const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
 const NO_FALLBACK_GROUP = /^(BASKETBALL|HOCKEY|SOCCER)_/
 
 const NBA_STAT_KEYS: Record<string, string[]> = {
+  INDIVIDUAL_FREE_THROWS_MISSED: ['ft_missed'],
+  INDIVIDUAL_TWO_POINTERS_MADE: ['twos'],
+  INDIVIDUAL_TWO_POINTERS_MISSED: ['two_missed'],
+  INDIVIDUAL_THREE_POINTERS_MISSED: ['three_missed'],
+  INDIVIDUAL_PERSONAL_FOULS: ['personal_fouls'],
+  INDIVIDUAL_QUADRUPLE_DOUBLES: ['quad_dbl'],
   INDIVIDUAL_FREE_THROWS_MADE: ['ftm'],
   INDIVIDUAL_TRIPLE_DOUBLES: ['trpl_dbl'],
   INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES: ['dbl_dbl'],

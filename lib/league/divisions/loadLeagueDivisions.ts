@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { parseStandingsDivisions } from '@/lib/league-import/standingsDivisions'
 import {
   parseActiveLeagueDivisions,
   resolveRosterDivisions,
@@ -30,8 +31,10 @@ export async function loadSeasonRosterDivisions(
 ): Promise<SeasonRosterDivisions | null> {
   try {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-    const active = parseActiveLeagueDivisions(league?.settings)
-    if (!active) return null
+    const settings = league?.settings as { fantrax_settings?: { publicRules?: { divisionWinners?: string } } } | null
+    let active = parseActiveLeagueDivisions(settings)
+    const imported = active ? null : parseStandingsDivisions(settings)
+    if (!active && imported?.source !== 'fantrax') return null
     const [teams, generic] = await Promise.all([
       prisma.leagueTeam.findMany({
         where: { leagueId },
@@ -42,6 +45,15 @@ export async function loadSeasonRosterDivisions(
         select: { id: true, platformUserId: true, redraftRosterId: true },
       }) as Promise<Array<{ id: string; platformUserId: string | null; redraftRosterId: string | null }>>,
     ])
+    if (!active && imported) {
+      const divisions = Object.entries(imported.names).map(([key, name], index) => ({ key, index, name }))
+      const teamDivision = new Map(teams.flatMap(team => {
+        const key = team.externalId && imported.teams[team.externalId]
+        return key ? [[team.id, key] as const] : []
+      }))
+      active = { divisions, teamDivision, rivalsTwice: false, playoffRule: settings?.fantrax_settings?.publicRules?.divisionWinners === 'top_seeds' ? 'top_seeds' : 'none' }
+    }
+    if (!active) return null
     const byRoster = resolveRosterDivisions(
       active,
       teams,

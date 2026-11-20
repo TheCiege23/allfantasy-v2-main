@@ -5,6 +5,7 @@ import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 import { fantraxStarterSlot } from '@/lib/league-import/fantrax/fantraxProSports'
 import { projectFantraxStandings } from '@/lib/redraft/fantraxNativePresentation'
+import { parseFantraxPublicRules } from '@/lib/league-import/fantrax/fantraxPublicRules'
 import { normalizeNbaGameStats } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { normalizeMlbGameStats } from '@/lib/scoring-runtime/mlbStatNormalization'
 import { playoffFinalWeek } from '@/lib/playoff-runtime/playoffFit'
@@ -28,6 +29,25 @@ describe('published Fantrax first-season calendars', () => {
       })
       expect(playoffFinalWeek({ teams, playoffStartWeek: start, weeksPerRound: 1 })).toBe(last)
     })
+  it('imports the keeper type, ordered tiebreakers, reseeding and division winner policy from the rules page', () => {
+    const rules=parseFantraxPublicRules(`<title>League Rules Summary - Test - Fantrax</title>
+      <ul><li><span>Reseed each playoff round:</span> Yes</li><li>Playoff Seeding:: Division winners get top seeds</li>
+      <li>Keeper league Type: Dynasty</li></ul><table><tr><th>Standings Tie Breakers</th></tr>
+      <tr><td><p>1. Most wins in entire season</p></td></tr><tr><td>2. Randomly selected</td></tr>
+      <tr><th>Playoff Tie Breakers</th></tr><tr><td>1. Best Bench players</td></tr></table>`)
+    expect(rules).toMatchObject({keeperType:'dynasty',divisionWinners:'top_seeds',reseed:true,standingsOrder:['wins','coin_flip'],playoffTies:['Best Bench players']})
+    const input=source('MLB',12,23,26)
+    input.settings!.raw.publicRules=rules
+    expect(FantraxLeagueMapper.map(input)).toMatchObject({isDynasty:true,league_type:'dynasty',tiebreaker_order:['wins','coin_flip'],
+      playoff_structure:{playoff_team_count:12,first_round_byes:4,total_rounds:4,reseed_behavior:'reseed_after_each_round'}})
+    expect(parseFantraxPublicRules('<title>Login</title><ul><li>Reseed each playoff round: Yes</li></ul>')).toBeNull()
+  })
+  it('scores the NBA shooting penalties from each game and leaves missing attempts unknown', () => {
+    const row=normalizeNbaGameStats({stats:{two_points_made:5,two_points_attempted:8,three_points_made:3,
+      three_points_attempted:7,free_throws_made:2,free_throws_attempted:4,fouls:2,points:21,rebounds:12,assists:10,steals:10}}).stats
+    expect(row).toMatchObject({twos:5,two_missed:3,three_missed:4,ft_missed:2,personal_fouls:2,quad_dbl:1})
+    expect(normalizeNbaGameStats({stats:{three_points_made:3}}).stats.three_missed).toBeUndefined()
+  })
   it('preserves an explicit no-playoffs league', () => {
     const input = source('MLB',12,23,26)
     input.settings!.raw.playoffs = { used: false, numPlayoffTeams: 12, firstPlayoffPeriod: 23 }
