@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/prisma"
 import { createRunBudget } from "@/lib/cron/runBudget"
-import { mergeRotation } from "@/lib/league-import/rotationPolicy"
+import { mergeRotation, orderByStaleness } from "@/lib/league-import/rotationPolicy"
 import {
   addMatchupSeasonCounters,
   emptyMatchupSeasonCounters,
@@ -138,11 +138,18 @@ export async function GET(request: Request) {
        * rotationPolicy.ts.
        */
       const starvedBefore = new Date(Date.now() - STARVATION_FLOOR_MS)
-      const [starvedRows, demandRows] = await Promise.all([
+      /*
+       * The queue is built from the leagues that EXIST. Status rows outlive a deleted league and
+       * used to hold the front of the queue for good; see `orderByStaleness`.
+       */
+      const [eligibleLeagues, statusRows, demandRows] = await Promise.all([
+        prisma.league.findMany({
+          // `platformLeagueId` is a non-nullable String, so the empty string is the "unset" value.
+          where: { platform: "sleeper", platformLeagueId: { not: "" } },
+          select: { id: true, isDynasty: true },
+        }),
         prisma.dynastyBackfillStatus.findMany({
-          where: { provider: "sleeper", updatedAt: { lt: starvedBefore } },
-          orderBy: { updatedAt: "asc" },
-          take: LEAGUE_CAP,
+          where: { provider: "sleeper" },
           select: { leagueId: true, updatedAt: true },
         }),
         /*
@@ -159,8 +166,13 @@ export async function GET(request: Request) {
         }),
       ])
 
+      const eligibleLeagueIds = eligibleLeagues.map((l) => l.id)
+      const refreshedAtByLeagueId = new Map(statusRows.map((r) => [r.leagueId, r.updatedAt]))
+      const statusRowsWithoutLeague = statusRows.length - eligibleLeagueIds.filter((id) => refreshedAtByLeagueId.has(id)).length
+      const starvedRows = orderByStaleness({ eligibleLeagueIds, refreshedAtByLeagueId, olderThan: starvedBefore })
+
       const rotation = mergeRotation({
-        starvedLeagueIds: starvedRows.map((r) => r.leagueId),
+        starvedLeagueIds: starvedRows.slice(0, LEAGUE_CAP).map((r) => r.leagueId),
         demandLeagueIds: demandRows.map((r) => r.id),
         cap: LEAGUE_CAP,
       })
@@ -172,13 +184,8 @@ export async function GET(request: Request) {
        */
       const stale =
         rotation.leagueIds.length > 0
-          ? rotation.leagueIds.map((id) => ({ leagueId: id, updatedAt: null as Date | null }))
-          : await prisma.dynastyBackfillStatus.findMany({
-              where: { provider: "sleeper" },
-              orderBy: { updatedAt: "asc" },
-              take: LEAGUE_CAP,
-              select: { leagueId: true, updatedAt: true },
-            })
+          ? rotation.leagueIds.map((id) => ({ leagueId: id, updatedAt: refreshedAtByLeagueId.get(id) ?? null }))
+          : orderByStaleness({ eligibleLeagueIds, refreshedAtByLeagueId }).slice(0, LEAGUE_CAP)
 
       if (stale.length === 0) {
         return {
@@ -189,28 +196,12 @@ export async function GET(request: Request) {
           leaguesRefreshed: 0,
           leaguesFailed: 0,
           skippedForTime: 0,
-          metadata: { note: "No Sleeper leagues carry a backfill status row yet.", renewals },
+          metadata: { note: "No Sleeper leagues to refresh.", renewals },
         }
       }
 
-      const leagues = await prisma.league.findMany({
-        where: {
-          id: { in: stale.map((s) => s.leagueId) },
-          platform: "sleeper",
-          // `platformLeagueId` is a non-nullable String, so the empty string is the "unset"
-          // value here — `{ not: null }` does not typecheck. Same filter the activity-ingest
-          // cron uses on the same column.
-          platformLeagueId: { not: "" },
-        },
-        select: { id: true, isDynasty: true },
-      })
-
-      /*
-       * ⚠ `findMany({ id: { in } })` DOES NOT PRESERVE THE ORDER OF THE `in` LIST. Reordering by
-       * the staleness query is what keeps this a rotation; without it the run would iterate in
-       * whatever order Postgres returned and the tail could starve while the budget looks fine.
-       */
-      const byId = new Map(leagues.map((l) => [l.id, l]))
+      /* `stale` holds the rotation's order; a selected id that is not an eligible league is dropped. */
+      const byId = new Map(eligibleLeagues.map((l) => [l.id, l]))
       const ordered = stale.map((s) => byId.get(s.leagueId)).filter((l): l is NonNullable<typeof l> => Boolean(l))
 
       const { syncSleeperHistoricalBackfillAfterImport } = await import(
@@ -262,6 +253,19 @@ export async function GET(request: Request) {
           if (errors.length < 5) {
             errors.push(`${league.id}: ${e instanceof Error ? e.message : String(e)}`)
           }
+          /*
+           * A league that throws before `runDynastyBackfill` stamps its status row would stay the
+           * oldest in the queue and take a slot on every fire. Send it to the back; it is tried
+           * again on the next lap.
+           */
+          try {
+            await prisma.dynastyBackfillStatus.updateMany({
+              where: { leagueId: league.id, provider: "sleeper" },
+              data: { updatedAt: new Date() },
+            })
+          } catch {
+            /* best effort: the failure itself is already counted above */
+          }
         }
       }
 
@@ -278,6 +282,10 @@ export async function GET(request: Request) {
         elapsedMs: budget.elapsedMs(),
         metadata: {
           leagueCap: LEAGUE_CAP,
+          /* Watch these two: a fire that selects fewer than the cap while leagues are starved is the jam this replaced. */
+          leaguesSelected: stale.length,
+          leaguesStarved: starvedRows.length,
+          statusRowsWithoutLeague,
           budgetMs: REFRESH_BUDGET_MS,
           remainingMs: budget.remainingMs(),
           matchupSeasons,
