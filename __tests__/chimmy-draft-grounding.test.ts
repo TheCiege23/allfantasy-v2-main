@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ManagersAhead } from '@/lib/competitive-edge/liveDraftManagers'
 
 const mocks = vi.hoisted(() => ({
   sessionFindUnique: vi.fn(),
@@ -7,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   viewerRoster: vi.fn(),
   buildDraftDecisionContext: vi.fn(),
   computeDraftRecommendation: vi.fn(),
-  managersAhead: vi.fn(async () => null),
+  managersAhead: vi.fn(async (): Promise<ManagersAhead | null> => null),
   snapshot: vi.fn(),
   fit: vi.fn(),
   auction: vi.fn(),
