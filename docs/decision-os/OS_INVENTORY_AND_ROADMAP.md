@@ -205,10 +205,28 @@ only, like every mark here: production tables were not read.
 | Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
 | Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
 | Commissioner | ~52 | ~78 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain. Engine, Cron, User ⚠ stay |
-| Decision OS hub | ~50–58 | not re-scored | Nothing here targeted the hub's own axes (multi-model ❌); measure it on its own |
+| Decision OS hub | ~50 | ~64 | Serialization ⚠→✅ and operability ⚠→✅ — see the hub note below |
 
 ⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
 commits after it.
+
+**Decision OS hub, 2026-11-20 — ~50 → ~64.** Seven hub axes, equal weight. Re-marked from code: assembly ⚠ · latency
+budget ✅ (per-slice deadline, #3852) · routing ⚠ · serialization ⚠→✅ · learning loop ⚠ · multi-model ❌ (by the owner's
+decision to retire three-brain) · operability ⚠→✅.
+- **Serialization ✅.** Measured by feeding a 16-player roster, a 12-team table and a week-14 matchup through the
+  serializer: the roster printed "starters: 10 items (not itemised here)" — not one player name, because the roster
+  branch of `renderItem` read `playerName` and `RosterPlayerLite` carries `name` — the standings printed "rows: 12
+  items", and the matchup was cut after 8 fields, losing weeks-until-playoffs, the margin and who leads. Matchup,
+  roster and standings now render field by field (`grounding/contextSliceText.ts`), every player and every team; and
+  the generic renderer names the fields it cuts ("+3 more fields not shown here: …") instead of dropping them silently.
+  Every slice Chimmy is most often asked about now has a typed renderer (rules, import, matchup, roster, standings,
+  decisions, the prose slices).
+- **Operability ✅.** Every packet slice has its own kill switch (`flags.ts`), the five the +10% push added included;
+  killed feeds are listed on the packet (`meta.killedFeeds`); every read has its own deadline and a late packet logs
+  its slowest slices by name.
+- Still ⚠/❌: routing and assembly (intent mapping covers each decision domain, but not every slice is intent-aware),
+  the learning loop (graded outcomes move start/sit and waiver confidence only; trade letters and commissioner
+  advice are reported, not applied — by rule), multi-model (retired).
 
 **Commissioner "inactive", 2026-11-20 — native leagues read the manager's own last action (owner's call: fix the
 flag before grading it).** Both the per-manager table (`managerHealth.ts`) and the hub's "N teams inactive"
