@@ -31,6 +31,7 @@ import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { ResultsRosterPanel, type ResultsRosterPanelPick, type ResultsRosterPanelTeam } from '@/components/app/draft-room/ResultsRosterPanel'
 import { sportHasByeWeeks } from '@/lib/draft-room/rosterSlotOrder'
+import { useWeekGames } from '@/components/app/draft-room/useWeekGames'
 import {
   buildSleeperPoolStatColumnDefs,
   formatDraftStatDisplay,
@@ -989,6 +990,8 @@ export default function MockDraftSleeperRoomClient({
    * An open mock has no league, so no chip.
    */
   const leagueConceptForMock = leaguePayload ? leagueAccentFor(leaguePayload.leagueConcept ?? null, { isDynasty: leaguePayload.isDynasty }).concept : null
+  /** NBA / NHL / MLB: games this week per team for the "My team" panel (football shows BYE). */
+  const rosterWeekGames = useWeekGames(draftState?.settings.sport ?? null)
   const signatureByOverall = useMemo(
     () => tileSignatureChipsByOverall(
       leagueConceptForMock,
@@ -2604,6 +2607,7 @@ export default function MockDraftSleeperRoomClient({
           starterSlots={mockStarterSlots}
           benchSlots={Math.max(0, draftState.settings.rounds - mockStarterTotal)}
           sport={sport}
+          weekGames={rosterWeekGames}
           testIdBase="mock-draft-roster"
         />
       </div>
