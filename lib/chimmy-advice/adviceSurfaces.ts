@@ -26,10 +26,19 @@ export const MY_TEAM_BENCH_SURFACE = 'my_team_bench' as const
 export const WAIVER_PANEL_SURFACE = 'waiver_panel' as const
 
 /**
- * Surfaces recorded for the advice ledger only: AllFantasy's own engines, never Chimmy. Every existing
- * reader skips them, and each one's upsert touches only its OWN rows (lib/chimmy-advice/adviceStore.ts).
+ * The waiver engine's #1 claim, recorded by the scheduled weekly run (lib/decision-os/waiver/weeklyEngineCalls.ts)
+ * since 2026-11-20 so the engine is graded whether or not anyone opened the panel. NOBODY WAS SHOWN IT: it is
+ * the weakest row there is, so any other surface recording the same pick takes it over
+ * (lib/chimmy-advice/adviceStore.ts), and it only ever updates its own rows. Ledger-only.
  */
-export const LEDGER_ONLY_SURFACES: readonly string[] = [MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE]
+export const WAIVER_ENGINE_SURFACE = 'waiver_engine' as const
+
+/**
+ * Surfaces recorded for the advice ledger only: AllFantasy's own engines, never Chimmy. Every existing
+ * reader skips them, and each one's upsert touches only its OWN rows (lib/chimmy-advice/adviceStore.ts) —
+ * plus an unshown `waiver_engine` row for the same pick, which the advice actually shown replaces.
+ */
+export const LEDGER_ONLY_SURFACES: readonly string[] = [MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE, WAIVER_ENGINE_SURFACE]
 
 export const isChimmyAdvice = (a: { surface: string }): boolean =>
   a.surface !== AF_TIP_SURFACE && !LEDGER_ONLY_SURFACES.includes(a.surface)

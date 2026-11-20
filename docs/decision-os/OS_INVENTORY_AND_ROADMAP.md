@@ -199,6 +199,19 @@ excluded), redraft claims and the trades they proposed. Nothing on record reads 
 Imported leagues keep the synced timestamp. ⚠ Grading the flag is still to do: it is not stored when shown, and
 native leagues have no current-week column for the advice table, so it needs its own small table (a migration).
 
+**Waiver OS, 2026-11-20 — the engine runs on a schedule and its confidence learns from its own claims.** The
+engine ran only when somebody opened the panel or asked Chimmy. The alert sweep now runs it weekly for every league
+the ledger can grade — Sleeper, redraft, full-PPR NFL (`isWaiverCalibrationScope`) — and records its #1 claim with
+its raw score under a new ledger-only surface, `waiver_engine`, which nobody is shown
+(`lib/decision-os/waiver/weeklyEngineCalls.ts`; 45 s a tick, 25 leagues, each at most once in six days; honours the
+`waiverDecision` kill switch and `ADVICE_LEDGER_WAIVERS=off`). A pick the panel or Chimmy actually SHOWS takes over
+that unshown row. The ledger grades every scored #1 claim by band (High ≥80, Medium ≥50) on the pickup rule — 10+
+PPR a week over three weeks — and `lib/decision-os/waiver/calibration.ts` moves the card's and the panel's
+CONFIDENCE (never the ranking, scores or bid) by half the shrunk gap, ±10 at most, silent below 20 graded claims.
+⚠ This narrows `engineRecord.ts`'s "reported, never applied" rule rather than overturning it: the correction applies
+only where the ledger's measure IS the league's own. Everywhere else nothing changes. Expect no movement until about
+three weeks of claims have been graded.
+
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
 

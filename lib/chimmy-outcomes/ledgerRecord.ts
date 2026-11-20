@@ -29,6 +29,7 @@
  */
 
 import type { TrackRecordLine } from './trackRecord'
+import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 
 /** Within this many points, a start/sit call is "same" — the Receipts card's AutoCoach band. */
 export const LEDGER_SAME_BAND = 1
@@ -147,6 +148,12 @@ export type LedgerSnapshot = {
    * `commissioner-review`), one per deal. Absent on a snapshot written before 2026-11-20.
    */
   commissionerTrades?: LedgerSnapshot['trades']
+  /**
+   * The waiver engine's #1 claims per confidence band — how often each band's claims became startable —
+   * the waiver engine's own calibration (`lib/decision-os/waiver/calibration.ts`). Absent on a snapshot
+   * written before 2026-11-20, and on a rebuild with no scored claim to grade.
+   */
+  waiverEngine?: WaiverEngineLedger
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -161,6 +168,7 @@ export function foldLedger(input: {
   adds: readonly AddRow[]
   trades: LedgerSnapshot['trades']
   commissionerTrades?: LedgerSnapshot['trades']
+  waiverEngine?: WaiverEngineLedger
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -234,6 +242,7 @@ export function foldLedger(input: {
     pickups,
     trades: input.trades,
     ...(input.commissionerTrades ? { commissionerTrades: input.commissionerTrades } : {}),
+    ...(input.waiverEngine && Object.keys(input.waiverEngine).length > 0 ? { waiverEngine: input.waiverEngine } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }

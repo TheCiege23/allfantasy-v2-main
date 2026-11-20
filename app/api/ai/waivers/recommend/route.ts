@@ -11,6 +11,7 @@ import { buildLiveWaiverDecisionDeps } from "@/lib/decision-os/waiver/deps"
 import { loadWaiverPool } from "@/lib/decision-os/waiver/pool"
 import { waiverEngineInputFrom } from "@/lib/decision-os/waiver/engineInput"
 import { claimsToPanelRecommendations } from "@/lib/decision-os/waiver/panelRecommendations"
+import { loadWaiverCalibrationForLeague } from "@/lib/decision-os/waiver/calibrationStore"
 import { prisma } from "@/lib/prisma"
 import { schedulePanelWaiverAdvice } from "@/lib/chimmy-advice/panelWaiverAdvice"
 
@@ -112,7 +113,11 @@ export async function POST(request: Request) {
       faabRemaining: facts.faabRemaining,
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
+    const [pool, calibration] = await Promise.all([
+      loadWaiverPool(leagueId, facts.sport, facts.rosterId),
+      // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
+      loadWaiverCalibrationForLeague(leagueId),
+    ])
     if (pool.availablePlayers.length === 0) {
       return empty([pool.leagueRosterCount === 0 ? "league_rosters_not_loaded" : "free_agent_pool_empty"], context)
     }
@@ -128,17 +133,18 @@ export async function POST(request: Request) {
         poolIncomplete: pool.poolIncomplete,
         pricing: pool.pricing,
       },
-      { decision: buildLiveWaiverDecisionDeps(facts) },
+      { decision: buildLiveWaiverDecisionDeps(facts, calibration.calibration) },
     )
 
     // The advice ledger: the #1 pickup this panel shows, recorded to be graded later. Background only.
-    schedulePanelWaiverAdvice({ userId, leagueId, claims: result.decision?.recommended_actions ?? [] })
+    schedulePanelWaiverAdvice({ userId, leagueId, claims: result.decision?.recommended_actions ?? [], scored: calibration.inScope })
 
     const isFaab = context.waiverType === "faab"
     const recommendations = claimsToPanelRecommendations(result.decision?.recommended_actions ?? [], {
       leagueId,
       includeFaab: includeFaab ?? isFaab,
       limit: mode === "quick" ? 3 : 5,
+      calibration: calibration.calibration,
     })
 
     /*

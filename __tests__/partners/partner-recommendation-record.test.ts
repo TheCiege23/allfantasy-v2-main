@@ -68,7 +68,8 @@ describe('recomputeLedgerForLeagues', () => {
     routeQueries([], [])
     await recomputeLedgerRecord({ now: NOW })
     const advice = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
-    expect(advice).toHaveLength(2)
+    // Bench calls, the panel's pickups, and the waiver engine's scored #1 claims (its own calibration, 2026-11-20).
+    expect(advice).toHaveLength(3)
     for (const s of advice) expect(s.sql).not.toContain('ANY(')
   })
 

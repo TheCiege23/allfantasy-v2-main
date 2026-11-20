@@ -11,6 +11,7 @@ import type { WaiverClaimRecommendation } from '../waiver/decision'
 import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
 import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
+import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice } from './packet'
@@ -299,7 +300,11 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       }
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
+    const [pool, calibration] = await Promise.all([
+      loadWaiverPool(leagueId, facts.sport, facts.rosterId),
+      // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
+      loadWaiverCalibrationForLeague(leagueId),
+    ])
     if (pool.availablePlayers.length === 0) {
       /*
        * Distinct from "no roster": the league resolved and the wire is empty after subtraction.
@@ -356,7 +361,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
         poolIncomplete: pool.poolIncomplete,
         pricing: pool.pricing,
       },
-      { decision: buildLiveWaiverDecisionDeps(facts) },
+      { decision: buildLiveWaiverDecisionDeps(facts, calibration.calibration) },
     )
 
     if (args.onClaims) {
