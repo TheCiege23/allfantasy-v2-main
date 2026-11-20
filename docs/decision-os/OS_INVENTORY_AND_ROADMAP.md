@@ -200,7 +200,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | League | 100 | 100 | 100 | — (the §0.47 two-rules-readers gap is real but is not an axis) |
 | Projection | 100 | ~93 | ~93 | Chimmy ⚠: league-scored roster projections exist for NFL only; NBA/NHL/MLB get canonical rows labelled "NOT this league" |
 | Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
-| Waiver | ~100 | ~93 | ~93 | Kernel ⚠: the packet's decision and the weekly run call `loadWaiverWorldFacts` directly; the feed is read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE` |
+| Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
 | Player Value | ~93 | ~90 | ~90 | Kernel ⚠: NBA/MLB/NHL/NCAAB/soccer boards are read live outside the kernel. User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
 | Trade | ~86 | ~79 | ~79 | Kernel ⚠: the graded inbox does not read the feed (only the env-gated proposals route does). Engine ⚠ and Cron ⚠ as before |
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
@@ -234,12 +234,17 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
   same starters and bench with the answer's clock.
 - **`rosterProjections` and `leaguePlayerMetrics` have their own kill switches** (`DECISION_OS_FEED_ROSTER_PROJECTIONS`,
   `DECISION_OS_FEED_LEAGUE_PLAYER_METRICS`); both still stop with `projections`.
+- **The waiver decision reads through Waiver OS** (ranked item 1). `loadWaiverDecisionSlice` — every Chimmy waiver
+  question and the weekly engine run — reads `waiverResourceSource` (this manager's FAAB, priority and settings, five
+  minutes, user-scoped) through `createWaiverOsLoaders`, derived by the same `loadWaiverWorldFacts` on a miss. "No
+  roster resolved" is never cached. The user-facing `/api/ai/waivers/recommend` still reads live, so the screen never
+  shows a FAAB balance up to five minutes old.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
 | # | Build | Moves | Size |
 |---|---|---|---|
-| 1 | The waiver decision reads through the feed (`decisionBridge.ts` → `createWaiverOsLoaders().loadWorldFacts`, same signature) | Waiver Kernel → ✅ (~100) | S |
+| ✅ | The waiver decision reads through the feed — **done in this change** (below) | Waiver Kernel → ✅ (~100) | S |
 | 2 | Provider drafts in manager records: credit current-season draft facts to the team's current owner; earlier seasons named as unattributed, the Sleeper shape | Psychology data, user-visible | M |
 | 3 | A manager-record feed (`OsFactSource` on `createOsFeed('psychology')`, membership/plan/viewer filtering kept at read time), refreshed on the `?intel=1` tick | Psychology Feed, Kernel, Cron → ✅ (~100); a whole-league load off every manager turn | M |
 | 4 | League value boards cached in Value OS (a league-level board source read by the packet, the card and Waivers) | Value Kernel → ✅ (~100) | M |
