@@ -68,13 +68,13 @@ const NHL_TEAMS: Record<string, string[]> = {
 
 /** Fantrax club abbreviations paired with Rolling Insights team IDs from its EPL schedule. */
 const EPL_TEAMS: Record<string, string[]> = {
-  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth'], BHA: ['3', 'Brighton & Hove Albion'],
+  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth', 'Bournemouth'], BHA: ['3', 'Brighton & Hove Albion', 'Brighton and Hove Albion'],
   CHE: ['6', 'Chelsea'], CRY: ['7', 'Crystal Palace'], EVE: ['8', 'Everton'], FUL: ['9', 'Fulham'],
-  LIV: ['12', 'Liverpool'], MCI: ['13', 'Manchester City'], MUN: ['14', 'Manchester United'],
-  NEW: ['15', 'Newcastle United'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
+  LIV: ['12', 'Liverpool', 'Liverpool FC'], MCI: ['13', 'Manchester City', 'MNC'], MUN: ['14', 'Manchester United', 'MAN'],
+  NEW: ['15', 'Newcastle United', 'Newcastle'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
   WHU: ['19', 'West Ham United', 'West Ham'],
-  BRF: ['24', 'Brentford'], NOT: ['25', 'Nottingham Forest'], IPS: ['26', 'Ipswich Town'],
-  LEE: ['67', 'Leeds United'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
+  BRF: ['24', 'Brentford', 'BRE'], NOT: ['25', 'Nottingham Forest', 'NFO'], IPS: ['26', 'Ipswich Town'],
+  LEE: ['67', 'Leeds United', 'LUFC'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
 }
 
 const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
@@ -128,6 +128,11 @@ const TEAM_ALIASES = Object.fromEntries(
 function nameKey(value: string) { const parts = value.split(','); return compact(parts.length === 2 ? `${parts[1]} ${parts[0]}` : value) }
 
 /** The canonical team code for a sport, or undefined when the label is not a team we recognise. */
+export function proRolesAgree(sport: ProFantraxSport, slot: string | null, position: string | null): boolean {
+  const requested = RULES[sport].roles(slot)
+  return !requested.length || RULES[sport].roles(position).some(role => requested.includes(role))
+}
+
 export function proTeamCode(sport: ProFantraxSport, label: string | null | undefined): string | undefined {
   return TEAM_ALIASES[sport].get(compact(label ?? ''))
 }

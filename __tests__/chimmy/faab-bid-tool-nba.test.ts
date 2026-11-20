@@ -108,13 +108,15 @@ describe('get_faab_bid_plan in an NBA league', () => {
   })
 })
 
-describe('get_faab_bid_plan in a sport with no value board', () => {
+describe('get_faab_bid_plan in a college league without a qualifying board', () => {
   it('🛑 refuses in words and never reads the NFL chart', async () => {
     h.league.mockResolvedValue({ ...LEAGUE, sport: 'NCAAB' })
-    const plan = await computeFaabBidPlan('N1', 'me')
+    const valueBoard = vi.fn(async () => ({ kind: 'unavailable' as const, sport: 'NCAAB' as const, reason: 'Insufficient games.' }))
+    const plan = await computeFaabBidPlan('N1', 'me', { valueBoard })
+    expect(valueBoard).toHaveBeenCalledWith('N1')
     expect(plan).toEqual({
       status: 'refused',
-      line: 'FAAB BID PLAN: AllFantasy has no College basketball player values to bid with yet, so bids cannot be priced in this league. Say so; do not estimate bids, and never use NFL values.',
+      line: "FAAB BID PLAN: this league's College basketball value board is not available — Insufficient games. Say so; do not estimate bids.",
     })
     expect(h.values).not.toHaveBeenCalled()
   })

@@ -93,7 +93,7 @@ export type IdpComponent =
  * forced fumbles and silently inflate every linebacker. One component resolves to exactly one
  * rule key.
  */
-const COMPONENT_RULE_KEYS: Record<IdpComponent, readonly string[]> = {
+export const COMPONENT_RULE_KEYS: Record<IdpComponent, readonly string[]> = {
   soloTackle: ['idp_solo_tackle', 'idp_tackle_solo', 'idp_tkl_solo', 'tkl_solo'],
   assistTackle: ['idp_assist_tackle', 'idp_tackle_assist', 'idp_assisted_tackle', 'idp_tkl_ast', 'tkl_ast'],
   sack: ['idp_sack'],

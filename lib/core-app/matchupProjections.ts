@@ -5,10 +5,9 @@ import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './ro
 import { isAtRisk, isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
-import { afEngineForLeague, lookupAfEngineProjections, projectionSportScope } from './playerProjections'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import {
-  computeLeagueProjectedPoints,
   extractScoringSettings,
   hasScoringRules,
   NO_LEAGUE_SCORING_REASON,
@@ -225,29 +224,9 @@ export async function loadSideProjections(args: {
   const leaguePlatform = String(league?.platform ?? '')
   const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId, league?.sport)
   const lookupIds = [...new Set(rosterIds.map(lookupOf).filter((x): x is string => x != null))]
-  const projections = await prisma.fantasyProjection.findMany({
-    // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.
-    // `projectionSportScope`: a Sleeper NBA starter's id can equal an NFL player's, so a non-NFL
-    // league reads only rows of its own sport (none today) rather than an NFL stranger's line.
-    where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' }, ...projectionSportScope(league?.sport) },
-    // `stats` carries the FULL component stat line the import cron preserves so
-    // consumers can rescore under league settings (see app/api/cron/
-    // import-projections). The generic `projectedPoints` total is deliberately
-    // not read here — a PPR number is not this league's number.
-    select: { playerId: true, stats: true, projectedPoints: true },
-  })
-  const byPlayer = new Map(projections.map((p) => [p.playerId, p]))
-  /* AllFantasy's own engine, same week — the second number beside the provider's on the board.
-     Never feeds the totals or the win probability, which stay on the provider line they were
-     built for. A failed read leaves the AF cells blank and nothing else. */
-  const afEngineRows = await lookupAfEngineProjections(lookupIds, { season: String(season), week }, league?.sport).catch(
-    (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
-  )
-  /* Spread, not a key set to null: a starter the engine never wrote carries no `afEngine` at all. */
-  const engineFor = (id: string, generic: number | null, league: number | null): { afEngine?: number } => {
-    const v = afEngineForLeague(afEngineRows.get(lookupOf(id) ?? ''), generic, league, scoring)
-    return v == null ? {} : { afEngine: v }
-  }
+  const metrics = await loadLeaguePlayerMetrics({ leagueId, week, rosterIds, limit: rosterIds.length, includeTradeValues: false })
+  const pointBoard = metrics?.season === season && metrics.unit === 'fantasy points'
+  const byPlayer = new Map((pointBoard ? metrics.rows : []).map((p) => [p.rosterPlayerId, p]))
 
   /*
    * 🛑 A STARTER RULED OUT IS A 0, NOT HIS PROJECTION. This file read no injury data at all, so
@@ -261,7 +240,7 @@ export async function loadSideProjections(args: {
    * is a certainty. `getByeWeeks` is the same bye read My Team uses, and it refuses to call anything
    * a bye unless the week's schedule is otherwise complete.
    */
-  const canScore = hasScoringRules(scoring)
+  const canScore = hasScoringRules(scoring) || (pointBoard && byPlayer.size > 0)
   const { unavailableBySleeperId, atRiskBySleeperId } = canScore
     ? await readPlayerAvailability({ sport: String(league?.sport ?? 'NFL'), season, week, sleeperIds: lookupIds })
     : { unavailableBySleeperId: new Map<string, Unavailable>(), atRiskBySleeperId: {} as Record<string, string> }
@@ -291,42 +270,23 @@ export async function loadSideProjections(args: {
         lineup.push({ playerId: id, projected: 0, unavailable })
         continue
       }
-      const proj = isResolvableId(id)
-        ? byPlayer.get(lookupOf(id) ?? '')
-        : undefined
-      if (!proj) {
+      const projected = byPlayer.get(id)?.weekly
+      if (projected == null) {
         unprojected++
-        lineup.push({ playerId: id, projected: null, ...(isResolvableId(id) ? engineFor(id, null, null) : {}) })
-        continue
-      }
-      /*
-       * ⚠ RESCORED UNDER THE LEAGUE'S OWN RULES, NEVER READ FROM THE GENERIC
-       * pts_ppr TOTAL. The feed nests component stats one level down; the outer
-       * object is metadata (name/team/week) and scoring it would be
-       * meaningless. A starter whose stats the rules cannot score is unpriced —
-       * not zero — same as a starter the feed does not carry.
-       */
-      const s = (proj.stats ?? {}) as Record<string, unknown>
-      const scored = scoring
-        ? computeLeagueProjectedPoints((s.stats ?? null) as Record<string, unknown> | null, scoring)
-        : null
-      if (!scored) {
-        unprojected++
-        lineup.push({ playerId: id, projected: null, ...engineFor(id, null, null) })
+        lineup.push({ playerId: id, projected: null })
         continue
       }
       starters.push({
         playerId: id,
-        projectedPoints: scored.points,
+        projectedPoints: projected,
         actualPoints: 0,
         isFinal: false,
       })
       lineup.push({
         playerId: id,
-        projected: scored.points,
-        ...engineFor(id, Number(proj.projectedPoints), scored.points),
+        projected, afEngine: projected,
       })
-      projectedRemaining += scored.points
+      projectedRemaining += projected
     }
     return {
       starters,
@@ -349,12 +309,10 @@ export async function loadSideProjections(args: {
       // A foreign league's unmapped id resolves to nothing — never to the Sleeper player sharing its number.
       const sleeperId = lookupOf(id) ?? ''
       const unavailable = unavailableBySleeperId.get(sleeperId) ?? null
-      const stats = (byPlayer.get(sleeperId)?.stats ?? {}) as Record<string, unknown>
-      const scored = scoring ? computeLeagueProjectedPoints((stats.stats ?? null) as Record<string, unknown> | null, scoring) : null
       return {
         playerId: id,
-        position: displayPosition(positions.get(sleeperId)?.position),
-        projected: unavailable ? 0 : scored?.points ?? null,
+        position: displayPosition(byPlayer.get(id)?.position ?? positions.get(sleeperId)?.position),
+        projected: unavailable ? 0 : byPlayer.get(id)?.weekly ?? null,
         unavailable,
         inactive: inactive.has(id),
       }
@@ -380,7 +338,7 @@ export async function loadSideProjections(args: {
     atRiskBySleeperId,
     // A metadata-only settings object is "no rules" too — see `hasScoringRules`. Without this the
     // eight label-only leagues read "N starters could not be priced", blaming the feed.
-    leagueScoring: hasScoringRules(scoring)
+    leagueScoring: canScore
       ? { available: true }
       : { available: false, reason: NO_LEAGUE_SCORING_REASON },
   }

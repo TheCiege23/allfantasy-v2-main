@@ -246,6 +246,9 @@ export default function PlayerCardSheet({
   const c = playerCardCopy(language)
   const reason = (text: string) => playerCardReasonText(text, language)
   const ago = (iso: string | null) => cardAgo(iso, language)
+  const afProjection = data?.afLeagueProjection
+  const projectionUnit = afProjection?.unit === 'category score' ? c.afCategory : c.afPoints
+  const projectionNumber = (points: number) => points.toLocaleString(getAppIntlLocale(), { maximumFractionDigits: 2 })
   const [insightOpen, setInsightOpen] = useState(false)
   /* The ☆'s optimistic value; null means "defer to the payload". Declared here,
      beside its sibling, because the reset effect below closes over it. */
@@ -716,6 +719,29 @@ export default function PlayerCardSheet({
           {/* stat tiles ────────────────────────────────────────── */}
           {data ? (
             <div className="af-pc-tiles">
+              {afProjection ? (
+                  <>
+                    <Tile label={c.afRank} value={`#${afProjection.rank}`} tone="plain"
+                      sub={`#${afProjection.positionRank} ${data.player.position ?? ''} · ${projectionNumber(afProjection.perGame)} ${projectionUnit} ${c.afPerGame}`} />
+                    {(afProjection.dynastyTradeValue ?? afProjection.tradeValue) != null ? (
+                      <Tile label={c.afTrade}
+                        value={projectionNumber((afProjection.dynastyTradeValue ?? afProjection.tradeValue)!)} tone="plain"
+                        sub={afProjection.tradeValueUnit ?? undefined} />
+                    ) : null}
+                    {afProjection.weekly != null ? (
+                      <Tile label={c.afWeek(afProjection.week)} value={projectionNumber(afProjection.weekly)} tone="plain" sub={projectionUnit} />
+                    ) : null}
+                    {afProjection.fullSeason != null ? (
+                      <Tile label={c.afFullSeason} value={projectionNumber(afProjection.fullSeason)} tone="plain"
+                        sub={afProjection.fullSeasonBasis === 'standard_season'
+                          ? `${projectionUnit} · ${c.afStandardSeason}`
+                          : projectionUnit} />
+                    ) : null}
+                    {afProjection.restOfSeason != null ? (
+                      <Tile label={c.afRemaining} value={projectionNumber(afProjection.restOfSeason)} tone="plain" sub={projectionUnit} />
+                    ) : null}
+                  </>
+              ) : null}
               {league ? (
                 <>
                   {league.boardValue?.available ? (

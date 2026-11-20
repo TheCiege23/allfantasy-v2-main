@@ -1,3 +1,5 @@
+import { valueBookFor } from '@/lib/core-app/valueBook'
+import { loadAfNflMarketQuote } from './afLeaguePlayerPrice'
 import 'server-only'
 
 import type { SportsPlayerRecord } from '@prisma/client'
@@ -824,15 +826,34 @@ export async function resolveAssets(
       if (!row && knownSleeperId) {
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
-      let pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
-      if (
-        pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
-        isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
-      ) {
-        floorCandidates.push(knownSleeperId)
-        if (args.onAnotherChart?.has(knownSleeperId)) {
-          pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
-          belowFloor.push(displayName)
+      let pa: PricedAsset
+      const afBook = args.nflCtx.afLeagueMarketBook
+      if (afBook) {
+        const id = knownSleeperId
+        const market = await loadAfNflMarketQuote({ book: afBook, sleeperId: id, name: displayName, position,
+          allowNameLookup: !raw.playerId && !raw.providerIdentity }).catch(() => null)
+        const specialty = (id || (!raw.playerId && !raw.providerIdentity)) ? leagueValueForPlayer({
+          name: displayName, identity: { sleeperId: id, position },
+          bySleeperId: args.nflCtx.leagueValueBySleeperId, byNameLower: args.nflCtx.leagueValueByNameLower,
+        }) : null
+        const price = market?.marketValue ?? specialty?.value
+        pa = price == null ? unpricedAsset({ name: displayName, type: 'player', position,
+          reason: { code: 'priced_on_analysis', label: 'AF has no verified league trade price for this player.' } })
+          : { name: displayName, type: 'player', position: position ?? market?.position ?? specialty?.position ?? undefined, value: price,
+              source: market ? 'allfantasy' : specialty?.basis ?? 'allfantasy',
+              ...(market ? { valueAsOf: market.generatedAt.toISOString() } : {}),
+              assetValue: { marketValue: price, impactValue: price, vorpValue: price, volatility: 0 } }
+      } else {
+        pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+        if (
+          pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
+          isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
+        ) {
+          floorCandidates.push(knownSleeperId)
+          if (args.onAnotherChart?.has(knownSleeperId)) {
+            pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
+            belowFloor.push(displayName)
+          }
         }
       }
       const defenderProjection = pa.source === 'idp-vorp' ? leagueValueForPlayer({
@@ -845,13 +866,13 @@ export async function resolveAssets(
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
-      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
+      else if (!afBook && !matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
       const headshot = row?.headshotUrl ?? row?.headshotUrlLg ?? row?.headshotUrlSm ?? null
       const src: TradeConsolePlayerLine['pricedSource'] =
-        pa.source === 'fantasycalc' || pa.source === 'excel'
+        pa.source === 'allfantasy' ? 'allfantasy' : pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
           : pa.source === 'idp-vorp' || pa.source === 'kicker-flat' || pa.source === 'dst-flat'
             ? 'idp_league'
@@ -869,7 +890,7 @@ export async function resolveAssets(
           logoUrl: row?.logoUrl ?? null,
           injuryStatus: row?.injuryStatus ?? null,
           pricedSource: src,
-          dataSource: row?.dataSource ?? 'fantasycalc+rolling',
+          dataSource: afBook ? 'allfantasy' : row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
           ...(defenderProjection ? {
             effectiveProjection: defenderProjection.points,
@@ -1118,6 +1139,7 @@ export async function resolveLeagueTradeChart(args: {
   const faabState = args.marketless ? null : await loadLeagueFaabState(leagueRow)
 
   const nflCtx: ValuationContext = {
+    ...(leagueRow && leagueSport === 'NFL' && !args.marketless ? { afLeagueMarketBook: valueBookFor(leagueRow.settings, leagueRow.leagueType) } : {}),
     asOfDate: asOf,
     isSuperFlex,
     fantasyCalcPlayers: fcPlayers,
