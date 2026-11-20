@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/college-weekly-projections",
+      "schedule": "45 * * * *"
+    },
+    {
       "path": "/api/cron/decision-os-intelligence-maintenance",
       "schedule": "*/10 * * * *"
     },
