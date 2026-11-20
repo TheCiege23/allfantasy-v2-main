@@ -59,6 +59,8 @@ interface ContractRowUI {
 export interface SalaryCapSummary {
   config: SalaryCapSummaryConfig
   myRosterId?: string
+  /** An imported league with no contracts on file: why the cap screens are empty (lib/salary-cap/importedContractsNote.ts). */
+  contractsNote?: string | null
   ledger: SalaryCapSummaryLedger | null
   futureProjection: FutureCapYearUI[]
   contracts: ContractRowUI[]
