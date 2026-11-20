@@ -607,22 +607,29 @@ export function DraftRoomPageClient({
       : 'Loading player pool...'
   const effectiveDraftSport = draftPool?.sport ?? sport
 
+  /*
+   * A kept player is taken from the first pick, not from the round his keeper slot comes up. He is on
+   * his team's roster already and the server refuses him to anyone else, but until his slot was
+   * reached he sat in the available list, the queue and the pick suggestions like any free player
+   * (walked locally 2026-11-20: keepers costing rounds 5 and 10 listed as available in round 1).
+   */
+  const keeperLocks = (session as DraftSessionSnapshot | null)?.keeper?.locks
   const draftedNames = useMemo(
     () =>
       new Set(
-        (session?.picks ?? [])
+        [...(session?.picks ?? []), ...(keeperLocks ?? [])]
           .map((p) => normalizeDraftedPlayerName(p.playerName))
           .filter(Boolean),
       ),
-    [session?.picks],
+    [session?.picks, keeperLocks],
   )
   const draftedPlayerIds = useMemo(() => {
     const s = new Set<string>()
-    for (const p of session?.picks ?? []) {
+    for (const p of [...(session?.picks ?? []), ...(keeperLocks ?? [])]) {
       if (p.playerId) s.add(String(p.playerId).trim())
     }
     return s
-  }, [session?.picks])
+  }, [session?.picks, keeperLocks])
   /** Single source for on-clock team, overall, and timer anchor — derived only from `session`. */
   const draftCore = useMemo(
     () => (session ? buildDraftRoomCoreState(session) : null),

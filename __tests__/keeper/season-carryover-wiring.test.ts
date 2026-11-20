@@ -267,6 +267,11 @@ describe('lockKeeperSelections — missed-deadline rule', () => {
     expect(mockApplyMissedDeadlineRule).toHaveBeenCalledTimes(1)
     expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2', prisma)
     expect(mockApplyMissedDeadlineRule.mock.invocationCallOrder[0]).toBeLessThan(mockKeeperRecordUpdateMany.mock.invocationCallOrder[0])
+    // The lock promotes a pending keeper AND one the commissioner confirmed; never a rejected one.
+    expect(mockKeeperRecordUpdateMany.mock.calls[0][0]).toEqual({
+      where: { leagueId: 'league-1', seasonId: 'season-2', status: { in: ['pending', 'confirmed'] } },
+      data: { status: 'locked', lockedAt: expect.any(Date) },
+    })
   })
 
   it('never picks again on a repeat lock, and a failure never stops the lock', async () => {
