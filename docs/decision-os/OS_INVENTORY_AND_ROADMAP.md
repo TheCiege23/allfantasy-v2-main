@@ -233,6 +233,15 @@ first-wave deadline; past it the board comes without the pick, which is that bui
 the tool still runs the full budget. Not asked for from inside the draft room, which already hands the loop the same
 board. "No draft session" is stated as a fact; a failed read is a gap; a late read is stamped late.
 
+**Commissioner OS, 2026-11-20 — league health reads through the domain-OS kernel.** It was the one Decision OS
+decision with no maintained facts: Chimmy's league-health slice rebuilt the hub's whole snapshot (rosters, seven days of
+counts, the owner-action clock, dynasty reads) on every question. `'commissioner'` is now an `OsDomain`, and
+`lib/decision-os/commissioner-os` holds that snapshot as a fact — read through `createOsFeed` like waiver, trade and
+import, five-minute TTL. ⚠ USER-scoped on purpose: with dynasty signals on, the snapshot marks which team is the
+viewer's (`dynastyHealthReads.ts`), so a league-scoped entry would tell a co-commissioner another's team is theirs.
+Commissioner access is still proved on every request before the read. Not done: no scheduled warm (nothing shows one
+is needed at a five-minute TTL), and the hub screen still builds its own snapshot live.
+
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
 
