@@ -38,7 +38,6 @@ import {
   getStatValueForDraftPlayer,
   type DraftStatPlayerSource,
 } from '@/lib/draft-room/draftSportStatColumns'
-import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
 import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
 import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
@@ -356,6 +355,22 @@ export function mockPoolStatCells(player: Pick<AvailablePlayer, 'position' | 'di
       label: column.label,
       value: formatDraftStatDisplay(getStatValueForDraftPlayer(player as DraftStatPlayerSource, column), column),
     }))
+}
+
+/**
+ * The phone pool row's stat line: two stats, short labels, so it fits beside the Draft and Queue
+ * buttons on a 390px screen without being cut off. Football leads with points per game (a season
+ * total says less in a draft) and then the position's main stat; other sports take their first two
+ * stats that have a value. Missing values are skipped, never shown as dashes or guessed.
+ */
+export function mockPoolPhoneStatLine(
+  player: Pick<AvailablePlayer, 'position' | 'display' | 'nflDraftProjectionSplits' | 'adp'>,
+  sport: string,
+): string | null {
+  const isNfl = String(sport).toUpperCase() === 'NFL'
+  const cells = mockPoolStatCells(player, sport).filter((cell) => cell.value !== '—' && !(isNfl && cell.key === 'pts'))
+  const line = cells.slice(0, 2).map((cell) => `${cell.label} ${cell.value}`).join(' · ')
+  return line || null
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
@@ -2470,7 +2485,7 @@ export default function MockDraftSleeperRoomClient({
             const queued = queue.includes(player.id) && !drafted
             const auction = Boolean(draftState.auction)
             return (
-              <div key={player.id} className="flex items-center gap-1.5 border-b border-white/[0.04] py-1" data-testid={`mock-draft-pool-row-${player.id}`}>
+              <div key={player.id} className="flex flex-wrap items-center gap-x-1.5 border-b border-white/[0.04] py-1" data-testid={`mock-draft-pool-row-${player.id}`}>
                 <button
                   type="button"
                   disabled={drafted || !isUserTurn}
@@ -2524,15 +2539,6 @@ export default function MockDraftSleeperRoomClient({
                         <span data-testid={`mock-draft-player-bye-${player.id}`}> · BYE {player.byeWeek}</span>
                       ) : null}
                     </div>
-                    {/* Phones: the live room's compact stat line. */}
-                    {(() => {
-                      const line = compactDraftPlayerStats(player as unknown as DraftStatPlayerSource, sport, player.position)
-                      return line ? (
-                        <div className="truncate text-[11px] text-white/60 md:hidden" data-testid={`mock-draft-player-stats-line-${player.id}`}>
-                          {line}
-                        </div>
-                      ) : null
-                    })()}
                   </div>
                   {queued ? (
                     <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-black text-orange-200">{mockCopy.queued}</span>
@@ -2566,6 +2572,21 @@ export default function MockDraftSleeperRoomClient({
                     </span>
                   </div>
                 </button>
+                {/*
+                 * Phones: the stat line gets a row of its own under the player. Beside the Draft and
+                 * Queue buttons the name column is ~75px, too narrow for any stat line to fit.
+                 */}
+                {(() => {
+                  const line = mockPoolPhoneStatLine(player, sport)
+                  return line ? (
+                    <div
+                      className="basis-full truncate pb-0.5 pl-1 text-[11px] text-white/60 md:hidden"
+                      data-testid={`mock-draft-player-stats-line-${player.id}`}
+                    >
+                      {line}
+                    </div>
+                  ) : null
+                })()}
               </div>
             )
           })}
