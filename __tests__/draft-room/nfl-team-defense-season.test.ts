@@ -1,6 +1,7 @@
 /**
  * Team defense (DEF) stats for the NFL draft pool (2026-11-20): SACK / INT / TD summed from the
- * team's defenders, PA/G from stored regular-season scores. Fumble recoveries stay empty on purpose.
+ * team's defenders, PA/G from stored regular-season scores, FR through playerFumbleRecoveries (the
+ * vendor's games-played echo dropped, the two copies of the count never added).
  */
 import { describe, expect, it } from 'vitest'
 import { attachTeamDefenseStats, summarizeTeamDefense } from '@/lib/draft-room/nflTeamDefenseSeason'
@@ -9,7 +10,12 @@ import { mockPoolPhoneStatLine, mockPoolStatCells } from '@/components/mock-draf
 
 const defenders = [
   { team: 'LAR', stats: { sacks: 23, tackles: 60, interceptions: 1 } },
-  { team: 'LAR', stats: { sacks: 7.5, interceptions: 4, interception_touchdowns: 1, defense_fumble_recoveries: 9 } },
+  // Both copies of one recovery: counted once, not twice.
+  { team: 'LAR', stats: { sacks: 7.5, interceptions: 4, interception_touchdowns: 1, fumbles_recoveries: 1, defense_fumble_recoveries: 1 } },
+  // The games-played echo: 16 "recoveries" in 16 games with no defensive snaps — dropped.
+  { team: 'LAR', gamesPlayed: 16, stats: { sacks: 0, games_played: 16, snap_count_defense: 0, defense_fumble_recoveries: 16 } },
+  // 2026-style row with only the team-named field, and real snaps: kept.
+  { team: 'LAR', gamesPlayed: 9, stats: { sacks: 0, games_played: 9, snap_count_defense: 410, defense_fumble_recoveries: 2 } },
   { team: 'Los Angeles Rams', stats: { sacks: 2, fumble_return_touchdowns: 1 } }, // a full name meets the code
   { team: 'BUF', stats: { sacks: 4 } },
   { team: null, stats: { sacks: 99 } }, // no team: ignored, never guessed
@@ -25,8 +31,8 @@ const games = [
 describe('summarizeTeamDefense', () => {
   it('sums defenders by team and takes points allowed per game from the scores', () => {
     const out = summarizeTeamDefense(defenders, games)
-    expect(out.get('LAR')).toEqual({ dst_sacks: 32.5, dst_interceptions: 5, dst_td: 2, dst_points_allowed_per_game: 23.5, games: 2 })
-    expect(out.get('BUF')).toEqual({ dst_sacks: 4, dst_interceptions: 0, dst_td: 0, dst_points_allowed_per_game: 17, games: 2 })
+    expect(out.get('LAR')).toEqual({ dst_sacks: 32.5, dst_interceptions: 5, dst_td: 2, dst_fumble_recoveries: 3, dst_points_allowed_per_game: 23.5, games: 2 })
+    expect(out.get('BUF')).toEqual({ dst_sacks: 4, dst_interceptions: 0, dst_td: 0, dst_fumble_recoveries: 0, dst_points_allowed_per_game: 17, games: 2 })
     expect(out.has('MIA')).toBe(false)
   })
 })
@@ -41,7 +47,7 @@ describe('attachTeamDefenseStats', () => {
     expect(qbOut).toBe(qb)
     const cols = getDraftStatColumnsForSport('NFL', { position: 'DEF' })
     const shown = Object.fromEntries(cols.map((c) => [c.label, formatDraftStatDisplay(getStatValueForDraftPlayer(defOut as never, c), c)]))
-    expect(shown).toEqual({ PTS: '—', AVG: '—', SACK: '32.5', INT: '5', FR: '—', TD: '2', 'PA/G': '23.5' })
+    expect(shown).toEqual({ PTS: '—', AVG: '—', SACK: '32.5', INT: '5', FR: '3', TD: '2', 'PA/G': '23.5' })
   })
 
   it('a defense whose team is unknown keeps its dashes', () => {
