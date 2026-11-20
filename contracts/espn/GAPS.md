@@ -210,7 +210,7 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 
 ## Knockout / total-points league with no schedule, 2026-11-20 — recorded without probing
 
-- `K-01` OPEN, ASK BEFORE PROBING: an ESPN NFL league in a knockout (guillotine) format has no weekly
+- `KO-01` OPEN, ASK BEFORE PROBING: an ESPN NFL league in a knockout (guillotine) format has no weekly
   scores stored, so its Guilly tab has nothing to show. Measured on production, read-only: the league
   syncs daily (`syncStatus: synced`, 18 rosters of 15 players), and its matchup sync state
   (`SportsDataCache` key `external_matchup_sync:espn:<leagueId>:2026`) reads `status: synced,
