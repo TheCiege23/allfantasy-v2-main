@@ -177,6 +177,27 @@ away: the fingerprints it scaled were already empty). All five are gone, with bo
 It now runs on its own as `lib/league-import/sleeper/sleeperTradeFactRotation.ts` on the same `?intel=1` tick
 (heartbeat `cron-sleeper-trade-facts`), 24 leagues a fire in a stateless order so nothing can wedge the line.
 The `manager_psych_profiles` table and `lib/psychological-profiles/` stay; the trade-fact ingest still lives there.
+**Item 7 follow-up, 2026-11-20 — one row per deal, and the commissioner review's own record.** 🛑 The trade
+ledger counted EVALUATIONS, not deals: `saveAdHocReceipt` reuses a receipt only for the same surface, viewer and
+league within 24h, so one deal re-opened on other days, on other screens, by both managers and by the commissioner
+was graded many times, inflating the letter record shown beside every Trade Center grade (and its 20-deal floor).
+`loadTradeLedgerInputs` now keeps the FIRST evaluation per `inputHash` (league + both sides + viewer's side), in
+SQL ahead of the LIMIT; the two sides of one deal stay two calls. The same grading over only
+`commissioner-review` evaluations is stored as `commissionerTrades`, and the commissioner's trade review shows
+the letter's record beside the grade — the commissioner tally when that letter has 20+ reviewed deals, else
+every deal; NFL redraft only. Reported, never applied: the approve / veto recommendation is unchanged.
+⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
+Neither is stored when shown; grading either needs it recorded first.
+
+**Commissioner "inactive", 2026-11-20 — native leagues read the manager's own last action (owner's call: fix the
+flag before grading it).** Both the per-manager table (`managerHealth.ts`) and the hub's "N teams inactive"
+(`commissionerHubHealth.ts`) used `Roster.updatedAt`, which every system write moves — auto-subs, IR and bye moves,
+taxi rules and Inactive Manager Mode's autopilot — so an absent manager looked active for as long as AllFantasy
+managed their team. Native leagues now use `lib/commissioner-hub/ownerLastAction.ts`: the manager's own lineup
+saves, the claims they filed (autopilot's, filed under the owner's id with `metadata.source = 'chimmy_autopilot'`,
+excluded), redraft claims and the trades they proposed. Nothing on record reads as not inactive, never inactive.
+Imported leagues keep the synced timestamp. ⚠ Grading the flag is still to do: it is not stored when shown, and
+native leagues have no current-week column for the advice table, so it needs its own small table (a migration).
 
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.

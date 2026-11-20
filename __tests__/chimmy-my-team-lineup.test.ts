@@ -88,8 +88,20 @@ describe('whole lineup: Chimmy says what My Team says', () => {
     expect(out).toContain('do not build a lineup of your own')
   })
 
-  it('steps aside by design outside the NFL, and as a failure when My Team cannot load', async () => {
-    expect(await run(myTeam([slot('QB', qb)], [], { league: { id: 'L', name: 'x', platform: 'sleeper', sport: 'NBA', format: null, sourceLink: null } } as never))).toEqual({ fallback: 'not_nfl' })
+  it('another sport is answered from My Team whenever My Team has a best lineup — the screen and chat agree', async () => {
+    // 2026-11-20: this was NFL-only, so an NCAAF/NBA points league got one lineup on the screen and another in chat.
+    const ncaaf = { league: { id: 'L', name: 'Campus League', platform: 'fantrax', sport: 'NCAAF', format: 'redraft', sourceLink: null } }
+    const data = myTeam([slot('QB', qb), slot('WR', wr1)], [wr2], ncaaf as never)
+    expect(data.lineupOptimizer).not.toBeNull()
+    const out = (await run(data)) as string
+    expect(typeof out).toBe('string')
+    expect(out).toContain('THE SAME ANSWER THE MY TEAM SCREEN SHOWS')
+    expect(out).toContain('start Benchy Burner')
+  })
+
+  it('steps aside by design when another sport has no My Team best lineup (a category league), and as a failure when My Team cannot load', async () => {
+    const nba = { league: { id: 'L', name: 'x', platform: 'sleeper', sport: 'NBA', format: null, sourceLink: null }, lineupOptimizer: null }
+    expect(await run(myTeam([slot('QB', qb)], [], nba as never))).toEqual({ fallback: 'not_nfl' })
     expect(await run(null)).toEqual({ fallback: 'no_my_team' })
     expect(await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u' }, { load: async () => { throw new Error('down') } })).toEqual({ fallback: 'no_my_team' })
   })
@@ -110,6 +122,13 @@ describe('start A or B: derived from My Team’s best lineup, so it cannot contr
   it('says BOTH START or NEITHER STARTS rather than inventing an either/or', async () => {
     expect(await ss(data, ['Quinn Arm', 'Benchy Burner'])).toContain('BOTH START')
     expect(await ss(data, ['Wade Hands', 'Ronnie Backup'])).toContain('NEITHER STARTS')
+  })
+
+  it('another sport with a My Team best lineup is answered from it too', async () => {
+    const nhl = { league: { id: 'L', name: 'Ice League', platform: 'sleeper', sport: 'NHL', format: 'redraft', sourceLink: null } }
+    const out = (await ss(myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [wr2, rbBench], nhl as never), ['Wade Hands', 'Benchy Burner'])) as string
+    expect(typeof out).toBe('string')
+    expect(out).toContain("FROM MY TEAM'S BEST LINEUP")
   })
 
   it('a name not on this roster goes to the scenario tool, which names the problem', async () => {

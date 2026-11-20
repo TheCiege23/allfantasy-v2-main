@@ -1,4 +1,5 @@
 import { isCanonicalLeagueRules, renderLeagueRules } from './leagueRulesText'
+import { isImportAssertions, renderImportAssertions } from './importAssertionsText'
 import type { DecisionOsGroundingPacket, GroundedSlice } from './packet'
 
 /**
@@ -50,6 +51,12 @@ const MAX_ITEMS = 8
 const ROSTER_PROJECTIONS_SLICE = "Your roster this week (this league's scoring)"
 const MAX_ITEMS_BY_SLICE: Readonly<Record<string, number>> = { [ROSTER_PROJECTIONS_SLICE]: 30 }
 
+/** My Team's best lineup — the lineup tool's own text, whole: a lineup cut short reads as complete. */
+const MY_TEAM_LINEUP_SLICE = 'Best lineup (My Team)'
+
+/** NBA/MLB/NHL: the asker's roster on the league's value board — whole, for the same reason. */
+const ROSTER_BOARD_VALUES_SLICE = 'Your roster values (this league\'s board)'
+
 /** Trim a prose slice so one long saved analysis cannot crowd out every other fact. */
 const MAX_PROSE = 1200
 
@@ -63,7 +70,7 @@ const MAX_PROSE = 1200
  */
 // Measured 2026-09-28: a 22-team survivor league with long team names is ~1,960 characters before
 // the values, trade-ledger and history lines (~500-600 more). 3200 leaves room; 2600 did not.
-const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200 }
+const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200, [MY_TEAM_LINEUP_SLICE]: 3200, [ROSTER_BOARD_VALUES_SLICE]: 3600 }
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10)
@@ -107,6 +114,12 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
    * Chimmy guessed PPR, the trade deadline and the FAAB budget (2026-11-16 re-score item 5).
    */
   if (isCanonicalLeagueRules(value)) return renderLeagueRules(value)
+
+  /*
+   * The import assertions, field by field. Same reason as the rules above: through `renderObject` the 8-row cap
+   * kept the two timestamps and cut parity, coverage and the incomplete scopes (2026-11-20 re-score push).
+   */
+  if (isImportAssertions(value)) return renderImportAssertions(value)
 
   /*
    * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
@@ -564,6 +577,10 @@ export function serializeDecisionOsGroundingForPrompt(
      * the canonical rows above for anyone on this roster.
      */
     [ROSTER_PROJECTIONS_SLICE, packet.rosterProjections as GroundedSlice<unknown>],
+    // On lineup questions: the same best lineup the My Team screen and the lineup tool give (2026-11-20).
+    [MY_TEAM_LINEUP_SLICE, packet.myTeamLineup as GroundedSlice<unknown>],
+    // NBA/MLB/NHL: the roster priced on the league's own board, the trade grade's price (2026-11-20).
+    [ROSTER_BOARD_VALUES_SLICE, packet.rosterBoardValues as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],

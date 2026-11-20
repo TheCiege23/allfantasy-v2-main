@@ -34,6 +34,8 @@ import {
   type RosterLeagueProjection,
   type RosterProjectionBasis,
 } from './rosterLeagueProjections'
+import { renderRosterBoardValues } from './rosterBoardValues'
+import { isBoardValueSport, loadLeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import { loadRosterValueGradeSliceCached, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
@@ -246,6 +248,20 @@ export interface DecisionOsGroundingPacket {
    * league's own. NFL only; asked for whenever projections are.
    */
   rosterProjections?: GroundedSlice<RosterLeagueProjection[]>
+
+  /**
+   * My Team's best lineup for the asker this week — the exact text Chimmy's lineup tool returns
+   * (`lib/chimmy/myTeamLineupGrounding.ts`), so the packet and the tool can never disagree (2026-11-20 re-score push).
+   * Asked for on lineup questions only; bounded by the packet's deadline.
+   */
+  myTeamLineup?: GroundedSlice<string>
+
+  /**
+   * NBA / MLB / NHL: the asker's roster on the league's own value board — the trade grade's price, rest-of-season value
+   * over the best free agent (`rosterBoardValues.ts`). These sports have no market slice, so until 2026-11-20 their
+   * values reached Chimmy only through a per-player tool call. Asked for whenever values are; NFL is not_requested.
+   */
+  rosterBoardValues?: GroundedSlice<string>
 
   /**
    * R3.3 (2.2) — "Where am I weak?" in value terms: this roster's positions ranked against the
@@ -606,6 +622,13 @@ export interface GroundingPacketArgs {
      * fixing. Unasked, it stays `not_requested` and never renders.
      */
     waiverDecision?: boolean
+    /**
+     * My Team's best lineup for the asker (default OFF). On lineup questions only: it loads My Team's data, which is
+     * real work, so it is opt-in and races the packet's deadline like every first-wave read — a late or failed load
+     * becomes a gap for this slice alone. Not the retired `lineupDecision` (a 37 s engine): this is the one
+     * optimizer My Team already runs, read the same way the lineup tool reads it.
+     */
+    myTeamLineup?: boolean
   }
   /**
    * Receives the waiver engine's claims when `want.waiverDecision` runs it — the side channel Chimmy
@@ -954,6 +977,30 @@ export async function buildDecisionOsGroundingPacket(
   const pRosterBasis: Promise<RosterProjectionBasis | null> =
     want.projections && !projectionKill && leagueId && args.userId
       ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport }))
+      : Promise.resolve(null)
+
+  /*
+   * My Team's best lineup, on lineup questions. First wave, under the packet's deadline. The ledger call is NOT
+   * recorded from here: the lineup tool records it when it answers, and recording twice would grade one call twice.
+   */
+  const pMyTeamLineup =
+    want.myTeamLineup && leagueId && args.userId
+      ? kick(
+          'myTeamLineup',
+          import('@/lib/chimmy/myTeamLineupGrounding')
+            .then((m) => m.buildMyTeamLineupContext({ leagueId, userId: args.userId! }))
+            .catch(() => ({ fallback: 'no_my_team' as const })),
+        )
+      : Promise.resolve(null)
+
+  /* The league's value board for a board sport (NBA/MLB/NHL). It needs no roster, so it loads in the first wave. */
+  const pBoard =
+    want.values && !marketKill && leagueId && args.userId && isBoardValueSport(args.sport)
+      ? kick(
+          'rosterBoardValues',
+          // A board read that throws is a stated gap, never a rejected packet.
+          loadLeagueValueBoard(leagueId).catch(() => ({ kind: 'unavailable' as const, sport: 'NBA' as const, reason: 'The league’s value board could not be read just now.' })),
+        )
       : Promise.resolve(null)
 
   const pCommissioner =
@@ -1547,6 +1594,42 @@ export async function buildDecisionOsGroundingPacket(
     ? present(leagueMetrics, { servedFrom: 'store', conclusive: verdictFor('lineupDecision') })
     : undefined
 
+  /* The roster on the league's value board: the board loaded in the first wave; pricing it is pure and instant. */
+  let rosterBoardValues: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.values && marketKill && isBoardValueSport(args.sport)) rosterBoardValues = absent<string>(marketKill)
+  else if (want.values && leagueId && args.userId && isBoardValueSport(args.sport)) {
+    const board = await pBoard
+    if (board) {
+      const r = renderRosterBoardValues(board, contextFacts?.roster?.value ?? null)
+      if (r.kind === 'ok') {
+        rosterBoardValues = present(r.text, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+      } else if (r.kind === 'unavailable') {
+        rosterBoardValues = absent<string>({
+          reason: 'not_computed',
+          detail: r.reason,
+          remedy: 'Ask about one player and the value tool reads the board directly.',
+        })
+      }
+    }
+    // A board that did not load in time is stamped late below.
+  }
+
+  let myTeamLineup: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.myTeamLineup && leagueId && args.userId) {
+    const out = await pMyTeamLineup
+    if (typeof out === 'string') {
+      myTeamLineup = present(out, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    } else if (out && out.fallback === 'no_my_team') {
+      myTeamLineup = absent<string>({
+        reason: 'not_computed',
+        detail: 'My Team could not load this lineup, so its best-lineup answer is not here.',
+        remedy: 'The lineup tool answers from the weekly projections instead and says so.',
+      })
+    }
+    // `not_nfl` (a non-NFL league with no My Team optimizer, e.g. a category league) stays not_requested: the
+    // sport's own tool answers, by design, and that is not a gap. A late read is stamped below.
+  }
+
   /*
    * A slice whose read ran out of budget says so, instead of a reason that sends someone looking at the wrong
    * system ("rules could not be resolved", "engine did not return"). Only absent slices are restamped.
@@ -1566,6 +1649,8 @@ export async function buildDecisionOsGroundingPacket(
   devyValues = stamp('devyValues', devyValues)
   projections = stamp('projections', projections)
   rosterProjections = stamp('rosterProjections', rosterProjections)
+  myTeamLineup = stamp('myTeamLineup', myTeamLineup)
+  rosterBoardValues = stamp('rosterBoardValues', rosterBoardValues)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
   portfolio = stamp('portfolio', portfolio)
@@ -1593,6 +1678,8 @@ export async function buildDecisionOsGroundingPacket(
       ? [['leaguePlayerMetrics', leaguePlayerMetrics] as [string, GroundedSlice<unknown>]]
       : []),
     ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
+    ['myTeamLineup', myTeamLineup as GroundedSlice<unknown>],
+    ['rosterBoardValues', rosterBoardValues as GroundedSlice<unknown>],
   ]
 
   return {
@@ -1614,6 +1701,8 @@ export async function buildDecisionOsGroundingPacket(
     commissionerHealthDecision,
     idpKickerValues,
     rosterProjections,
+    myTeamLineup,
+    rosterBoardValues,
     rosterValueGrade,
     gaps: collectGaps(slices),
     meta: {

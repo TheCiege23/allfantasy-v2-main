@@ -62,6 +62,7 @@ type IntentDerivedWant = Required<
     | 'commissionerHealthDecision'
     | 'rosterValueGrade'
     | 'waiverDecision'
+    | 'myTeamLineup'
   >
 >
 
@@ -75,6 +76,11 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * paid `get_manager_record` tool instead.
      */
     commissionerHealthDecision: intent === 'commissioner',
+    /*
+     * My Team's best lineup, on a lineup question (2026-11-20). The one optimizer the screen runs, read the way the
+     * lineup tool reads it, so a "who should I start" turn has the answer in its packet as well as its tool.
+     */
+    myTeamLineup: intent === 'start_sit',
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *
