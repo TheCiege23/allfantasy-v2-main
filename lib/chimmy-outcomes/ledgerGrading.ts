@@ -2,16 +2,20 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
 import {
+  addWindowEnd,
   completedThrough,
   firstWeekNotKickedOff,
   foldLedger,
   LAST_REGULAR_WEEK,
   ADD_WINDOW_WEEKS,
+  STARTABLE_PPR_PER_WEEK,
   TRADE_LETTERS,
   weekCalendar,
+  weekIsOver,
   type AddRow,
   type BenchRow,
   type LedgerSnapshot,
@@ -147,6 +151,71 @@ async function loadAddRows(season: number, db: Db, leagueIds?: readonly string[]
   })
 }
 
+/**
+ * THE WAIVER ENGINE'S #1 CLAIMS, WITH THE SCORE IT GAVE THEM (2026-11-20) — the input to the engine's own
+ * calibration (`lib/decision-os/waiver/calibration.ts`). Rows from the scheduled weekly run
+ * (`waiver_engine`) and the panel (`waiver_panel`), but only those carrying a score: both record one only
+ * in a league the ledger can measure (redraft, full-PPR NFL), so a row with no score is out of scope by
+ * construction and never reaches the bands.
+ */
+export type EngineClaimRow = AddRow & { score: number; givenAt: Date }
+
+async function loadEngineClaimRows(season: number, db: Db): Promise<EngineClaimRow[]> {
+  const rows = await db.$queryRaw<Array<{ user_id: string; week: number; rec_key: string; score: number; given_at: Date }>>`
+    SELECT user_id, week, rec_player_key AS rec_key, confidence_pct AS score, given_at
+    FROM chimmy_advice
+    WHERE surface IN (${WAIVER_ENGINE_SURFACE}, ${WAIVER_PANEL_SURFACE}) AND advice_type = 'add' AND season = ${season}
+      AND confidence_pct IS NOT NULL`
+  const ids = [...new Set(rows.map((r) => r.rec_key).filter(Boolean))]
+  const feed = await readPprByWeek(season, ids, db)
+  return rows.map((r) => {
+    const week = Number(r.week)
+    const end = Math.min(week + ADD_WINDOW_WEEKS - 1, LAST_REGULAR_WEEK)
+    const m = feed.get(r.rec_key)
+    let pts = 0
+    let weeks = 0
+    for (let w = week; w <= end; w++) {
+      const p = m?.get(w)
+      if (p != null) {
+        pts += p
+        weeks++
+      }
+    }
+    return {
+      userId: r.user_id,
+      week,
+      recPts: weeks > 0 ? pts : null,
+      recWeeks: weeks,
+      altPts: null,
+      hasDrop: false,
+      score: Number(r.score),
+      givenAt: new Date(r.given_at),
+    }
+  })
+}
+
+/**
+ * Graded engine claims → the per-band counts the snapshot stores. The pickup rule exactly: nothing until
+ * the claim's three-week window is provably over, a window with no stat row is unscored (never "not
+ * startable"), and startable is STARTABLE_PPR_PER_WEEK or more per week of the window.
+ */
+export function gradeEngineClaims(rows: readonly EngineClaimRow[], cal: WeekCalendar, now: Date): WaiverEngineLedger {
+  const graded: GradedWaiverClaim[] = []
+  for (const r of rows) {
+    const end = addWindowEnd(r.week)
+    if (!weekIsOver(cal, end, now)) continue
+    if (!(r.recWeeks > 0) || r.recPts == null || !Number.isFinite(r.recPts)) continue
+    const weeks = end - r.week + 1
+    const at = r.givenAt instanceof Date ? r.givenAt.getTime() : Number.NaN
+    graded.push({
+      score: r.score,
+      startable: r.recPts / weeks >= STARTABLE_PPR_PER_WEEK,
+      ageDays: Number.isFinite(at) ? (now.getTime() - at) / 86_400_000 : 0,
+    })
+  }
+  return foldWaiverEngineBands(graded)
+}
+
 export type TradeLedgerInputs = {
   rows: Array<TradeLedgerRow & { completed: boolean }>
   skips: Record<string, number>
@@ -266,14 +335,17 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
   const cal = await loadNflWeekCalendar(season, db)
   if (cal.size === 0) return null
   const noTrades = { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }
-  const [bench, adds, trades, commissionerTrades] = await Promise.all([
+  const [bench, adds, trades, commissionerTrades, engineClaims] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
     part(() => loadAddRows(season, db), [] as AddRow[]),
     part(() => gradeTrades(season, cal, now, db), noTrades),
     // The same letters, graded only where a commissioner was shown them in a trade review.
     part(() => gradeTrades(season, cal, now, db, COMMISSIONER_REVIEW_SURFACE), noTrades),
+    // The waiver engine's #1 claims, by the score it gave them — its own calibration.
+    part(() => loadEngineClaimRows(season, db), [] as EngineClaimRow[]),
   ])
-  return foldLedger({ season, cal, now, bench, adds, trades, commissionerTrades })
+  const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
+  return foldLedger({ season, cal, now, bench, adds, trades, commissionerTrades, waiverEngine })
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 
-export type ImportedAlertEvent = {
+type ImportedAlertEvent = {
   category: NotificationCategoryId
   title: string
   body: string

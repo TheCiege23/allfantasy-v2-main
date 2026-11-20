@@ -77,7 +77,8 @@ const EPL_TEAMS: Record<string, string[]> = {
   LEE: ['67', 'Leeds United', 'LUFC'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
 }
 
-const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
+// IF: the registry's generic infielder label (Danny Serretti, Taitn Gray: 2B/1B on Fantrax, IF here).
+const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'IF', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
 const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'GF', 'FC', 'UT', 'UTIL']
 const NHL_SKATER = ['C', 'LW', 'RW', 'W', 'F', 'D', 'LD', 'RD']
 
@@ -184,7 +185,14 @@ export function proTeamCode(sport: ProFantraxSport, label: string | null | undef
 }
 
 /** Exact normalized name + recognized current team + compatible role; never a name-only guess. */
-export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: FantraxPlayerRef[], identities: ProIdentityRow[]) {
+/**
+ * `fullDirectory`: the caller passes Fantrax's WHOLE player directory for the sport (only the scheduled
+ * ingest does). The unattached, team-surname-initial and changed-club rules rest on "Fantrax lists this name
+ * once", which a partial list cannot prove — the ESPN MLB matcher and the points grader's one-league roster
+ * claims both reuse this planner with partial lists, and keep the strict rules only.
+ */
+export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: FantraxPlayerRef[], identities: ProIdentityRow[], opts: { fullDirectory?: boolean } = {}) {
+  const full = opts.fullDirectory === true
   const rules = RULES[sport]
   const teamAliases = TEAM_ALIASES[sport]
   const byName = new Map<string, ProIdentityRow[]>()
@@ -196,19 +204,72 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
   }
   const proposed: Array<{ id: string; fantraxId: string; rollingInsightsId: string }> = []
   const existingSourceIds = new Set(identities.map(row => row.fantraxId).filter(Boolean))
+  // Source side of uniqueness: how often Fantrax lists a name anywhere, and a surname on one team.
+  const refNames = new Map<string, number>()
+  const refSurnameTeam = new Map<string, number>()
+  for (const ref of refs) {
+    const key = nameKey(ref.name); refNames.set(key, (refNames.get(key) ?? 0) + 1)
+    const team = teamAliases.get(compact(ref.team ?? '')), split = nameSplit(ref.name)
+    if (team && split) refSurnameTeam.set(`${split.last}|${team}`, (refSurnameTeam.get(`${split.last}|${team}`) ?? 0) + 1)
+  }
   let unmatched = 0, ambiguous = 0, unchanged = 0, conflicts = 0
   for (const ref of refs) {
     const sourceTeam = teamAliases.get(compact(ref.team ?? ''))
     const sourceRoles = rules.roles(ref.position)
+    const key = nameKey(ref.name)
+    /*
+     * An UNATTACHED player — Fantrax's "(N/A)" team: released, unsigned, between clubs. Measured
+     * 2026-11-19: 4 of 6 still-unlinked rostered NBA ids (Kelly Olynyk, Kevin Porter Jr., Killian Hayes,
+     * Darryl Morsell). There is no team to compare, so the name has to carry it alone: held by exactly ONE
+     * identity in the sport (already-linked ones counted) and listed exactly once by Fantrax.
+     * NBA and NHL only: MLB's directory carries 7,000+ unattached minor leaguers and unsigned players, and
+     * `tests/mlb-fantrax-identity.test.ts` pins its "(N/A) never links" decision deliberately.
+     */
+    if (full && (sport === 'NBA' || sport === 'NHL') && ref.fantraxId && !sourceTeam && compact(ref.team ?? '') === 'na' && sourceRoles.length) {
+      const named = byName.get(key) ?? []
+      const only = named.length === 1 && refNames.get(key) === 1 ? named.filter(row => row.rollingInsightsId && rules.roles(row.position).some(role => sourceRoles.includes(role))) : []
+      if (only.length !== 1) { unmatched++; continue }
+      const row = only[0]!
+      if (row.fantraxId === ref.fantraxId) { unchanged++; continue }
+      if (row.fantraxId || existingSourceIds.has(ref.fantraxId)) { conflicts++; continue }
+      proposed.push({ id: row.id, fantraxId: ref.fantraxId, rollingInsightsId: row.rollingInsightsId! })
+      continue
+    }
     if (!ref.fantraxId || !sourceTeam || !sourceRoles.length) { unmatched++; continue }
     const fits = (row: ProIdentityRow) => Boolean(row.rollingInsightsId) && teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam && rules.roles(row.position).some(role => sourceRoles.includes(role))
-    let candidates = (byName.get(nameKey(ref.name)) ?? []).filter(fits)
+    let candidates = (byName.get(key) ?? []).filter(fits)
     if (!candidates.length) {
       const split = nameSplit(ref.name)
       candidates = split ? (bySurname.get(split.last) ?? []).filter(row => {
         const other = nameSplit(row.canonicalName)
         return other !== null && nicknameOf(split.first, other.first) && fits(row)
       }) : []
+    }
+    /*
+     * Last: a spelling the two sides never share (Mo / Mohamed Bamba, Arseny / Arseni Gritsyuk). Same team,
+     * same surname, same first initial, compatible role — and the ONLY player of that surname on that team
+     * on both sides (every identity counted). Bub / Carlton Carrington stays unlinked: no letter in common.
+     * NBA and NHL only. The first dry run paired Juan with Jorge Lopez (Giants) and Cristian with Carlos
+     * Alvarado in MLB, and Keith with Kai Andrews in soccer: Fantrax lists whole organisations under one
+     * club code there, so "the only Lopez on the team" is not true on its side. All 28 NBA/NHL pairs held.
+     */
+    if (full && (sport === 'NBA' || sport === 'NHL') && !candidates.length && !(byName.get(key) ?? []).length) {
+      const split = nameSplit(ref.name)
+      const onTeam = split ? (bySurname.get(split.last) ?? []).filter(row => teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam) : []
+      const other = onTeam.length === 1 ? nameSplit(onTeam[0]!.canonicalName) : null
+      if (split && other && other.first[0] === split.first[0] && refSurnameTeam.get(`${split.last}|${sourceTeam}`) === 1 && fits(onTeam[0]!)) candidates = onTeam
+    }
+    /*
+     * A player who CHANGED CLUB since our record was written: offseason trades and loans (2026-11-19: 492
+     * MLB and 17 Premier League players on a club — Dillon Tate TOR→LAA, Vince Velasquez CHC→KC, Harvey
+     * Elliott). Only when the name is held by exactly ONE identity in the sport (linked ones counted) and
+     * listed exactly once in Fantrax's whole directory, minor leaguers and "(N/A)" included — so a common
+     * name never moves — and only for a compatible role. MLB and soccer only: NBA/NHL keep the pinned
+     * "never crosses a team" decision (`tests/fantrax-nba-nhl-import.test.ts`), and had no such case left.
+     */
+    if (full && !candidates.length && (sport === 'MLB' || sport === 'SOCCER')) {
+      const named = byName.get(key) ?? []
+      if (named.length === 1 && refNames.get(key) === 1 && named[0]!.rollingInsightsId && rules.roles(named[0]!.position).some(role => sourceRoles.includes(role))) candidates = named
     }
     if (candidates.length > 1 && sport === 'NHL') {
       const line = nhlLine(ref.position)

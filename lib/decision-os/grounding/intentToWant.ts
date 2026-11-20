@@ -63,6 +63,9 @@ type IntentDerivedWant = Required<
     | 'rosterValueGrade'
     | 'waiverDecision'
     | 'myTeamLineup'
+    | 'pendingTrades'
+    | 'draftBoard'
+    | 'managerRecords'
   >
 >
 
@@ -81,6 +84,22 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * lineup tool reads it, so a "who should I start" turn has the answer in its packet as well as its tool.
      */
     myTeamLineup: intent === 'start_sit',
+    /*
+     * The trades waiting on the asker, graded, on a trade question (2026-11-20). The trade tool reads the same inbox
+     * with the same engine; in the packet, "should I take this offer?" has the offer and its grade without the model
+     * having to think of calling it.
+     */
+    pendingTrades: intent === 'trade',
+    /*
+     * The draft board with Draft OS's pick for the asker, on a draft question (2026-11-20). The same read as the
+     * draft board tool; the route turns it off inside the draft room, which already hands the loop that board.
+     */
+    draftBoard: intent === 'draft',
+    /*
+     * Every leaguemate's record, facts only, on a manager question (2026-11-20) — the manager-record tool's league
+     * summary. Competitive Edge only: the builder checks the plan and a locked plan puts no history in the packet.
+     */
+    managerRecords: intent === 'manager_psychology',
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *

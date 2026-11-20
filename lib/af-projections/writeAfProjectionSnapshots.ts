@@ -103,6 +103,8 @@ export interface WriteSnapshotsResult {
 
 export interface WriteSnapshotsOptions {
   sport?: string
+  /** Restrict a stat-line backfill to verified athletes. */
+  playerIds?: string[]
   /** Season to read production from. Defaults to the newest season present. */
   sourceSeason?: number
   /** Season the projection applies to. Defaults to sourceSeason + 1. */
@@ -181,9 +183,9 @@ async function soccerSeasonWithRows(where: { lt?: number } = {}): Promise<{ seas
   return row ? { season: String(row.season) } : null
 }
 
-async function loadSoccerSeasonLines(season: number): Promise<SeasonLine[]> {
+async function loadSoccerSeasonLines(season: number, playerIds?: string[]): Promise<SeasonLine[]> {
   const rows = await prisma.playerGameStat.findMany({
-    where: { sportType: 'SOCCER', season },
+    where: { sportType: 'SOCCER', season, ...(playerIds ? { playerId: { in: playerIds } } : {}) },
     select: { playerId: true, team: true, gameDate: true, normalizedStatMap: true },
   })
   const ids = [...new Set(rows.map((r) => r.playerId))]
@@ -326,10 +328,11 @@ export async function writeAfProjectionSnapshotsForSeason(
     }
   }
 
+  const scope = opts.playerIds ? { playerId: { in: opts.playerIds } } : {}
   const statLines: SeasonLine[] = soccer
-    ? await loadSoccerSeasonLines(sourceSeason)
+    ? await loadSoccerSeasonLines(sourceSeason, opts.playerIds)
     : await prisma.fantasyStatLine.findMany({
-        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER },
+        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER, ...scope },
         // Only `playerId` and `stats` are read (see SeasonLine). Selecting them keeps the
         // per-preset points JSON and the rest of each row out of memory for a whole season.
         select: { playerId: true, stats: true },
@@ -353,9 +356,9 @@ export async function writeAfProjectionSnapshotsForSeason(
   const priorLines: SeasonLine[] = !blend
     ? []
     : soccer
-      ? await loadSoccerSeasonLines(priorSeason as number)
+      ? await loadSoccerSeasonLines(priorSeason as number, opts.playerIds)
       : await prisma.fantasyStatLine.findMany({
-          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER },
+          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER, ...scope },
           select: { playerId: true, stats: true },
         })
   const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))

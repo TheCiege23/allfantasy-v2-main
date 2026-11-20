@@ -18,6 +18,11 @@
  * own, and the ledger measures something narrower than the letter claims (standard PPR, players only,
  * redraft only) — so it is reported, never applied.
  *
+ * ⚠ ONE NARROW EXCEPTION, AND IT IS NOT HERE (2026-11-20): the waiver engine's CONFIDENCE (never its ranking)
+ * is corrected by its own graded #1 claims, but only in a redraft full-PPR NFL league — the one scope where the
+ * ledger's measure IS the league's, so the objection above does not apply. See `lib/decision-os/waiver/calibration.ts`.
+ * The waiver panel's record below is still reported as it always was; trade letters are still never moved.
+ *
  * 🛑 THE SAMPLE RULES ARE THE LEDGER'S: a letter is absent below MIN_TRADES_PER_LETTER graded deals, and a
  * pickup rate is null below MIN_GRADED_FOR_OVERALL_RATE. Nothing here lowers either.
  *

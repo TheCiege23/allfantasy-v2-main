@@ -290,6 +290,16 @@ describe('Draft OS recommendation in the draft context', () => {
     expect(out).not.toContain('DRAFT DECISION')
   })
 
+  it('a caller-shortened budget (the grounding packet’s) drops the pick line and keeps the board', async () => {
+    mocks.buildDraftDecisionContext.mockImplementation(() => new Promise(() => {}))
+    const started = Date.now()
+    const out = await buildDraftContext('lg1', 'app-user-1', { draftOsBudgetMs: 20 })
+    // Well under the default DRAFT_OS_BUDGET_MS (2,500 ms): the caller's budget, not the default, ended the wait.
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(out).toContain('ON THE CLOCK: Manager 3')
+    expect(out).not.toContain('DRAFT DECISION')
+  })
+
   it('gives up after its time budget instead of holding the chat turn', async () => {
     const lines = await buildDraftOsRecommendationLines('lg1', 'roster-1', {
       buildContext: () => new Promise(() => {}),

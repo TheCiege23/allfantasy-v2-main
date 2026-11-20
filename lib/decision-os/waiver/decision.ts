@@ -13,6 +13,7 @@ import type { WaiverAIServiceInput, WaiverAIServiceOutput } from '@/lib/waiver-a
 import type { ScoredWaiverTarget } from '@/lib/waiver-engine/waiver-scoring'
 import type { WaiverDCO } from './dco'
 import { evaluateWaiverRules, type WaiverRuleDeps } from './rules'
+import { calibrateWaiverScore, calibrationNote, type CalibratedWaiverScore, type WaiverCalibration } from './calibration'
 
 /** A Decision OS waiver claim recommendation (mapped from a deterministic ScoredWaiverTarget). */
 export interface WaiverClaimRecommendation {
@@ -35,6 +36,12 @@ export interface WaiverDecisionDeps {
   ruleDeps: WaiverRuleDeps
   newId?: () => string
   lifecyclePhase?: string
+  /**
+   * How the engine's past #1 claims at each confidence band turned out (`calibration.ts`). Moves the
+   * CONFIDENCE shown beside the top claim by at most ±10 — never the ranking, the scores in the list or
+   * the bid. Null or absent (every league the ledger cannot measure) changes nothing.
+   */
+  calibration?: WaiverCalibration | null
 }
 
 /** Map a deterministic suggestion → a claim recommendation. The engine suggests a drop by name only. */
@@ -54,18 +61,19 @@ export function suggestionToRecommendation(s: ScoredWaiverTarget): WaiverClaimRe
   }
 }
 
-function deriveConfidence(top: WaiverClaimRecommendation | undefined, dataCompleteness: number): number {
+function deriveConfidence(top: WaiverClaimRecommendation | undefined, dataCompleteness: number, calibrated: CalibratedWaiverScore | null): number {
   if (!top) return Math.min(70, dataCompleteness)
-  // compositeScore is already 0–100; cap by data completeness (honesty).
-  return Math.max(0, Math.min(100, Math.round(Math.min(top.compositeScore, dataCompleteness))))
+  // compositeScore is already 0–100, corrected by its band's record when there is one; capped by data completeness (honesty).
+  const score = calibrated ? calibrated.score : top.compositeScore
+  return Math.max(0, Math.min(100, Math.round(Math.min(score, dataCompleteness))))
 }
 
-function howConfident(confidence: number, dataCompleteness: number, uncertainty: string[]): string {
+function howConfident(confidence: number, dataCompleteness: number, uncertainty: string[], note = ''): string {
   const band = confidence >= 80 ? 'High' : confidence >= 50 ? 'Medium' : 'Low'
   const caveat = uncertainty.length
     ? ` (${dataCompleteness < 100 ? 'data partial — ' : ''}${uncertainty[0].toLowerCase().replace(/\.$/, '')})`
     : ''
-  return `${band} confidence${caveat}.`
+  return `${band} confidence${caveat}.${note}`
 }
 
 /**
@@ -93,9 +101,11 @@ export async function decideWaiverClaim(dco: WaiverDCO, deps: WaiverDecisionDeps
 
   // 3) Four answers (grounded in the DCO + recommender + verdicts).
   const data_completeness = dco.data_completeness
-  const confidence = deriveConfidence(top, data_completeness)
+  // The engine's own record, by the band its RAW score falls in (the band those graded claims were scored at).
+  const calibrated = top ? calibrateWaiverScore(top.compositeScore, deps.calibration) : null
+  const confidence = deriveConfidence(top, data_completeness, calibrated)
   const uncertainty = [...dco.uncertainty]
-  const how_confident = howConfident(confidence, data_completeness, uncertainty)
+  const how_confident = howConfident(confidence, data_completeness, uncertainty, calibrationNote(calibrated))
 
   /*
    * 🛑 TWO DIFFERENT EMPTY ANSWERS, AND THEY MUST NOT SHARE A SENTENCE. The scorer drops every

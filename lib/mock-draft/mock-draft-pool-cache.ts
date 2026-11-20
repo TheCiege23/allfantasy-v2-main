@@ -8,6 +8,7 @@ import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { attachAfAdpToMockPool } from '@/lib/mock-draft/mockPoolAfAdp'
+import { attachSeasonStatsToMockPool } from '@/lib/mock-draft/mockPoolSeasonStats'
 import { loadNflAgesBySleeperId, plausibleAge } from '@/lib/mock-draft/mockPoolAges'
 import { fillPoolFromConsensus, type ConsensusRow, type MockPoolEntry } from '@/lib/mock-draft/nflPoolConsensusFill'
 import { getLiveAdpByName, getSeasonDefenseAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
@@ -426,10 +427,15 @@ export async function getCachedMockDraftPool(params: MockDraftPoolRequest): Prom
   logMockPool('cache miss', { cacheKey })
   const rebuildStartedAt = Date.now()
   const built = await buildMockPoolPayload(params)
-  // AF ADP beside market ADP, computed once per cached pool (see mockPoolAfAdp.ts).
+  // AF ADP beside market ADP, and the live room's season stat columns (mockPoolSeasonStats.ts),
+  // computed once per cached pool.
+  const withStats = await attachSeasonStatsToMockPool(built.entries, {
+    sport: normalizeToSupportedSport(params.sport || DEFAULT_SPORT),
+    scoring: params.scoring,
+  })
   const payload: MockDraftPoolPayload = {
     ...built,
-    entries: await attachAfAdpToMockPool(built.entries, {
+    entries: await attachAfAdpToMockPool(withStats, {
       sport: normalizeToSupportedSport(params.sport || DEFAULT_SPORT),
       season: params.season,
       scoring: params.scoring,

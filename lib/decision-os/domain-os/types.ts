@@ -65,6 +65,13 @@ export type OsDomain =
    * are VIEWER-SCOPED, so they are derived at read and never stored here.
    */
   | 'psychology'
+  /**
+   * The commissioner's league-health snapshot (2026-11-20 re-score push) — the input to `commissioner.league.health`,
+   * the one Decision OS domain that had no maintained facts and read its world live on every call. USER level, not
+   * league: with dynasty signals on, the snapshot marks which team is the VIEWER's, so one co-commissioner's
+   * snapshot is not another's. See `lib/decision-os/commissioner-os/index.ts`.
+   */
+  | 'commissioner'
 
 export interface OsFactEnvelope<T> {
   facts: T
