@@ -483,7 +483,7 @@ describe('DB-first boundary — outbound host census', () => {
      * host in the WRONG category reads as settled, so nobody looks again. This asserts
      * the claim instead of restating it.
      */
-    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only'])
+    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only', 'request-origin'])
     const monitored = monitoredPatterns()
     const violations: string[] = []
 
