@@ -899,6 +899,9 @@ export async function buildDecisionOsGroundingPacket(
   const pendingTradesKill = killed('pendingTrades')
   const draftBoardKill = killed('draftBoard')
   const managerRecordsKill = killed('managerRecords')
+  // Their own switches since 2026-11-20 (they used to stop only with `projections`) — see `flags.ts`.
+  const rosterProjectionsKill = killed('rosterProjections')
+  const leaguePlayerMetricsKill = killed('leaguePlayerMetrics')
 
   const pAssertions =
     leagueId && !importKill
@@ -1026,7 +1029,7 @@ export async function buildDecisionOsGroundingPacket(
       )
     : Promise.resolve(null)
 
-  const pLeaguePlayerMetrics = want.projections && !projectionKill && leagueId && args.userId
+  const pLeaguePlayerMetrics = want.projections && !projectionKill && !leaguePlayerMetricsKill && leagueId && args.userId
     ? kick('leaguePlayerMetrics', (async () => {
         const access = await authorizeLeagueRead(leagueId, args.userId)
         if (!access.authorized) return null
@@ -1040,7 +1043,7 @@ export async function buildDecisionOsGroundingPacket(
    * the roster (`rosterLeagueProjections.ts`). A non-NFL league answers without a query.
    */
   const pRosterBasis: Promise<RosterProjectionBasis | null> =
-    want.projections && !projectionKill && leagueId && args.userId
+    want.projections && !projectionKill && !rosterProjectionsKill && leagueId && args.userId
       ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport }))
       : Promise.resolve(null)
 
@@ -1636,6 +1639,7 @@ export async function buildDecisionOsGroundingPacket(
   let pRosterProjections: Promise<GroundedSlice<RosterLeagueProjection[]>> | null = null
   const rosterBasis = await pRosterBasis
   if (want.projections && projectionKill) rosterProjections = absent<RosterLeagueProjection[]>(projectionKill)
+  else if (want.projections && rosterProjectionsKill) rosterProjections = absent<RosterLeagueProjection[]>(rosterProjectionsKill)
   else if (rosterBasis && !contextFacts) {
     rosterProjections = absent<RosterLeagueProjection[]>({
       reason: 'not_computed',

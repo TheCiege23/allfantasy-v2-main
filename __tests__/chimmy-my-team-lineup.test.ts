@@ -135,3 +135,34 @@ describe('start A or B: derived from My Team’s best lineup, so it cannot contr
     expect(await ss(data, ['Somebody Else', 'Benchy Burner'])).toEqual({ fallback: 'not_nfl' })
   })
 })
+
+describe('the answer is decided at the moment it is given, not when the shared load ran (2026-11-20)', () => {
+  /*
+   * The load is shared for up to 60 s and its verdict was computed with the load's clock, while the "locked" flags use
+   * the answer's clock. In the minute a game kicks off the block could say "start X" and label X locked.
+   */
+  const kickoff = new Date(NOW.getTime() + 30_000)
+  const burner = player('3', 'Benchy Burner', 'WR', 15, { kickoff })
+
+  it('🛑 a bench player whose game started after the load is not recommended', async () => {
+    const data = myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [burner, rbBench])
+    // Control: at load time he was the swap.
+    expect(data.lineupOptimizer).toMatchObject({ state: 'improve', changes: [{ inName: 'Benchy Burner' }] })
+    const answeredAt = new Date(NOW.getTime() + 60_000)
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: answeredAt }, { load: async () => data })) as string
+    expect(out).not.toContain('start Benchy Burner')
+    expect(out).toContain('Benchy Burner (WR) 15 pts [game started — locked]')
+  })
+
+  it('answered inside the same moment as the load, the verdict is unchanged', async () => {
+    const data = myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [burner, rbBench])
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => data })) as string
+    expect(out).toContain('- WR: start Benchy Burner (15 pts) instead of Wade Hands (9 pts).')
+  })
+
+  it('no answer at load time stays no answer', async () => {
+    const data = myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [burner, rbBench], { lineupOptimizer: null } as never)
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => data }))
+    expect(out).not.toEqual(expect.stringContaining('Verdict:'))
+  })
+})

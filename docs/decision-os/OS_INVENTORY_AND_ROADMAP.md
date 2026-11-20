@@ -189,6 +189,67 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**FRESH RE-SCORE, 2026-11-20 — every OS and the hub re-measured from code at `ffab3b550c`, not carried forward
+(owner's choice).** Four independent read-only audits; every surprising claim below was re-read by hand before it went
+in. Same seven axes and weights. ⚠ **One rule is now stricter, and it is the main reason numbers fell: Kernel ✅ needs
+the LIVE path to read through `createOsFeed`.** A feed that is registered but read only behind an env flag or a shadow
+scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-scheduled only; production was not read.
+
+| OS | +10% push | Re-scored on `main` | After the queued PRs | What changed the mark |
+|---|---|---|---|---|
+| League | 100 | 100 | 100 | — (the §0.47 two-rules-readers gap is real but is not an axis) |
+| Projection | 100 | ~93 | ~93 | Chimmy ⚠: league-scored roster projections exist for NFL only; NBA/NHL/MLB get canonical rows labelled "NOT this league" |
+| Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
+| Waiver | ~100 | ~93 | ~93 | Kernel ⚠: the packet's decision and the weekly run call `loadWaiverWorldFacts` directly; the feed is read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE` |
+| Player Value | ~93 | ~90 | ~90 | Kernel ⚠: NBA/MLB/NHL/NCAAB/soccer boards are read live outside the kernel. User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
+| Trade | ~86 | ~79 | ~79 | Kernel ⚠: the graded inbox does not read the feed (only the env-gated proposals route does). Engine ⚠ and Cron ⚠ as before |
+| Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
+| Lineup | ~86 | ~80 | ~80 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠: graded start/sit is reported, not fed back into the optimizer |
+| Commissioner | ~85 | ~85 | ~93 | The hub-prime PR makes Cron n/a. User stays ⚠: the hub shows the snapshot but never the decision (`decisionOsShadow` has no reader, and is built without the learned inactive record) |
+| Manager Psychology | ~90 | ~63 | ~63 | Feed ❌: no `OsFactSource` for manager records — the packet loads the whole league's history fresh on every manager question. Kernel ⚠: `'psychology'` declared, never used |
+| Decision OS hub | ~86 | ~79 | ~86 | Operability ⚠ → ✅ in this build: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own |
+
+**Stale or false claims this re-score corrected** (each checked in code):
+- "Retired label engine still runs in two crons" — false since 2026-11-19 (item 10 already said so; the gap column did not).
+- "ESPN/Yahoo/MFL/Fantrax/Fleaflicker records carry no trades or drafts" — partly: Fantrax trades now count (from the
+  commissioner's upload); drafts are still absent for every non-Sleeper platform; ESPN/Yahoo/MFL/Fleaflicker trades too.
+- "Manager facts reach Chimmy … never the packet" (Manager Psychology row of the OS census) — false since the
+  `managerRecords` slice.
+- "Every packet slice has its own kill switch" — false for two slices until this build.
+- "User ⚠ (soccer) stays" (Player Value) — stale: soccer is a board sport on the player card and Waivers.
+- "The offer sweep stays Sleeper-only (no other provider contract carries pending offers)" — true but misleading: no
+  contract has captured a pending-offer shape, Sleeper's included (Fleaflicker `FetchTrades` is documented, not captured).
+- "Draft OS is warmed hourly, 242 rows" (draft-os header) — stale since 2026-11-17; rewritten by #3962.
+- Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
+
+**Built in this change (no migration):**
+- **A native league is no longer told its import failed.** With no sync state, every scope rendered "NOT complete on
+  the last run", the sync "never", and the closing line told the model to say the sync was incomplete — beside a note
+  saying no sync is normal here. `ImportAssertions.native` (from `isNativePlatform`) now renders one honest line, the
+  rosters held, and an instruction not to call the league unsynced; a native league that does carry a sync record still
+  renders in full.
+- **Chimmy's lineup verdict is decided at the moment it answers.** `getMyTeamData`'s optimizer ran with the load's
+  clock and the load is shared for 60 s, while the "locked" flags used the answer's clock — so in the minute a game
+  kicked off the block could say "start X" and label X locked. `optimizationAt` re-runs the pure optimizer over the
+  same starters and bench with the answer's clock.
+- **`rosterProjections` and `leaguePlayerMetrics` have their own kill switches** (`DECISION_OS_FEED_ROSTER_PROJECTIONS`,
+  `DECISION_OS_FEED_LEAGUE_PLAYER_METRICS`); both still stop with `projections`.
+
+**Ranked build list from here** (no migration and no owner decision unless marked):
+
+| # | Build | Moves | Size |
+|---|---|---|---|
+| 1 | The waiver decision reads through the feed (`decisionBridge.ts` → `createWaiverOsLoaders().loadWorldFacts`, same signature) | Waiver Kernel → ✅ (~100) | S |
+| 2 | Provider drafts in manager records: credit current-season draft facts to the team's current owner; earlier seasons named as unattributed, the Sleeper shape | Psychology data, user-visible | M |
+| 3 | A manager-record feed (`OsFactSource` on `createOsFeed('psychology')`, membership/plan/viewer filtering kept at read time), refreshed on the `?intel=1` tick | Psychology Feed, Kernel, Cron → ✅ (~100); a whole-league load off every manager turn | M |
+| 4 | League value boards cached in Value OS (a league-level board source read by the packet, the card and Waivers) | Value Kernel → ✅ (~100) | M |
+| 5 | The graded trade inbox reads through Trade OS; read `tradeSettingsSource` or delete it | Trade Kernel → ✅ | M |
+| 6 | Small truths: `sport: () => 'NFL'` on the four waiver/trade sources; `transactions` missing from `IMPORT_SCOPES`; the projection warm's calendar-year season; `servedFrom: 'store'` hard-coded on live reads; the dead `buildPsychologyGroundingLines` call | honesty, no axis | S each |
+| — | **Owner decision:** show the hub's commissioner decision card (and give it the learned record) | Commissioner User → ✅ (~100) | M |
+| — | **Owner decision:** league-scored projections for NBA/NHL/MLB points leagues (category leagues have no points) | Projection Chimmy → ✅ | M |
+| — | **Owner decision:** let graded trades move letters; grade more than 3 pending offers (latency) | Trade Engine | M / S |
+| — | **Migration:** draft advice learns from graded tips | Draft Engine → ✅ (~100) | L |
+
 **THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
 the 2026-11-20 re-score (axes 1–3 = 40%, 4–5 = 30%, 6–7 = 30%; ⚠ counts half; n/a leaves its group). Code-scheduled
 only, like every mark here: production tables were not read.
