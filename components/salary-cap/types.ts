@@ -61,6 +61,8 @@ export interface SalaryCapSummary {
   myRosterId?: string
   /** An imported league with no contracts on file: why the cap screens are empty (lib/salary-cap/importedContractsNote.ts). */
   contractsNote?: string | null
+  /** The viewer is the commissioner of an imported cap league and may upload its contract sheet. */
+  canImportContracts?: boolean
   ledger: SalaryCapSummaryLedger | null
   futureProjection: FutureCapYearUI[]
   contracts: ContractRowUI[]

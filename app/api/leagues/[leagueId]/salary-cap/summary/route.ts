@@ -13,6 +13,8 @@ import { getFutureCapProjection } from '@/lib/salary-cap/FutureCapProjectionServ
 import { prisma } from '@/lib/prisma'
 
 import { importedCapContractsNote } from '@/lib/salary-cap/importedContractsNote'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 export const dynamic = 'force-dynamic'
 
 export async function GET(
@@ -102,6 +104,10 @@ export async function GET(
       return sum
     }, 0)
 
+  // The commissioner of an imported league may upload its contract sheet (see contracts/import).
+  const canImportContracts =
+    !isNativePlatform(leagueRow?.platform) && (await canCommissionerAct(leagueId, userId, 'league').catch(() => false))
+
   return NextResponse.json({
     config: {
       mode: config.mode,
@@ -127,6 +133,7 @@ export async function GET(
     },
     myRosterId: myRosterId ?? undefined,
     contractsNote: importedCapContractsNote(leagueRow?.platform, contractsOnFile),
+    canImportContracts,
     ledger: ledger
       ? {
           rosterId: ledger.rosterId,

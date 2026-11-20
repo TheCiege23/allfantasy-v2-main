@@ -850,11 +850,13 @@ export function LeagueShell({
     if (shouldUseMatchupPrimary) return
     if (league.guillotineMode) return
     if (!zombieLeague || zombieLandingApplied.current) return
+    // An imported league has no outbreak board (lib/zombie/importedZombieNote.ts): open on its usual tab.
+    if (!nativeWorkspace) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has('zombie')) return
     setActiveTab('zombie')
     zombieLandingApplied.current = true
-  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague])
+  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague, nativeWorkspace])
 
   /** Big Brother leagues default to the Big Brother hub. */
   useEffect(() => {
