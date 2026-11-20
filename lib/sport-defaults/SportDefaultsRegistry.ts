@@ -802,7 +802,12 @@ export function getWaiverDefaults(sportType: SportType, _formatType?: string | n
    * this same override. A sport whose base is FAAB is unchanged; a commissioner can still choose
    * another waiver type in settings.
    */
-  if (normalizedVariant === 'GUILLOTINE') {
+  /*
+   * Keeper is redraft with keepers, and takes redraft's bidding default in every sport (owner's
+   * decision, 2026-11-20). It had no row either: an NBA or NHL keeper league was created on rolling
+   * or reverse standings while the same league as redraft got FAAB $100. NFL is unchanged.
+   */
+  if (normalizedVariant === 'GUILLOTINE' || normalizedVariant === 'KEEPER') {
     const merged = { ...base, ...variantOverrides }
     const budget = typeof merged.FAAB_budget_default === 'number' && merged.FAAB_budget_default > 0 ? merged.FAAB_budget_default : 100
     return { ...merged, ...REDRAFT_FAAB_WAIVER_OVERRIDE, FAAB_budget_default: budget, sport_type: sportType }

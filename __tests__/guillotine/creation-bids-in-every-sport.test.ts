@@ -60,6 +60,14 @@ describe('a guillotine league is created on FAAB bidding', () => {
     expect(league.waiverBudget).toBe(100)
   })
 
+  it.each(['NFL', 'NBA', 'NHL', 'MLB'])('a %s keeper league bids too, like the same league as redraft', async (sport) => {
+    const { league, waivers } = await create('keeper', sport)
+    expect(waivers.waiverType).toBe('faab')
+    expect(waivers.faabBudget).toBe(100)
+    expect(league.waiverType).toBe('faab')
+    expect(league.waiverBudget).toBe(100)
+  })
+
   it('an NBA redraft league already bids: guillotine was the format left out', async () => {
     const { waivers } = await create('redraft', 'NBA')
     expect(waivers.waiverType).toBe('faab')
