@@ -69,6 +69,33 @@ describe('a Fantrax roster id in the trade analyzer', () => {
     expect(out.lines[0]).toMatchObject({ name: 'Jack Hughes', playerId: 'NHL:9001', unpriced: true })
   })
 
+  it('tells two NHL centres named Jack Hughes apart by the Rolling Insights id', async () => {
+    // Production, 2026-11-19: Fantrax 04bdb → RI 2349 (NJD); Fantrax 05rin → RI 4215 (LA). Both C.
+    rows.set('2349', record('NHL:2349', 'Jack Hughes', 'C', 'NJD'))
+    rows.set('4215', record('NHL:4215', 'Jack Hughes', 'C', 'LA'))
+    searchRows.list = [record('NHL:2349', 'Jack Hughes', 'C', 'NJD'), record('NHL:4215', 'Jack Hughes', 'C', 'LA')]
+    const resolve = identities({ '04bdb': { name: 'Jack Hughes', position: 'C', team: 'NEW JERSEY DEVILS', rollingInsightsId: '2349' } })
+    const out = await resolveNhl({ playerId: '04bdb', name: 'Jack Hughes' }, { platform: 'fantrax', resolveProviderIds: resolve })
+    expect(out.unresolved).toEqual([])
+    expect(out.lines[0]).toMatchObject({ playerId: 'NHL:2349', team: 'NJD' })
+  })
+
+  it('refuses a keyed record that carries another name', async () => {
+    // `sports_players` keys Sleeper- and RI-seeded rows alike, so a bare number is not the person.
+    rows.set('777', record('NHL:777', 'Someone Else', 'C'))
+    searchRows.list = [record('NHL:hintz', 'Roope Hintz', 'C', 'DAL')]
+    const resolve = identities({ fx7: { name: 'Roope Hintz', position: 'C', rollingInsightsId: '777' } })
+    const out = await resolveNhl({ playerId: 'fx7', name: 'Roope Hintz' }, { platform: 'fantrax', resolveProviderIds: resolve })
+    expect(out.lines[0]).toMatchObject({ name: 'Roope Hintz', playerId: 'NHL:hintz' })
+  })
+
+  it('keeps a player the identity knows even when no record exists', async () => {
+    const resolve = identities({ fx8: { name: 'Roope Hintz', position: 'C', team: 'DALLAS STARS', rollingInsightsId: '2088' } })
+    const out = await resolveNhl({ playerId: 'fx8', name: 'Roope Hintz' }, { platform: 'fantrax', resolveProviderIds: resolve })
+    expect(out.unresolved).toEqual([])
+    expect(out.lines[0]).toMatchObject({ name: 'Roope Hintz', playerId: 'fx8', position: 'C', team: 'DALLAS STARS', unpriced: true })
+  })
+
   it('falls back to the name when the identity has no record link', async () => {
     searchRows.list = [record('NHL:hintz', 'Roope Hintz', 'C', 'DAL')]
     const resolve = identities({ fx2: { name: 'Roope Hintz', position: 'C' } })

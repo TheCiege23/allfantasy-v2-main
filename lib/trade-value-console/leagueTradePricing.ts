@@ -685,6 +685,34 @@ export async function identifyProviderRosterId(
   return hits?.get(id) ?? null
 }
 
+/** One athlete's name in two sources: case, accents, punctuation and spacing aside. */
+function sameAthleteName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) =>
+    String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  const x = norm(a)
+  return x.length > 0 && x === norm(b)
+}
+
+/**
+ * A provider identity standing in for a missing `sports_players` row: enough for the unpriced line
+ * (name, position, team), keyed by the league's own id so the sport grader still reads it.
+ */
+function identityAsRecord(identity: ResolvedProviderPlayer, leagueId: string, sport: SupportedSport): SportsPlayerRecord {
+  return {
+    id: leagueId,
+    sport: identity.sport || sport,
+    name: identity.name,
+    position: identity.position ?? '—',
+    team: identity.team ?? '—',
+    headshotUrl: identity.imageUrl ?? null,
+    headshotUrlLg: null,
+    headshotUrlSm: null,
+    logoUrl: null,
+    injuryStatus: null,
+    dataSource: 'provider_identity',
+  } as unknown as SportsPlayerRecord
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -917,17 +945,28 @@ export async function resolveAssets(
      * skipped because a `playerId` was present, and an NHL Fantrax trade (Hughes for Montour + Hintz)
      * was refused before the NHL points grader, which reads Fantrax ids itself, ever ran. The id is
      * now read through the platform's `PlayerIdentityMap` column (the rule the roster list already
-     * uses to show the names), and a miss falls back to the name, as a typed name does.
+     * uses to show the names), in this order:
+     *   1. the identity's Rolling Insights (then Sleeper) id → the record keyed by it. Measured on
+     *      production the same day, outside the NFL NO Fantrax-linked identity carries a Sleeper id,
+     *      but the Rolling Insights id reaches a record for NHL 186/196, NBA 298/307, NCAAB 2819/2909.
+     *      The record must carry the identity's NAME: `sports_players` keys Sleeper- and RI-seeded
+     *      rows the same way (`NHL:<number>`), so a bare number is not proof of the person;
+     *   2. the name, narrowed by the identity's position — "Jack Hughes" is two NHL centres (NJD and
+     *      LA), which only step 1 tells apart, and is why it comes first;
+     *   3. the identity itself. It proves the player exists, and every sport grader reads the league's
+     *      own ids, so an unrecordable player is an unpriced line, never "could not resolve".
      */
     let identityPosition: string | null = null
+    let identity: ResolvedProviderPlayer | null = null
     if (!row && !providerSleeperId && !raw.providerIdentity && raw.playerId?.trim() && args.platform) {
-      const hit = await identifyProviderRosterId(raw.playerId.trim(), args.platform, args.effectiveSport, args.resolveProviderIds)
-      if (hit) {
-        identityPosition = hit.position
-        displayName = hit.name || displayName
-        if (hit.sleeperId) {
-          const bySleeper = (await getPlayer(hit.sleeperId, { sport: args.effectiveSport })) as SportsPlayerRecord | null
-          if (bySleeper && valuePositionsAgree(hit.position, bySleeper.position)) row = bySleeper
+      identity = await identifyProviderRosterId(raw.playerId.trim(), args.platform, args.effectiveSport, args.resolveProviderIds)
+      if (identity) {
+        identityPosition = identity.position
+        displayName = identity.name || displayName
+        for (const key of [identity.rollingInsightsId, identity.sleeperId]) {
+          if (!key || row) continue
+          const keyed = (await getPlayer(key, { sport: args.effectiveSport })) as SportsPlayerRecord | null
+          if (keyed && sameAthleteName(keyed.name, identity.name) && valuePositionsAgree(identity.position, keyed.position)) row = keyed
         }
       }
     }
@@ -943,6 +982,7 @@ export async function resolveAssets(
       const exact = byPosition.length > 0 ? byPosition : named
       row = (exact.length === 1 ? exact[0] : await onePersonNamed(exact, args.effectiveSport)) as SportsPlayerRecord | null
     }
+    if (!row && identity && raw.playerId?.trim()) row = identityAsRecord(identity, raw.playerId.trim(), args.effectiveSport)
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')
       continue
