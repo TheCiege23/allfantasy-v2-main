@@ -204,8 +204,8 @@ only, like every mark here: production tables were not read.
 | Lineup | ~75 | ~86 | Chimmy ⚠→✅: My Team's best lineup in every sport that has one, and in the packet. Kernel ⚠ stays |
 | Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
 | Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
-| Commissioner | ~52 | ~78 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain. Engine, Cron, User ⚠ stay |
-| Decision OS hub | ~50 | ~64 | Serialization ⚠→✅ and operability ⚠→✅ — see the hub note below |
+| Commissioner | ~52 | ~85 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag. Cron, User ⚠ stay |
+| Decision OS hub | ~50 | ~71 | Serialization, operability and the learning loop ⚠→✅ — see the hub and learning-loop notes below |
 
 ⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
 commits after it.
@@ -227,6 +227,18 @@ decision to retire three-brain) · operability ⚠→✅.
 - Still ⚠/❌: routing and assembly (intent mapping covers each decision domain, but not every slice is intent-aware),
   the learning loop (graded outcomes move start/sit and waiver confidence only; trade letters and commissioner
   advice are reported, not applied — by rule), multi-model (retired).
+
+**Learning loop, 2026-11-20 — the commissioner's inactive warnings learn from the graded flag (owner's choice).** The
+inactive flag is graded two weeks on (`inactiveFlagLedger.ts`); its record now sets how strongly the health decision's
+three inactive-derived verdicts are put — "N inactive managers", "abandoned — find replacements" and the abandonment
+risk — in a NATIVE league (the one clock the flag is graded on), once 30 flags are graded, with the rate shrunk toward
+even odds (worth 20 flags): ≥70% held up → as before, with the record cited; 40–70% → "message them before replacing
+anyone"; <40% → an information item, and neither abandonment verdict is critical. The inactive COUNT, the manager table
+and auto hand-over are untouched. The no-op `commissioner-health/outcome.ts` hook (no callers) is deleted, as waiver's
+was. ⚠ Checked and refused, with reasons: trade "confidence" is the share of a deal's players that could be priced and
+the commissioner-health "confidence" is data completeness — neither predicts an outcome, so grading them would
+calibrate the wrong thing. With start/sit, waiver and the commissioner warnings learning, the hub's learning loop is ✅
+(~64 → ~71); Commissioner's Engine ⚠ → ✅ (~78 → ~85).
 
 **Commissioner "inactive", 2026-11-20 — native leagues read the manager's own last action (owner's call: fix the
 flag before grading it).** Both the per-manager table (`managerHealth.ts`) and the hub's "N teams inactive"
