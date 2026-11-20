@@ -216,6 +216,8 @@ export const FAST_TIER_OPERATIONAL_OVERLAYS = Object.freeze([
   // and calls ESPN only while a Cup game is in its live window.
   Object.freeze({ path: '/api/cron/nba-cup-live', schedule: '* * * * *' }),
   Object.freeze({ path: '/api/cron/season-tournaments', schedule: '*/5 * * * *' }),
+  // Survivor Guillotine refreshes NFL and NBA scores on the fast scheduler.
+  Object.freeze({ path: '/api/cron/survivor-guillotine-ingest', schedule: '*/5 * * * *' }),
 ])
 
 export function withFastTierOperationalOverlays(crons) {

@@ -138,8 +138,8 @@ type LineupSwitchDb = Pick<PrismaClient, 'redraftSeason' | '$queryRaw'>
 /** True when both per-day tables exist. `to_regclass` never throws on a missing table. */
 export async function dailyLineupTablesExist(db: Pick<LineupSwitchDb, '$queryRaw'>): Promise<boolean> {
   try {
-    const rows = await db.$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass('public.redraft_daily_lineups') IS NOT NULL
-        AND to_regclass('public.player_daily_scores') IS NOT NULL) AS ok`
+    const rows = await db.$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass(format('%I.%I', current_schema(), 'redraft_daily_lineups')) IS NOT NULL
+        AND to_regclass(format('%I.%I', current_schema(), 'player_daily_scores')) IS NOT NULL) AS ok`
     return rows?.[0]?.ok === true
   } catch {
     return false
