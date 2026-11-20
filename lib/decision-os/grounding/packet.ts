@@ -800,6 +800,21 @@ export async function buildDecisionOsGroundingPacket(
   const valueOs = createValueOsLoaders()
   const projectionOs = createProjectionOsLoaders()
   const leagueOs = createLeagueOsLoaders()
+  /*
+   * WHERE EACH FEED READ WAS ACTUALLY SERVED FROM, BY THE LOADER'S OWN RECORD OF THIS BUILD (2026-11-20 re-score).
+   * Five slices hard-coded `servedFrom: 'store'`, so a fact derived live on a cache miss was labelled as maintained
+   * state. Each loader keeps `drainOutcomes()`; this collects it as each read lands. With no record (an older loader,
+   * a test double) the label stays 'store', exactly as before.
+   */
+  const feedServed: Record<string, 'store' | 'live' | 'unavailable'> = {}
+  const collectServed = (domain: string, loaders: { drainOutcomes?: () => Record<string, { servedFrom: 'store' | 'live' | 'unavailable' }> }) => {
+    try {
+      for (const [kind, o] of Object.entries(loaders.drainOutcomes?.() ?? {})) feedServed[`${domain}:${kind}`] = o.servedFrom
+    } catch {
+      /* a telemetry read never costs the packet */
+    }
+  }
+  const servedFromFeed = (key: string): 'store' | 'live' => (feedServed[key] === 'live' ? 'live' : 'store')
 
   /*
    * ⚠ `meta.durationMs` ALONE CANNOT BE ACTED ON, WHICH IS WHY THESE EXIST.
@@ -1191,13 +1206,14 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── The assertions first: everything else is judged against them. ─────────────────────────
   const assertions = await pAssertions
+  collectServed('import', importOs)
 
   let importSlice: GroundedSlice<ImportAssertions> = importKill
     ? absent<ImportAssertions>(importKill)
     : assertions
     ? present(assertions, {
         asOf: assertions.lastSuccessfulSyncAt,
-        servedFrom: 'store',
+        servedFrom: servedFromFeed('import:assertions'),
         conclusive: { ok: true },
       })
     : absent<ImportAssertions>({
@@ -1216,9 +1232,10 @@ export async function buildDecisionOsGroundingPacket(
   if (want.leagueRules && leagueId && rulesKill) leagueRules = absent(rulesKill)
   else if (want.leagueRules && leagueId) {
     const rules = await pRules
+    collectServed('league', leagueOs)
     const v = verdictFor('leagueRules')
     leagueRules = rules
-      ? present(rules, { servedFrom: 'store', conclusive: v })
+      ? present(rules, { servedFrom: servedFromFeed('league:rules'), conclusive: v })
       : absent({
           reason: 'not_computed',
           detail: 'This league\'s rules could not be resolved.',
@@ -1233,6 +1250,7 @@ export async function buildDecisionOsGroundingPacket(
     const v = verdictFor('globalPlayerValue') // global — no league import can block it
     const vf = await pValueFormat
     const rows = await pMarket
+    collectServed('value', valueOs)
     if (!vf) {
       // ⚠ A DISTINCT REASON FROM "no values held". The market is fine; we could not work out
       // which of its four format buckets to read, which is a LEAGUE-side gap with a different
@@ -1253,7 +1271,7 @@ export async function buildDecisionOsGroundingPacket(
       const priced = (rows ?? []).some((r) => r.status === 'ok')
       const noMarketForSport = hasSubstance(rows) && rows.every((r) => r.status === 'no_producer')
       marketValues = priced
-        ? present(rows!, { servedFrom: 'store', conclusive: v })
+        ? present(rows!, { servedFrom: servedFromFeed('value:market'), conclusive: v })
         : noMarketForSport
         ? absent({
             reason: 'not_requested',
@@ -1296,8 +1314,9 @@ export async function buildDecisionOsGroundingPacket(
   else if (wantsDevy) {
     const v = verdictFor('globalPlayerValue')
     const rows = await pDevy
+    collectServed('value', valueOs)
     devyValues = hasSubstance(rows)
-      ? present(rows, { servedFrom: 'store', conclusive: v })
+      ? present(rows, { servedFrom: servedFromFeed('value:devy'), conclusive: v })
       : absent({
           reason: devyBoardApplies ? 'not_computed' : 'no_producer',
           detail: devyBoardApplies
@@ -1315,6 +1334,7 @@ export async function buildDecisionOsGroundingPacket(
   else if (want.projections) {
     const v = verdictFor('lineupDecision')
     const facts = await pProjections
+    collectServed('projection', projectionOs)
     if (!hasSubstance(facts)) {
       projections = absent({
         reason: 'not_computed',
@@ -1324,7 +1344,7 @@ export async function buildDecisionOsGroundingPacket(
     } else {
       // ⚠ Present but possibly INCONCLUSIVE: we have the numbers, the league may be too stale to
       // act on them. The verdict travels with the slice rather than gating its presence.
-      const slice = present(facts, { asOf: oldestAsOf(facts), servedFrom: 'store', conclusive: v })
+      const slice = present(facts, { asOf: oldestAsOf(facts), servedFrom: servedFromFeed('projection:canonical'), conclusive: v })
       projections = v.ok ? slice : { ...slice, gap: gapFromVerdict(v) }
     }
   }

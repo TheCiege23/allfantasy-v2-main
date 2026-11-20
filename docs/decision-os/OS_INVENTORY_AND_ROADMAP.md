@@ -246,6 +246,19 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
   entry is per viewer because your own FAAB is read through your roster; a single team's record and the commissioner's
   whole directory still build live; an unavailable result is never cached. Facts only — no label, score or prediction
   is stored, and this is not the retired `psychology-os`.
+- **Small truths** (ranked item 6):
+  - The domain-OS warm keyed the NFL projection and NCAAF devy entries on the calendar year, so in January and
+    February it warmed next year's entries while every league asked for this season's. It uses `currentNflSeason`
+    now (the follow-alert check's rule: January and February belong to last season).
+  - Five feed slices hard-coded `servedFrom: 'store'`; they read each loader's own `drainOutcomes()` record for the
+    build now, so a live derivation on a cache miss says `live` (no record keeps the old label).
+  - The four waiver and trade sources labelled every sport's rows `NFL`; they say `ALL` (the column labels a row for
+    audit only — reads key on domain, kind, level and scope).
+  - The dead `buildPsychologyGroundingLines` call (it returned `[]`, and its comment claimed it grounded manager
+    behaviour) and the function are gone.
+  - ⚠ **NOT done: `transactions` in `IMPORT_SCOPES`.** The collector writes it for Sleeper, but adding it to the
+    freshness list would print "transactions NOT complete" forever for any provider whose sync never runs that
+    scope — the false-warning class this change fixes for native leagues. It needs a per-provider scope list first.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
@@ -254,9 +267,9 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | ✅ | The waiver decision reads through the feed — **done in this change** (below) | Waiver Kernel → ✅ (~100) | S |
 | 2 | Provider drafts in manager records. ⚠ **Needs a read-only production check first**: whether each provider's `dw_draft_facts.managerId` equals its `league_teams.externalId`, and whether earlier seasons can be tied to their owners. Crediting the current season alone gives every manager one draft, under the record's two-draft floor, so it would say nothing but a count; and a wrong id match states false facts about a named leaguemate | Psychology data, user-visible | M–L |
 | ✅ | A manager-record feed — **done in this change** (below). Not refreshed on a schedule: the entry is per viewer, so it is warm exactly when its viewer is asking | Psychology Feed, Kernel → ✅ (~93) | M |
-| 4 | League value boards cached in Value OS (a league-level board source read by the packet, the card and Waivers) | Value Kernel → ✅ (~100) | M |
+| 4 | League value boards cached in Value OS. ⚠ **Re-sized to L after reading it (2026-11-20):** the board carries `ReadonlyMap`s (`rosterIndex`, `replacementByPosition`, the dynasty context) that `domain_os_facts` cannot store as JSON without a custom codec, and a baseball board is ~1,500 players (~450 KB per league per write). A per-process share of the built board is the cheaper latency win, but does not move the Kernel axis | Value Kernel → ✅ (~100) | L |
 | 5 | The graded trade inbox reads through Trade OS; read `tradeSettingsSource` or delete it | Trade Kernel → ✅ | M |
-| 6 | Small truths: `sport: () => 'NFL'` on the four waiver/trade sources; `transactions` missing from `IMPORT_SCOPES`; the projection warm's calendar-year season; `servedFrom: 'store'` hard-coded on live reads; the dead `buildPsychologyGroundingLines` call | honesty, no axis | S each |
+| ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
 | — | **Owner decision:** show the hub's commissioner decision card (and give it the learned record) | Commissioner User → ✅ (~100) | M |
 | — | **Owner decision:** league-scored projections for NBA/NHL/MLB points leagues (category leagues have no points) | Projection Chimmy → ✅ | M |
 | — | **Owner decision:** let graded trades move letters; grade more than 3 pending offers (latency) | Trade Engine | M / S |
