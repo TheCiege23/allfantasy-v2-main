@@ -267,6 +267,14 @@ export interface DecisionOsGroundingPacket {
   pendingTrades?: GroundedSlice<string>
 
   /**
+   * The league's draft — live, scheduled or finished — with Draft OS's pick for the asker when it is their turn: the
+   * exact text Chimmy's `get_current_draft_board` tool returns (`buildDraftContext`), so the two cannot disagree
+   * (2026-11-20 re-score push). Asked for on draft questions only. The pick decision gets a shorter budget here
+   * (DRAFT_BOARD_PICK_BUDGET_MS) so the board fits the packet's deadline; past it the board comes without the pick.
+   */
+  draftBoard?: GroundedSlice<string>
+
+  /**
    * NBA / MLB / NHL: the asker's roster on the league's own value board — the trade grade's price, rest-of-season value
    * over the best free agent (`rosterBoardValues.ts`). These sports have no market slice, so until 2026-11-20 their
    * values reached Chimmy only through a per-player tool call. Asked for whenever values are; NFL is not_requested.
@@ -317,6 +325,12 @@ const PENDING_TRADES_FAILED = '__pending_trades_failed__' as const
 const PENDING_TRADES_NONE = '__pending_trades_none__' as const
 const NO_PENDING_TRADES =
   'No trade offers are waiting on you in this league (AllFantasy proposals and the synced Sleeper offers were both read).'
+
+/** `draftBoard` sentinels and its budget for the pick decision inside the packet's 2,400 ms first wave. */
+const DRAFT_BOARD_FAILED = '__draft_board_failed__' as const
+const DRAFT_BOARD_NONE = '__draft_board_none__' as const
+const NO_DRAFT_BOARD = 'This league has no draft session in AllFantasy, so there is no draft board to describe.'
+const DRAFT_BOARD_PICK_BUDGET_MS = 1500
 
 /** A league using none of the commissioner tools — not a gap, so it is filed the silent way. */
 const NO_LEAGUE_OFFICE: GroundingGap = {
@@ -651,6 +665,11 @@ export interface GroundingPacketArgs {
      * and the trade tool still answers.
      */
     pendingTrades?: boolean
+    /**
+     * The draft board and Draft OS's pick for the asker (default OFF). On draft questions only — and not when the
+     * question comes from inside the draft room, which already hands the tool loop the same board.
+     */
+    draftBoard?: boolean
   }
   /**
    * Receives the waiver engine's claims when `want.waiverDecision` runs it — the side channel Chimmy
@@ -1036,6 +1055,22 @@ export async function buildDecisionOsGroundingPacket(
             // ⚠ The builder's null means "nothing waiting"; `kick`'s null means "missed the deadline". Never the same.
             .then((text): string | typeof PENDING_TRADES_NONE => text ?? PENDING_TRADES_NONE)
             .catch(() => PENDING_TRADES_FAILED),
+        )
+      : Promise.resolve(undefined)
+
+  /*
+   * The draft, on draft questions. First wave, under the packet's deadline; the pick decision inside it gets its own
+   * shorter budget so a slow decision costs the pick line, not the whole board.
+   */
+  const pDraftBoard =
+    want.draftBoard && leagueId && args.userId
+      ? kick(
+          'draftBoard',
+          import('@/lib/chimmy/draftGrounding')
+            .then((m) => m.buildDraftContext(leagueId, args.userId!, { draftOsBudgetMs: DRAFT_BOARD_PICK_BUDGET_MS }))
+            // ⚠ The builder's null means "this league has no draft"; `kick`'s null means "missed the deadline".
+            .then((text): string | typeof DRAFT_BOARD_NONE => text ?? DRAFT_BOARD_NONE)
+            .catch(() => DRAFT_BOARD_FAILED),
         )
       : Promise.resolve(undefined)
 
@@ -1709,12 +1744,31 @@ export async function buildDecisionOsGroundingPacket(
     // A read still running at the deadline is stamped late below.
   }
 
+  let draftBoard: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
+  if (want.draftBoard && leagueId && args.userId) {
+    const out = await pDraftBoard
+    if (out === DRAFT_BOARD_FAILED) {
+      draftBoard = absent<string>({
+        reason: 'not_computed',
+        detail: 'The draft board could not be read for this answer.',
+        remedy: 'The draft board tool reads it directly.',
+      })
+    } else if (out === DRAFT_BOARD_NONE) {
+      // Not a gap: a league with no draft session has nothing to show, and saying so stops an invented board.
+      draftBoard = present(NO_DRAFT_BOARD, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    } else if (typeof out === 'string') {
+      draftBoard = present(out, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+    }
+    // A read still running at the deadline is stamped late below.
+  }
+
   marketValues = stamp('marketValues', marketValues)
   devyValues = stamp('devyValues', devyValues)
   projections = stamp('projections', projections)
   rosterProjections = stamp('rosterProjections', rosterProjections)
   myTeamLineup = stamp('myTeamLineup', myTeamLineup)
   pendingTrades = stamp('pendingTrades', pendingTrades)
+  draftBoard = stamp('draftBoard', draftBoard)
   rosterBoardValues = stamp('rosterBoardValues', rosterBoardValues)
   commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
   leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
@@ -1745,6 +1799,7 @@ export async function buildDecisionOsGroundingPacket(
     ['rosterProjections', rosterProjections as GroundedSlice<unknown>],
     ['myTeamLineup', myTeamLineup as GroundedSlice<unknown>],
     ['pendingTrades', pendingTrades as GroundedSlice<unknown>],
+    ['draftBoard', draftBoard as GroundedSlice<unknown>],
     ['rosterBoardValues', rosterBoardValues as GroundedSlice<unknown>],
   ]
 
@@ -1769,6 +1824,7 @@ export async function buildDecisionOsGroundingPacket(
     rosterProjections,
     myTeamLineup,
     pendingTrades,
+    draftBoard,
     rosterBoardValues,
     rosterValueGrade,
     gaps: collectGaps(slices),

@@ -26,3 +26,12 @@ describe('Chimmy route → packet trade grades', () => {
     expect(src).toMatch(/grades: toolContext\.tradeGrades,/)
   })
 })
+
+describe('Chimmy route → the draft board slice', () => {
+  it('is asked for on draft questions, but never from inside the draft room, which already hands the loop that board', () => {
+    const call = src.slice(src.indexOf('withPacketCeiling(buildDecisionOsGroundingPacket({'))
+    const args = call.slice(0, call.indexOf('.then((packet)'))
+    expect(args).toMatch(/\.\.\.earlyWant,\s*(?:\/\/[^\n]*\n\s*)?draftBoard: earlyWant\.draftBoard && insightType !== 'draft',/)
+    expect(src).toMatch(/const draftRoomBoard = insightType === 'draft' && leagueSnapshot && userId/)
+  })
+})

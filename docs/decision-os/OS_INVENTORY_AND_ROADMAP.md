@@ -224,6 +224,15 @@ builder that throws is a gap that tells Chimmy not to say either way; a late rea
 Sleeper-only (no other provider contract carries pending offers — `contracts/`), and `tradeSettingsSource` remains
 unread rather than warmed (warming an entry nobody reads is the waste retired on 2026-09-06).
 
+**Draft OS, 2026-11-20 — the draft and Draft OS's pick are in the packet.** A draft question asked outside the draft
+room reached the board and the pick only if the model called `get_current_draft_board`. A draft question now asks for a
+`draftBoard` slice: the exact text that tool returns (`buildDraftContext` — the board, the asker's picks and queue,
+the managers before their pick, and Draft OS's pick when they are on the clock, gated by the room's own pick rules).
+The pick decision gets 1,500 ms there (DRAFT_BOARD_PICK_BUDGET_MS) instead of 2,500 so the board fits the packet's
+first-wave deadline; past it the board comes without the pick, which is that builder's existing honest fallback, and
+the tool still runs the full budget. Not asked for from inside the draft room, which already hands the loop the same
+board. "No draft session" is stated as a fact; a failed read is a gap; a late read is stamped late.
+
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
 

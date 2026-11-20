@@ -57,6 +57,9 @@ const MY_TEAM_LINEUP_SLICE = 'Best lineup (My Team)'
 /** The trades waiting on the asker, each graded — the trade tool's own text, whole: an inbox cut short reads as complete. */
 const PENDING_TRADES_SLICE = 'Trades waiting on you (graded)'
 
+/** The draft and Draft OS's pick for the asker — the draft board tool's own text, whole. */
+const DRAFT_BOARD_SLICE = 'The draft (board and your pick)'
+
 /** NBA/MLB/NHL: the asker's roster on the league's value board — whole, for the same reason. */
 const ROSTER_BOARD_VALUES_SLICE = 'Your roster values (this league\'s board)'
 
@@ -73,7 +76,7 @@ const MAX_PROSE = 1200
  */
 // Measured 2026-09-28: a 22-team survivor league with long team names is ~1,960 characters before
 // the values, trade-ledger and history lines (~500-600 more). 3200 leaves room; 2600 did not.
-const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200, [MY_TEAM_LINEUP_SLICE]: 3200, [PENDING_TRADES_SLICE]: 4000, [ROSTER_BOARD_VALUES_SLICE]: 3600 }
+const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200, [MY_TEAM_LINEUP_SLICE]: 3200, [PENDING_TRADES_SLICE]: 4000, [DRAFT_BOARD_SLICE]: 4000, [ROSTER_BOARD_VALUES_SLICE]: 3600 }
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10)
@@ -584,6 +587,8 @@ export function serializeDecisionOsGroundingForPrompt(
     [MY_TEAM_LINEUP_SLICE, packet.myTeamLineup as GroundedSlice<unknown>],
     // On trade questions: the offers waiting on the asker with the one engine's grade — the trade tool's text (2026-11-20).
     [PENDING_TRADES_SLICE, packet.pendingTrades as GroundedSlice<unknown>],
+    // On draft questions: the board and Draft OS's pick — the draft board tool's text (2026-11-20).
+    [DRAFT_BOARD_SLICE, packet.draftBoard as GroundedSlice<unknown>],
     // NBA/MLB/NHL: the roster priced on the league's own board, the trade grade's price (2026-11-20).
     [ROSTER_BOARD_VALUES_SLICE, packet.rosterBoardValues as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],

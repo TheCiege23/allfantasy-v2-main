@@ -64,6 +64,7 @@ type IntentDerivedWant = Required<
     | 'waiverDecision'
     | 'myTeamLineup'
     | 'pendingTrades'
+    | 'draftBoard'
   >
 >
 
@@ -88,6 +89,11 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * having to think of calling it.
      */
     pendingTrades: intent === 'trade',
+    /*
+     * The draft board with Draft OS's pick for the asker, on a draft question (2026-11-20). The same read as the
+     * draft board tool; the route turns it off inside the draft room, which already hands the loop that board.
+     */
+    draftBoard: intent === 'draft',
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *

@@ -26,10 +26,11 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
    * `optimizeLineup`; the psychology one had no renderer. An exact key set fails the moment either
    * is re-added, which a pair of `toBe(false)` assertions could not do.
    */
-  it('the router decides exactly five slices', () => {
+  it('the router decides exactly six slices', () => {
     for (const intent of ALL_INTENTS) {
       expect(Object.keys(deriveWantFromIntent(intent)).sort()).toEqual([
         'commissionerHealthDecision',
+        'draftBoard',
         'myTeamLineup',
         'pendingTrades',
         'rosterValueGrade',
@@ -39,6 +40,12 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
   })
 
   // 2026-11-20: a trade question carries the offers waiting on the asker, graded by the one trade engine.
+  // 2026-11-20: a draft question carries the draft board with Draft OS's pick for the asker.
+  it('draft turns on draftBoard, and only draft does', () => {
+    expect(deriveWantFromIntent('draft').draftBoard).toBe(true)
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'draft')) expect(deriveWantFromIntent(intent).draftBoard).toBe(false)
+  })
+
   it('trade turns on pendingTrades, and only trade does', () => {
     expect(deriveWantFromIntent('trade').pendingTrades).toBe(true)
     for (const intent of ALL_INTENTS.filter((i) => i !== 'trade')) expect(deriveWantFromIntent(intent).pendingTrades).toBe(false)
@@ -127,10 +134,10 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('every other intent (draft, matchup, league_strength, bracket, injury, weather, story_recap, general) turns on nothing', () => {
-    // `trade` left this list on 2026-11-20: it turns on `pendingTrades` (tested above).
+  it('every other intent (matchup, league_strength, bracket, injury, weather, story_recap, general) turns on nothing', () => {
+    // `trade` and `draft` left this list on 2026-11-20: they turn on `pendingTrades` and `draftBoard` (tested above).
     const untouched: ChimmyOrchestrationIntent[] = [
-      'draft', 'matchup', 'league_strength', 'bracket', 'injury', 'weather', 'story_recap', 'general',
+      'matchup', 'league_strength', 'bracket', 'injury', 'weather', 'story_recap', 'general',
     ]
     for (const intent of untouched) {
       const w = deriveWantFromIntent(intent)

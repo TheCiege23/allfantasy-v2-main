@@ -2296,6 +2296,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
             idpKicker: true,
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
+            // Inside the draft room the loop is already handed this board (`draftRoomBoard` below): never twice.
+            draftBoard: earlyWant.draftBoard && insightType !== 'draft',
           },
           /*
            * The waiver engine's claims, HELD — not recorded here. A side channel: never in the
