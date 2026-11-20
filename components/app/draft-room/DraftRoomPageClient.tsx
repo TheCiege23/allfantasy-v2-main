@@ -47,6 +47,7 @@ import {
   type ResultsRosterPanelTeam,
   type ResultsRosterPanelPick,
 } from '@/components/app/draft-room/ResultsRosterPanel'
+import { useWeekGames } from '@/components/app/draft-room/useWeekGames'
 import { DraftRosterStrip } from '@/components/app/draft-room/DraftRosterStrip'
 import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
 import { DraftDayShow } from '@/components/draft-day/DraftDayShow'
@@ -3235,6 +3236,9 @@ export function DraftRoomPageClient({
     }))
   }, [session?.slotOrder, currentUserRosterId, aiManagedRosterIds])
 
+  /** NBA / NHL / MLB: games this week per team, shown in "My team" where football shows BYE. */
+  const rosterWeekGames = useWeekGames(effectiveDraftSport)
+
   const resultsRosterPicks = useMemo<ResultsRosterPanelPick[]>(() => {
     return (session?.picks ?? []).map((p) => ({
       rosterId: p.rosterId,
@@ -4541,6 +4545,8 @@ export function DraftRoomPageClient({
         starterSlots={rosterConfig?.starterSlots ?? null}
         benchSlots={rosterConfig?.benchSlots ?? null}
         idpEnabled={Boolean(idpRosterSummary)}
+        sport={effectiveDraftSport}
+        weekGames={rosterWeekGames}
       />
     </div>
   ) : (
@@ -4980,6 +4986,7 @@ export function DraftRoomPageClient({
                     benchSlots={rosterConfig?.benchSlots ?? null}
                     idpEnabled={Boolean(idpRosterSummary)}
                     sport={effectiveDraftSport}
+                    weekGames={rosterWeekGames}
                   />
                 }
                 chimmyBody={
