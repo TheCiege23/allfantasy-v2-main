@@ -70,7 +70,20 @@ export const maxDuration = 300
  */
 
 /** Leagues per fire. Ordering is decided by `mergeRotation`, not by this constant. */
-const LEAGUE_CAP = 25
+/*
+ * Raised from 25 on 2026-11-20, from measurement rather than the ~9.6 s/league guess above: the
+ * six most recent fires each refreshed ten leagues in 24-45 s, about 2.5-4.5 s a league. Those were
+ * recently refreshed leagues; one that has waited weeks has more to fetch and may take longer, which
+ * is what the budget check between leagues is for (`skippedForTime` says when it bites).
+ */
+const LEAGUE_CAP = 50
+
+/**
+ * Slots kept for leagues not refreshed in a week. With the dead rows gone the tail is real: 611
+ * leagues on 2026-11-20. Thirty-five a fire is 210 a day, a lap in about three days, and the other
+ * fifteen still go to the leagues people have open.
+ */
+const STARVED_SLOTS = 35
 
 /**
  * 240s against the 300s platform ceiling, matching `CRON_RUN_BUDGET_MS`.
@@ -138,9 +151,25 @@ export async function GET(request: Request) {
        * rotationPolicy.ts.
        */
       const starvedBefore = new Date(Date.now() - STARVATION_FLOOR_MS)
+      /*
+       * 🛑 THE STARVED BUCKET WAS FULL OF LEAGUES THAT NO LONGER EXIST, FOREVER. A status row
+       * outlives its league. Such a row can never be refreshed, so its `updatedAt` never moves, so
+       * it is the oldest row at every fire. Measured on production 2026-11-20: 93 dead rows, and
+       * the 25 oldest were ALL dead. They took the bucket's whole reserve and were then dropped by
+       * the league lookup below, so each fire refreshed only the ten most recently viewed leagues
+       * (`rows_written: 10`, ~30 s of a 240 s budget) and 611 live leagues waited. By week 11, 390
+       * of 547 in-season leagues held matchup scores only through week 6 or 7.
+       *
+       * The bucket is now drawn only from leagues that can be refreshed.
+       */
+      const refreshable = await prisma.league.findMany({
+        where: { platform: "sleeper", platformLeagueId: { not: "" } },
+        select: { id: true },
+      })
+      const refreshableIds = refreshable.map((l) => l.id)
       const [starvedRows, demandRows] = await Promise.all([
         prisma.dynastyBackfillStatus.findMany({
-          where: { provider: "sleeper", updatedAt: { lt: starvedBefore } },
+          where: { provider: "sleeper", updatedAt: { lt: starvedBefore }, leagueId: { in: refreshableIds } },
           orderBy: { updatedAt: "asc" },
           take: LEAGUE_CAP,
           select: { leagueId: true, updatedAt: true },
@@ -163,6 +192,7 @@ export async function GET(request: Request) {
         starvedLeagueIds: starvedRows.map((r) => r.leagueId),
         demandLeagueIds: demandRows.map((r) => r.id),
         cap: LEAGUE_CAP,
+        starvedReserve: STARVED_SLOTS,
       })
 
       /*
@@ -174,7 +204,7 @@ export async function GET(request: Request) {
         rotation.leagueIds.length > 0
           ? rotation.leagueIds.map((id) => ({ leagueId: id, updatedAt: null as Date | null }))
           : await prisma.dynastyBackfillStatus.findMany({
-              where: { provider: "sleeper" },
+              where: { provider: "sleeper", leagueId: { in: refreshableIds } },
               orderBy: { updatedAt: "asc" },
               take: LEAGUE_CAP,
               select: { leagueId: true, updatedAt: true },
