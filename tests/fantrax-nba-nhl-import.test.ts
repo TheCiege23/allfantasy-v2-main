@@ -227,6 +227,38 @@ describe('DB-first identity links for NBA and NHL', () => {
     const plan = planProFantraxIdentityLinks('NHL', [ref], [row('a', 'Elias Pettersson', 'VAN', 'D'), row('b', 'Elias Pettersson', 'VAN', 'D')])
     expect(plan.links).toEqual([])
   })
+
+  // The last unlinked rostered NBA/NHL ids in production, 2026-11-19.
+  it('links an unattached "(N/A)" player only when the name is unique on both sides (Kevin Porter Jr.)', () => {
+    const ref = { fantraxId: '051pa', name: 'Porter, Kevin', team: '(N/A)', position: 'SG' }
+    const kpj = row('kpj', 'Kevin Porter Jr.', 'MILWAUKEE BUCKS', 'SG')
+    expect(planProFantraxIdentityLinks('NBA', [ref], [kpj, row('otto', 'Otto Porter', 'UTA', 'PF')]).links.map((l) => l.id)).toEqual(['kpj'])
+    // A namesake anywhere (even already linked), or Fantrax listing the name twice: refused.
+    expect(planProFantraxIdentityLinks('NBA', [ref], [kpj, { ...row('kp2', 'Kevin Porter', 'BOS', 'SG'), fantraxId: 'taken' }]).links).toEqual([])
+    expect(planProFantraxIdentityLinks('NBA', [ref, { ...ref, fantraxId: 'dup', team: 'BOS' }], [kpj]).links.filter((l) => l.fantraxId === '051pa')).toEqual([])
+    // An unknown team label that is not "(N/A)" never takes this path.
+    expect(planProFantraxIdentityLinks('NBA', [{ ...ref, team: 'XYZ' }], [kpj]).links).toEqual([])
+  })
+  it('links a spelling the sides never share by team, surname and initial (Mo / Mohamed Bamba, Arseny / Arseni)', () => {
+    expect(planProFantraxIdentityLinks('NBA', [{ fantraxId: '049kf', name: 'Bamba, Mo', team: 'UTA', position: 'C' }],
+      [row('bamba', 'Mohamed Bamba', 'UTAH JAZZ', 'C')]).links.map((l) => l.id)).toEqual(['bamba'])
+    expect(planProFantraxIdentityLinks('NHL', [{ fantraxId: '051um', name: 'Gritsyuk, Arseny', team: 'NJD', position: 'RW' }],
+      [row('gr', 'Arseni Gritsyuk', 'NEW JERSEY DEVILS', 'RW')]).links.map((l) => l.id)).toEqual(['gr'])
+  })
+  it('refuses that rule on another initial, a second surname on the team on either side, or another team', () => {
+    const ref = { fantraxId: '06mk6', name: 'Carrington, Bub', team: 'WAS', position: 'PG' }
+    expect(planProFantraxIdentityLinks('NBA', [ref], [row('c', 'Carlton Carrington', 'WAS', 'SG')]).links).toEqual([])
+    const mo = { fantraxId: 'm', name: 'Bamba, Mo', team: 'UTA', position: 'C' }
+    expect(planProFantraxIdentityLinks('NBA', [mo], [row('a', 'Mohamed Bamba', 'UTA', 'C'), row('b', 'Malik Bamba', 'UTA', 'PG')]).links).toEqual([])
+    expect(planProFantraxIdentityLinks('NBA', [mo, { fantraxId: 'n', name: 'Bamba, Max', team: 'UTA', position: 'PG' }], [row('a', 'Mohamed Bamba', 'UTA', 'C')]).links.filter((l) => l.fantraxId === 'm')).toEqual([])
+    expect(planProFantraxIdentityLinks('NBA', [mo], [row('a', 'Mohamed Bamba', 'BOS', 'C')]).links).toEqual([])
+  })
+  it('never applies the initial or unattached rules to MLB or soccer (Juan / Jorge Lopez)', () => {
+    expect(planProFantraxIdentityLinks('MLB', [{ fantraxId: 'j', name: 'Lopez, Juan', team: 'WSH', position: 'RP' }],
+      [row('jorge', 'Jorge Lopez', 'WASHINGTON NATIONALS', 'P')]).links).toEqual([])
+    expect(planProFantraxIdentityLinks('MLB', [{ fantraxId: 'n', name: 'Judge, Aaron', team: '(N/A)', position: 'OF' }],
+      [row('aj', 'Aaron Judge', 'NYY', 'RF')]).links).toEqual([])
+  })
 })
 
 describe('import UI', () => {

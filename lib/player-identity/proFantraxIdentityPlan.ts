@@ -191,19 +191,60 @@ export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: Fantra
   }
   const proposed: Array<{ id: string; fantraxId: string; rollingInsightsId: string }> = []
   const existingSourceIds = new Set(identities.map(row => row.fantraxId).filter(Boolean))
+  // Source side of uniqueness: how often Fantrax lists a name anywhere, and a surname on one team.
+  const refNames = new Map<string, number>()
+  const refSurnameTeam = new Map<string, number>()
+  for (const ref of refs) {
+    const key = nameKey(ref.name); refNames.set(key, (refNames.get(key) ?? 0) + 1)
+    const team = teamAliases.get(compact(ref.team ?? '')), split = nameSplit(ref.name)
+    if (team && split) refSurnameTeam.set(`${split.last}|${team}`, (refSurnameTeam.get(`${split.last}|${team}`) ?? 0) + 1)
+  }
   let unmatched = 0, ambiguous = 0, unchanged = 0, conflicts = 0
   for (const ref of refs) {
     const sourceTeam = teamAliases.get(compact(ref.team ?? ''))
     const sourceRoles = rules.roles(ref.position)
+    const key = nameKey(ref.name)
+    /*
+     * An UNATTACHED player — Fantrax's "(N/A)" team: released, unsigned, between clubs. Measured
+     * 2026-11-19: 4 of 6 still-unlinked rostered NBA ids (Kelly Olynyk, Kevin Porter Jr., Killian Hayes,
+     * Darryl Morsell). There is no team to compare, so the name has to carry it alone: held by exactly ONE
+     * identity in the sport (already-linked ones counted) and listed exactly once by Fantrax.
+     * NBA and NHL only: MLB's directory carries 7,000+ unattached minor leaguers and unsigned players, and
+     * `tests/mlb-fantrax-identity.test.ts` pins its "(N/A) never links" decision deliberately.
+     */
+    if ((sport === 'NBA' || sport === 'NHL') && ref.fantraxId && !sourceTeam && compact(ref.team ?? '') === 'na' && sourceRoles.length) {
+      const named = byName.get(key) ?? []
+      const only = named.length === 1 && refNames.get(key) === 1 ? named.filter(row => row.rollingInsightsId && rules.roles(row.position).some(role => sourceRoles.includes(role))) : []
+      if (only.length !== 1) { unmatched++; continue }
+      const row = only[0]!
+      if (row.fantraxId === ref.fantraxId) { unchanged++; continue }
+      if (row.fantraxId || existingSourceIds.has(ref.fantraxId)) { conflicts++; continue }
+      proposed.push({ id: row.id, fantraxId: ref.fantraxId, rollingInsightsId: row.rollingInsightsId! })
+      continue
+    }
     if (!ref.fantraxId || !sourceTeam || !sourceRoles.length) { unmatched++; continue }
     const fits = (row: ProIdentityRow) => Boolean(row.rollingInsightsId) && teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam && rules.roles(row.position).some(role => sourceRoles.includes(role))
-    let candidates = (byName.get(nameKey(ref.name)) ?? []).filter(fits)
+    let candidates = (byName.get(key) ?? []).filter(fits)
     if (!candidates.length) {
       const split = nameSplit(ref.name)
       candidates = split ? (bySurname.get(split.last) ?? []).filter(row => {
         const other = nameSplit(row.canonicalName)
         return other !== null && nicknameOf(split.first, other.first) && fits(row)
       }) : []
+    }
+    /*
+     * Last: a spelling the two sides never share (Mo / Mohamed Bamba, Arseny / Arseni Gritsyuk). Same team,
+     * same surname, same first initial, compatible role — and the ONLY player of that surname on that team
+     * on both sides (every identity counted). Bub / Carlton Carrington stays unlinked: no letter in common.
+     * NBA and NHL only. The first dry run paired Juan with Jorge Lopez (Giants) and Cristian with Carlos
+     * Alvarado in MLB, and Keith with Kai Andrews in soccer: Fantrax lists whole organisations under one
+     * club code there, so "the only Lopez on the team" is not true on its side. All 28 NBA/NHL pairs held.
+     */
+    if ((sport === 'NBA' || sport === 'NHL') && !candidates.length && !(byName.get(key) ?? []).length) {
+      const split = nameSplit(ref.name)
+      const onTeam = split ? (bySurname.get(split.last) ?? []).filter(row => teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam) : []
+      const other = onTeam.length === 1 ? nameSplit(onTeam[0]!.canonicalName) : null
+      if (split && other && other.first[0] === split.first[0] && refSurnameTeam.get(`${split.last}|${sourceTeam}`) === 1 && fits(onTeam[0]!)) candidates = onTeam
     }
     if (candidates.length > 1 && sport === 'NHL') {
       const line = nhlLine(ref.position)
