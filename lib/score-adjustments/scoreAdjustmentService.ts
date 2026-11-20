@@ -1,4 +1,5 @@
 import 'server-only'
+import { sourceOwnedFixture } from '@/lib/league-import/fantrax/cutoverPolicy'
 
 import { randomUUID } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
@@ -29,9 +30,10 @@ import { readManualFinals } from './manualFinal'
  * points-for move with the score. Every change writes the audit log with its reason.
  */
 
-export type AdjustmentError = AdjustmentInputError | 'not_found' | 'not_points' | 'c2c' | 'median_only' | 'too_many'
+export type AdjustmentError = AdjustmentInputError | 'not_found' | 'not_points' | 'c2c' | 'median_only' | 'too_many' | 'source_owned'
 
 export const ADJUSTMENT_SERVICE_ERROR_TEXT: Record<Exclude<AdjustmentError, AdjustmentInputError>, string> = {
+  source_owned: 'Fantrax owns the result for this period.',
   not_found: 'That matchup or adjustment is not in this league.',
   not_points: 'Score adjustments are for points leagues. In a category league the score is categories won.',
   c2c: 'Campus to Canton matchups are scored by their own engine and cannot be adjusted here yet.',
@@ -107,9 +109,10 @@ export async function addScoreAdjustment(
   const input = parsed.value
   const matchup = await prisma.redraftMatchup.findFirst({
     where: { id: input.matchupId, leagueId },
-    select: { id: true, seasonId: true, week: true, homeRosterId: true, awayRosterId: true },
+    select: { id: true, seasonId: true, week: true, homeRosterId: true, awayRosterId: true, lineupSnapshots: true },
   })
   if (!matchup) return { ok: false, error: 'not_found' }
+  if (sourceOwnedFixture(matchup.lineupSnapshots)) return { ok: false, error: 'source_owned' }
   if (!matchup.awayRosterId) return { ok: false, error: 'median_only' }
   const side: Side | null = input.rosterId === matchup.homeRosterId ? 'home' : input.rosterId === matchup.awayRosterId ? 'away' : null
   if (!side) return { ok: false, error: 'bad_target' }

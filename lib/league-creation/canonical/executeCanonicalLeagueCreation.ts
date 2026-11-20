@@ -133,6 +133,7 @@ export async function executeCanonicalLeagueCreation(args: {
             sport: String(body.sport),
             teamCount: body.teamCount,
             acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
+            cutover: body.conceptSetup?.cutover,
           })
         }
         if (sgCreate.kind === 'ok') {

@@ -134,6 +134,8 @@ export default async function CreateLeaguePage(
     )
   }
 
+  const { activeFantraxCalendar } = await import('@/lib/league-import/fantrax/cutoverPolicy')
+  const activePeriod = source.season === resolveLeagueCreationSeason(String(source.sport)) ? activeFantraxCalendar(source.platform, source.settings)?.period : undefined
   let reviewError: string | undefined
   let baseballReview: ReturnType<typeof importedMlbScoring> | undefined
   if (String(source.sport) === 'MLB') {
@@ -156,6 +158,7 @@ export default async function CreateLeaguePage(
     <CreateLeaguePageClient
       userId={userId}
       importSourceLeagueId={source.id}
+      cutoverPeriod={activePeriod}
       importTemplate={importTemplate}
       importSourceName={source.name?.trim() || 'Imported League'}
     />

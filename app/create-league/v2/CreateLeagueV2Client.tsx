@@ -26,6 +26,8 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { applyRequestedFormat, type RequestableFormat } from '@/lib/create-league-v2/requestedFormat'
 
+import type { CutoverPolicy } from '@/lib/league-import/fantrax/cutoverPolicy'
+
 interface CreateLeagueV2ClientProps {
   userId: string
   /** Opened from the demo league: offer "Create a test league" pre-selected. */
@@ -35,6 +37,7 @@ interface CreateLeagueV2ClientProps {
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
   importSourceLeagueId?: string
+  cutoverPeriod?: number
   importedLeagues?: ImportedLeagueSummary[]
 }
 
@@ -71,7 +74,7 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues, fromDemo, requestedFormat }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, cutoverPeriod, importedLeagues, fromDemo, requestedFormat }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
   // An import carries its own format; a fresh create starts on the sport's default format
@@ -82,6 +85,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     return normalizeInitialState(!importTemplate && requestedFormat ? applyRequestedFormat(start, requestedFormat) : start)
   })
   const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
+  const [cutoverPolicy, setCutoverPolicy] = useState<CutoverPolicy>()
   const [testLeague, setTestLeague] = useState(fromDemo === true)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -205,6 +209,10 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   }, [router])
 
   const handleSubmit = useCallback(async () => {
+    if (cutoverPeriod && !cutoverPolicy) {
+      setSubmitError('Choose who scores the open Fantrax period before creating your league.')
+      return
+    }
     if (importSourceLeagueId && state.sport === 'MLB' && !acceptWeeklyLineups) {
       setSubmitError('Confirm weekly lineups for your native baseball league before creating it.')
       return
@@ -224,7 +232,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     const isTest = testLeague && !importSourceLeagueId
     if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.SUBMIT, funnelMeta)
     try {
-      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups, isTest)
+      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups, isTest, cutoverPeriod && cutoverPolicy ? { policy: cutoverPolicy, period: cutoverPeriod } : undefined)
       if (!result.ok) {
         setSubmitError(result.error ?? t('createLeague.v2.submitError'))
         if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
@@ -252,7 +260,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups, testLeague])
+  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups, testLeague, cutoverPeriod, cutoverPolicy])
 
   const retryFinalization = useCallback(async () => {
     if (!createdLeagueId || retryingFinalization) return
@@ -261,6 +269,13 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
 
   return (
     <>
+    {cutoverPeriod && <fieldset className="mx-auto my-4 grid max-w-5xl gap-3 rounded-xl border p-4">
+      <legend className="px-2 font-bold">Who scores period {cutoverPeriod}?</legend>
+      <label><input type="radio" name="scoringCutover" checked={cutoverPolicy === 'after_open_period'}
+        onChange={() => setCutoverPolicy('after_open_period')} /> Fantrax finishes this period. AllFantasy starts scoring in period {cutoverPeriod + 1}.</label>
+      <label><input type="radio" name="scoringCutover" checked={cutoverPolicy === 'reconcile_open_period'}
+        onChange={() => setCutoverPolicy('reconcile_open_period')} /> Switch this period to AllFantasy once locked lineups and individual scores match. Fantrax scores it while verification is pending.</label>
+    </fieldset>}
     {!importSourceLeagueId ? (
       <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={fromDemo === true} />
     ) : null}

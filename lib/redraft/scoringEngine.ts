@@ -40,6 +40,7 @@ import {
 } from './dailyLineups'
 import { gamesCountActive } from './gamesCount'
 import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { readCutover, sourceOwnsWeek, sourceOwnedFixture } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { warnDailyBestBallWaitingForSchedule } from '@/lib/bestball/dailyScheduleStatus'
 import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
@@ -1140,6 +1141,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     },
   })
   if (!m || !m.homeRoster || m.league?.leagueVariant === 'season_tournament') return null
+  if (sourceOwnedFixture(m.lineupSnapshots)) return null
   if (!m.awayRosterId) {
     await updateByeRowScore(m)
     return null
@@ -1534,6 +1536,7 @@ export async function recalculateMatchupsForSeasonWeek(
 ): Promise<{ updated: number; incomplete: number; summaries: MatchupScoreUpdateSummary[] }> {
   const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true,platform:true,sport:true,leagueVariant:true}}}})
   const settings = settingsForScoringWeek(season?.league.settings as Record<string,any> | null, season?.season, week)
+  if (sourceOwnsWeek(readCutover(settings, season?.season), week)) return { updated: 0, incomplete: 0, summaries: [] }
   if (settings?.scoring_mode === 'roto' && season) {
     const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
     if (isNativePlatform(season.league.platform) && isBasketballC2CLeague(season.league)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')

@@ -394,6 +394,7 @@ export async function submitCreateLeagueV2(
   acceptWeeklyLineups = false,
   /** "Create a test league": the server fills open seats with placeholder AI managers. */
   testLeague = false,
+  cutover?: { policy: import('@/lib/league-import/fantrax/cutoverPolicy').CutoverPolicy; period: number },
 ): Promise<CreateLeagueV2Result> {
   if (!getEffectiveLeagueType(state)) {
     return { ok: false, error: 'Choose a league concept to continue.' }
@@ -412,7 +413,7 @@ export async function submitCreateLeagueV2(
     payload = buildTournamentPayload(state)
   } else {
     const canonical = buildCanonicalPayload(state)
-    payload = { ...canonical, ...(testLeague && !sourceLeagueId ? { testLeague: true } : {}), ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), ...(getEffectiveLeagueType(state) === 'zombie' ? { zombieLeagueCount: 1 } : {}), acceptWeeklyLineups } } : {}) }
+    payload = { ...canonical, ...(testLeague && !sourceLeagueId ? { testLeague: true } : {}), ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), ...(getEffectiveLeagueType(state) === 'zombie' ? { zombieLeagueCount: 1 } : {}), acceptWeeklyLineups, ...(cutover ? { cutover } : {}) } } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {

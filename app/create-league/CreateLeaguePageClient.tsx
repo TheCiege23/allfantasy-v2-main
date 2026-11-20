@@ -14,6 +14,7 @@ export function CreateLeaguePageClient({
   importTemplate,
   importSourceName,
   importSourceLeagueId,
+  cutoverPeriod,
   importedLeagues,
   fromDemo,
   requestedFormat,
@@ -22,9 +23,10 @@ export function CreateLeaguePageClient({
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
   importSourceLeagueId?: string
+  cutoverPeriod?: number
   importedLeagues?: ImportedLeagueSummary[]
   fromDemo?: boolean
   requestedFormat?: RequestableFormat
 }) {
-  return <CreateLeagueV2Client userId={userId} importTemplate={importTemplate} importSourceName={importSourceName} importSourceLeagueId={importSourceLeagueId} importedLeagues={importedLeagues} fromDemo={fromDemo} requestedFormat={requestedFormat} />
+  return <CreateLeagueV2Client userId={userId} importTemplate={importTemplate} importSourceName={importSourceName} importSourceLeagueId={importSourceLeagueId} cutoverPeriod={cutoverPeriod} importedLeagues={importedLeagues} fromDemo={fromDemo} requestedFormat={requestedFormat} />
 }

@@ -1,4 +1,5 @@
 import { createWeeklyPointsAgainst } from '@/lib/redraft/weeklyPointsAgainst'
+import { object, readCutover, sourceOwnedFixture } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { accumulateTeamTotals, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
 import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
@@ -105,6 +106,7 @@ export async function updateStandings(
 
     const snapshot = matchup.lineupSnapshots as Record<string, any> | null
     const categoryResult = snapshot?.categoryMatchup
+    const tiebreak = sourceOwnedFixture(snapshot) ? object(snapshot?.fantraxCutover).winner : categoryResult ? snapshot?.categoryTiebreakWinner : null
     if(categoryResult) {
       home.categoryWinsFor+=categoryResult.aWins; home.categoryLossesFor+=categoryResult.bWins; home.categoryTiesFor+=categoryResult.ties
       away.categoryWinsFor+=categoryResult.bWins; away.categoryLossesFor+=categoryResult.aWins; away.categoryTiesFor+=categoryResult.ties
@@ -115,12 +117,12 @@ export async function updateStandings(
       const result = homeScore > awayScore ? 'W' : homeScore < awayScore ? 'L' : 'T'
       home.streakEvents.push({week:matchup.week,result})
       away.streakEvents.push({week:matchup.week,result:result === 'W' ? 'L' : result === 'L' ? 'W' : 'T'})
-    } else if (homeScore > awayScore || (categoryResult && homeScore === awayScore && snapshot?.categoryTiebreakWinner === matchup.homeRosterId)) {
+    } else if (homeScore > awayScore || (homeScore === awayScore && tiebreak === matchup.homeRosterId)) {
       home.wins += 1
       away.losses += 1
       home.streakEvents.push({ week: matchup.week, result: 'W' })
       away.streakEvents.push({ week: matchup.week, result: 'L' })
-    } else if (awayScore > homeScore || (categoryResult && homeScore === awayScore && snapshot?.categoryTiebreakWinner === matchup.awayRosterId)) {
+    } else if (awayScore > homeScore || (homeScore === awayScore && tiebreak === matchup.awayRosterId)) {
       away.wins += 1
       home.losses += 1
       away.streakEvents.push({ week: matchup.week, result: 'W' })
@@ -307,6 +309,12 @@ export async function updateStandings(
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor
     return a.pointsAgainst - b.pointsAgainst
   })
+  const cutover = readCutover(categorySettings, categorySeasonRow?.season)
+  if (cutover?.installedSeasonId === seasonId && cutover.officialRanks && week >= cutover.period-1 &&
+      !matchups.some(m => m.week >= cutover.period && isMatchupComplete(m))) {
+    const ranks = cutover.officialRanks
+    ordered.sort(([a],[b]) => ranks[a] - ranks[b])
+  }
   const seedByRoster = new Map(ordered.map(([rosterId], index) => [rosterId, index + 1]))
   const seedsFrozen = playoffSeedsFrozen({
     week,

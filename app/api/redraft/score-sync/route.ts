@@ -6,6 +6,8 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
+import { readCutover } from '@/lib/league-import/fantrax/cutoverPolicy'
+import { refreshCutover } from '@/lib/league-import/fantrax/refreshCutover'
 import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
@@ -283,6 +285,11 @@ async function runRedraftReconciliation() {
         if (guillotine.outcome !== 'not_guillotine') await checkGuillotineCorrections(season.id)
       } catch { guillotineFailed += 1 }
       continue
+    }
+    const cutover = readCutover(season.league.settings)
+    if (cutover && !cutover.settled && cutover.installedSeasonId === season.id) {
+      try { await refreshCutover(season.leagueId, season.id) }
+      catch (error) { failed++; console.warn('[fantrax-cutover] refresh pending', season.id, error instanceof Error ? error.message : 'Provider unavailable') }
     }
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
     if (!resolved.ok || resolved.phase === 'preseason') {

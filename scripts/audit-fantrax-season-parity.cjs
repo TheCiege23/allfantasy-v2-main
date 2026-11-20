@@ -146,7 +146,7 @@ async function exerciseBracket(seasonId, expected, divisionTop, reseed) {
   }
   return {pass:false,qualification,reason:'round limit'}
 }
-async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay) {
+async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay,policy='after_open_period') {
   const {createStateFromImportedLeague}=require('../lib/create-league-v2/import-template.ts')
   const {submitCreateLeagueV2}=require('../lib/create-league-v2/submit.ts')
   const source=await prisma.league.findUniqueOrThrow({where:{id:leagueId},select:{
@@ -162,18 +162,33 @@ async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay) {
       return publicFetch(stagingOrigin+path,{...options,redirect:'error',headers:{...options.headers,cookie},signal:AbortSignal.timeout(240000)})
     }
     // Keep the source lineup frequency. The audit cannot consent to a commissioner rule change.
-    const result=await submitCreateLeagueV2(state,leagueId,false)
+    const active=provider.info.scoringPeriods.find(p=>Date.parse(p.startDate)<=Date.now() && Date.now()<=Date.parse(p.endDate))
+    const choice=active ? { policy, period:active.number } : undefined
+    const result=await submitCreateLeagueV2(state,leagueId,false,false,choice)
     if(!result.ok || !result.leagueId)return {...selection,created:false,reason:result.error || 'Missing league ID'}
     const native=await prisma.league.findUniqueOrThrow({where:{id:result.leagueId},select:{leagueSize:true,leagueType:true,playoffTeams:true,playoffStartWeek:true,settings:true}})
     const finalizeResponse=await publicFetch(stagingOrigin+'/api/leagues/'+encodeURIComponent(result.leagueId)+'/import-carryover/finalize',{
       method:'POST',redirect:'error',headers:{cookie},signal:AbortSignal.timeout(200000)})
     const final=await finalizeResponse.json()
     const season=await prisma.redraftSeason.findFirst({where:{leagueId:result.leagueId},orderBy:{createdAt:'desc'},select:{id:true,season:true,currentWeek:true}})
-    let matchedNativeRecords=0,liveFinalGames=0
+    let matchedNativeRecords=0,matchedNativeRanks=0,liveFinalGames=0,matchedNativeScores=0
     if(season){
       const board=await screen('/api/redraft/standings?seasonId='+season.id,cookie)
       const byName=new Map(board.rosters.map(t=>[t.teamName,t]))
       matchedNativeRecords=replay.rows.filter(t=>{const row=byName.get(replay.names.get(t.teamId));return row && [row.wins,row.losses,row.ties].join('-')===t.points}).length
+      matchedNativeRanks=replay.rows.filter(t=>byName.get(replay.names.get(t.teamId))?.playoffSeed===t.rank).length
+      const dated=scheduledResults(provider).periods
+      for(const p of dated){
+        const board=await screen('/api/redraft/matchup?seasonId='+season.id+'&week='+p.period,cookie)
+        for(const m of p.matchups){
+          const home=replay.names.get(m.home.teamId),away=replay.names.get(m.away.teamId)
+          const paired=board.matchups.filter(f=>f.homeRoster?.teamName===home && f.awayRoster?.teamName===away || f.homeRoster?.teamName===away && f.awayRoster?.teamName===home)
+          if(paired.length===1 && paired[0].status==='final'){
+            const x=paired[0],same=x.homeRoster.teamName===home
+            if(close(x.homeScore,same?m.home.score:m.away.score)&&close(x.awayScore,same?m.away.score:m.home.score))matchedNativeScores++
+          }
+        }
+      }
       liveFinalGames=await prisma.redraftMatchup.count({where:{seasonId:season.id,status:{in:['final','completed']}}})
     }
     let categoryChecks=null
@@ -196,7 +211,7 @@ async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay) {
     return {...selection,created:true,nativeType:native.leagueType,franchises:native.leagueSize,field:native.playoffTeams,
       start:native.playoffStartWeek,rosterCopies:native.settings?.importCarryover?.playerCount,finalizeStatus:finalizeResponse.status,
       complete:final.complete===true,materializedPlayers:final.materializedPlayers,finalizeError:final.error,season:season?.season,currentWeek:season?.currentWeek,
-      matchedNativeRecords,liveFinalGames,archivedGames:native.settings?.importCarryover?.history?.matchups,categoryChecks}
+      policy,cutover:final.cutover,matchedNativeRecords,matchedNativeRanks,matchedNativeScores,liveFinalGames,archivedGames:native.settings?.importCarryover?.history?.matchups,categoryChecks}
   }finally{global.fetch=restore}
 }
 async function runCase(userId,sport,id,index,runId,cookie) {
@@ -350,6 +365,11 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       facts.length===games && scheduled.conflicting===0 && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
     try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie,source,replay)}
     catch(error){evidence.native={created:false,reason:String(error.message).slice(0,260)}}
+    if(source.info.scoringSystem?.type==='HEAD_TO_HEAD_ROTI_SINGLE_WIN'){
+      evidence.immediate=await tryNativeConversion(leagueId,orig.length,cookie,source,replay,'reconcile_open_period')
+      evidence.pass=evidence.pass && [evidence.native,evidence.immediate].every(n=>n.complete && n.cutover?.policy===n.policy && n.currentWeek===season.currentWeek &&
+        n.matchedNativeRecords===orig.length && n.matchedNativeRanks===orig.length && n.matchedNativeScores===games && n.liveFinalGames===games)
+    }
     if(!evidence.native.created && sourcePlayers){
       const ids=[...new Set(Object.values(source.rosters).flatMap(t=>t.rosterItems.map(p=>p.id)))]
       const nativeKey=sport==='NFL'?'sleeperId':'rollingInsightsId'

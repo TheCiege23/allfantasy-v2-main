@@ -1,4 +1,5 @@
 import 'server-only'
+import { sourceOwnedFixture } from '@/lib/league-import/fantrax/cutoverPolicy'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -27,6 +28,7 @@ export type ManualFinalError =
   | 'bad_reason'
   | 'not_found'
   | 'not_native'
+  | 'source_owned'
   | 'not_regular_season'
   | 'bye'
   | 'roto'
@@ -36,6 +38,7 @@ export type ManualFinalError =
   | 'week_closed'
 
 export const MANUAL_FINAL_ERROR_TEXT: Record<ManualFinalError, string> = {
+  source_owned: 'Fantrax owns the result for this period.',
   bad_reason: `Give a reason (${MANUAL_FINAL_REASON_MIN}–${MANUAL_FINAL_REASON_MAX} characters). It shows in the audit log.`,
   not_found: 'That game is not in this league.',
   not_native: 'This league is scored by the platform it was imported from, so a game cannot be closed here.',
@@ -71,7 +74,7 @@ async function loadMatchup(leagueId: string, matchupId: unknown) {
   return prisma.redraftMatchup.findFirst({
     where: { id: matchupId, leagueId },
     select: {
-      id: true, seasonId: true, week: true, type: true, status: true, awayRosterId: true, homeScore: true, awayScore: true,
+      id: true, seasonId: true, week: true, type: true, status: true, awayRosterId: true, homeScore: true, awayScore: true, lineupSnapshots: true,
       season: { select: { currentWeek: true } },
     },
   })
@@ -108,6 +111,7 @@ export async function finalizeMatchupManually(leagueId: string, userId: string, 
   if (!reason) return { ok: false, error: 'bad_reason' }
   const matchup = await loadMatchup(leagueId, b.matchupId)
   if (!matchup) return { ok: false, error: 'not_found' }
+  if (sourceOwnedFixture(matchup.lineupSnapshots)) return { ok: false, error: 'source_owned' }
   if (!matchup.awayRosterId) return { ok: false, error: 'bye' }
   if (matchup.type !== 'regular') return { ok: false, error: 'not_regular_season' }
   if (matchup.week > Math.max(1, matchup.season.currentWeek ?? 1)) return { ok: false, error: 'future_week' }

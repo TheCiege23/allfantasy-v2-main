@@ -8,6 +8,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client'
+import { readCutover } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 import { mapSportWeekToLeagueWeek } from './leagueSeasonWeek'
@@ -173,6 +174,7 @@ export async function resolveSeasonWeekForRedraftSeason(
       season: true,
       totalWeeks: true,
       playoffStartWeek: true,
+      league: { select: { settings: true } },
     },
   })
   if (!season) return { ok: false, reason: 'SEASON_NOT_FOUND' }
@@ -180,6 +182,17 @@ export async function resolveSeasonWeekForRedraftSeason(
   const lastPlayoffWeek = await resolveLastPlayoffWeek(db, seasonId, season.playoffStartWeek, season.leagueId)
 
   const sportWeek = await resolveSportWeek(season.sport, season.season, deps)
+  const cutover = readCutover(season.league?.settings, season.season)
+  if (cutover && cutover.periods.length) {
+    const now = (deps.now ?? new Date()).getTime()
+    const current = cutover.periods.find(p => now <= Date.parse(p.endDate)) ?? cutover.periods[cutover.periods.length-1]
+    const ended = now > Date.parse(current.endDate)
+    const preseason = now < Date.parse(cutover.periods[0].startDate)
+    return { ok:true, source:'schedule', fantasyWeek:current.number, sportWeek:sportWeek.ok ? sportWeek.sportWeek : current.number,
+      phase:preseason ? 'preseason' : current.number < season.playoffStartWeek ? 'regular' : ended && lastPlayoffWeek && current.number >= lastPlayoffWeek ? 'season_complete' : 'playoffs',
+      state:preseason ? 'upcoming' : ended ? 'played' : 'live', sportWeekComplete:ended && sportWeek.ok && sportWeek.state === 'played',
+      slate: sportWeek.ok ? sportWeek.slate : null }
+  }
   return mapSportWeekToLeagueWeek(sportWeek, {
     sport: season.sport,
     seasonYear: season.season,

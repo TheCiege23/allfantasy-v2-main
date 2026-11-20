@@ -1,3 +1,4 @@
+import { activeFantraxCalendar, cutoverPolicyValid, type Cutover } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { parseStandingsDivisions } from '@/lib/league-import/standingsDivisions'
 import { readPlayerPoolScope, teamPoolResolver } from '@/lib/league/player-pools/policy'
 import { DIVISION_CONFIG_KEY, readDivisionConfig, validateDivisionSetup, type LeagueDivisionConfig } from '@/lib/league/divisions/leagueDivisions'
@@ -183,9 +184,10 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   sport: string
   teamCount: number
   acceptWeeklyLineups?: boolean
+  cutover?: unknown
 }): Promise<number> {
   const [source, target, teams, rosters, slots, session] = await Promise.all([
-    tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true, settings: true, season: true } }),
+    tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, platformLeagueId: true, sport: true, settings: true, season: true } }),
     tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true, season: true, leagueType: true, leagueVariant: true } }),
     tx.leagueTeam.findMany({
       where: { leagueId: args.sourceLeagueId, lifecycleState: { not: 'ARCHIVED' } },
@@ -197,6 +199,16 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   ])
   if (!source || !target || isNativePlatform(source.platform) || String(source.sport) !== args.sport) {
     refuse('The imported league sport must match the standalone league.')
+  }
+  const sourceCalendar = source.season === target.season ? activeFantraxCalendar(source.platform, source.settings) : undefined
+  const selected = asRecord(args.cutover)
+  let cutover: Cutover | undefined
+  if (sourceCalendar || args.cutover != null) {
+    if (!sourceCalendar || !cutoverPolicyValid(selected.policy) || selected.period !== sourceCalendar.period) {
+      refuse('Review the current Fantrax period and choose when native scoring should start.')
+    }
+    if (!source.platformLeagueId || !source.season) refuse('Refresh the Fantrax import to verify the season schedule.')
+    cutover = { policy: selected.policy, season: source.season, ...sourceCalendar, snapshotId: source.platformLeagueId, teams: {} }
   }
   let mlbScoring: ReturnType<typeof importedMlbScoring> | undefined
   let mlbRoster: ReturnType<typeof importedMlbRoster> | undefined
@@ -323,6 +335,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     teamIds.set(team.externalId, nativeTeam.id)
     rosterIds.set(sourceRoster.id, targetRoster.id)
     rosterIds.set(team.externalId, targetRoster.id)
+    if (cutover) cutover.teams[team.externalId] = targetRoster.id
     if (claimedUserId && i > 0) {
       if (!additionalTeam) {
         await tx.redraftLeagueMember.create({ data: { leagueId: args.targetLeagueId, userId: claimedUserId, role: 'MEMBER', teamNumber: slot.slotNumber } })
@@ -443,6 +456,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
       // A league that played several games a week keeps doing so; the native schedule reads this setting.
       ...(readGamesPerWeek(source.settings) > 1 ? { [GAMES_PER_WEEK_SETTINGS_KEY]: readGamesPerWeek(source.settings) } : {}),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,
+        ...(cutover ? { cutover } : {}),
         ...(nflScoring ? { scoring: { convertedCount: nflScoring.convertedCount, notScored: nflScoring.notScored, approximated: nflScoring.approximated } } : {}),
         ...(futurePicks ? { futurePickCount: futurePicks.copied, futurePicksSkipped: futurePicks.skippedUnmapped + futurePicks.skippedNotTraded + futurePicks.skippedPastSeason } : {}),
         copiedAt: new Date().toISOString() },

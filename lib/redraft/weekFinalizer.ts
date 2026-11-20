@@ -6,6 +6,7 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { readCutover, sourceOwnsWeek } from '@/lib/league-import/fantrax/cutoverPolicy'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
@@ -128,6 +129,7 @@ export { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS }
 
 export type WeekFinalizeRefusal =
   | 'finalizer_disabled'
+  | 'fantrax_owns_period'
   | 'season_not_found'
   | 'sport_not_week_keyed'
   | 'no_games_on_slate'
@@ -453,7 +455,7 @@ export async function finalizeRedraftWeek(
 
   const season = await prisma.redraftSeason.findFirst({
     where: { id: params.seasonId },
-    select: { id: true, leagueId: true, sport: true, season: true },
+    select: { id: true, leagueId: true, sport: true, season: true, league: { select: { settings: true } } },
   })
   if (!season) {
     return emptyResult(
@@ -473,6 +475,7 @@ export async function finalizeRedraftWeek(
     week: params.week,
   }
 
+  if (sourceOwnsWeek(readCutover(season.league?.settings, season.season), params.week)) return emptyResult(base, 'fantrax_owns_period')
   if (isWeekFinalizerDisabled()) return emptyResult(base, 'finalizer_disabled')
 
   const isDateWindowed = DATE_WINDOWED_SPORTS.includes(sport)
