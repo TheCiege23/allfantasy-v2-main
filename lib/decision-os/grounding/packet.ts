@@ -1055,11 +1055,12 @@ export async function buildDecisionOsGroundingPacket(
 
   /*
    * The league's rulebook and the feed's week for the roster projections, read now so only the pricing waits for
-   * the roster (`rosterLeagueProjections.ts`). A non-NFL league answers without a query.
+   * the roster (`rosterLeagueProjections.ts`). A board-sport league (NBA, NHL, MLB, NCAAB, soccer) checks access here and is priced on its
+   * value board once the roster is in; any other non-NFL league answers without a query.
    */
   const pRosterBasis: Promise<RosterProjectionBasis | null> =
     want.projections && !projectionKill && !rosterProjectionsKill && leagueId && args.userId
-      ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport }))
+      ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport, userId: args.userId }))
       : Promise.resolve(null)
 
   /*
