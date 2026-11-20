@@ -12,6 +12,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 import { dailyScheduleWaitingNotice, loadDailyBestBallScheduleStatus } from '@/lib/bestball/dailyScheduleStatus'
+import { buildImportedBestBallTab, importedBestBallNote } from '@/lib/bestball/importedBestBallTab'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,6 +154,41 @@ export async function GET(
     Number.isFinite(requestedWeek) && weeksAvailable.includes(requestedWeek)
       ? requestedWeek
       : weeksAvailable[weeksAvailable.length - 1] ?? 1
+
+  /*
+   * An imported league: the legacy tables above hold nothing for it, but its weekly team scores are
+   * stored (lib/bestball/importedBestBallTab.ts). Any failure falls through to the tab as it was.
+   */
+  if (weeksAvailable.length === 0 && resolveWriteAuthority(league.platform) !== 'NATIVE') {
+    try {
+      const [facts, importedTeams] = await Promise.all([
+        prisma.matchupFact.findMany({
+          where: { leagueId, season: league.season },
+          select: { weekOrPeriod: true, teamA: true, teamB: true, scoreA: true, scoreB: true },
+        }),
+        prisma.leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } }),
+      ])
+      const imported = buildImportedBestBallTab(facts, importedTeams, Number.isFinite(requestedWeek) ? requestedWeek : null)
+      if (imported.weeksAvailable.length > 0) {
+        return NextResponse.json({
+          league: { id: league.id, name: league.name, sport: league.sport, season: league.season, summary: buildBestBallSettingsSummary(bestBallSettings), settings: bestBallSettings, profile, structureLock },
+          source: 'imported',
+          importedNote: importedBestBallNote(league.platform),
+          ...imported,
+          draftNotice,
+          dailySchedule,
+          dailyScheduleNotice,
+          rosterComposition: league.rosters.map((roster) => {
+            const players = (roster.playerData as { players?: unknown[] } | null)?.players
+            const team = league.teams.find((t) => t.platformUserId && t.platformUserId === roster.platformUserId)
+            return { rosterId: roster.id, teamName: team?.teamName ?? team?.ownerName ?? 'Team', playerCount: Array.isArray(players) ? players.length : 0 }
+          }),
+        })
+      }
+    } catch (error) {
+      console.error('[bestball] imported tab read failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
 
   const [weeklyScores, weeklyResults, standings, historyRows] = await Promise.all([
     prisma.weeklyScore.findMany({

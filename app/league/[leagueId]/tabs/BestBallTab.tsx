@@ -35,7 +35,9 @@ type BestBallApiResponse = {
   selectedWeek: number
   weeksAvailable: number[]
   /** `native` when read from AllFantasy's own scoring; absent for the legacy tables. */
-  source?: 'native'
+  source?: 'native' | 'imported'
+  /** `imported`: who picks the lineups, and that only team scores are shown here. */
+  importedNote?: string
   /** A hosted league whose draft is not finished: why nothing is scored yet. */
   draftNotice?: string | null
   /** A daily league whose season has no regular-season opener yet: daily scoring is waiting for it. */
@@ -191,6 +193,11 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
               No scored weeks yet. Lineups appear here once the first games are played.
             </div>
           ) : null}
+          {data.source === 'imported' && data.importedNote && data.lineups.length > 0 ? (
+            <div data-testid="bestball-imported-note" className="rounded-xl border border-white/10 bg-[#0a1228]/60 p-4 text-sm text-white/65">
+              {data.importedNote}
+            </div>
+          ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
             {data.lineups.map((lineup) => (
               <article key={lineup.rosterId} data-testid="bestball-lineup-card" className="min-w-0 rounded-xl border border-white/10 bg-[#0a1228]/80 p-4">
@@ -219,7 +226,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="text-lg font-bold text-[#ffb8d1]">{lineup.totalPoints.toFixed(2)}</div>
-                    <div className="text-[11px] text-white/40">{lineup.starters.length} counted</div>
+                    {data.source === 'imported' ? null : <div className="text-[11px] text-white/40">{lineup.starters.length} counted</div>}
                   </div>
                 </div>
                 {lineup.sealedSeatsNote ? (
@@ -232,7 +239,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     Waiting on stats for {lineup.awaitingStats} player{lineup.awaitingStats === 1 ? '' : 's'}; this total can still change.
                   </p>
                 ) : null}
-                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35">
+                <div className={data.source === 'imported' ? 'hidden' : 'mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35'}>
                   Counted
                   {lineup.scoringPeriod === 'daily' ? (
                     <span className="normal-case tracking-normal text-white/35"> · points summed over the days each player made that day&apos;s best lineup</span>
