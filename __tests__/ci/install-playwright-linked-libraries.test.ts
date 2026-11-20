@@ -204,7 +204,18 @@ describe('install-playwright.sh — linked libraries first', () => {
 
 describe('playwright-linked-packages.cjs — reading Playwright\'s message', () => {
   const require = createRequire(import.meta.url)
-  const { packagesFromMessage, DLOPEN_ONLY_PACKAGES } = require('../../scripts/ci/playwright-linked-packages.cjs')
+  const {
+    packagesFromMessage,
+    librariesFromMessage,
+    playwrightLibraryTable,
+    DLOPEN_ONLY_PACKAGES,
+    DLOPEN_ONLY_LIBRARIES,
+  } = require('../../scripts/ci/playwright-linked-packages.cjs')
+
+  // 🛑 Captured from this fix's own first CI run (mobile-smoke job 136367977317, ubuntu-26.04, Playwright 1.64.1). The
+  // first version of the helper could only read the apt-command form above, and Playwright withholds that whole
+  // command when even ONE library is unmapped — here libgraphene-1.0.so.0 — so every 26.04 run fell back.
+  const RUNNER_2604 = readFileSync(join(process.cwd(), '__tests__/ci/fixtures/playwright-1.64.1-webkit-missing-ubuntu26.04.txt'), 'utf8')
 
   // Captured verbatim from playwright-core 1.64.1's validator on 2026-11-20, against a stand-in WebKit directory
   // whose binary links libevent-2.1.so.7 (absent) on a host without libGLESv2.so.2.
@@ -239,5 +250,56 @@ describe('playwright-linked-packages.cjs — reading Playwright\'s message', () 
 
   it('drops only the dlopen-only H.264 package, which drags in ffmpeg', () => {
     expect([...DLOPEN_ONLY_PACKAGES]).toEqual(['gstreamer1.0-libav'])
+    expect([...DLOPEN_ONLY_LIBRARIES]).toEqual(['libx264.so'])
+  })
+
+  it('🛑 reads the library list Playwright prints on ubuntu-26.04 when it cannot name every package', () => {
+    expect(packagesFromMessage(RUNNER_2604)).toBeNull()
+    const libraries = librariesFromMessage(RUNNER_2604)
+    expect(libraries).toHaveLength(35)
+    expect(libraries).toContain('libevent-2.1.so.7')
+    expect(libraries).toContain('libgraphene-1.0.so.0')
+    expect(libraries).toContain('libx264.so')
+  })
+
+  it('reads no library list from the apt-command form, and refuses a line that is not a library', () => {
+    expect(librariesFromMessage(REAL)).toBeNull()
+    expect(librariesFromMessage('Missing libraries:\n    libevent-2.1.so.7\n    $(rm -rf /)')).toBeNull()
+  })
+
+  /*
+   * ⚠ This reads Playwright's module-private table out of the installed bundle's source. If a Playwright upgrade
+   * moves it, the helper falls back safely (the full install, as before) — and THIS test is what says so, instead of
+   * every 26.04 run silently losing the reordering. Skipped only where playwright-core is not installed.
+   */
+  const hasPlaywright = (() => {
+    try {
+      require.resolve('playwright-core/lib/coreBundle')
+      return true
+    } catch {
+      return false
+    }
+  })()
+  it.skipIf(!hasPlaywright)('reads Playwright\'s own library table for the right platform, and maps the 26.04 run', () => {
+    const t26 = playwrightLibraryTable('ubuntu26.04-x64')
+    const t24 = playwrightLibraryTable('ubuntu24.04-x64')
+    expect(t26?.['libevent-2.1.so.7']).toBe('libevent-2.1-7t64')
+    // Distinct per platform, so the right block was read rather than the first one found.
+    expect(t26?.['libicudata.so.78']).toBe('libicu78')
+    expect(t24?.['libicudata.so.74']).toBe('libicu74')
+    expect(t24?.['libicudata.so.78']).toBeUndefined()
+    expect(playwrightLibraryTable('not-a-platform')).toBeNull()
+
+    const mapped = new Set<string>()
+    const unmapped: string[] = []
+    for (const lib of librariesFromMessage(RUNNER_2604) as string[]) {
+      if (DLOPEN_ONLY_LIBRARIES.has(lib)) continue
+      if (t26?.[lib]) mapped.add(t26[lib])
+      else unmapped.push(lib)
+    }
+    expect(unmapped).toEqual(['libgraphene-1.0.so.0'])
+    expect(mapped).toContain('libevent-2.1-7t64')
+    expect(mapped.has('gstreamer1.0-libav')).toBe(false)
+    expect(mapped.size).toBe(15)
   })
 })
