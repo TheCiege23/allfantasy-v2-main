@@ -114,6 +114,12 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
   return (
     <SpecialtyShell format="salary" testId="salary-specialty">
     <div className="space-y-6">
+      {/* Shown above every cap view: an imported league whose contracts AllFantasy does not hold. */}
+      {summary?.contractsNote ? (
+        <p role="note" data-testid="salary-cap-imported-note" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+          {summary.contractsNote}
+        </p>
+      ) : null}
       {view === 'home' && summary && (
         <SalaryCapSpecialtyHome
           summary={summary}

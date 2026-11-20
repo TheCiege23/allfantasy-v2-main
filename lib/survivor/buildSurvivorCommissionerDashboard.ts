@@ -139,6 +139,10 @@ export async function buildSurvivorCommissionerDashboard(
   const nbaSeason = typeof fullSeasonPlan.season === 'number' ? fullSeasonPlan.season : new Date().getFullYear()
 
   const week = await resolveSurvivorCurrentWeek(leagueId, null)
+  const outOfGameCount = await prisma.survivorPlayer
+    .findMany({ where: { leagueId }, select: { playerState: true } })
+    .then((cast) => (cast.length ? cast.filter((p) => p.playerState !== 'active' && p.playerState !== 'survivor_winner').length : null))
+    .catch(() => null)
 
   const [
     config,
@@ -323,7 +327,12 @@ export async function buildSurvivorCommissionerDashboard(
     juryCount: jury.length,
     merged,
     rosterCount,
-    eliminatedCount: eliminatedIds.size,
+    /*
+     * `eliminatedIds` holds each voted-out manager under BOTH roster ids (the league roster and its
+     * season roster) so either can be looked up. Its size is therefore twice the head count: one
+     * manager voted out read "10 active, 2 eliminated" of 12. Count the people, not the ids.
+     */
+    eliminatedCount: outOfGameCount ?? eliminatedIds.size,
     auditTail: auditTail.map(entry => ({ eventType: entry.eventType, createdAt: entry.createdAt, metadata: {} })),
     privacy: {
       commissionerParticipationMode: access.settings.commissionerParticipationMode,

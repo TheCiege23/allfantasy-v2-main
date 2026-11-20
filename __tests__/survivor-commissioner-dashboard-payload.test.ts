@@ -196,6 +196,17 @@ describe('survivor commissioner dashboard payload', () => {
     })
   })
 
+  it('counts the people out of the game, not the two roster ids each is stored under', async () => {
+    // One manager voted out: the lookup set holds his league roster id AND his season roster id.
+    getCurrentlyEliminatedRosterIds.mockResolvedValue(new Set(['roster-out', 'season-roster-out']))
+    prisma.survivorPlayer.findMany.mockResolvedValue([
+      ...Array.from({ length: 11 }, (_, i) => ({ userId: `u${i}`, displayName: `M${i}`, playerState: 'active' })),
+      { userId: 'out', displayName: 'Out', playerState: 'exile' },
+    ])
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'u1', 'c@test.local')
+    expect('eliminatedCount' in result && result.eliminatedCount).toBe(1)
+  })
+
   it('carries the weekly to-do list, built from the same facts as the readiness list', async () => {
     const result = await buildSurvivorCommissionerDashboard('league-1', 'user-1', 'u@example.com')
     expect(result.ok).toBe(true)
