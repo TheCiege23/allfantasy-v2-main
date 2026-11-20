@@ -83,3 +83,22 @@ export function readWeekAppearances(data: unknown): WeekAppearances | null {
   }
   return out
 }
+
+/** School participation totals include games in which no individual stat was recorded. */
+export function verifiedSeasonAppearances(weeks: Map<number, WeekAppearances>, receipts: unknown, maxWeek: number) {
+  const counts = gamesPlayedFrom(weeks.values())
+  if (!Array.isArray(receipts)) return counts
+  for (const receipt of receipts) {
+    const { playerId, throughWeek, gamesPlayed, sourceUrl } = receipt ?? {}
+    if (typeof playerId !== 'string' || !/^\d+$/.test(playerId) || typeof sourceUrl !== 'string' ||
+      !sourceUrl.startsWith('https://') || !Number.isInteger(throughWeek) || throughWeek < 1 ||
+      throughWeek > maxWeek || !Number.isInteger(gamesPlayed) || gamesPlayed < 1 || gamesPlayed > throughWeek + 1) continue
+    const earlier = new Set<string>(), later = new Set<string>()
+    for (const [week, players] of weeks) {
+      for (const id of players[playerId] ?? []) (week <= throughWeek ? earlier : later).add(id)
+    }
+    for (const id of earlier) later.delete(id)
+    counts.set(playerId, Math.max(counts.get(playerId) ?? 0, gamesPlayed + later.size))
+  }
+  return counts
+}

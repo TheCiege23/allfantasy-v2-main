@@ -246,13 +246,31 @@ export async function loadLeaguePlayerMetrics(args: {
   }
   const wantedIds = args.playerIds ? new Set(args.playerIds) : null
   const wantedName = args.playerName ? normalizePlayerName(args.playerName) : null
+  // A transfer can have two projected school records. Resolve the imported name or
+  // the current canonical name against the selected league's actual roster first.
+  let namedRosterKeys: Set<string> | null = null
+  if (wantedName && league.platform === 'fantrax' && (sport === 'NCAAB' || sport === 'NCAAF')) {
+    const matches = await prisma.$queryRaw<Array<{ rosterId: string }>>`
+      SELECT DISTINCT ids.id AS "rosterId" FROM rosters r
+      CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(r."playerData"->'players') = 'array'
+        THEN r."playerData"->'players' ELSE '[]'::jsonb END) AS ids(id)
+      LEFT JOIN "PlayerIdentityMap" p ON p.sport = ${sport} AND p."fantraxId" = ids.id
+      WHERE r."leagueId" = ${leagueId} AND (
+        lower(trim(r."playerData"->'player_metadata'->ids.id->>'name')) = lower(trim(${args.playerName}::text))
+        OR p."normalizedName" = ${wantedName} OR lower(trim(p."canonicalName")) = lower(trim(${args.playerName}::text))
+      )`
+    if (matches.length) {
+      const linked = await resolveRosterIdsToKeys(prisma, sport, 'fantraxId', matches.map(row => row.rosterId))
+      namedRosterKeys = new Set(linked.values())
+    }
+  }
   const searchName = args.searchName ? normalizePlayerName(args.searchName) : null
   const wantedPosition = args.position?.trim().toUpperCase()
   const positionCounts = new Map<string, number>()
   for (const row of rates) positionCounts.set(row.position, (positionCounts.get(row.position) ?? 0) + 1)
   const selected = rankLeaguePlayerRates(rates).filter((row) =>
     (!args.rosterIds || rosterKeys.has(row.playerId)) && (!wantedIds || wantedIds.has(row.playerId)) &&
-    (wantedName == null || normalizePlayerName(row.playerName) === wantedName) &&
+    (namedRosterKeys ? namedRosterKeys.has(row.playerId) : wantedName == null || normalizePlayerName(row.playerName) === wantedName) &&
     (!searchName || normalizePlayerName(row.playerName).includes(searchName)) &&
     (!wantedPosition || wantedPosition === 'ALL' || row.position === wantedPosition),
   ).slice(0, Math.max(1, Math.min(args.rosterIds?.length ?? args.playerIds?.length ?? 200, args.limit ?? 100)))
