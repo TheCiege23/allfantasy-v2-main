@@ -1,4 +1,5 @@
 import { isCanonicalLeagueRules, renderLeagueRules } from './leagueRulesText'
+import { isImportAssertions, renderImportAssertions } from './importAssertionsText'
 import type { DecisionOsGroundingPacket, GroundedSlice } from './packet'
 
 /**
@@ -107,6 +108,12 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
    * Chimmy guessed PPR, the trade deadline and the FAAB budget (2026-11-16 re-score item 5).
    */
   if (isCanonicalLeagueRules(value)) return renderLeagueRules(value)
+
+  /*
+   * The import assertions, field by field. Same reason as the rules above: through `renderObject` the 8-row cap
+   * kept the two timestamps and cut parity, coverage and the incomplete scopes (2026-11-20 re-score push).
+   */
+  if (isImportAssertions(value)) return renderImportAssertions(value)
 
   /*
    * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
