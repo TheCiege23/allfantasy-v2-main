@@ -7,6 +7,7 @@ import { loadRetentionStats } from '@/lib/billing/retentionStats'
 import type { RetentionStats } from '@/lib/billing/retention'
 import { loadProWeekStats, type ProWeekStats } from '@/lib/referral/proWeekStats'
 import { summarizeGrowth, type GrowthEvent, type GrowthEventNames, type GrowthSummary } from './growthRevenue'
+import { EXCLUDE_STORE_TEST_SUBSCRIPTIONS } from '@/lib/monetization/storeTestSubscriptions'
 
 /**
  * The data behind /admin/growth (counting rules in `./growthRevenue.ts`). Read-only. Each section is read
@@ -76,7 +77,7 @@ export async function getGrowthRevenueReport(opts: { days?: number; now?: Date; 
         COUNT(DISTINCT "sessionId") FILTER (WHERE "createdAt" < ${from}) AS before
       FROM "AnalyticsEvent"
       WHERE event = ${NAMES.landing} AND "createdAt" >= ${prevFrom} AND "createdAt" < ${now} AND "sessionId" IS NOT NULL`,
-    db.userSubscription.findMany({ select: { status: true, source: true, sku: true, plan: { select: { code: true } } } }),
+    db.userSubscription.findMany({ where: EXCLUDE_STORE_TEST_SUBSCRIPTIONS, select: { status: true, source: true, sku: true, plan: { select: { code: true } } } }),
     loadRetentionStats(db as never, now, days),
     loadProWeekStats(db as never, now),
   ])

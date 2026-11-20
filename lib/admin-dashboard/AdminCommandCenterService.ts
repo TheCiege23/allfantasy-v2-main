@@ -37,6 +37,7 @@ import {
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
 import { describeMrrEstimate, estimateMrr, formatUsdCents } from "@/lib/monetization/mrrEstimate"
+import { EXCLUDE_STORE_TEST_SUBSCRIPTIONS, EXCLUDE_STORE_TEST_SUBSCRIPTIONS_SQL } from "@/lib/monetization/storeTestSubscriptions"
 import { describeProWeekStats, loadProWeekStats, type ProWeekStats } from "@/lib/referral/proWeekStats"
 import { describeRetention, loadRetentionStats } from "@/lib/billing/retentionStats"
 import type { RetentionStats } from "@/lib/billing/retention"
@@ -413,6 +414,7 @@ async function countActiveSubscriberUsers(): Promise<number> {
     SELECT COUNT(DISTINCT "userId") AS count
     FROM "user_subscriptions"
     WHERE "status" IN ('active', 'trialing', 'past_due')
+      AND ${EXCLUDE_STORE_TEST_SUBSCRIPTIONS_SQL}
   `
   return Number(rows[0]?.count ?? 0)
 }
@@ -736,6 +738,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     countActiveSubscriberUsers(),
     countAdminUsers(),
     prisma.userSubscription.findMany({
+      // Apple sandbox / App Review purchases are not subscribers: lib/monetization/storeTestSubscriptions.ts
+      where: EXCLUDE_STORE_TEST_SUBSCRIPTIONS,
       select: {
         status: true,
         sku: true,
@@ -745,7 +749,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       },
     }),
     prisma.userSubscription.count({
-      where: { status: { in: FAILED_OR_CANCELED_STATUSES } },
+      where: { status: { in: FAILED_OR_CANCELED_STATUSES }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS },
     }),
     prisma.bracketPayment.count({ where: { status: { in: ["completed", "paid", "succeeded"] } } }),
     prisma.bracketPayment.aggregate({
@@ -869,8 +873,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: today } } }).catch(() => 0),
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
     // ── Subscription velocity ────────────────────────────────────────────────
-    prisma.userSubscription.count({ where: { createdAt: { gte: today } } }),
-    prisma.userSubscription.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.userSubscription.count({ where: { createdAt: { gte: today }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS } }),
+    prisma.userSubscription.count({ where: { createdAt: { gte: sevenDaysAgo }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS } }),
     // ── Revenue breakdown ────────────────────────────────────────────────────
     prisma.bracketPayment.aggregate({
       where: { status: { in: ["completed", "paid", "succeeded"] }, createdAt: { gte: today } },
@@ -904,7 +908,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       where: { status: { in: ["completed", "paid", "succeeded"] }, createdAt: { gte: sevenHoursAgo } },
       _sum: { amountCents: true },
     }),
-    prisma.userSubscription.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
+    prisma.userSubscription.count({ where: { createdAt: { gte: sevenHoursAgo }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS } }),
     prisma.tokenLedger.aggregate({
       where: { tokenDelta: { gt: 0 }, createdAt: { gte: sevenHoursAgo } },
       _sum: { tokenDelta: true },
