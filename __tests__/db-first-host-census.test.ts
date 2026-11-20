@@ -87,6 +87,7 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'request-origin', why: 'NBA website used only as Origin and Referer headers; official JSON is fetched from cdn.nba.com', test: /^www\.nba\.com$/i },
   { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
   { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
   { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
