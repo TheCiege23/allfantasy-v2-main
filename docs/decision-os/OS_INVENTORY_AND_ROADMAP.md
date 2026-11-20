@@ -203,7 +203,7 @@ only, like every mark here: production tables were not read.
 | Manager Psychology (facts) | ~75 | ~90 | Packet ⚠→✅ and Chimmy ⚠→✅: leaguemates' records in the packet, Competitive Edge only |
 | Lineup | ~75 | ~86 | Chimmy ⚠→✅: My Team's best lineup in every sport that has one, and in the packet. Kernel ⚠ stays |
 | Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
-| Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
+| Draft | ~57 | ~93 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed ⚠→✅: the engine reads its rules through Draft OS (60 s); Cron ⚠→n/a (a 60 s entry is warm only while a draft runs, as League OS). Engine ⚠ stays (no outcome stage) |
 | Commissioner | ~52 | ~85 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag. Cron, User ⚠ stay |
 | Decision OS hub | ~50 | ~86 | Serialization, operability, the learning loop, routing and assembly ⚠→✅ — see the hub, learning-loop and routing notes below. Multi-model stays ❌ by the owner's decision |
 
@@ -312,6 +312,19 @@ The pick decision gets 1,500 ms there (DRAFT_BOARD_PICK_BUDGET_MS) instead of 2,
 first-wave deadline; past it the board comes without the pick, which is that builder's existing honest fallback, and
 the tool still runs the full budget. Not asked for from inside the draft room, which already hands the loop the same
 board. "No draft session" is stated as a fact; a failed read is a gap; a late read is stamped late.
+
+**Draft OS, 2026-11-20 — the feed has a reader (owner's choice of the two Draft builds).** Draft OS cached
+`resolveCanonicalLeagueRules` for six hours for a resolver deleted on 2026-09-06; a cron warmed it until the owner retired
+that warm on 2026-11-17, leaving a module with no reader and no writer. Meanwhile the draft engine assembled its own
+rules on every call — the IDP lookup and the roster template, on every poll of a live draft. Draft OS now caches exactly
+those rules (`DraftRosterRules`: template slots, IDP, superflex / 2QB, scoring format, TE premium), derived by the one
+function that computed them inline (`deriveDraftRosterRules`), for 60 seconds, and `buildDraftDecisionContext` and the
+queue reorder read them through `readDraftRosterRules`, which falls back to the same derivation when the cache cannot
+answer. ⚠ Not League OS's ruleset: it carries the raw `starters`, not the roster template the engine counts, and for a
+native football redraft league fills `starters` from the saved layout — a second derivation that would disagree. ⚠ 60 s,
+not 6 h: a commissioner editing roster slots minutes before the draft is seen within a minute. Still never cached: the
+draft state and the available pool, which change on every pick. Feed ⚠ → ✅; Cron ⚠ → n/a; Draft ~79 → ~93. The engine
+still has no outcome stage (graded only by `scripts/draft-backtest.ts --recorded`) — the one Draft axis left.
 
 **Commissioner OS, 2026-11-20 — league health reads through the domain-OS kernel.** It was the one Decision OS
 decision with no maintained facts: Chimmy's league-health slice rebuilt the hub's whole snapshot (rosters, seven days of
