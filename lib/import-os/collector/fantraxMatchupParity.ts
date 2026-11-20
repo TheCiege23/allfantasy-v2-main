@@ -144,8 +144,17 @@ async function readRosterIdsByTeamName(
   return map.size > 0 ? map : null
 }
 
+/**
+ * The cadence row is per IMPORT (`platformLeagueId`), because that is what the rows are written under.
+ *
+ * 🛑 IT WAS KEYED ON THE FANTRAX LEAGUE ALONE. One Fantrax league imported twice is two snapshots with one
+ * `sourceLeagueId`, so both shared a cadence row: the first wrote its weeks and recorded "synced", and the second
+ * read that row as its own and was never due. Production 2026-11-19: a league's state read `synced, weeksWritten: 10`
+ * while `WeeklyMatchup` held zero rows for its `platformLeagueId`, and its matchup and schedule screens were empty.
+ * Each import costs its own Fantrax read every interval; that is the price of every import having its weeks.
+ */
 function cacheKeyFor(connection: FantraxMatchupConnection): string {
-  return `${CACHE_KEY_PREFIX}:${connection.sourceLeagueId}:${connection.season}`
+  return `${CACHE_KEY_PREFIX}:${connection.sourceLeagueId}:${connection.season}:${connection.platformLeagueId}`
 }
 
 async function recordSyncState(

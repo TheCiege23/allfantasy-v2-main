@@ -263,6 +263,30 @@ describe('enumeration and cadence', () => {
     expect(out.enumerated).toBe(0)
   })
 
+  it('gives every import of one Fantrax league its own weeks and its own cadence row', async () => {
+    // Production 2026-11-19: one Fantrax league, two imports. The first synced; the second shared its cadence row,
+    // was never due, and had no WeeklyMatchup rows — an empty matchup and schedule screen.
+    fantraxLeagueFindMany.mockResolvedValue([
+      { id: 'import-a', sourceLeagueId: 'v2kzedypmm8jp61b', season: 2026, leagueName: 'Cream Bowl' },
+      { id: 'import-b', sourceLeagueId: 'v2kzedypmm8jp61b', season: 2026, leagueName: 'Cream Bowl' },
+    ])
+    leagueFindMany.mockResolvedValue([
+      { platformLeagueId: 'import-a', season: 2026 },
+      { platformLeagueId: 'import-b', season: 2026 },
+    ])
+    // A cadence row written earlier in the run is read back as "not due", as the real table would.
+    const written = new Set<string>()
+    cacheUpsert.mockImplementation(async (arg: { where: { cacheKey: string } }) => { written.add(arg.where.cacheKey); return {} })
+    cacheFindUnique.mockImplementation(async (arg: { where: { cacheKey: string } }) =>
+      written.has(arg.where.cacheKey) ? { expiresAt: new Date(NOW.getTime() + 60_000) } : null)
+
+    const out = await runFantraxMatchupParity({ now: NOW })
+    expect(out).toMatchObject({ enumerated: 2, synced: 2, notDue: 0 })
+    expect(weeklyCreateMany.mock.calls.map(([arg]) => arg.data[0].leagueId)).toEqual(['import-a', 'import-b'])
+    const cadenceKeys = [...written].filter((key) => key.startsWith('fantrax_matchup_sync:'))
+    expect(cadenceKeys).toEqual(['fantrax_matchup_sync:v2kzedypmm8jp61b:2026:import-a', 'fantrax_matchup_sync:v2kzedypmm8jp61b:2026:import-b'])
+  })
+
   it('does not re-read a league inside its cadence window', async () => {
     cacheFindUnique.mockResolvedValue({ expiresAt: new Date(NOW.getTime() + 60_000) })
     const out = await runFantraxMatchupParity({ now: NOW })
