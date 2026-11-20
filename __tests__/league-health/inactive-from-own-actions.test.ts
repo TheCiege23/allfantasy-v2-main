@@ -25,6 +25,8 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('server-only', () => ({}))
+const record = vi.hoisted(() => vi.fn(async () => 0))
+vi.mock('@/lib/commissioner-hub/inactiveFlagLedger', () => ({ recordInactiveFlags: record }))
 vi.mock('@/lib/prisma', () => {
   const g = (rows: () => unknown[]) => ({ groupBy: async () => rows() })
   return {
@@ -117,6 +119,13 @@ describe('the commissioner view of a native league', () => {
     expect(out.inactiveCount).toBe(1)
   })
 
+  it('records the inactive stretches it shows, so the flag can be graded', async () => {
+    h.saves = [{ rosterId: 'r1', actorUserId: 'u1', _max: { createdAt: ago(20) } }]
+    record.mockClear()
+    const out = await getLeagueManagerHealth('L1')
+    expect(record).toHaveBeenCalledWith('L1', out.rows)
+  })
+
   it('a manager with nothing on record is not called inactive', async () => {
     const out = await getLeagueManagerHealth('L1')
     for (const r of out.rows) {
@@ -129,10 +138,13 @@ describe('the commissioner view of a native league', () => {
     h.platform = 'sleeper'
     h.saves = [{ rosterId: 'r1', actorUserId: 'u1', _max: { createdAt: ago(20) } }]
     h.rosters = h.rosters.map((r) => (r.id === 'r1' ? { ...r, updatedAt: ago(30) } : r))
+    record.mockClear()
     const out = await getLeagueManagerHealth('L1')
     const r1 = out.rows.find((r) => r.rosterId === 'r1')!
     expect(r1.status).toBe('inactive')
     expect(Math.round((Date.now() - Date.parse(r1.lastActionAt!)) / DAY)).toBe(30)
+    // An imported league's flag reads the sync, so it is never recorded for grading.
+    expect(record).not.toHaveBeenCalled()
   })
 })
 

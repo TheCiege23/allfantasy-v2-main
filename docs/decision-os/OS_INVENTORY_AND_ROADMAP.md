@@ -217,8 +217,14 @@ taxi rules and Inactive Manager Mode's autopilot — so an absent manager looked
 managed their team. Native leagues now use `lib/commissioner-hub/ownerLastAction.ts`: the manager's own lineup
 saves, the claims they filed (autopilot's, filed under the owner's id with `metadata.source = 'chimmy_autopilot'`,
 excluded), redraft claims and the trades they proposed. Nothing on record reads as not inactive, never inactive.
-Imported leagues keep the synced timestamp. ⚠ Grading the flag is still to do: it is not stored when shown, and
-native leagues have no current-week column for the advice table, so it needs its own small table (a migration).
+Imported leagues keep the synced timestamp. The hub headline, the console page's tile and the hand-over now read
+the same clock.
+
+**…and graded (2026-11-20, migration `20261120030000_commissioner_inactive_flags`).** Each stretch a native manager
+is shown as inactive is recorded once (`lib/commissioner-hub/inactiveFlagLedger.ts`, keyed by the last action it
+was idle from) and graded two weeks on by the outcome rebuild: did they do something of their own again? The share
+that stayed away is shown under a native league's manager table from 30 graded flags. Raw SQL, so a missing table
+is "nothing recorded" until the migration is applied.
 
 **Waiver OS, 2026-11-20 — the engine runs on a schedule and its confidence learns from its own claims.** The
 engine ran only when somebody opened the panel or asked Chimmy. The alert sweep now runs it weekly for every league

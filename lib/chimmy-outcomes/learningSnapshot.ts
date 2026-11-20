@@ -26,6 +26,7 @@ import { confidenceLevelFor, type ChimmyConfidenceLevel, type ChimmyTrackRecord 
 import type { ChimmyAnswerType } from '@/lib/chimmy-chat/response-contract'
 import { decayWeight, shrunkWeightedRate } from './shrinkage'
 import type { LedgerSnapshot } from './ledgerRecord'
+import type { InactiveFlagTally } from '@/lib/commissioner-hub/inactiveFlagView'
 
 const LEARNING_SNAPSHOT_VERSION = 1
 /** How far back advice is resolved: a full NFL regular season fits inside it. */
@@ -90,6 +91,11 @@ export type AdviceLearningSnapshot = {
    * then has none, and a rebuild that could not read the schedule writes none. See `ledgerRecord.ts`.
    */
   ledger?: LedgerSnapshot
+  /**
+   * The commissioner's "inactive manager" flag, graded two weeks on (`lib/commissioner-hub/inactiveFlagLedger.ts`,
+   * 2026-11-20). Optional: absent before then, and while its table's migration is not applied.
+   */
+  inactiveFlags?: InactiveFlagTally
 }
 
 /** Graded calls: right, wrong, and `same` (within a point — neither, and never in a rate). */

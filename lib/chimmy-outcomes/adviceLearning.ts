@@ -8,6 +8,7 @@ import { resolveChimmyAdviceOutcomes, type ReceiptsLeague } from '@/lib/core-app
 import { buildAdviceLearningSnapshot, LEARNING_WINDOW_DAYS, type AdviceOutcome } from './learningSnapshot'
 import { ADVICE_LEARNING_CACHE_KEY, readAdviceLearningSnapshot, resetAdviceLearningMemo } from './learningStore'
 import { recomputeLedgerRecord } from './ledgerGrading'
+import { gradeInactiveFlags } from '@/lib/commissioner-hub/inactiveFlagLedger'
 
 export { ADVICE_LEARNING_CACHE_KEY, readAdviceLearningSnapshot }
 
@@ -49,6 +50,8 @@ export type AdviceLearningRun =
       ms: number
       /** AllFantasy's own calls (ledgerGrading.ts): graded, or why not. */
       ledger: 'graded' | 'no_schedule' | 'error'
+      /** The commissioner "inactive" flag's grading: done, its table not migrated yet, or failed. */
+      inactiveFlags: 'graded' | 'no_table' | 'error'
     }
 
 export async function recomputeAdviceLearning(
@@ -122,6 +125,15 @@ export async function recomputeAdviceLearning(
   } catch {
     ledger = 'error'
   }
+  // The commissioner's "inactive" flag, graded two weeks on. Same row, same isolation: a failure stays here.
+  let inactiveFlags: 'graded' | 'no_table' | 'error' = 'error'
+  try {
+    const tally = await gradeInactiveFlags(now)
+    if (tally) snapshot.inactiveFlags = tally
+    inactiveFlags = tally ? 'graded' : 'no_table'
+  } catch {
+    inactiveFlags = 'error'
+  }
   await prisma.sportsDataCache.upsert({
     where: { cacheKey: ADVICE_LEARNING_CACHE_KEY },
     create: { cacheKey: ADVICE_LEARNING_CACHE_KEY, data: snapshot as never, expiresAt: new Date(now.getTime() + SNAPSHOT_TTL_MS) },
@@ -138,6 +150,7 @@ export async function recomputeAdviceLearning(
     complete,
     ms: Date.now() - started,
     ledger,
+    inactiveFlags,
   }
 }
 

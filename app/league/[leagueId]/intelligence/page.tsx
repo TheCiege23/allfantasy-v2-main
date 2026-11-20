@@ -35,6 +35,7 @@ import {
   withOwnerActionClock,
 } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getRivalryBoard } from '@/lib/rivalry-engine/rivalryBoard'
 import { CommissionerIntelligenceHub } from '@/components/commissioner-intelligence/CommissionerIntelligenceHub'
@@ -293,6 +294,7 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
           signals={signals}
           interventions={interventions}
           managers={managerHealth.rows}
+          nativeLeague={isNativePlatform(league.platform)}
           rivalries={rivalryBoard.rows}
           seasonsCovered={rivalryBoard.seasonsCovered}
           audit={auditRows.map((a) => ({
