@@ -205,10 +205,11 @@ export function nflWeekForDate(now: Date): number {
  * 🛑 A CAP, NOT A WINDOW, AND THE ASYMMETRY WITH TRANSACTIONS IS THE WHOLE POINT. A transaction
  * is an EVENT: last week's trades are already stored, so the live path only wants the weeks around
  * now, and `maxTransactionWeeks` (weeks 1..N, anchored at week 1 forever) was the wrong shape.
- * A matchup is a SEASON RECORD: `bootstrapLeagueFromNormalizedImport` upserts `TeamPerformance`
- * from every week it is given, so dropping a PAST week would stop refreshing a real score and
- * nothing else would fix it — `SleeperHistoricalMatchupSyncService` has no scheduled caller. Past
- * weeks must stay. Only the unplayed future is waste, and "1..current+1" says exactly that.
+ * A matchup is a SEASON RECORD: `bootstrapLeagueFromNormalizedImport` writes `TeamPerformance`
+ * and the current season's `dw_matchup_facts` from every week it is given, so dropping a PAST week
+ * would stop refreshing a real score. The only other writer, the scheduled history refresh
+ * (`/api/cron/sleeper-historical-refresh`), takes days to lap every league. Past weeks must stay.
+ * Only the unplayed future is waste, and "1..current+1" says exactly that.
  *
  * ⚠ WHY THE FUTURE IS PURE WASTE, MEASURED ON PRODUCTION 2026-09-05. Every 2026 row in
  * `team_performances` is zero-point — all 18 weeks, ~2,974 rows each, avg 0.0. Sleeper reports

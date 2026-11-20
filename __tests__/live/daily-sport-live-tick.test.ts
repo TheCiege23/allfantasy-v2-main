@@ -37,8 +37,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: async (run: (tx: unknown) => Promise<unknown>) => run({
       $executeRaw: vi.fn(async () => 0),
+      sportsGame: { upsert: vi.fn(async () => ({})) },
       playerGameStat: {
         findMany: async () => [],
+        count: async () => 0,
         upsert: (...a: unknown[]) => h.upsert(...a),
       },
     }),

@@ -205,7 +205,7 @@ only, like every mark here: production tables were not read.
 | Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
 | Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
 | Commissioner | ~52 | ~85 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag. Cron, User ⚠ stay |
-| Decision OS hub | ~50 | ~71 | Serialization, operability and the learning loop ⚠→✅ — see the hub and learning-loop notes below |
+| Decision OS hub | ~50 | ~86 | Serialization, operability, the learning loop, routing and assembly ⚠→✅ — see the hub, learning-loop and routing notes below. Multi-model stays ❌ by the owner's decision |
 
 ⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
 commits after it.
@@ -224,9 +224,32 @@ decision to retire three-brain) · operability ⚠→✅.
 - **Operability ✅.** Every packet slice has its own kill switch (`flags.ts`), the five the +10% push added included;
   killed feeds are listed on the packet (`meta.killedFeeds`); every read has its own deadline and a late packet logs
   its slowest slices by name.
-- Still ⚠/❌: routing and assembly (intent mapping covers each decision domain, but not every slice is intent-aware),
-  the learning loop (graded outcomes move start/sit and waiver confidence only; trade letters and commissioner
-  advice are reported, not applied — by rule), multi-model (retired).
+- Still ⚠/❌ at that point: routing and assembly (intent mapping covers each decision domain, but not every slice is
+  intent-aware), the learning loop (since ✅, below), multi-model (retired). Routing and assembly are ✅ since the
+  routing note below.
+
+**Routing and assembly, 2026-11-20 — ~71 → ~86.** Three changes, each found in the code rather than assumed:
+- **One classification per chat turn** (`classifyChimmyTurn`, `lib/chimmy-orchestration/intent-classifier.ts`). The
+  route classified the message alone for the packet and again, with the last two user turns joined in, for the prompt
+  label and the specialist agent — so on a follow-up ("what about Waddle instead?" after a trade question) the prompt
+  said trade and the packet left out the graded offers. And joining the turns was wrong in itself: the branches are
+  ordered, so "who should I pick up?" then "should I accept Bob's offer?" was a WAIVER turn. Now the current question
+  decides, and the earlier turns only when it names nothing; a rules question stays general. The packet, the label,
+  the agent and the admin proof page read the one result.
+- **The commissioner's activity read follows the same router as the health decision.** It had its own word list
+  (`inactiv`, `pending`, `recent`, `what…happen`), so "which managers are inactive?" got the activity log but never the
+  health decision (the one the inactive-flag record tunes), and "any pending trade offers?" ran the commissioner's log.
+  The classifier's commissioner intent now covers a league's inactive and abandoned managers and its health — a
+  manager or the league must be named, because "is Kupp inactive?" is a player's game status — and both reads follow
+  `want.commissionerHealthDecision`. The word list still serves the older `/api/chimmy` route, which has no router.
+- **What answers the question leads the packet** (`ANSWERING_SLICES_BY_INTENT`, `grounding/serialize.ts`). The packet
+  rendered in one fixed order whatever was asked, so a trade question's graded offers sat behind import state, rules,
+  values and two projection blocks, and a standings question found the table last. The slices the intent calls for
+  now come first, under a line naming them; nothing is dropped or rewritten, a slice that did not render is never
+  named, and with no intent the text is byte-identical to before.
+- ⚠ What this does NOT change: the always-on slices (rules, values, projections, the context engine, league and
+  portfolio intelligence) are still assembled on every turn, by D14 (correctness over speed) — each is bounded by its
+  own deadline, so an irrelevant one costs only itself. Multi-model stays ❌ by the owner's decision.
 
 **Learning loop, 2026-11-20 — the commissioner's inactive warnings learn from the graded flag (owner's choice).** The
 inactive flag is graded two weeks on (`inactiveFlagLedger.ts`); its record now sets how strongly the health decision's

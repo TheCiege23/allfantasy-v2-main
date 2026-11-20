@@ -425,6 +425,12 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
     alphabeticalSort = ls.alphabeticalSort
   }
 
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const settings = league.settings as { draft_rounds?: unknown; survivorGuillotine?: { rosterExpansionState?: unknown } } | null
+    const configuredRounds = Number(settings?.draft_rounds)
+    if (settings?.survivorGuillotine?.rosterExpansionState && Number.isInteger(configuredRounds) && configuredRounds >= 1 && configuredRounds <= 50) rounds = configuredRounds
+  }
+
   const slotOrder = await buildSlotOrderForLeague(leagueId)
 
   session = await (prisma as any).draftSession.create({

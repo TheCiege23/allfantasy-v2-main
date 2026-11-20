@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
-  dynastyBackfillStatus: { findMany: vi.fn() },
+  dynastyBackfillStatus: { findMany: vi.fn(), updateMany: vi.fn() },
   league: { findMany: vi.fn() },
 }))
 const backfill = vi.hoisted(() => ({ syncSleeperHistoricalBackfillAfterImport: vi.fn() }))
@@ -40,6 +40,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = SECRET
   telemetry.outcomes.length = 0
   db.dynastyBackfillStatus.findMany.mockReset()
+  db.dynastyBackfillStatus.updateMany.mockReset().mockResolvedValue({ count: 1 })
   db.league.findMany.mockReset()
   backfill.syncSleeperHistoricalBackfillAfterImport.mockReset()
 

@@ -10,6 +10,7 @@ import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRos
 import { changeAwareWritesEnabled } from '../changeAwareWrites'
 import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
+import { writeCurrentSeasonMatchupFacts } from './currentSeasonMatchupFacts'
 import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
 
 interface SleeperLeagueBootstrapResult {
@@ -507,6 +508,28 @@ export async function bootstrapLeagueFromNormalizedImport(
    */
   const performances = await writeTeamPerformances({ season, rows: performanceRows })
   teamPerformancesCreated = performances.processed
+
+  /*
+   * The same schedule, as head-to-head rows in `dw_matchup_facts`. This is what keeps the season
+   * being played current there on every sync; see `currentSeasonMatchupFacts.ts` for why the
+   * four-hourly history refresh could not. Sleeper only: the other providers' history services key
+   * their rows differently. A failure here never fails the sync.
+   */
+  if (normalized.source.source_provider === 'sleeper') {
+    try {
+      await writeCurrentSeasonMatchupFacts({
+        leagueId,
+        sport: normalized.league.sport,
+        season: normalized.league.season,
+        schedule: normalized.schedule,
+      })
+    } catch (err) {
+      console.error('[bootstrapLeagueFromNormalizedImport] could not refresh current-season matchup facts', {
+        leagueId,
+        error: err instanceof Error ? err.name : 'unknown',
+      })
+    }
+  }
 
   /*
    * 🛑 A TEAM SOMEONE PICKED WITHOUT PROOF NEVER CARRIES THE COMMISSIONER FLAG. The upserts above copy

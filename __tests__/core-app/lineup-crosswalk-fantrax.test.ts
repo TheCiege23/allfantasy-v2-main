@@ -8,7 +8,7 @@ vi.mock('@/lib/player-identity/resolveRosterPlayerIdentities', () => ({
   resolveFantraxIdentities: h.fantrax,
 }))
 
-import { lineupCrosswalkToSleeperIds } from '@/lib/core-app/lineupCrosswalk'
+import { lineupCrosswalkToSleeperIds, lineupRegistryNames } from '@/lib/core-app/lineupCrosswalk'
 
 /**
  * Production 2026-11-20: a Fantrax matchup said "None of the 18 players in this lineup could be identified — we
@@ -36,6 +36,27 @@ describe('lineupCrosswalkToSleeperIds', () => {
     await lineupCrosswalkToSleeperIds('fantrax', 'NCAAF', ['x'])
     expect(h.shared).toHaveBeenNthCalledWith(1, 'espn', 'NFL', ['espn-1'])
     expect(h.shared).toHaveBeenNthCalledWith(2, 'fantrax', 'NCAAF', ['x'])
+    expect(h.fantrax).not.toHaveBeenCalled()
+  })
+})
+
+/** Production 2026-11-20: after the bridge, "2 of 18 players in this lineup could not be identified" - named in the registry, with no Sleeper id. */
+describe('lineupRegistryNames', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('names a Fantrax NFL starter from the registry, and only one the registry names', async () => {
+    h.fantrax.mockResolvedValue(new Map([
+      ['05rlf', { name: 'Rookie Back', position: 'RB', team: 'LV', sleeperId: null }],
+      ['06zzz', { name: null, position: 'WR', team: 'KC', sleeperId: null }],
+    ]))
+    const out = await lineupRegistryNames('fantrax', 'NFL', ['05rlf', '06zzz'])
+    expect([...out]).toEqual([['05rlf', { name: 'Rookie Back', position: 'RB', team: 'LV' }]])
+  })
+
+  it('reads nothing for another platform, another sport, or no ids', async () => {
+    expect((await lineupRegistryNames('espn', 'NFL', ['1'])).size).toBe(0)
+    expect((await lineupRegistryNames('fantrax', 'NCAAF', ['1'])).size).toBe(0)
+    expect((await lineupRegistryNames('fantrax', 'NFL', [])).size).toBe(0)
     expect(h.fantrax).not.toHaveBeenCalled()
   })
 })
