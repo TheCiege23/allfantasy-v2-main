@@ -21,9 +21,11 @@ const cacheUpsert = vi.fn()
 const weeklyFindMany = vi.fn()
 const weeklyDeleteMany = vi.fn()
 const weeklyCreateMany = vi.fn()
+const executeRaw = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $executeRaw: (...a: unknown[]) => executeRaw(...a),
     fantraxLeague: { findMany: (...a: unknown[]) => fantraxLeagueFindMany(...a) },
     league: { findMany: (...a: unknown[]) => leagueFindMany(...a) },
     leagueTeam: { findMany: (...a: unknown[]) => leagueTeamFindMany(...a) },
@@ -84,6 +86,7 @@ beforeEach(() => {
   weeklyFindMany.mockResolvedValue([])
   weeklyDeleteMany.mockResolvedValue({ count: 0 })
   weeklyCreateMany.mockResolvedValue({ count: 2 })
+  executeRaw.mockResolvedValue(0)
   getFantraxLeagueInfo.mockResolvedValue({ ok: true, data: { leagueName: 'Cream Bowl' } })
   fetchFantraxScheduleWithScores.mockResolvedValue({
     rows: [fixture()],
@@ -153,7 +156,7 @@ describe('writing a scored Fantrax week', () => {
  * treat `pointsFor === 0 && pointsAgainst === 0` as unplayed, so a FUTURE
  * fixture written as 0-0 is indistinguishable from a real result of zero.
  */
-describe('unplayed fixtures are not written at all', () => {
+describe('unplayed fixtures: past ones are never written, coming ones are', () => {
   it('skips a league whose season has not started, and says so', async () => {
     fetchFantraxScheduleWithScores.mockResolvedValue({
       rows: [fixture({ awayScore: null, homeScore: null, played: false })],
@@ -170,23 +173,67 @@ describe('unplayed fixtures are not written at all', () => {
     expect(weeklyCreateMany).not.toHaveBeenCalled()
   })
 
-  it('writes the played week and leaves the unplayed one absent', async () => {
+  const unplayed = { awayScore: null, homeScore: null, played: false }
+  const written = () =>
+    weeklyCreateMany.mock.calls.map((c) => {
+      const rows = (c[0] as { data: Array<{ week: number; pointsFor: number; pointsAgainst: number }> }).data
+      return { week: rows[0].week, rows: rows.length, points: rows.map((r) => [r.pointsFor, r.pointsAgainst]) }
+    })
+
+  /*
+   * Production 2026-11-20, three games a week: week 11 listed 47 of 51 games — the rest were between teams with
+   * nobody in action yet — and no later week had any. A fixture from the current period on is stored as 0-0,
+   * which readers show as not started; a period that has ended still gets its results only.
+   */
+  it('writes the games still to come, and never an unplayed one from a week that has ended', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
     fetchFantraxScheduleWithScores.mockResolvedValue({
       rows: [
         fixture({ week: 1 }),
-        fixture({ week: 2, awayScore: null, homeScore: null, played: false }),
+        fixture({ week: 2, ...unplayed }), // ended with no result on file: unknown, so absent
+        fixture({ week: 3 }), // this week, one game under way
+        fixture({ week: 3, ...unplayed }), // this week, a second game nobody has started
+        fixture({ week: 4, ...unplayed }), // next week
       ],
-      position: { period: 2, state: 'in_progress', scoredThrough: 2 },
-      periodsRead: 2,
+      position: { period: 3, state: 'in_progress', scoredThrough: 3 },
+      periodsRead: 3,
       periodsFailed: 0,
     })
 
     await runFantraxMatchupParity({ now: NOW })
 
-    const weeks = weeklyCreateMany.mock.calls.map(
-      (c) => (c[0] as { data: Array<{ week: number }> }).data[0].week,
-    )
-    expect(weeks).toEqual([1])
+    expect(written()).toEqual([
+      { week: 1, rows: 2, points: [[118.4, 96.2], [96.2, 118.4]] },
+      { week: 3, rows: 4, points: [[118.4, 96.2], [96.2, 118.4], [0, 0], [0, 0]] },
+      { week: 4, rows: 2, points: [[0, 0], [0, 0]] },
+    ])
+    // The league's own period is saved for the week resolver, so "this week" does not depend on those 0-0 rows.
+    expect(executeRaw).toHaveBeenCalledTimes(1)
+    expect(executeRaw.mock.calls[0].slice(1)).toEqual(expect.arrayContaining([3, '3']))
+  })
+
+  it('keeps results-only for a season that is over and for a calendar longer than 30 periods', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
+    fetchFantraxScheduleWithScores.mockResolvedValue({
+      rows: [fixture({ week: 1 }), fixture({ week: 2, ...unplayed })],
+      position: { period: 2, state: 'complete', scoredThrough: 2 },
+      periodsRead: 2,
+      periodsFailed: 0,
+    })
+    await runFantraxMatchupParity({ now: NOW })
+    expect(written().map((w) => w.week)).toEqual([1])
+
+    weeklyCreateMany.mockClear()
+    cacheFindUnique.mockResolvedValue(null)
+    fetchFantraxScheduleWithScores.mockResolvedValue({
+      rows: [fixture({ week: 1 }), fixture({ week: 2, ...unplayed }), fixture({ week: 31, ...unplayed })],
+      position: { period: 2, state: 'in_progress', scoredThrough: 2 },
+      periodsRead: 2,
+      periodsFailed: 0,
+    })
+    await runFantraxMatchupParity({ now: NOW })
+    expect(written().map((w) => w.week)).toEqual([1])
+    expect(executeRaw).not.toHaveBeenCalled()
   })
 
   /** A genuine scoreless week HAS been played, and must be stored. */

@@ -41,6 +41,7 @@ import { INACTIVE_AFTER_MS } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
+import { recordInactiveFlags } from '@/lib/commissioner-hub/inactiveFlagLedger'
 
 export type ManagerHealthStatus = 'active' | 'at_risk' | 'inactive' | 'unknown'
 
@@ -289,6 +290,10 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
     const bt = b.lastActionAt ? Date.parse(b.lastActionAt) : 0
     return at - bt
   })
+
+  // Native only: record each inactive stretch shown, so the flag can be graded two weeks on. Best effort and
+  // not awaited — the table never waits on, or fails for, its own record.
+  if (native) void recordInactiveFlags(leagueId, rows).catch(() => {})
 
   return {
     leagueId,

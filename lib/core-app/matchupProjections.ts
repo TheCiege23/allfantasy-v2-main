@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds } from './lineupCrosswalk'
 import { isAtRisk, isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
@@ -207,7 +208,7 @@ export async function loadSideProjections(args: {
    * translated, and `lineup[].playerId` below stays exactly what came off the
    * roster.
    */
-  const playerCrosswalk = await crosswalkToSleeperIds(
+  const playerCrosswalk = await lineupCrosswalkToSleeperIds(
     String(league?.platform ?? ''),
     String(league?.sport ?? 'NFL'),
     rosterIds,

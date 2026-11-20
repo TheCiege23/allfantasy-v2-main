@@ -340,3 +340,20 @@ MID or FWD), fantasyPoints, appearances, and clubMatches over the same period. I
 rostered players and free agents. Pass the league ID and file for a dry run, then append --apply
 to save. The grader checks the current scoring digest, season and roster coverage on every read.
 The ordinary partial projection remains the fallback while a matching export is unavailable.
+
+## F-18 — College school codes are Fantrax's own, not ours — **CAPTURED 2026-11-19**
+
+`getPlayerIds?sport=NCAAB` and `?sport=CFB` are now captured (`fixtures/ncaab-player-ids.json`,
+`fixtures/cfb-player-ids.json`) via `scripts/probe.sh --player-ids <NCAAB|CFB>`: one sample row per team
+code plus the row and position counts, so the fixtures record each sport's whole school-code vocabulary.
+Same id-keyed `{ fantraxId, name: "Last, First", team, position }` shape as the pro maps; every sport also
+carries team rows (`position: "Tm"` and, in CFB, `DST`/`ST`/`TmD`/`TO`/`TQB`/`TK`).
+
+**The codes are Fantrax's, mixed case (`AzSt`, `ChaSo`, `PRINC`, `KAN`, `MIA-O`).** For NCAAB, 191 of the
+365 school codes match no `SportsTeam.shortName` (PRIN, KU, M-OH…), which is why 2,805 players at those
+schools never linked. `ncaabFantraxIdentityPlan.ts` now learns such a code only from three or more already-linked
+players who agree on the school, as the NCAAF matcher already did (124 CFB codes verified that way).
+
+**CFB positions are Fantrax's labels, not the registry's.** CB/S vs DB, OLB vs LB, DE vs EDGE, DL vs DE all
+occur for one player at one school; `ncaafFantraxIdentityPlan.ts` compares position GROUPS. Offensive
+labels stay exact.

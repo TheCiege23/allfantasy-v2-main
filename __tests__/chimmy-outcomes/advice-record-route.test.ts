@@ -35,8 +35,15 @@ describe('GET /api/advice-record', () => {
 
   it('no snapshot, or none with a ledger, is a null record — not an error', async () => {
     m.read.mockResolvedValue(null)
-    expect(await (await GET()).json()).toEqual({ record: null })
+    expect(await (await GET()).json()).toEqual({ record: null, inactiveFlags: null })
     m.read.mockResolvedValue({ computedAt: 'x' })
-    expect(await (await GET()).json()).toEqual({ record: null })
+    expect(await (await GET()).json()).toEqual({ record: null, inactiveFlags: null })
+  })
+
+  it("carries the commissioner inactive flag's record: counts, with a rate only from 30 graded", async () => {
+    m.read.mockResolvedValue({ computedAt: 'x', inactiveFlags: { graded: 40, stayedAway: 30, pending: 6 } })
+    expect((await (await GET()).json()).inactiveFlags).toEqual({ graded: 40, stayedAway: 30, ratePct: 75 })
+    m.read.mockResolvedValue({ computedAt: 'x', inactiveFlags: { graded: 12, stayedAway: 9, pending: 0 } })
+    expect((await (await GET()).json()).inactiveFlags).toEqual({ graded: 12, stayedAway: 9, ratePct: null })
   })
 })
