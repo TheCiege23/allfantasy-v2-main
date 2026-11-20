@@ -11,6 +11,7 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { loadOwnerLastActions, type OwnerActionRoster } from '@/lib/commissioner-hub/ownerLastAction'
 // From the module rather than the behavioral barrel: the barrel re-exports the whole
 // subsystem and this file needs exactly one provider from it.
 import { realDataProvider } from '@/lib/decision-os/behavioral/api/real-data-provider'
@@ -186,6 +187,9 @@ type CountMap = Map<string, number>
 type RosterHealthRow = {
   id?: string | null
   platformUserId?: string | null
+  /** The manager running the team when it is not `platformUserId` (multi-team managers). */
+  managerUserId?: string | null
+  redraftRosterId?: string | null
   playerData?: unknown
   updatedAt?: Date | string | null
   settings?: unknown
@@ -1027,6 +1031,42 @@ export async function loadCommissionerHealthCounts(
   return out
 }
 
+/** Every roster of a NATIVE league, in the shape `loadOwnerLastActions` reads. */
+export function nativeActionRosters(leagues: readonly LeagueHealthRow[]): OwnerActionRoster[] {
+  return leagues
+    .filter((l) => isNativePlatform(l.platform))
+    .flatMap((l) =>
+      (Array.isArray(l.rosters) ? l.rosters : []).map((r) => ({
+        id: String(r.id ?? ''),
+        leagueId: l.id,
+        platformUserId: r.platformUserId ?? null,
+        managerUserId: r.managerUserId ?? null,
+        redraftRosterId: r.redraftRosterId ?? null,
+      })),
+    )
+    .filter((r) => r.id)
+}
+
+/**
+ * 🛑 NATIVE LEAGUES COUNT INACTIVE FROM THE MANAGER'S OWN LAST ACTION, NOT `Roster.updatedAt` (2026-11-20).
+ * Every system write moves `updatedAt` (autopilot included), so an absent manager kept counting as active.
+ * The per-manager table (`managerHealth.ts`) reads the same clock — `INACTIVE_AFTER_MS` says the two must
+ * never disagree. PURE: `updatedAt` is replaced on a copy of each native roster; null means "no action on
+ * record", which `isRosterInactive` treats as not inactive. Imported leagues, and a failed read (`ownAction`
+ * null), pass through unchanged.
+ */
+export function withOwnerActionClock(
+  leagues: readonly LeagueHealthRow[],
+  ownAction: ReadonlyMap<string, Date | null> | null,
+): LeagueHealthRow[] {
+  if (!ownAction) return [...leagues]
+  return leagues.map((league) => {
+    if (!isNativePlatform(league.platform)) return league
+    const rosters = (Array.isArray(league.rosters) ? league.rosters : []).map((r) => ({ ...r, updatedAt: ownAction.get(String(r.id ?? '')) ?? null }))
+    return { ...league, rosters }
+  })
+}
+
 export async function getCommissionerHubHealthForUser(
   userId: string,
   leagues: UserLeague[],
@@ -1089,6 +1129,8 @@ export async function getCommissionerHubHealthForUser(
             select: {
               id: true,
               platformUserId: true,
+              managerUserId: true,
+              redraftRosterId: true,
               playerData: true,
               updatedAt: true,
               settings: true,
@@ -1105,8 +1147,10 @@ export async function getCommissionerHubHealthForUser(
         : Promise.resolve(null),
     ])
 
+    const leagueRows: LeagueHealthRow[] = Array.isArray(dbLeagues) ? dbLeagues : []
+    const ownAction = await loadOwnerLastActions(nativeActionRosters(leagueRows)).catch(() => null)
     const dbById = new Map<string, LeagueHealthRow>(
-      (Array.isArray(dbLeagues) ? dbLeagues : []).map((league: LeagueHealthRow) => [league.id, league]),
+      withOwnerActionClock(leagueRows, ownAction).map((league) => [league.id, league]),
     )
     const nflCoverageByLeague = new Map<string, CanonicalNflDataCoverage | null>()
     await Promise.all(
