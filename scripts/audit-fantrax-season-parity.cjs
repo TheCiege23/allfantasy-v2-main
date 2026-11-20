@@ -123,6 +123,29 @@ async function exerciseBracket(seasonId, expected, divisionTop, reseed) {
   }
   return {pass:false,qualification,reason:'round limit'}
 }
+async function tryNativeConversion(leagueId,teamCount,cookie) {
+  const {createStateFromImportedLeague}=require('../lib/create-league-v2/import-template.ts')
+  const {submitCreateLeagueV2}=require('../lib/create-league-v2/submit.ts')
+  const source=await prisma.league.findUniqueOrThrow({where:{id:leagueId},select:{
+    name:true,sport:true,leagueType:true,leagueVariant:true,scoringPresetId:true,leagueSettings:{select:{draftType:true}},
+  }})
+  const state=createStateFromImportedLeague({...source,leagueSize:teamCount,draftType:source.leagueSettings?.draftType})
+  const selection={sourceType:source.leagueType,selectedType:state.leagueType,idp:state.idpSelected,teamCount:state.teamCount}
+  if(state.teamCount!==teamCount)return {...selection,created:false,reason:'Wizard cannot preserve the source team count'}
+  const restore=global.fetch
+  try {
+    global.fetch=async(path,options)=>{
+      if(path!=='/api/leagues')throw Error('Unexpected wizard endpoint')
+      return publicFetch(stagingOrigin+path,{...options,redirect:'error',headers:{...options.headers,cookie},signal:AbortSignal.timeout(240000)})
+    }
+    // Keep the source lineup frequency. The audit cannot consent to a commissioner rule change.
+    const result=await submitCreateLeagueV2(state,leagueId,false)
+    if(!result.ok || !result.leagueId)return {...selection,created:false,reason:result.error || 'Missing league ID'}
+    const native=await prisma.league.findUniqueOrThrow({where:{id:result.leagueId},select:{leagueSize:true,leagueType:true,playoffTeams:true,playoffStartWeek:true,settings:true}})
+    return {...selection,created:true,nativeType:native.leagueType,franchises:native.leagueSize,field:native.playoffTeams,
+      start:native.playoffStartWeek,rosterCopies:native.settings?.importCarryover?.playerCount,warning:result.warning || null}
+  }finally{global.fetch=restore}
+}
 async function runCase(userId,sport,id,index,runId,cookie) {
   const source=await capture(id), key='qa'+runId+String(index).padStart(6,'0')
   const replay=replayTransport(source,sport,key)
@@ -270,6 +293,8 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
       games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
       facts.length===games && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
+    try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie)}
+    catch(error){evidence.native={created:false,reason:String(error.message).slice(0,260)}}
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
     return evidence.pass
   } finally {
