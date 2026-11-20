@@ -272,8 +272,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
             }`}
           >
             <p>
-              <span className="font-semibold text-white">Status:</span> {session.status}
-              {locked ? ' — editing disabled' : ''}
+              <span className="font-semibold text-white">Status:</span> {locked ? 'Locked' : 'Open'}
+              {locked ? ' — editing disabled' : ` · ${selected.size} of ${maxKeepers} selected`}
             </p>
             <p className="mt-1">
               Deadline: {new Date(session.deadline).toLocaleString()}
@@ -294,7 +294,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
 
           <div className="space-y-2">
             {players.length === 0 ? (
-              <p className="text-[12px] text-white/45">No players on your roster for this season yet.</p>
+              // The roster arrives after the window does: say "loading" until it has, not that there is no team.
+              <p className="text-[12px] text-white/45">{loading ? 'Loading your roster…' : 'No players on your roster for this season yet.'}</p>
             ) : (
               players.map((p) => {
                 const e = eligByPlayer.get(p.playerId)
