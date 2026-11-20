@@ -898,7 +898,7 @@ async function buildMatchupData(
   /* A Fantrax starter the crosswalk could not translate is still named, from the registry (see lineupCrosswalk.ts). */
   const untranslatedIds = scoreIds.filter((id) => !playerCrosswalk.has(id))
   const registryNames = untranslatedIds.length
-    ? await timer.time('registryNames', lineupRegistryNames(league.platform, sport, untranslatedIds).catch(
+    ? await timer.time('registryNames', lineupRegistryNames(league.platform, sport, untranslatedIds, platformLeagueId).catch(
         () => new Map<string, LineupRegistryName>(),
       ))
     : new Map<string, LineupRegistryName>()
