@@ -9,8 +9,12 @@
  *
  * `recordChoppedReleases` writes the rows at the chop, from the chopped team's roster while it still
  * holds its players. `claimedPlayerIds` answers "has someone picked him up since" at read time, from
- * the rosters themselves: nothing updates a row when a claim lands, and a status that is not kept
- * current is worse than none.
+ * the rosters themselves, which is the answer the home and the war room use.
+ *
+ * `recordChopReleaseClaim` stamps the row when a waiver claim on a released player is awarded: who
+ * won him and for how much. The winning bid had no writer either, so the waiver recap's "top splash"
+ * and the trade notes' read of what FAAB buys were always empty (walked locally 2026-11-20: a $37
+ * award left the row `pending` with no bid). It is a record of the award, not the availability check.
  */
 import { prisma } from '@/lib/prisma'
 
@@ -71,4 +75,31 @@ export async function claimedPlayerIds(
     select: { playerId: true },
   })
   return new Set(rows.map((r) => r.playerId))
+}
+
+/**
+ * A waiver claim on a chopped team's player was awarded: stamp his latest unclaimed release row with
+ * the winner and the bid. `rosterId` is the league roster (`Roster.id`) the claim was filed for.
+ * Returns whether a row was stamped; a player who was never released by a chop stamps nothing.
+ */
+export async function recordChopReleaseClaim(
+  input: { leagueId: string; playerId: string; rosterId: string; winningBid: number | null; at?: Date },
+  db: Pick<typeof prisma, 'guillotineWaiverRelease'> = prisma,
+): Promise<boolean> {
+  const row = await db.guillotineWaiverRelease.findFirst({
+    where: { leagueId: input.leagueId, playerId: input.playerId, claimedAt: null },
+    orderBy: { scoringPeriod: 'desc' },
+    select: { id: true },
+  })
+  if (!row) return false
+  await db.guillotineWaiverRelease.update({
+    where: { id: row.id },
+    data: {
+      releaseStatus: 'claimed',
+      claimedByRosterId: input.rosterId,
+      claimedAt: input.at ?? new Date(),
+      winningBid: input.winningBid != null && Number.isFinite(input.winningBid) ? input.winningBid : null,
+    },
+  })
+  return true
 }

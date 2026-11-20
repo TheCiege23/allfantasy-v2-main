@@ -23,6 +23,7 @@ const m = vi.hoisted(() => ({
     waiverClaim: { count: vi.fn(), findFirst: vi.fn() },
     waiverTransaction: { findFirst: vi.fn(), findMany: vi.fn() },
     guillotineWaiverRelease: { findMany: vi.fn() },
+    guillotineLeagueConfig: { findUnique: vi.fn() },
   },
   executeAdd: vi.fn(),
   effective: vi.fn(),
@@ -72,6 +73,7 @@ beforeEach(() => {
   m.prisma.waiverTransaction.findMany.mockResolvedValue([])
   m.prisma.waiverTransaction.findFirst.mockResolvedValue(null)
   m.releases = [{ leagueId: 'L', playerId: 'star', availableAt: CHOP, eliminatedRosterId: 'rr-chopped' }]
+  m.prisma.guillotineLeagueConfig.findUnique.mockResolvedValue({ rosterReleaseTiming: 'next_waiver_run' })
   m.prisma.guillotineWaiverRelease.findMany.mockImplementation(
     async ({ where }: { where: { leagueId: string; availableAt: { gte: Date }; playerId?: { in: string[] } } }) =>
       m.releases.filter(
@@ -116,6 +118,27 @@ describe('a chopped player in an instant-free-agent league', () => {
     m.prisma.guillotineWaiverRelease.findMany.mockRejectedValue(new Error('down'))
     const r = await call()
     expect(r.body.code).toBeUndefined()
+  })
+})
+
+describe('the commissioner’s "Right after the chop" setting', () => {
+  it('🛑 a league that chose it gets it: the chopped player is a first-come add at once', async () => {
+    // The setting was saved, shown on the rules page and quoted in the chop alert, and decided nothing.
+    m.prisma.guillotineLeagueConfig.findUnique.mockResolvedValue({ rosterReleaseTiming: 'immediate' })
+    m.effective.mockResolvedValue(INSTANT_FA)
+    m.executeAdd.mockResolvedValue({ success: true })
+    const r = await call()
+    expect(r.body.code).not.toBe('PLAYER_ON_WAIVERS')
+    expect(m.executeAdd).toHaveBeenCalledTimes(1)
+    expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).size).toBe(0)
+  })
+  it('[control] the default, "At the next waiver run", still holds him', async () => {
+    m.effective.mockResolvedValue(INSTANT_FA)
+    expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).has('star')).toBe(true)
+  })
+  it('[control] a choice that cannot be read keeps the hold', async () => {
+    m.prisma.guillotineLeagueConfig.findUnique.mockRejectedValue(new Error('down'))
+    expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).has('star')).toBe(true)
   })
 })
 

@@ -21,7 +21,7 @@ export type GuillotineAtmosphereSummary = {
 
 export type GuillotineAtmosphereState = {
   mood: GuillotineAtmosphereMood
-  /** Teams still alive; the league's team count before any summary exists. */
+  /** Teams still alive; the league's team count before any week is settled; null while that is unknown. */
   alive: number | null
   week: number | null
   firstChopWeek: number | null
@@ -57,7 +57,14 @@ export function deriveGuillotineAtmosphere(input: {
   const firstChopWeek = posInt(summary?.config?.eliminationStartWeek) ?? posInt(input.settings?.eliminationStartWeek)
   const lastChopWeek = posInt(summary?.config?.eliminationEndWeek) ?? posInt(input.settings?.eliminationEndWeek)
   const standings = summary?.survivalStandings
-  const alive = standings && standings.length > 0 ? standings.length : posInt(input.teamCount)
+  /*
+   * How many are alive: the survival standings once a week has been settled; before that, the whole
+   * league. The team count stands in ONLY where it is certainly true: before the draft, or when the
+   * summary has loaded and holds no settled week yet. With no summary in a season under way the count
+   * is unknown, and the banner says nothing rather than the full team count. It used to say "8 alive"
+   * for a moment on every page load of a league with four teams left (seen walking one, 2026-11-20).
+   */
+  const alive = standings && standings.length > 0 ? standings.length : input.predraft || summary ? posInt(input.teamCount) : null
   // The summary's week is the latest SCORED week; the league row can be ahead of it mid-week.
   const weeks = [posInt(summary?.weekOrPeriod), posInt(input.leagueWeek)].filter((w): w is number => w != null)
   const week = weeks.length ? Math.max(...weeks) : null
