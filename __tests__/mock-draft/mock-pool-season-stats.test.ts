@@ -19,7 +19,7 @@ vi.mock('@/lib/draft-room/storedDraftSeasonStats', () => ({
 }))
 
 import { attachSeasonStatsToMockPool, mergeSeasonStatsIntoEntry, mockScoringPreset } from '@/lib/mock-draft/mockPoolSeasonStats'
-import { mockPoolStatCells } from '@/components/mock-draft/MockDraftSleeperRoomClient'
+import { mockPoolPhoneStatLine, mockPoolStatCells } from '@/components/mock-draft/MockDraftSleeperRoomClient'
 
 beforeEach(() => {
   riSeason.mockReset()
@@ -101,5 +101,38 @@ describe('mockPoolStatCells', () => {
     expect(cells.length).toBeGreaterThan(0)
     expect(cells.some((c) => c.value === '26.4')).toBe(true)
     expect(cells.every((c) => !/YDS|REC/.test(c.label))).toBe(true)
+  })
+})
+
+describe('mockPoolPhoneStatLine', () => {
+  // ~20 characters fit beside the Draft and Queue buttons on a 390px phone at 11px.
+  const FITS = 20
+
+  it('football: points per game, then the position stat — short enough to fit', () => {
+    const wr = mockPoolPhoneStatLine(
+      { position: 'WR', adp: 5, display: { stats: { fantasyPointsPerGame: 21.6 } }, nflDraftProjectionSplits: { projectedPoints: 373, receiving: { rec: 104, yds: 1428 } } as never },
+      'NFL',
+    )
+    expect(wr).toBe('AVG 21.6 · REC 104')
+    expect(wr!.length).toBeLessThanOrEqual(FITS)
+    const qb = mockPoolPhoneStatLine(
+      { position: 'QB', adp: 2, display: { stats: { fantasyPointsPerGame: 24.1 } }, nflDraftProjectionSplits: { passing: { yds: 4306, td: 32 } } as never },
+      'NFL',
+    )
+    expect(qb).toBe('AVG 24.1 · PA YDS 4,306')
+  })
+
+  it('basketball: two stats, never three', () => {
+    const line = mockPoolPhoneStatLine(
+      { position: 'PG', adp: 3, display: { stats: { pointsPerGame: 29.4, reboundsPerGame: 6, minutesPerGame: 34.2 } }, nflDraftProjectionSplits: null },
+      'NBA',
+    )
+    expect(line).toBe('PPG 29.4 · RPG 6')
+    expect(line!.length).toBeLessThanOrEqual(FITS)
+  })
+
+  it('skips missing stats instead of showing dashes, and is empty with none', () => {
+    expect(mockPoolPhoneStatLine({ position: 'RB', adp: 9, display: { stats: { fantasyPointsPerGame: 15 } }, nflDraftProjectionSplits: null }, 'NFL')).toBe('AVG 15.0')
+    expect(mockPoolPhoneStatLine({ position: 'C', adp: 9, display: null, nflDraftProjectionSplits: null }, 'NBA')).toBeNull()
   })
 })
