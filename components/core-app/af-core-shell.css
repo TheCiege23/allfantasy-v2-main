@@ -4978,3 +4978,46 @@ button.af-rail-sport:focus-visible {
 @media (max-width: 720px) {
   .af-core .af-topbar-inbox { display: none; }
 }
+
+/* Sub-tabs of the open league tab (LEAGUE_TABS, lib/core-app/leagueDestinations.ts): one row of pill links above the
+   screen, scrolling sideways on a phone rather than wrapping. Same tokens as the native league page's .nl-subtabs.
+   Top level on purpose, not inside any @media. */
+.af-subtabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.af-subtabs::-webkit-scrollbar {
+  display: none;
+}
+.af-subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.af-subtab:hover {
+  background: var(--chip);
+}
+.af-subtab[aria-current='page'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+@media (max-width: 719px) {
+  .af-subtab {
+    min-height: 44px;
+  }
+}
