@@ -4979,6 +4979,7 @@ export function DraftRoomPageClient({
                     starterSlots={rosterConfig?.starterSlots ?? null}
                     benchSlots={rosterConfig?.benchSlots ?? null}
                     idpEnabled={Boolean(idpRosterSummary)}
+                    sport={effectiveDraftSport}
                   />
                 }
                 chimmyBody={
