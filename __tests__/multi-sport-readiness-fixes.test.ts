@@ -48,6 +48,21 @@ describe('multisport scoring readiness', () => {
     expect(planNcaafFantraxIdentityLinks([ref, { ...ref, fantraxId: 'fx2' }], [row]).links).toEqual([])
     expect(planNcaafFantraxIdentityLinks([{ ...ref, team: 'University of Miami' }], [{ ...row, currentTeam: 'Miami University' }]).links).toEqual([])
   })
+  // Real labels from the 2026-11-19 Fantrax CFB capture: same player, same school, different label.
+  it('matches college defenders by position group (CB/DB, OLB/LB, DE/EDGE, DL/DE)', () => {
+    const row = { id: 'p1', canonicalName: 'Josiah Brown', currentTeam: 'Vanderbilt University', position: 'DB', cfbdId: '42', fantraxId: null }
+    const ref = { fantraxId: 'fx1', name: 'Brown, Josiah', team: 'Vanderbilt', position: 'CB' }
+    for (const [fantrax, registry] of [['CB', 'DB'], ['S', 'DB'], ['OLB', 'LB'], ['DE', 'EDGE'], ['DL', 'DE'], ['EDGE', 'LB']]) {
+      expect(planNcaafFantraxIdentityLinks([{ ...ref, position: fantrax }], [{ ...row, position: registry }]).links, `${fantrax}/${registry}`).toHaveLength(1)
+    }
+  })
+  it('still refuses a same-named player in another position group', () => {
+    const row = { id: 'p1', canonicalName: 'John Smith', currentTeam: 'Vanderbilt University', position: 'WR', cfbdId: '42', fantraxId: null }
+    for (const fantrax of ['RB', 'DB', 'LB', 'QB']) {
+      expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: fantrax }], [row]).links, fantrax).toEqual([])
+    }
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: 'DE' }], [{ ...row, position: 'OLB' }]).links).toEqual([])
+  })
 })
 
  it('maps captured college defensive fields without guessing assisted tackles or forced fumbles', () => {

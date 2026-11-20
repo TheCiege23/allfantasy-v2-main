@@ -8,7 +8,22 @@ export type NcaafIdentityRow = { id: string; canonicalName: string; currentTeam:
 const schoolAliases: Record<string, string> = { ...COLLEGE_NAME_ALIASES, ...CFBD_SCHOOL_ALIASES, 'vanderbilt university': 'Vanderbilt' }
 const school = (value: string | null) => exactKey(schoolAliases[exactKey(value)] ?? value)
 const nameKey = (value: string) => { const parts = value.split(','); return normalizePlayerName(parts.length === 2 ? `${parts[1]} ${parts[0]}` : value) }
-const positions = (value: string | null) => String(value ?? '').toUpperCase().split(/[,/\s]+/).filter(p => ['QB','RB','WR','TE','K','P','DL','DE','DT','LB','DB','CB','S'].includes(p))
+/*
+ * Position GROUPS, not labels. Measured 2026-11-19 against the Fantrax CFB capture
+ * (`contracts/fantrax/fixtures/cfb-player-ids.json`): rostered players still unlinked although name,
+ * school and CFBD id all agreed differed only in the label — Fantrax CB/S where the registry says DB,
+ * OLB for LB, DE for EDGE, DL for DE (Josiah Brown, Memphis CB/DB; Liam Danitz, Wisconsin OLB/LB;
+ * Lance Jackson, Texas DE/EDGE). An edge rusher is listed as either a lineman or a linebacker, so EDGE
+ * joins both groups. Offence keeps its exact labels: an RB and a WR of one name are two people.
+ */
+const POSITION_GROUPS: Record<string, readonly string[]> = {
+  QB: ['QB'], RB: ['RB'], FB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], P: ['P'],
+  DB: ['DB'], CB: ['DB'], S: ['DB'], SS: ['DB'], FS: ['DB'],
+  DL: ['DL'], DE: ['DL'], DT: ['DL'], NT: ['DL'],
+  LB: ['LB'], OLB: ['LB'], ILB: ['LB'], MLB: ['LB'],
+  EDGE: ['DL', 'LB'],
+}
+const positions = (value: string | null) => [...new Set(String(value ?? '').toUpperCase().split(/[,/\s]+/).flatMap(p => POSITION_GROUPS[p] ?? []))]
 
 export function planNcaafFantraxIdentityLinks(refs: FantraxPlayerRef[], identities: NcaafIdentityRow[], seasonSchools: string[] = [], providerSchoolAliases: Readonly<Record<string, string>> = {}) {
   // Only the current CFBD schedule establishes a school suffix match. A loose
