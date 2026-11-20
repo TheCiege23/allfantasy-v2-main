@@ -14,7 +14,7 @@
  * so an open trade panel or player card is never covered by it.
  */
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Bell, X } from 'lucide-react'
 
 type YoureUpAlertProps = {
@@ -42,6 +42,17 @@ export function YoureUpAlert({
   onSeePlayers,
   onDismiss,
 }: YoureUpAlertProps) {
+  /*
+   * A short buzz when it becomes your turn (2026-11-19), on phones that allow it. Once per pick:
+   * the alert mounts once per pick. Browsers without the Vibration API (iOS Safari) skip it.
+   */
+  useEffect(() => {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate([70, 50, 70])
+    } catch {
+      /* a hint, never an error */
+    }
+  }, [pickLabel])
   return (
     <div
       role="alert"

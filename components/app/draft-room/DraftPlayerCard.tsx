@@ -461,8 +461,10 @@ function DraftPlayerCardInner({
           </span>
           <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
           {isQueued && (
+            /* Not on phones (2026-11-19): the row's queue button already shows a tick, and this pill
+               squeezed the name to "N…" on a 375px screen. */
             <span
-              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100"
+              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100 max-md:hidden"
               title="On your queue"
             >
               Queued

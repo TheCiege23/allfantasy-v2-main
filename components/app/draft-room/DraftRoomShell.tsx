@@ -261,8 +261,11 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = ['players', 'board', 'queue', 'roster', 'chat'].flatMap(id => visibleTabs.filter(tab => tab.id === id))
-  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'roster', 'chat'].includes(tab.id))
+  /* Chimmy is a tab of its own on phones (2026-11-19), as in the desktop dock; "More" now appears
+     only when a league has extra tabs (keepers). */
+  const PRIMARY_MOBILE = ['players', 'board', 'queue', 'roster', 'helper', 'chat']
+  const primaryMobileTabs = PRIMARY_MOBILE.flatMap(id => visibleTabs.filter(tab => tab.id === id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !PRIMARY_MOBILE.includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
