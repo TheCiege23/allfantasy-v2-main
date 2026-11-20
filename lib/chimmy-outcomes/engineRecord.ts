@@ -46,6 +46,21 @@ export function tradeLetterRecord(view: LedgerRecordView | null | undefined, let
 }
 
 /**
+ * For the commissioner's trade review: the letter's record over trades a COMMISSIONER was shown, when that
+ * letter has enough of them; otherwise the record over every graded deal. `scope` says which, so the copy can
+ * say it. Null when neither qualifies — the panel then shows the grade alone.
+ */
+export function commissionerLetterRecord(
+  view: LedgerRecordView | null | undefined,
+  letter: string | null | undefined,
+): (TradeLetterRecord & { scope: 'commissioner' | 'everyone' }) | null {
+  const own = tradeLetterRecord(view ? { ...view, trades: view.commissionerTrades ?? null } : null, letter)
+  if (own) return { ...own, scope: 'commissioner' }
+  const all = tradeLetterRecord(view, letter)
+  return all ? { ...all, scope: 'everyone' } : null
+}
+
+/**
  * The ledger's trade letters are graded on REDRAFT NFL deals only (`ledgerGrading.ts`): a dynasty deal is
  * priced for years, not weeks. So the record belongs beside a grade only when that grade is too.
  */

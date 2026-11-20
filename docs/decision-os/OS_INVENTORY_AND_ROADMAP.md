@@ -177,6 +177,17 @@ away: the fingerprints it scaled were already empty). All five are gone, with bo
 It now runs on its own as `lib/league-import/sleeper/sleeperTradeFactRotation.ts` on the same `?intel=1` tick
 (heartbeat `cron-sleeper-trade-facts`), 24 leagues a fire in a stateless order so nothing can wedge the line.
 The `manager_psych_profiles` table and `lib/psychological-profiles/` stay; the trade-fact ingest still lives there.
+**Item 7 follow-up, 2026-11-20 — one row per deal, and the commissioner review's own record.** 🛑 The trade
+ledger counted EVALUATIONS, not deals: `saveAdHocReceipt` reuses a receipt only for the same surface, viewer and
+league within 24h, so one deal re-opened on other days, on other screens, by both managers and by the commissioner
+was graded many times, inflating the letter record shown beside every Trade Center grade (and its 20-deal floor).
+`loadTradeLedgerInputs` now keeps the FIRST evaluation per `inputHash` (league + both sides + viewer's side), in
+SQL ahead of the LIMIT; the two sides of one deal stay two calls. The same grading over only
+`commissioner-review` evaluations is stored as `commissionerTrades`, and the commissioner's trade review shows
+the letter's record beside the grade — the commissioner tally when that letter has 20+ reviewed deals, else
+every deal; NFL redraft only. Reported, never applied: the approve / veto recommendation is unchanged.
+⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
+Neither is stored when shown; grading either needs it recorded first.
 
 Known follow-up inside item 1: projections still derive IDP scoring from `pRules`, so a late rules read also makes
 projections late. Reading IDP rules off the league row (as `loadLeagueValueFormat` does for the chart) breaks it.
