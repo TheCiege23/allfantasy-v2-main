@@ -5,6 +5,11 @@ import { usesFantraxPeriodCalendar } from '@/lib/league-import/fantrax/fantraxPr
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
 import type { NormalizedLeagueSettings } from '../../types'
 import type { FantraxImportPayload } from './types'
+import type { FantraxPlayoffs } from '../../fantrax/fantraxApi'
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
+}
 
 export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = {
   map(source) {
@@ -17,6 +22,13 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
       source.settings?.scoringType ??
       (source.league.isDevy ? 'devy' : source.league.sport === 'NCAAF' ? 'college' : null)
     const seasonState = source.settings?.raw?.seasonState
+    const calendar = source.settings?.raw
+    const playoffs = calendar?.playoffs as FantraxPlayoffs | null | undefined
+    const playoffStart = playoffs?.used === true ? positiveInteger(playoffs.firstPlayoffPeriod) : undefined
+    const playoffTeams = playoffs?.used === false ? 0
+      : playoffs?.used === true ? positiveInteger(playoffs.numPlayoffTeams) : undefined
+    const regularPeriods = positiveInteger(playoffs?.lastRegularSeasonPeriod) ??
+      (playoffStart ? playoffStart - 1 : undefined)
     const hasLiveSeasonState = seasonState === 'preseason' || seasonState === 'in_progress' || seasonState === 'complete'
     const hasRosteredPlayers = source.teams.some((team) => team.rosterPlayerIds.length > 0)
     const isPreDraft = hasLiveSeasonState && seasonState !== 'complete' &&
@@ -49,9 +61,12 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
           : seasonState === 'preseason'
             ? 'off_season'
             : 'in_season',
-      playoff_team_count: undefined,
-      regular_season_length: source.schedule.length > 0 ? source.schedule.length : undefined,
-      ...(usesFantraxPeriodCalendar(source.league.sport) ? { current_week: source.league.currentWeek ?? undefined } : {}),
+      playoff_team_count: playoffTeams,
+      playoff_teams: playoffTeams,
+      playoff_start_week: playoffStart,
+      regular_season_length: regularPeriods ?? (source.schedule.length || undefined),
+      ...(positiveInteger(calendar?.lastPeriod) || usesFantraxPeriodCalendar(source.league.sport)
+        ? { current_week: source.league.currentWeek ?? undefined } : {}),
       schedule_unit: 'week',
       matchup_frequency: 'head_to_head',
       waiver_type: undefined,

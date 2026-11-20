@@ -798,7 +798,7 @@ export async function fetchFantraxLeagueForImport(
   )
   const usesPeriodCalendar = usesFantraxPeriodCalendar(sport)
   const currentWeek =
-    (usesPeriodCalendar ? sourceCurrentPeriod : null) ??
+    sourceCurrentPeriod ??
     firstUnscored?.week ?? (schedule.length > 0 ? schedule[schedule.length - 1].week : null)
 
   const transactions: FantraxImportTransaction[] = transactionRows.map((transaction, index) => {

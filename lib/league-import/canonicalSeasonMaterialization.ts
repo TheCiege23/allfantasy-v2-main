@@ -85,7 +85,9 @@ export async function materializeRedraftSeasonForImportedLeague(
    * every imported NHL and MLB league, from 32 to 256 teams (Fantrax-scale simulation, 2026-11-07).
    * Native NHL and MLB leagues already play full seasons on these same tables.
    */
-  const fantraxPeriodSeason = league.platform?.toLowerCase() === 'fantrax' && usesFantraxPeriodCalendar(sport)
+  const calendar = (league.settings as { fantrax_settings?: { lastPeriod?: unknown } } | null)?.fantrax_settings
+  const fantraxPeriodSeason = league.platform?.toLowerCase() === 'fantrax' &&
+    (usesFantraxPeriodCalendar(sport) || Boolean(positivePeriod(calendar?.lastPeriod)))
   if (!fantraxPeriodSeason && !MATERIALIZED_SPORTS.has(sport)) {
     return { seasonId: null, created: false, rosterCount: 0, skippedReason: 'UNSUPPORTED_SPORT' }
   }

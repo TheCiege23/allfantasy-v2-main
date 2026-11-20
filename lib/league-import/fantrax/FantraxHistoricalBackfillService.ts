@@ -129,6 +129,8 @@ function buildSnapshotPlayers(
  */
 export function resolveFantraxChampionTeamId(payload: FantraxImportPayload): string | null {
   if (!payload.league.isFinished) return null
+  const raw = payload.settings?.raw
+  const playoffs = raw?.playoffs as { used?: boolean } | undefined
 
   const lost = new Set<string>()
   let lastScoredPlayoffWeek: number | null = null
@@ -150,6 +152,8 @@ export function resolveFantraxChampionTeamId(payload: FantraxImportPayload): str
     }
   }
 
+  if (playoffs?.used && (lastScoredPlayoffWeek == null ||
+    (typeof raw?.lastPeriod === 'number' && lastScoredPlayoffWeek < raw.lastPeriod))) return null
   if (lastScoredPlayoffWeek == null) {
     return payload.teams.find((team) => team.rank === 1)?.teamId ?? null
   }
@@ -176,7 +180,15 @@ export function scoredFantraxMatchups(payload: FantraxImportPayload): Array<{
   week: number
   matchup: FantraxScheduleMatchup & { points1: number; points2: number }
 }> {
-  return payload.schedule.flatMap((week) =>
+  const calendar = payload.settings?.raw?.scoringPeriods
+  const openPeriods = new Set<number>()
+  if (Array.isArray(calendar)) {
+    const now = Date.now()
+    for (const period of calendar) {
+      if (period && Date.parse(period.endDate) >= now) openPeriods.add(period.number)
+    }
+  }
+  return payload.schedule.filter((week) => !openPeriods.has(week.week)).flatMap((week) =>
     week.matchups.flatMap((matchup) =>
       matchup.points1 != null && matchup.points2 != null
         ? [{ week: week.week, matchup: { ...matchup, points1: matchup.points1, points2: matchup.points2 } }]

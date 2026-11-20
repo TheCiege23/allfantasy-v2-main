@@ -595,7 +595,7 @@ export async function importFantraxLeague(args: {
       scoringSystem: info.data.scoringSystem ?? null,
       rosterInfo: info.data.rosterInfo,
       ...fantraxTeamDivisions(info.data),
-      ...(retainPeriodCalendar ? fantraxPeriodCalendar(info.data) : {}),
+      ...fantraxPeriodCalendar(info.data),
     },
     seasonState: schedule.position?.state ?? (retainPeriodCalendar ? fantraxSeasonDateState(info.data) : null),
     currentPeriod: schedule.position?.period ?? null,

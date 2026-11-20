@@ -77,6 +77,7 @@ const CATEGORY_KEYS: Record<string, string[]> = {
  */
 const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
   BASKETBALL_PLAYER: {
+    INDIVIDUAL_THREE_POINTERS_MADE: ['threes'],
     INDIVIDUAL_POINTS: ['pts'],
     INDIVIDUAL_REBOUNDS: ['reb'],
     INDIVIDUAL_ASSISTS: ['ast'],
@@ -104,6 +105,7 @@ const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
     INDIVIDUAL_PENALTY_MINUTES: ['goalie_penalty_minutes'],
   },
   FOOTBALL_OFFENSE: {
+    INDIVIDUAL_KICKOFF_RETURN_YARDS: ['kr_yd'],
     INDIVIDUAL_FUMBLES_LOST: ['fum_lost'],
     INDIVIDUAL_INTERCEPTIONS_THROWN: ['pass_int'],
   },
@@ -113,6 +115,7 @@ const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
   },
   /* The defence group scores individual defenders (the captured league starts DL / LB / DB). */
   FOOTBALL_DEFENSE: {
+    INDIVIDUAL_PUNT_RETURN_YARDS: ['pr_yd'],
     INDIVIDUAL_TACKLES: ['idp_tkl'],
     INDIVIDUAL_TACKLES_FOR_LOSS: ['idp_tkl_loss'],
     INDIVIDUAL_SACKS_DEFENSIVE: ['idp_sack'],
