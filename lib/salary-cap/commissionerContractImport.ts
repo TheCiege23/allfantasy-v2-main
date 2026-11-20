@@ -129,7 +129,11 @@ export function matchContractSheet(
     if (rosterIds.length === 0) { bad(`No team in this league is called "${row.team}"`); continue }
     if (rosterIds.length > 1) { bad(`More than one team matches "${row.team}"; use the team name instead of the manager name`); continue }
     const rosterId = rosterIds[0]
-    const hits = playersByRoster.get(rosterId)?.get(nameKey(row.player)) ?? []
+    const onRoster = playersByRoster.get(rosterId)
+    // Sheets often write "Last, First". Only tried when the name as written matched nobody.
+    const flipped = row.player.includes(',') ? row.player.split(',').map((s) => s.trim()).reverse().join(' ') : null
+    const direct = onRoster?.get(nameKey(row.player)) ?? []
+    const hits = direct.length > 0 || !flipped ? direct : onRoster?.get(nameKey(flipped)) ?? []
     if (hits.length === 0) { bad(`${row.player} is not on ${row.team}'s roster`); continue }
     if (hits.length > 1) { bad(`Two players on ${row.team} are called ${row.player}`); continue }
     const player = hits[0]

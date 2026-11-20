@@ -59,6 +59,12 @@ describe('nameKey', () => {
 describe('matchContractSheet', () => {
   const sheet = (text: string) => parseContractSheet(text).rows
 
+  it('reads a "Last, First" name when the name as written matched nobody', () => {
+    const { matched, problems } = matchContractSheet(sheet('Gridiron Kings,"Chase, Ja\'Marr",40,5,3\nGridiron Kings,"Nobody, Real",5,1'), teams, players)
+    expect(matched.map((m) => [m.playerId, m.playerName, m.salary])).toEqual([['p2', "Ja'Marr Chase", 40]])
+    expect(problems.map((p) => p.line)).toEqual([2])
+  })
+
   it('attaches a row to the one team and the one player on it', () => {
     const { matched, problems } = matchContractSheet(sheet('gridiron kings,patrick mahomes,45,4,2\nCap Casualties,Amon-Ra St Brown,18,3'), teams, players)
     expect(problems).toEqual([])
