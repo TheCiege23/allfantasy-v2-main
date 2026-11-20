@@ -115,12 +115,12 @@ export async function updateStandings(
       const result = homeScore > awayScore ? 'W' : homeScore < awayScore ? 'L' : 'T'
       home.streakEvents.push({week:matchup.week,result})
       away.streakEvents.push({week:matchup.week,result:result === 'W' ? 'L' : result === 'L' ? 'W' : 'T'})
-    } else if (homeScore > awayScore) {
+    } else if (homeScore > awayScore || (categoryResult && homeScore === awayScore && snapshot?.categoryTiebreakWinner === matchup.homeRosterId)) {
       home.wins += 1
       away.losses += 1
       home.streakEvents.push({ week: matchup.week, result: 'W' })
       away.streakEvents.push({ week: matchup.week, result: 'L' })
-    } else if (awayScore > homeScore) {
+    } else if (awayScore > homeScore || (categoryResult && homeScore === awayScore && snapshot?.categoryTiebreakWinner === matchup.awayRosterId)) {
       away.wins += 1
       home.losses += 1
       away.streakEvents.push({ week: matchup.week, result: 'W' })

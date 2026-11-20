@@ -13,6 +13,7 @@ import { importedMlbScoring } from './importedMlbScoring'
 import { importedNflScoring } from './importedNflScoring'
 import { copyImportedHistory } from './copyImportedHistory'
 import { importedMlbRoster } from './importedMlbRoster'
+import { importedFantraxNbaCategories } from '@/lib/category-scoring/fantraxNbaCategories'
 import { isNativeFuturePickLeague, loadNativePickHorizonStart } from '@/lib/league-trade-engine/nativeFuturePicks'
 
 type Tx = Prisma.TransactionClient
@@ -206,6 +207,11 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   }
   // Best-effort, never refuses: null keeps the preset the creator picked (owner, 2026-10-25).
   const nflScoring = args.sport === 'NFL' ? importedNflScoring(source.settings) : null
+  let nbaCategories: ReturnType<typeof importedFantraxNbaCategories> = null
+  if (args.sport === 'NBA' && source.platform === 'fantrax') {
+    try { nbaCategories = importedFantraxNbaCategories(asRecord(source.settings).fantrax_settings) }
+    catch (error) { refuse(error instanceof Error ? error.message : 'Imported NBA categories require review.') }
+  }
   if (teams.length !== args.teamCount || slots.length !== args.teamCount || !session) {
     refuse('Team count must match the imported league exactly to carry over every roster.')
   }
@@ -431,6 +437,9 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
       } : {}),
       ...(nflScoring ? importedNflSettings(asRecord(target.settings), nflScoring, args.creatorUserId) : {}),
+      ...(nbaCategories ? { ...nbaCategories, scoringSettings: { ...asRecord(asRecord(target.settings).scoringSettings),
+        scoringMode: nbaCategories.scoring_mode, categoryPresetId: nbaCategories.category_preset_id, categoryRecordMode: nbaCategories.category_record_mode },
+        sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: nbaCategories.scoring_mode } } : {}),
       // A league that played several games a week keeps doing so; the native schedule reads this setting.
       ...(readGamesPerWeek(source.settings) > 1 ? { [GAMES_PER_WEEK_SETTINGS_KEY]: readGamesPerWeek(source.settings) } : {}),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,

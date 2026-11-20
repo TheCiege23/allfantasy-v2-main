@@ -21,7 +21,10 @@ import type {
 // Native weekly basketball stats use short canonical keys; provider aggregates can use long keys.
 // Prefer the stored primary key without adding aliases twice.
 const NBA_STAT_KEYS: Record<string, string> = { points_scored: 'pts', rebound: 'reb', assist: 'ast', steal: 'stl', block: 'blk', turnover: 'to', three_point_made: 'threes', field_goals_made: 'fgm', field_goals_attempted: 'fga', free_throws_made: 'ftm', free_throws_attempted: 'fta' }
-const categoryStat = (totals: TeamStatTotals, key: string) => totals[key] ?? totals[NBA_STAT_KEYS[key]]
+function categoryStat(totals: TeamStatTotals, key: string) {
+  if (key === 'double_double_only') return totals[key] ?? Math.max(0, (totals.dbl_dbl ?? 0) - (totals.trpl_dbl ?? 0))
+  return totals[key] ?? totals[NBA_STAT_KEYS[key]]
+}
 
 /**
  * A category's stat from a stat line — the lookup matchups use, exported so a trade grade valuing projected

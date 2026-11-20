@@ -117,6 +117,14 @@ export const NBA_NINE_CAT: readonly CategoryDefinition[] = Object.freeze([
 
 export const NBA_EIGHT_CAT: readonly CategoryDefinition[] = Object.freeze(NBA_NINE_CAT.filter(category => category.id !== 'nba_to'))
 
+export const NBA_CUSTOM_CATEGORIES: readonly CategoryDefinition[] = [
+  ...NBA_NINE_CAT,
+  { id: 'nba_fgm', label: 'FGM', direction: 'higher', computation: { kind: 'sum', statKey: 'field_goals_made' } },
+  { id: 'nba_ftm', label: 'FTM', direction: 'higher', computation: { kind: 'sum', statKey: 'free_throws_made' } },
+  { id: 'nba_3p_pct', label: '3P%', direction: 'higher', computation: { kind: 'ratio', numeratorStatKey: 'three_point_made', denominatorStatKey: 'three_attempts' } },
+  { id: 'nba_dd_only', label: 'DD only', direction: 'higher', computation: { kind: 'sum', statKey: 'double_double_only' } },
+]
+
 type NbaCategoryPresetId = 'nba_8cat' | 'nba_8cat_standard' | 'nba_9cat'
 
 export function getNbaCategoryPreset(preset: NbaCategoryPresetId): readonly CategoryDefinition[] {

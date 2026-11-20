@@ -24,7 +24,7 @@
 
 import type { CategoryDefinition, ScoringMode } from './types'
 import { MLB_FIVE_BY_FIVE, MLB_SIX_BY_SIX } from './MlbCategoryRegistry'
-import { NBA_EIGHT_CAT, NBA_LEGACY_EIGHT_CAT, NBA_NINE_CAT } from './NbaCategoryRegistry'
+import { NBA_EIGHT_CAT, NBA_LEGACY_EIGHT_CAT, NBA_NINE_CAT, NBA_CUSTOM_CATEGORIES } from './NbaCategoryRegistry'
 import { NHL_STANDARD_CATEGORIES } from './NhlCategoryRegistry'
 
 export type CategoryRecordMode = 'each' | 'most' | 'roto'
@@ -54,7 +54,7 @@ export const SPORT_SCORING_TYPES: Readonly<Record<string, SportScoringTypes>> = 
   NBA: {
     modes: ['points', 'h2h_category', 'roto'],
     presets: { nba_8cat: NBA_LEGACY_EIGHT_CAT, nba_8cat_standard: NBA_EIGHT_CAT, nba_9cat: NBA_NINE_CAT },
-    catalog: NBA_NINE_CAT,
+    catalog: NBA_CUSTOM_CATEGORIES,
     rotoPresets: ['nba_9cat'],
   },
   MLB: {

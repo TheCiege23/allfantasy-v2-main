@@ -146,7 +146,7 @@ async function exerciseBracket(seasonId, expected, divisionTop, reseed) {
   }
   return {pass:false,qualification,reason:'round limit'}
 }
-async function tryNativeConversion(leagueId,teamCount,cookie) {
+async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay) {
   const {createStateFromImportedLeague}=require('../lib/create-league-v2/import-template.ts')
   const {submitCreateLeagueV2}=require('../lib/create-league-v2/submit.ts')
   const source=await prisma.league.findUniqueOrThrow({where:{id:leagueId},select:{
@@ -165,8 +165,38 @@ async function tryNativeConversion(leagueId,teamCount,cookie) {
     const result=await submitCreateLeagueV2(state,leagueId,false)
     if(!result.ok || !result.leagueId)return {...selection,created:false,reason:result.error || 'Missing league ID'}
     const native=await prisma.league.findUniqueOrThrow({where:{id:result.leagueId},select:{leagueSize:true,leagueType:true,playoffTeams:true,playoffStartWeek:true,settings:true}})
+    const finalizeResponse=await publicFetch(stagingOrigin+'/api/leagues/'+encodeURIComponent(result.leagueId)+'/import-carryover/finalize',{
+      method:'POST',redirect:'error',headers:{cookie},signal:AbortSignal.timeout(200000)})
+    const final=await finalizeResponse.json()
+    const season=await prisma.redraftSeason.findFirst({where:{leagueId:result.leagueId},orderBy:{createdAt:'desc'},select:{id:true,season:true,currentWeek:true}})
+    let matchedNativeRecords=0,liveFinalGames=0
+    if(season){
+      const board=await screen('/api/redraft/standings?seasonId='+season.id,cookie)
+      const byName=new Map(board.rosters.map(t=>[t.teamName,t]))
+      matchedNativeRecords=replay.rows.filter(t=>{const row=byName.get(replay.names.get(t.teamId));return row && [row.wins,row.losses,row.ties].join('-')===t.points}).length
+      liveFinalGames=await prisma.redraftMatchup.count({where:{seasonId:season.id,status:{in:['final','completed']}}})
+    }
+    let categoryChecks=null
+    if(provider.info.scoringSystem?.type==='HEAD_TO_HEAD_ROTI_SINGLE_WIN'){
+      const {nativeCategoryScoringContext}=require('../lib/category-scoring/nativeCategoryScoringContext.ts')
+      const {fantraxNbaCategoryOutcome}=require('../lib/category-scoring/fantraxNbaCategories.ts')
+      const context=nativeCategoryScoringContext(native.settings,'NBA'), ids=context?.categories.map(c=>c.id)||[]
+      const configs=provider.info.scoringSystem.scoringCategorySettings.flatMap(g=>g.configs)
+      const bySource=new Map(configs.map((c,i)=>[c.scoringCategory.name,ids[i]]))
+      let games=0,matched=0,tiebreakWins=0
+      for(const p of scheduledResults(provider).periods)for(const m of p.matchups){games++
+        const categories=m.categories.map(c=>({categoryId:bySource.get(c.name),winner:c.home.outcome==='WIN'?'a':c.away.outcome==='WIN'?'b':'tie'}))
+        const result={categories,aWins:categories.filter(c=>c.winner==='a').length,bWins:categories.filter(c=>c.winner==='b').length,ties:categories.filter(c=>c.winner==='tie').length}
+        const scored=fantraxNbaCategoryOutcome(result,native.settings?.fantrax_category_scoring,true)
+        if(ids.length===configs.length && scored.homeScore===m.home.score && scored.awayScore===m.away.score)matched++
+        if(scored.tiebreak)tiebreakWins++
+      }
+      categoryChecks={categories:ids.length,games,matched,tiebreakWins,recordMode:context?.recordMode||null}
+    }
     return {...selection,created:true,nativeType:native.leagueType,franchises:native.leagueSize,field:native.playoffTeams,
-      start:native.playoffStartWeek,rosterCopies:native.settings?.importCarryover?.playerCount,warning:result.warning || null}
+      start:native.playoffStartWeek,rosterCopies:native.settings?.importCarryover?.playerCount,finalizeStatus:finalizeResponse.status,
+      complete:final.complete===true,materializedPlayers:final.materializedPlayers,finalizeError:final.error,season:season?.season,currentWeek:season?.currentWeek,
+      matchedNativeRecords,liveFinalGames,archivedGames:native.settings?.importCarryover?.history?.matchups,categoryChecks}
   }finally{global.fetch=restore}
 }
 async function runCase(userId,sport,id,index,runId,cookie) {
@@ -318,7 +348,7 @@ async function runCase(userId,sport,id,index,runId,cookie) {
       matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
       games===matchedScores && games===screenGames && games===uniqueGames && screenRecords===orig.length &&
       facts.length===games && scheduled.conflicting===0 && matchedTiebreaks===sourceTiebreaks && evidence.champion===null
-    try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie)}
+    try {evidence.native=await tryNativeConversion(leagueId,orig.length,cookie,source,replay)}
     catch(error){evidence.native={created:false,reason:String(error.message).slice(0,260)}}
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
     return evidence.pass

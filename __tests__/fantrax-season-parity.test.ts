@@ -5,6 +5,9 @@ import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 
 import { createStateFromImportedLeague } from '@/lib/create-league-v2/import-template'
 import { matchSharedFantraxPlayers } from '@/lib/player-identity/fantraxSharedPlayerIds'
+import { fantraxNbaCategoryOutcome, importedFantraxNbaCategories } from '@/lib/category-scoring/fantraxNbaCategories'
+import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
+import { resolveCategoryMatchup } from '@/lib/category-scoring/CategoryMatchupResolver'
 import type { SleeperPlayer } from '@/lib/sleeper-client'
 import { getEffectiveLeagueType } from '@/lib/create-league-v2/state'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
@@ -83,6 +86,19 @@ describe('published Fantrax first-season calendars', () => {
     expect(matchSharedFantraxPlayers([{...ref,rotowireId:'42'}],[player])).toEqual([])
     expect(matchSharedFantraxPlayers([ref],[player,{...player,player_id:'second',rotowire_id:42}])).toEqual([])
     expect(matchSharedFantraxPlayers([ref,{...ref,fantraxId:'duplicate'}],[player])).toEqual([])
+  })
+  it('scores the imported NBA categories, credits half a tie and applies the first decisive tiebreaker', () => {
+    const names=[['INDIVIDUAL_POINTS','Points'],['INDIVIDUAL_FIELD_GOALS_MADE','Field Goals Made'],['INDIVIDUAL_DOUBLE_DOUBLES','Double Doubles Only'],['INDIVIDUAL_THREE_POINT_PERCENTAGE','Three Point %'],['INDIVIDUAL_FREE_THROWS_MADE','Free Throws Made']]
+    const raw={scoringSystem:{type:'HEAD_TO_HEAD_ROTI_SINGLE_WIN',scoringCategorySettings:[{group:{code:'BASKETBALL_PLAYER'},configs:names.map(([code,name])=>({scoringCategory:{code,name}}))}]},
+      publicRules:{matchupTies:['Ahead in specific scoring category - Points','Ahead in specific scoring category - Field Goals Made']}}
+    const settings=importedFantraxNbaCategories(raw)!
+    const cats=resolveLeagueCategories(settings,settings.category_preset_id)!
+    const result=resolveCategoryMatchup({pts:22,fgm:10,dbl_dbl:2,trpl_dbl:1,threes:2,three_attempts:4,ftm:1},
+      {pts:22,fgm:8,dbl_dbl:2,trpl_dbl:0,threes:1,three_attempts:5,ftm:3},cats)
+    expect(result.categories.map(c=>c.winner)).toEqual(['tie','a','b','a','b'])
+    expect(fantraxNbaCategoryOutcome(result,settings.fantrax_category_scoring,true)).toEqual({homeScore:2.5,awayScore:2.5,tiebreak:'a'})
+    expect(fantraxNbaCategoryOutcome(result,settings.fantrax_category_scoring,false).tiebreak).toBeNull()
+    expect(fantraxNbaCategoryOutcome(result,undefined,true)).toEqual({homeScore:2,awayScore:2,tiebreak:null})
   })
   it('preserves an explicit no-playoffs league', () => {
     const input = source('MLB',12,23,26)

@@ -1,4 +1,5 @@
 import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { fantraxNbaCategoryOutcome } from '@/lib/category-scoring/fantraxNbaCategories'
 import { readWeekPositions } from '@/lib/bestball/weekPositions'
 import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
@@ -1201,10 +1202,13 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     collectPlayerPoints,
   })
   const categoryMatchup = categories ? resolveCategoryMatchup(home.statTotals ?? {}, away.statTotals ?? {}, categories) : null
+  let categoryTiebreakWinner: string | null = null
   if (categoryMatchup) {
     if (bestBall || useDevyEngine) throw new Error('Category scoring is not supported for this concept.')
-    home.points = categoryMatchup.aWins
-    away.points = categoryMatchup.bWins
+    const outcome = fantraxNbaCategoryOutcome(categoryMatchup, scoringSettings?.fantrax_category_scoring, m.type === 'regular')
+    home.points = outcome.homeScore
+    away.points = outcome.awayScore
+    categoryTiebreakWinner = outcome.tiebreak === 'a' ? homeRosterId : outcome.tiebreak === 'b' ? awayRosterId : null
   }
   // Commissioner score adjustments (lib/score-adjustments): points leagues only, added on top of the
   // computed score on every rescore so a stat sync can never erase one.
@@ -1286,7 +1290,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
         lineupSnapshots: {
           ...(previousSnapshots && typeof previousSnapshots === 'object' && !Array.isArray(previousSnapshots) ? previousSnapshots : {}),
           ...(zombieItems ? { zombieItems: { ...zombieItems, homeBaseScore: zombieBaseScores.home, awayBaseScore: zombieBaseScores.away } } : {}),
-          ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
+          ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryTiebreakWinner, categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
           redraftScoring: {
             scoredAt: new Date().toISOString(),
             isComplete,
@@ -1345,7 +1349,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   }
   if (isFinal) {
     const winnerRosterId =
-      home.points > away.points ? homeRosterId : away.points > home.points ? awayRosterId : null
+      home.points > away.points ? homeRosterId : away.points > home.points ? awayRosterId : categoryTiebreakWinner
     await getPlatformEvents().emit(EVENT.MATCHUP_FINALIZED, {
       leagueId,
       seasonId: seasonRowId,
