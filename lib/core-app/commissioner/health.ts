@@ -20,6 +20,7 @@
  * rule here is testable without a database.
  */
 
+import type { InactiveFlagHubRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { isPollClosed, type ViewerPoll } from '@/lib/chat-core/messagePolls'
 import { unnamedTeamLabel } from './activity'
 import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
@@ -128,6 +129,12 @@ type AbandonedInput = {
   totalTeams: number
   action: HealthFlagAction | null
   /**
+   * The graded record of the "no moves in 14 days" warning (`inactiveFlagHubRecord`), in a league AllFantasy hosts —
+   * the one clock that record is graded on. Null or absent: the warning reads exactly as before. Same bands as the
+   * commissioner's health decision in Chimmy, so the screen and the answer never disagree about how far to trust it.
+   */
+  inactiveRecord?: InactiveFlagHubRecord | null
+  /**
    * Set when the league's data has stopped arriving. Idle time is read from
    * `Roster.updatedAt`, which every sync touches — so when syncs stop, every
    * manager drifts past the 14-day window together and the whole league reads
@@ -137,6 +144,12 @@ type AbandonedInput = {
    */
   stale?: { reason: string; action: HealthFlagAction } | null
   language?: string
+}
+
+function quietRecordLine(r: InactiveFlagHubRecord, m: ReturnType<typeof copy>): string {
+  if (r.standing === 'held_up') return m.healthQuietRecordHeldUp(r.stayedAway, r.graded)
+  if (r.standing === 'mixed') return m.healthQuietRecordMixed(r.stayedAway, r.graded)
+  return m.healthQuietRecordLow(r.stayedAway, r.graded)
 }
 
 export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
@@ -212,6 +225,7 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
       : [
           unowned.length > 0 ? m.healthUnownedDetail(namesPreview(unowned, 4, input.language)) : null,
           quiet.length > 0 ? m.healthQuietDetail(namesPreview(quiet, 4, input.language)) : null,
+          quiet.length > 0 && input.inactiveRecord ? quietRecordLine(input.inactiveRecord, m) : null,
         ]
           .filter(Boolean)
           .join(' ')

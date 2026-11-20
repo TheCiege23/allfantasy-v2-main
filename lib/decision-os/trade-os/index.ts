@@ -63,7 +63,8 @@ export const tradeSettingsSource: OsFactSource<TradeLeagueOsArgs, TradeLeagueFac
   level: 'league',
   ttlMs: 2 * HOURS,
   scopeKey: (a) => `${a.leagueId}:${a.seasonId}`,
-  sport: () => 'NFL',
+  // Every sport's facts land here, so 'ALL' (2026-11-20): this column labels a row for audit and pruning only.
+  sport: () => 'ALL',
   derive: (a) => loadTradeLeagueFacts({ leagueId: a.leagueId, seasonId: a.seasonId }).catch(() => null),
 }
 
@@ -79,7 +80,8 @@ export const tradeRosterSource: OsFactSource<TradeOsArgs, TradeWorldFacts> = {
   level: 'user',
   ttlMs: 3 * MINUTES,
   scopeKey: (a) => `${a.leagueId}:${a.proposerRosterId}>${a.receiverRosterId}`,
-  sport: () => 'NFL',
+  // Every sport's facts land here, so 'ALL' (2026-11-20): this column labels a row for audit and pruning only.
+  sport: () => 'ALL',
   derive: deriveWorldFacts,
 }
 

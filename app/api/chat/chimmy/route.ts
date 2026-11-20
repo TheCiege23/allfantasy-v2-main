@@ -58,7 +58,6 @@ import {
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { leagueVariantFor } from '@/lib/core-app/valueBook'
 import { tradeFormatCoverage } from '@/lib/trade-value-console/formatCoverage'
-import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { buildChimmySportDataDigest } from '@/lib/chimmy/chimmy-sport-data-digest'
@@ -1554,17 +1553,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    */
   const verifiedTeamId = await resolveCallerTeamId({ leagueId: leagueSnapshot?.id, userId, teamId })
 
-  // How the managers in this league have actually behaved. Entitlement is checked
-  // inside, so an unentitled user grounds exactly as before; and the block names
-  // the managers it has NOT observed, because a model handed a partial roster of
-  // personalities will invent the rest in the same confident voice.
-  const psychologyGroundingLines =
-    leagueSnapshot && userId
-      ? await buildPsychologyGroundingLines({
-          leagueId: leagueSnapshot.id,
-          userId,
-        }).catch(() => [] as string[])
-      : []
+  /*
+   * (The psychology-profile grounding call that stood here was removed 2026-11-20: `buildPsychologyGroundingLines`
+   * has returned [] since the Competitive Edge privacy pass, and its comment still claimed it grounded manager
+   * behaviour. Manager facts reach Chimmy through the `managerRecords` slice and the `get_manager_record` tool.)
+   */
 
   let normalizedLeagueContext: NormalizedLeagueContext | null = null
   if (leagueId && userId) {
@@ -2670,9 +2663,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         season: effectiveSeasonResult,
       }),
       connectedFranchiseGrounding,
-      ...(psychologyGroundingLines.length > 0
-        ? [psychologyGroundingLines.join(NEWLINE)]
-        : []),
     ]
       .filter(Boolean)
       .join(NEWLINE) || undefined,

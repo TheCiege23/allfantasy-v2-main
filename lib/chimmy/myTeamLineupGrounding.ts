@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getMyTeamData, type LineupPlayer, type LineupSlot, type MyTeamData } from '@/lib/core-app/myTeam'
-import type { LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
+import { optimizeLineup, type LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import type { ChatStartCall } from './tools/chimmyTools'
@@ -96,6 +96,27 @@ async function loadMyTeam(args: { leagueId: string; userId: string }, d: MyTeamL
 
 const isFallback = (x: MyTeamData | MyTeamFallback): x is MyTeamFallback => 'fallback' in x
 
+/**
+ * My Team's best lineup, re-run at the moment of ANSWERING (2026-11-20 re-score).
+ *
+ * 🛑 THE SHARED LOAD IS UP TO 60 SECONDS OLD, AND SO WAS ITS VERDICT. `getMyTeamData` runs the optimizer with the clock
+ * of the load (`adviceAt`), and the load is shared for a minute (`loadShared`). The "locked" flags below are drawn with
+ * the clock of the answer. So in the minute a game kicks off — when the question is asked most — the block could say
+ * "start X instead of Y" while labelling X or Y "game started — locked". The optimizer is pure and cheap, so it runs
+ * again here over the same starters and bench with the same clock the flags use: one answer, one moment.
+ * No answer at load time (best ball, no starters, an unpriced seat) stays no answer.
+ */
+function optimizationAt(data: MyTeamData, now: number): LineupOptimization | null {
+  if (!data.lineupOptimizer) return null
+  return optimizeLineup({
+    starters: data.starters.available ? data.starters.data : [],
+    bench: data.bench.available ? data.bench.data : [],
+    sport: data.league.sport ?? null,
+    bestBall: Boolean(data.league.bestBall),
+    now: new Date(now),
+  })
+}
+
 function weekOf(data: MyTeamData): string {
   const p = data.projections
   return p && p.available ? `week ${p.data.week}, ${p.data.season}` : 'this week'
@@ -143,7 +164,7 @@ export async function buildMyTeamLineupContext(
   const now = (args.now ?? new Date()).getTime()
   const starters = data.starters.available ? data.starters.data : []
   const bench = data.bench.available ? data.bench.data : []
-  const opt = data.lineupOptimizer ?? null
+  const opt = optimizationAt(data, now)
 
   const lines = [
     `BEST LINEUP for ${data.league.name} (${weekOf(data)}) — THE SAME ANSWER THE MY TEAM SCREEN SHOWS: the exact lineup optimizer on AllFantasy projections under this league's scoring. A bye or ruled-out player counts 0; a player whose game has started is locked.`,
@@ -217,7 +238,7 @@ export async function buildMyTeamStartSitContext(
   // A name not on this roster is the scenario tool's question to answer (it says so); not a My Team failure.
   if (!a || !b || a.sleeperId === b.sleeperId) return { fallback: 'not_nfl' }
 
-  const opt = data.lineupOptimizer ?? null
+  const opt = optimizationAt(data, (args.now ?? new Date()).getTime())
   const head = `START/SIT: ${a.name} or ${b.name} (${weekOf(data)}) — FROM MY TEAM'S BEST LINEUP, the same answer the My Team screen shows (AllFantasy projections under this league's scoring).`
   const line = (p: LineupPlayer) => `${p.name} (${p.position ?? '?'}): ${pts(valueOf(p))}${flags(p, (args.now ?? new Date()).getTime())}`
   if (!opt) {
