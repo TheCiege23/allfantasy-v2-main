@@ -189,6 +189,27 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
+the 2026-11-20 re-score (axes 1–3 = 40%, 4–5 = 30%, 6–7 = 30%; ⚠ counts half; n/a leaves its group). Code-scheduled
+only, like every mark here: production tables were not read.
+
+| OS | Before | After | What moved |
+|---|---|---|---|
+| League | 100 | 100 | — |
+| Projection | 100 | 100 | — |
+| Import | ~93 | ~100 | Chimmy ⚠→✅: the import slice reaches the prompt in full, not its first 8 fields |
+| Waiver | ~86 | ~100 | Engine ⚠→✅ (confidence learns from graded #1 claims, full-PPR redraft only); Cron ⚠→✅ (weekly engine run) |
+| Player Value | ~78 | ~93 | Packet ⚠→✅ (NBA/MLB/NHL board values); Chimmy ⚠→✅ (tools on the league's chart). User ⚠ (soccer) stays |
+| Manager Psychology (facts) | ~75 | ~90 | Packet ⚠→✅ and Chimmy ⚠→✅: leaguemates' records in the packet, Competitive Edge only |
+| Lineup | ~75 | ~86 | Chimmy ⚠→✅: My Team's best lineup in every sport that has one, and in the packet. Kernel ⚠ stays |
+| Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
+| Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
+| Commissioner | ~52 | ~78 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain. Engine, Cron, User ⚠ stay |
+| Decision OS hub | ~50–58 | not re-scored | Nothing here targeted the hub's own axes (multi-model ❌); measure it on its own |
+
+⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
+commits after it.
+
 **Commissioner "inactive", 2026-11-20 — native leagues read the manager's own last action (owner's call: fix the
 flag before grading it).** Both the per-manager table (`managerHealth.ts`) and the hub's "N teams inactive"
 (`commissionerHubHealth.ts`) used `Roster.updatedAt`, which every system write moves — auto-subs, IR and bye moves,
