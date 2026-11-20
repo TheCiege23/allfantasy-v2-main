@@ -2904,7 +2904,7 @@ async function buildResolvedDraftPoolForLeague(
   // (nflTeamDefenseSeason.ts), for the same season every other NFL column shows. A failed read
   // leaves the DEF columns as dashes rather than failing the pool.
   if (sport === 'NFL' && nflPoolStatSeason) {
-    const defenseByTeam = await loadNflTeamDefenseSeason(nflPoolStatSeason).catch((error) => {
+    const defenseByTeam = await loadNflTeamDefenseSeason(nflPoolStatSeason, nflStatScorer).catch((error) => {
       console.warn('[draft-pool] team defense stats unavailable', { leagueId, error: String(error) })
       return new Map() as TeamDefenseByTeam
     })

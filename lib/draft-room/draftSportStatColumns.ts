@@ -201,7 +201,8 @@ export function formatDraftStatDisplay(value: number | null, column: DraftStatCo
   if (value == null || !Number.isFinite(value)) return '—'
   if (column.category === 'hitter' && column.key === 'avg') return value.toFixed(3)
   if (column.key === 'obp') return value.toFixed(3)
-  if (column.key === 'avg' && column.category === 'offense') return value.toFixed(1)
+  // Fantasy points per game read to one decimal, offense and team defense alike ("7.8", not "7.80").
+  if (column.key === 'avg' && (column.category === 'offense' || column.category === 'defense')) return value.toFixed(1)
   if (column.type === 'percent') return `${(value * 100).toFixed(1)}%`
   if (column.type === 'number') {
     const abs = Math.abs(value)
