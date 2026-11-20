@@ -205,6 +205,13 @@ export function fantraxSoccerPosition(position: string): string {
   return LINEUP_SLOT_CODES.SOCCER[position] ?? position
 }
 
+export function fantraxStarterSlot(sport: string, providerPosition: string): string | undefined {
+  const code = providerPosition.trim().toUpperCase()
+  if (sport === 'NBA' || sport === 'NHL' || sport === 'NCAAB') return SLOT_CODES[sport === 'NCAAB' ? 'NBA' : sport][code]
+  if (sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB' || sport === 'SOCCER') return LINEUP_SLOT_CODES[sport][code]
+  return undefined
+}
+
 /**
  * A Fantrax league's starting lineup, as `SLOT:COUNT` entries.
  *

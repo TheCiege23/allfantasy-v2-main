@@ -340,7 +340,7 @@ export async function bootstrapLeagueFromNormalizedImport(
       players: r.player_ids,
       player_metadata: snapshotImportedPlayerMetadata(r.player_ids, normalized.player_map),
       starters: r.starter_ids,
-      // ESPN only: the provider's own slot per starter, so My Team need not guess FLEX from a position.
+      // Preserve an imported starter's occupied slot, including FLEX and superflex.
       ...(r.starter_slot_by_id && Object.keys(r.starter_slot_by_id).length > 0
         ? { starter_slot_by_id: r.starter_slot_by_id }
         : {}),

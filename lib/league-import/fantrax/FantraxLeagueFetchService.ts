@@ -14,7 +14,7 @@ import {
   readStoredFantraxFuturePicks,
   rekeyFantraxFuturePicks,
 } from './fantraxSnapshotHistory'
-import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
+import { fantraxSoccerPosition, fantraxStarterSlot, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
 
 type LegacyStanding = {
   rank?: unknown
@@ -706,6 +706,13 @@ export async function fetchFantraxLeagueForImport(
      */
     const lineupSource = ownPlayers.length > 0 ? ownPlayers : isUserTeam ? rosterPlayers : []
     const lineup = splitLineup(lineupSource, sport)
+    const starters = new Set(lineup?.starters)
+    const starterSlotById: Record<string, string> = {}
+    for (const player of lineupSource) {
+      const id = asString(player.fantraxId)
+      const slot = fantraxStarterSlot(sport, asString(player.position))
+      if (slot && starters.has(id)) starterSlotById[id] = slot
+    }
     return {
       teamId,
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
@@ -738,6 +745,7 @@ export async function fetchFantraxLeagueForImport(
        * this line never filled it.
        */
       starterPlayerIds: lineup?.starters ?? [],
+      ...(starters.size && Object.keys(starterSlotById).length === starters.size ? { starterSlotById } : {}),
       /*
        * 🛑 THE FALLBACK WAS `rosterPlayerIds` — THE WHOLE ROSTER, ONTO IR. When
        * the split is refused (no statuses at all) the honest shape is "everything

@@ -35,6 +35,7 @@ export interface FantraxImportTeam {
   waiverPriority: number | null
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
+  starterSlotById?: Record<string, string>
   reservePlayerIds: string[]
   /** NBA/NHL/MLB minor-league stash, carried as the taxi squad. Absent or empty for every other sport. */
   taxiPlayerIds?: string[]

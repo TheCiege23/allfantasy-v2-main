@@ -18,6 +18,7 @@ export const FantraxRosterMapper: IExternalRosterMapper<FantraxImportPayload> = 
         points_against: team.pointsAgainst ?? undefined,
         player_ids: team.rosterPlayerIds,
         starter_ids: team.starterPlayerIds,
+        ...(team.starterSlotById ? { starter_slot_by_id: team.starterSlotById } : {}),
         reserve_ids: team.reservePlayerIds,
         taxi_ids: team.taxiPlayerIds ?? [],
         faab_remaining: team.faabRemaining,

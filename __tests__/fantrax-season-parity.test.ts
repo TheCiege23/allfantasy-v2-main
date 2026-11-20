@@ -3,6 +3,7 @@ import { FantraxLeagueMapper } from '@/lib/league-import/adapters/fantrax/Fantra
 import type { FantraxImportPayload } from '@/lib/league-import/adapters/fantrax/types'
 import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
+import { fantraxStarterSlot } from '@/lib/league-import/fantrax/fantraxProSports'
 import { scoredFantraxMatchups, resolveFantraxChampionTeamId } from '@/lib/league-import/fantrax/FantraxHistoricalBackfillService'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
@@ -47,5 +48,8 @@ describe('published Fantrax first-season calendars', () => {
     ]}} as FantraxLeagueInfo)
     expect(rules).toEqual({ rules: [{stat_key:'kr_yd',points_value:0.05},{stat_key:'pr_yd',points_value:0.1}],gaps:[] })
   })
+  it('keeps the occupied NFL flex slot when an eligible athlete plays several positions', () => {
+    expect(['RWT','SFX','ID','DE'].map(code=>fantraxStarterSlot('NFL',code))).toEqual(['FLEX','SUPER_FLEX','IDP_FLEX','DE'])
+    expect(fantraxStarterSlot('NFL','UNKNOWN')).toBeUndefined()
+  })
 })
-

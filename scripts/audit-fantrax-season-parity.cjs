@@ -1,6 +1,6 @@
 // One-shot staging replay. League IDs come from the operator. Only public source data is read.
-// QA team aliases, fixture player IDs and an isolated app account keep every staging claim synthetic.
-const { randomUUID } = require('node:crypto')
+// QA team aliases and an isolated app account keep every staging claim synthetic.
+const { randomUUID, createHash } = require('node:crypto')
 const { prisma } = require('../lib/prisma.ts')
 const { fetchFantraxLeagueForImport } = require('../lib/league-import/fantrax/FantraxLeagueFetchService.ts')
 const { FantraxAdapter } = require('../lib/league-import/adapters/fantrax/FantraxAdapter.ts')
@@ -26,7 +26,9 @@ async function read(endpoint, id, params = {}) {
   }
 }
 async function capture(id) {
-  const info=await read('getLeagueInfo',id,{excludePlayerInfo:'true'})
+  const info=await read('getLeagueInfo',id)
+  const rosterData=await read('getTeamRosters',id)
+  const rosters=rosterData.rosters??rosterData
   const standings=await read('getStandings',id)
   const periods=[]
   for (const p of info.scoringPeriods) {
@@ -35,25 +37,23 @@ async function capture(id) {
     if (data.period!==p.number || !Array.isArray(data.matchups)) throw Error('Missing source period '+p.number)
     periods.push({...data,ended:Date.parse(p.endDate)<Date.now()})
   }
-  return { info, standings, periods }
+  return { info, standings, periods, rosters }
 }
 function replayTransport(source,sport,key) {
   const ids=Object.keys(source.info.teamInfo)
   const names=new Map(ids.map((id,i)=>[id,'QA '+key+' team '+(i+1)]))
   const sid=new Map(ids.map((id,i)=>[id,'t'+(i+1)]))
-  const player='qa-parity-'+sport
-  const pos={NFL:'WR',NBA:'PG',NCAAB:'PG',MLB:'1B',NHL:'C'}[sport]
   const side=t=> t?.id ? {id:sid.get(t.id),name:names.get(t.id)} : null
   const scored=t=> t?.teamId ? {...t,teamId:sid.get(t.teamId),teamName:names.get(t.teamId)} : null
   const {info,standings,periods}=source
   const teamInfo=Object.fromEntries(ids.map(id=>[sid.get(id),{...side({id}),division:info.teamInfo[id].division}]))
   const matchups=info.matchups.map(w=>({period:w.period,matchupList:(w.matchupList||[]).map(p=>({away:side(p.away),home:side(p.home)}))}))
-  const cleanInfo={...info,teamInfo,matchups,leagueName:'QA season parity '+key,playerInfo:{[player]:{}}}
+  const cleanInfo={...info,teamInfo,matchups,leagueName:'QA season parity '+key}
   const scores=new Map(periods.map(p=>[p.period,{period:p.period,matchups:p.matchups.map(m=>({...m,away:scored(m.away),home:scored(m.home)}))}]))
   const rows=Array.isArray(standings)?standings:standings.standings
   const dataset = {
     getLeagueInfo:cleanInfo, getStandings:rows.map(scored),
-    getTeamRosters:Object.fromEntries(ids.map((id,i)=>[sid.get(id),{teamName:names.get(id),rosterItems:i===0 && periods.length?[{id:player,position:pos,status:'ACTIVE'}]:[]}])),
+    getTeamRosters:Object.fromEntries(ids.map(id=>[sid.get(id),{teamName:names.get(id),rosterItems:source.rosters[id].rosterItems}])),
     getDraftResults:{draftPicks:[]},getDraftPicks:{},
   }
   return { names,rows, fetch:async(input,init)=>{
@@ -62,8 +62,7 @@ function replayTransport(source,sport,key) {
     const u=new URL(href),ep=u.pathname.split('/').at(-1)
     let data
     if(ep==='getPlayerIds'){
-      const dir=u.searchParams.get('sport')
-      data={['qa-parity-'+dir]:{fantraxId:'qa-parity-'+dir,name:'QA Fixture',position:pos,team:'QA'}}
+      return publicFetch(input,init)
     }else if(u.searchParams.get('leagueId')!==key)throw Error('Unexpected fixture league')
     else if(ep==='getMatchupScores')data=scores.get(Number(u.searchParams.get('period')))
     else data=dataset[ep]
@@ -100,6 +99,26 @@ async function runCase(userId,sport,id,index,runId) {
     ])
     const byName=new Map(teams.map(t=>[t.teamName,t]))
     const external=id=>byName.get(replay.names.get(id))?.externalId
+    const rosterRows=await prisma.roster.findMany({where:{leagueId},select:{playerData:true}})
+    const rosterByTeam=new Map(rosterRows.map(r=>[r.playerData.source_team_id,r.playerData]))
+    const sorted=ids=>[...ids].sort().join('|')
+    let matchedRosters=0,sourcePlayers=0,suppliedRoster=null,matchedActiveGroups=0
+    for(const id of orig){
+      const sourceRows=source.rosters[id].rosterItems
+      const ids=sourceRows.map(p=>p.id)
+      const row=rosterByTeam.get(external(id))
+      sourcePlayers+=ids.length
+      if(row && sorted(row.players||[])===sorted(ids))matchedRosters++
+      const active=sourceRows.filter(p=>p.status==='ACTIVE').map(p=>p.id)
+      if(row && sorted(row.starters||[])===sorted(active))matchedActiveGroups++
+      const signature=createHash('sha256').update(sorted(ids)).digest('hex')
+      if(process.env.QA_ROSTER_FINGERPRINT && signature===process.env.QA_ROSTER_FINGERPRINT){
+        const positions={RWT:'FLEX',SFX:'SUPER_FLEX',ID:'IDP_FLEX'}
+        suppliedRoster={players:ids.length,storedPlayers:row?.players?.length,starters:active.length,ir:row?.reserve?.length,
+          matchedStarterSlots:sourceRows.filter(p=>p.status==='ACTIVE' && row?.starter_slot_by_id?.[p.id]===(positions[p.position]||p.position)).length,
+          samePlayers:sorted(row?.players||[])===sorted(ids)}
+      }
+    }
     const stored=new Map(facts.map(f=>[[f.weekOrPeriod,...[f.teamA,f.teamB].sort()].join('|'),f]))
     let matchedRecords=0,matchedRank=0,matchedPF=0,availablePF=0,games=0,matchedScores=0,matchedContributions=0,matchedRebuiltRecords=0
     const records=new Map(orig.map(id=>[id,[0,0,0]]))
@@ -133,12 +152,14 @@ async function runCase(userId,sport,id,index,runId) {
       season.currentWeek===(source.periods.length?source.periods.at(-1).period:0)
     const evidence={index,sport,leagueId,field:league.playoffTeams,playoffStart:league.playoffStartWeek,currentPeriod:season.currentWeek,closed,
       backfill,teams:teams.length,sourceTeams:orig.length,matchedRecords,matchedRank,availablePF,matchedPF,matchedRebuiltRecords,
+      sourcePlayers,matchedRosters,matchedActiveGroups,suppliedRoster,
       games,matchedScores,storedFacts:facts.length,matchedContributions,settingsPass,
       scoringRules:payload.settings.scoringRules.length,scoringGaps:payload.settings.raw.scoringGaps||[],
       sourceManagerFields:Object.keys(Object.values(source.info.teamInfo)[0]).filter(k=>/owner|manager|user/i.test(k)),
       champion:resolveFantraxChampionTeamId(payload),warnings:result.incompleteSteps?.map(w=>w.code)||[]}
     evidence.pass=backfill==='complete' && settingsPass && teams.length===orig.length && matchedRecords===orig.length && matchedRank===orig.length &&
-      matchedPF===availablePF && games===matchedScores && facts.length===games && evidence.champion===null
+      matchedRosters===orig.length && matchedActiveGroups===orig.length && matchedPF===availablePF &&
+      games===matchedScores && facts.length===games && evidence.champion===null
     console.log('FANTRAX_PARITY '+JSON.stringify(evidence))
     return evidence.pass
   } finally {
@@ -161,4 +182,3 @@ async function main(){
   if(!passed)process.exitCode=1
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1}).finally(()=>prisma.$disconnect())
-
