@@ -3,6 +3,7 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
+import { primeCommissionerHealthSnapshot } from '@/lib/decision-os/commissioner-os'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
@@ -997,6 +998,12 @@ export async function getCommissionerHub(input: {
   // ── Canonical health score ─────────────────────────────────────────────
   // A stale import is NOT scored — see resolveHubHealthScore for the measured contradiction.
   const snapshot = healthSnapshots.find((s) => s.leagueId === leagueId) ?? null
+  /*
+   * What this page shows is what Chimmy reads (2026-11-20): the snapshot goes to Commissioner OS's five-minute fact,
+   * so "how healthy is my league?" asked right after opening the hub gets these numbers, not a second build. Access
+   * was proved above. Not awaited and never throws — a failed write only means Chimmy derives as before.
+   */
+  void primeCommissionerHealthSnapshot({ userId, leagueId }, snapshot, { dynastySignals: dynastyLeague, dynastyLeague })
   const healthScore: CommissionerHubData['health']['score'] = resolveHubHealthScore({
     snapshot,
     unread,

@@ -70,4 +70,32 @@ export function createCommissionerOsLoaders(deps: Parameters<typeof createOsFeed
   }
 }
 
+const sharedFeed = createCommissionerOs()
+
+/**
+ * THE HUB SCREEN'S SNAPSHOT IS CHIMMY'S SNAPSHOT (2026-11-20). The commissioner hub builds this exact snapshot live
+ * for its own page (`lib/core-app/commissionerHub.ts`); Chimmy read a cached one derived separately, up to five
+ * minutes apart, so a commissioner could look at the hub and ask Chimmy and get two different counts. The screen now
+ * hands what it built to this fact, and Chimmy's next read inside five minutes serves exactly that — the same numbers
+ * the commissioner is looking at. It is also the warm: the entry is filled the moment a commissioner opens the hub,
+ * which is when it is about to be asked about, so no scheduled job is needed for a five-minute entry.
+ *
+ * ⚠ ONLY A SNAPSHOT THE DERIVATION WOULD HAVE PRODUCED IS STORED:
+ *   - built from the database (`source: 'database'`), never the dashboard fallback, which is assembled from the
+ *     caller's league metadata and so differs by caller;
+ *   - with dynasty signals whenever the league uses them — the derivation always asks for them, and they are read
+ *     for exactly the leagues `usesDynastyBackground` accepts, which is the same test the hub uses to ask;
+ *   - for the league it is keyed on.
+ * Anything else is skipped, and Chimmy derives as before. Never throws: a failed write is an accelerator problem.
+ */
+export async function primeCommissionerHealthSnapshot(
+  args: CommissionerOsArgs,
+  snapshot: CommissionerLeagueHealthSnapshot | null | undefined,
+  built: { dynastySignals: boolean; dynastyLeague: boolean },
+): Promise<boolean> {
+  if (!snapshot || snapshot.leagueId !== args.leagueId || snapshot.source !== 'database') return false
+  if (built.dynastyLeague && !built.dynastySignals) return false
+  return sharedFeed.prime(commissionerHealthSource, args, snapshot).catch(() => false)
+}
+
 export const commissionerOsSources = [commissionerHealthSource] as const
