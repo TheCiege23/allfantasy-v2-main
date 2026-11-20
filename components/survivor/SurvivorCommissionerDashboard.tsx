@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { survivorPhaseWords } from '@/lib/survivor/survivorPhaseWords'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -318,7 +319,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                     {data ? (
                       <>
                         {data.league.sport} · Week {data.week} ·{' '}
-                        <span className="font-medium text-amber-100/90">{gs?.phase ?? 'loading'}</span>
+                        <span className="font-medium text-amber-100/90">{survivorPhaseWords(gs?.phase) ?? 'loading'}</span>
                       </>
                     ) : (
                       'Loading island…'
@@ -384,7 +385,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             <>
               {data.todo ? <SurvivorCommissionerTodoCard todo={data.todo} /> : null}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <WarRoomStatOrb label="Phase" value={gs?.phase ?? '—'} hint="Game state" accent="emerald" />
+                <WarRoomStatOrb label="Phase" value={survivorPhaseWords(gs?.phase) ?? '—'} hint="Game state" accent="emerald" />
                 <WarRoomStatOrb
                   label="Players / roster"
                   value={`${Math.max(0, data.rosterCount - data.eliminatedCount)} active`}
