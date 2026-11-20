@@ -12,14 +12,8 @@ import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
 import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
 import { createCommissionerOsLoaders } from '../commissioner-os'
-import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
-import { inactiveFlagView, type InactiveFlagView } from '@/lib/commissioner-hub/inactiveFlagView'
-
-/** The inactive flag's graded record from the outcome snapshot (memoised by its store). Null on any failure. */
-async function loadInactiveFlagRecord(): Promise<InactiveFlagView | null> {
-  const snapshot = await readAdviceLearningSnapshot().catch(() => null)
-  return inactiveFlagView(snapshot?.inactiveFlags)
-}
+// The inactive flag's graded record — the one loader the hub's flag also reads, so the two never disagree.
+import { loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice } from './packet'

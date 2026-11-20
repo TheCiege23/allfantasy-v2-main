@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { primeCommissionerHealthSnapshot } from '@/lib/decision-os/commissioner-os'
+import { inactiveFlagHubRecord, loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
@@ -881,9 +882,17 @@ export async function getCommissionerHub(input: {
       ]
     : []
 
+  /*
+   * The "no moves in 14 days" warning's graded record (2026-11-20), in a league AllFantasy hosts — the one clock it is
+   * graded on. The same loader and bands as the commissioner's health decision in Chimmy (`inactiveFlagRecord.ts`), so
+   * the hub and Chimmy say the same thing about how far to trust it. Memoised by its store; a failure reads as none.
+   */
+  const inactiveRecord = native ? inactiveFlagHubRecord(await loadInactiveFlagRecord().catch(() => null)) : null
+
   const flags = rankFlags([
     abandonedTeamsFlag({
       managers: memberRows,
+      inactiveRecord,
       activityReason: memberActivity.available ? null : memberActivity.reason,
       orphanTeams: unownedTeamNames(teams, language),
       totalTeams: teamCount,

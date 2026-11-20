@@ -205,7 +205,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Trade | ~86 | ~79 | ~79 | Kernel ⚠: the graded inbox does not read the feed (only the env-gated proposals route does). Engine ⚠ and Cron ⚠ as before |
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
 | Lineup | ~86 | ~80 | ~80 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠: graded start/sit is reported, not fed back into the optimizer |
-| Commissioner | ~85 | ~85 | ~93 | The hub-prime PR makes Cron n/a. User stays ⚠: the hub shows the snapshot but never the decision (`decisionOsShadow` has no reader, and is built without the learned inactive record) |
+| Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
 | Manager Psychology | ~90 | ~63 | ~93 | Feed ❌ → ✅ and Kernel ⚠ → ✅ in this change: manager records read through the `psychology` feed (below). Cron ⚠ stays: ESPN/MFL waivers and Fantrax trades refresh only at import or upload (a provider-quota decision) |
 | Decision OS hub | ~86 | ~79 | ~86 | Operability ⚠ → ✅ in this build: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own |
 
@@ -259,6 +259,18 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
   - ⚠ **NOT done: `transactions` in `IMPORT_SCOPES`.** The collector writes it for Sleeper, but adding it to the
     freshness list would print "transactions NOT complete" forever for any provider whose sync never runs that
     scope — the false-warning class this change fixes for native leagues. It needs a per-provider scope list first.
+- **The hub's quiet-manager warning cites its graded record** (the owner chose "hub decision card"; re-scoped). Chimmy's
+  health decision softened its inactive warning by the flag's graded record; the hub's "no moves in 14 days" flag
+  never did, so the two could disagree about the same managers. In a league AllFantasy hosts (the one clock the record
+  is graded on), the flag now adds one sentence after its existing caution — held up, mixed ("message them before
+  replacing anyone") or low ("most came back on their own"), with the counts, in English and Spanish. The bands are the
+  decision's own: `inactiveFlagHubRecord` applies `inactiveFlagPrecision` and the same two thresholds from
+  `commissioner-health/rules.ts`, and both surfaces read one loader (`lib/commissioner-hub/inactiveFlagRecord.ts`). Under
+  the record's floor, or for an imported league, the flag reads exactly as before. Severity is unchanged: the flag
+  counts facts; only the advice beside them learns.
+  - ⚠ The "everyone is quiet" case (a fact about the league, usually the offseason) does not cite the record.
+  - ⚠ Not a card: the decision's risk scores (churn, dispute, abandonment) are still not shown on the hub — the
+    re-scope's point, and an owner call if they ever should be.
 
 **Ranked build list from here** (no migration and no owner decision unless marked):
 
@@ -270,7 +282,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | 4 | League value boards cached in Value OS. ⚠ **Re-sized to L after reading it (2026-11-20):** the board carries `ReadonlyMap`s (`rosterIndex`, `replacementByPosition`, the dynasty context) that `domain_os_facts` cannot store as JSON without a custom codec, and a baseball board is ~1,500 players (~450 KB per league per write). A per-process share of the built board is the cheaper latency win, but does not move the Kernel axis | Value Kernel → ✅ (~100) | L |
 | 5 | The graded trade inbox reads through Trade OS; read `tradeSettingsSource` or delete it | Trade Kernel → ✅ | M |
 | ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
-| — | **Owner decision:** show the hub's commissioner decision card (and give it the learned record) | Commissioner User → ✅ (~100) | M |
+| ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
 | — | **Owner decision:** league-scored projections for NBA/NHL/MLB points leagues (category leagues have no points) | Projection Chimmy → ✅ | M |
 | — | **Owner decision:** let graded trades move letters; grade more than 3 pending offers (latency) | Trade Engine | M / S |
 | — | **Migration:** draft advice learns from graded tips | Draft Engine → ✅ (~100) | L |
