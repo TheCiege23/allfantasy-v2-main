@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
-import { KeeperSelectionTab, keeperValueLine } from '@/app/league/[leagueId]/tabs/KeeperSelectionTab'
+import { KeeperSelectionTab, keeperRefusalText, keeperValueLine } from '@/app/league/[leagueId]/tabs/KeeperSelectionTab'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -41,5 +41,19 @@ describe('keeper screen — value report', () => {
     await screen.findByText('Star Guy')
     expect(screen.queryByTestId('keeper-value')).toBeNull()
     expect(screen.queryByTestId('keeper-value-note')).toBeNull()
+  })
+})
+
+describe('keeperRefusalText', () => {
+  const nameOf = (id: string) => ({ a: 'Josh Allen', b: 'Bijan Robinson' } as Record<string, string>)[id] ?? ''
+  it('says why in words, with the players named', () => {
+    expect(keeperRefusalText({ playerIds: ['a', 'b'], reason: 'duplicate_round_5' }, nameOf)).toBe('Josh Allen and Bijan Robinson both cost a round 5 pick. Keep one, or ask your commissioner how the league settles it.')
+    expect(keeperRefusalText({ playerIds: ['a'], reason: 'rejected_by_commissioner' }, nameOf)).toBe('Josh Allen: your commissioner rejected this keeper.')
+    expect(keeperRefusalText({ playerIds: ['a'], reason: 'max_years_reached' }, nameOf)).toBe('Josh Allen has been kept the most seasons your league allows.')
+    expect(keeperRefusalText({ playerIds: ['a'], reason: 'not_on_roster' }, nameOf)).toBe('Josh Allen is not on your roster.')
+  })
+  it('an unknown code or an unknown player still reads as a sentence, never as a code', () => {
+    expect(keeperRefusalText({ playerIds: ['zzz'], reason: 'some_new_code' }, nameOf)).toBe('This player is not eligible to be kept.')
+    expect(keeperRefusalText({ reason: 'ineligible' }, nameOf)).toBe('This player is not eligible to be kept.')
   })
 })

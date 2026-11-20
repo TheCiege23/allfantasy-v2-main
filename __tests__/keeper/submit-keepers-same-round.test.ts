@@ -145,13 +145,22 @@ describe('submitKeeperSelections — the saved list is the selection', () => {
   it('removes this team\'s pending keepers the list no longer names, and nobody else\'s', async () => {
     setup('player_chooses')
     await submitKeeperSelections('R', 'L', 'S', ['c'])
-    expect(sweeps()).toEqual([{ leagueId: 'L', seasonId: 'S', rosterId: 'R', status: 'pending', playerId: { notIn: ['c'] } }])
+    expect(sweeps()).toEqual([{ leagueId: 'L', seasonId: 'S', rosterId: 'R', status: { in: ['pending', 'confirmed'] }, playerId: { notIn: ['c'] } }])
   })
 
   it('saving nobody clears every pending keeper', async () => {
     setup('player_chooses')
     await submitKeeperSelections('R', 'L', 'S', [])
-    expect(sweeps()).toEqual([{ leagueId: 'L', seasonId: 'S', rosterId: 'R', status: 'pending', playerId: { notIn: [] } }])
+    expect(sweeps()).toEqual([{ leagueId: 'L', seasonId: 'S', rosterId: 'R', status: { in: ['pending', 'confirmed'] }, playerId: { notIn: [] } }])
+  })
+
+  it('a keeper the commissioner rejected stays rejected: saving him again is refused and writes nothing for him', async () => {
+    setup('player_chooses')
+    m.recordFindMany.mockImplementation(async (args?: { where?: { status?: unknown } }) => (args?.where?.status === 'rejected' ? [{ rosterId: 'R', playerId: 'c' }] : []) as never)
+    const out = await submitKeeperSelections('R', 'L', 'S', ['c'])
+    expect(out.conflicted).toEqual([{ playerIds: ['c'], reason: 'rejected_by_commissioner' }])
+    expect(m.recordUpsert).not.toHaveBeenCalled()
+    m.recordFindMany.mockImplementation(async () => [])
   })
 
   it('counts teams, not saves: one team saving twice is one team; a team that kept nobody counts', async () => {

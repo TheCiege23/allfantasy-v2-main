@@ -120,7 +120,16 @@ async function submitKeeperSelectionsLocked(
     e: (typeof elig)[0]
   }[] = []
 
+  // A keeper the commissioner rejected stays rejected: saving him again does not put him back.
+  const rejected = new Set(
+    (await db.keeperRecord.findMany({ where: { leagueId, seasonId, rosterId, status: 'rejected', playerId: { in: playerIds } }, select: { playerId: true } })).map((r) => r.playerId),
+  )
+
   for (const pid of playerIds) {
+    if (rejected.has(pid)) {
+      conflicted.push({ playerIds: [pid], reason: 'rejected_by_commissioner' })
+      continue
+    }
     const e = eligMap.get(pid)
     if (!e?.isEligible) {
       conflicted.push({ playerIds: [pid], reason: e?.ineligibleReason ?? 'ineligible' })
@@ -237,9 +246,10 @@ async function submitKeeperSelectionsLocked(
    * save only ever added: untick a player and save, and his record stayed on file, was locked with
    * the rest, cost a pick and could put the team over the keeper limit (the limit is checked against
    * the list sent, not what is stored). Saving nobody left every earlier keeper in place too. A
-   * pending keeper the list no longer names is removed. Locked records are never touched.
+   * pending or commissioner-confirmed keeper the list no longer names is removed. Locked and rejected
+   * records are never touched.
    */
-  await db.keeperRecord.deleteMany({ where: { leagueId, seasonId, rosterId, status: 'pending', playerId: { notIn: playerIds } } })
+  await db.keeperRecord.deleteMany({ where: { leagueId, seasonId, rosterId, status: { in: ['pending', 'confirmed'] }, playerId: { notIn: playerIds } } })
 
   /*
    * How many TEAMS have submitted, counted, not incremented. It went up by one on every save, so one
@@ -324,8 +334,14 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
       console.error('[keeper] missed-deadline rule failed; defaults rolled back', { leagueId, sessionId, error: error instanceof Error ? error.message : error })
     }
 
+    /*
+     * 🛑 A KEEPER THE COMMISSIONER CONFIRMED WAS DROPPED AT THE LOCK. The dashboard's Confirm button
+     * sets `confirmed`; the lock promoted only `pending`, and the carryover, the pick forfeits and the
+     * next draft all read `locked`. So approving a keeper was the one way to lose him: he stayed in
+     * the pool and the team kept its pick. Both statuses lock; `rejected` never does.
+     */
     await db.keeperRecord.updateMany({
-      where: { leagueId, seasonId: current.seasonId, status: 'pending' },
+      where: { leagueId, seasonId: current.seasonId, status: { in: ['pending', 'confirmed'] } },
       data: { status: 'locked', lockedAt: new Date() },
     })
     await db.keeperSelectionSession.update({ where: { id: sessionId }, data: { status: 'locked', lockedAt: new Date() } })
