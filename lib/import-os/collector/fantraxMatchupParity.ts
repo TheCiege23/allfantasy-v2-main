@@ -291,8 +291,8 @@ export async function runFantraxMatchupParity(input?: {
         week.matchups.push({
           teamId1: away,
           teamId2: home,
-          points1: scored ? row.awayScore : 0,
-          points2: scored ? row.homeScore : 0,
+          points1: scored ? (row.awayScore ?? 0) : 0,
+          points2: scored ? (row.homeScore ?? 0) : 0,
         })
       }
 
