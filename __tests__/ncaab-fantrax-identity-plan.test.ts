@@ -40,7 +40,14 @@ describe('school abbreviations confirmed by current games', () => {
   const identities = refs.map((r, i) => ({ ...identity, id: 'i' + i, normalizedName: r.name.toLowerCase(), rollingInsightsId: 'r' + i }))
   const sourcePlayers = refs.map((r, i) => ({ ...args.sourcePlayers[0]!, name: r.name, externalId: 'r' + i }))
   const currentAppearances = identities.map(p => ({ playerId: p.id, team: 'Rider' }))
-  const input = { ...args, refs, identities, sourcePlayers, currentAppearances, rosterIds: new Set(['f3']) }
+  /*
+   * A same-name record at another school for each player (no Rolling Insights id, no appearance). It leaves
+   * this learner's evidence untouched, and keeps the file's OTHER learner (linked/unique-name anchors) from
+   * also learning 'Rdr' — so these assertions test a code only current appearances taught, which is what
+   * they were written for. Where both learners know a code, that learner's rules decide (owner, 2026-11-19).
+   */
+  const elsewhere = identities.map((p) => ({ ...p, id: `${p.id}-elsewhere`, currentTeam: 'DUKE UNIVERSITY', rollingInsightsId: null }))
+  const input = { ...args, refs, identities: [...identities, ...elsewhere], sourcePlayers, currentAppearances, rosterIds: new Set(['f3']) }
   it('accepts an exact current player on the agreed school and rejects a missing or conflicting box', () => {
     expect(planNcaabFantraxIdentityLinks(input).links).toEqual([{ id: 'i3', fantraxId: 'f3', rollingInsightsId: 'r3' }])
     expect(planNcaabFantraxIdentityLinks({ ...input, currentAppearances: currentAppearances.slice(0, 3) }).links).toEqual([])
@@ -54,6 +61,62 @@ describe('school abbreviations confirmed by current games', () => {
       currentAppearances: currentAppearances.map((p,i) => i ? p : { ...p, team: 'O' }),
     }).links).toEqual([])
     expect(planNcaabFantraxIdentityLinks({ ...input, refs: [...refs, { ...refs[3]!, fantraxId: 'other-id' }] }).links).toEqual([])
+  })
+})
+
+/*
+ * Captured 2026-11-19 (`contracts/fantrax/fixtures/ncaab-player-ids.json`): 191 of Fantrax's school codes
+ * are not our `SportsTeam.shortName` (PRINC vs PRIN, KAN vs KU), so their players could never link.
+ */
+describe('Fantrax NCAAB school codes we do not hold', () => {
+  const school = 'PRINCETON UNIVERSITY'
+  const anchor = (n: number): NcaabIdentity => ({ id: `a${n}`, normalizedName: `anchor ${n}`, position: 'G',
+    currentTeam: school, rollingInsightsId: `ra${n}`, fantraxId: `fa${n}` })
+  const target: NcaabIdentity = { id: 'ri-t', normalizedName: 'xaivian lee', position: 'G', currentTeam: school,
+    rollingInsightsId: '777', fantraxId: null }
+  const base = {
+    refs: [
+      ...[1, 2, 3].map((n) => ({ fantraxId: `fa${n}`, name: `${n}, Anchor`, team: 'PRINC', position: 'G' })),
+      { fantraxId: 'fx-t', name: 'Lee, Xaivian', team: 'PRINC', position: 'G' },
+    ],
+    identities: [anchor(1), anchor(2), anchor(3), target],
+    sourcePlayers: [{ externalId: '777', name: 'Xaivian Lee', position: 'G', team: 'Princeton University' }],
+    teams: [{ name: 'Princeton University', shortName: 'PRIN' }],
+    rosterIds: new Set(['fx-t']),
+  }
+
+  it('learns the code from three players already linked at one school', () => {
+    expect(planNcaabFantraxIdentityLinks(base).links).toEqual([{ id: 'ri-t', fantraxId: 'fx-t', rollingInsightsId: '777' }])
+  })
+  it('learns nothing from two anchors', () => {
+    expect(planNcaabFantraxIdentityLinks({ ...base, identities: [anchor(1), anchor(2), target] }).links).toEqual([])
+  })
+  it('learns nothing when one anchor sits at another school', () => {
+    const dissent = { ...anchor(4), currentTeam: 'RIDER UNIVERSITY' }
+    expect(planNcaabFantraxIdentityLinks({ ...base,
+      refs: [...base.refs, { fantraxId: 'fa4', name: '4, Anchor', team: 'PRINC', position: 'G' }],
+      identities: [...base.identities, dissent] }).links).toEqual([])
+  })
+  it('never overrides a code we already hold', () => {
+    // PRIN is ours and means Princeton; three anchors claiming it for Rider change nothing.
+    const held = { ...base, refs: base.refs.map((r) => ({ ...r, team: 'PRIN' })),
+      identities: [...[1, 2, 3].map((n) => ({ ...anchor(n), currentTeam: 'RIDER UNIVERSITY' })), target] }
+    expect(planNcaabFantraxIdentityLinks(held).links).toEqual([{ id: 'ri-t', fantraxId: 'fx-t', rollingInsightsId: '777' }])
+  })
+})
+
+describe('Fantrax NCAAB position is a tie-breaker, not a gate', () => {
+  it('links one same-named player at the school when only the label differs (F vs G)', () => {
+    expect(planNcaabFantraxIdentityLinks({ ...args, refs: [{ ...args.refs[0]!, position: 'F' }] }).links)
+      .toEqual([{ id: 'ri-1', fantraxId: '064v9', rollingInsightsId: '20542' }])
+  })
+  it('splits two same-named teammates by position, and refuses when position cannot', () => {
+    const forward: NcaabIdentity = { ...identity, id: 'ri-f', position: 'F', rollingInsightsId: '20543' }
+    const sources = [...args.sourcePlayers, { externalId: '20543', name: 'Bryce Baker', position: 'F', team: 'Rider University' }]
+    expect(planNcaabFantraxIdentityLinks({ ...args, identities: [identity, forward], sourcePlayers: sources }).links)
+      .toEqual([{ id: 'ri-1', fantraxId: '064v9', rollingInsightsId: '20542' }])
+    expect(planNcaabFantraxIdentityLinks({ ...args, refs: [{ ...args.refs[0]!, position: 'C' }],
+      identities: [identity, forward], sourcePlayers: sources }).links).toEqual([])
   })
 })
 
@@ -99,5 +162,65 @@ describe('Fantrax NCAAB: the remaining unlinked classes', () => {
     const targetRef = ref(target, 'xt')
     expect(run([...anchors.map((a, i) => ref(a, `x${i}`)), targetRef], [...anchors, target], [namesake]).some((l) => l.fantraxId === 'xt')).toBe(true)
     expect(run([...anchors.slice(0, 2).map((a, i) => ref(a, `x${i}`)), targetRef], [...anchors.slice(0, 2), target], [namesake]).some((l) => l.fantraxId === 'xt')).toBe(false)
+  })
+})
+
+/*
+ * Two school-code learners, both kept (owner's decision 2026-11-19): this file's (linked anchors, unique-name
+ * bootstrap, supermajority) and #3910's (current game appearances). Where they disagree, nothing links.
+ */
+describe('Fantrax NCAAB: the two school-code learners together', () => {
+  const teams = [{ name: 'Rider University', shortName: 'Rider' }, { name: 'Princeton University', shortName: 'PRIN' }]
+  const person = (id: string, name: string, school: string, fantraxId: string | null = null): NcaabIdentity =>
+    ({ id, normalizedName: name.toLowerCase(), position: 'G', currentTeam: school, rollingInsightsId: `ri-${id}`, fantraxId })
+  const sourceOf = (p: NcaabIdentity, name: string) => ({ externalId: p.rollingInsightsId!, name, position: 'G', team: p.currentTeam })
+  const ref = (fantraxId: string, name: string) => ({ fantraxId, name: name.split(' ').reverse().join(', '), team: 'PRINC', position: 'G' })
+  // Three players already linked at Princeton under Fantrax's code PRINC: this file's learner says PRINC = Princeton.
+  const linked = ['Ann Alpha', 'Ben Beta', 'Cal Gamma'].map((n, i) => ({ p: person(`a${i}`, n, 'PRINCETON UNIVERSITY', `fa${i}`), n }))
+  const target = person('t', 'Dee Delta', 'PRINCETON UNIVERSITY')
+  const base = {
+    refs: [...linked.map(({ p, n }) => ref(p.fantraxId!, n)), ref('ft', 'Dee Delta')],
+    identities: [...linked.map(({ p }) => p), target],
+    sourcePlayers: [...linked.map(({ p, n }) => sourceOf(p, n)), sourceOf(target, 'Dee Delta')],
+    teams, rosterIds: new Set(['ft']),
+  }
+
+  it('links on a code only this file learned, without needing a current appearance', () => {
+    expect(planNcaabFantraxIdentityLinks(base).links).toEqual([{ id: 't', fantraxId: 'ft', rollingInsightsId: 'ri-t' }])
+  })
+  it('lets this file decide the player when both learners agree on the school (no minutes yet still links)', () => {
+    // Three ACTIVE Princeton players under PRINC: #3910's learner also says PRINC = Princeton. The target
+    // has no appearance yet — #3910's rule alone would refuse him; in agreement, this file's rules decide.
+    const active = ['Eve Epsilon', 'Fay Zeta', 'Gus Eta'].map((n, i) => ({ p: person(`p${i}`, n, 'PRINCETON UNIVERSITY'), n }))
+    const plan = planNcaabFantraxIdentityLinks({
+      ...base,
+      teams: [...teams, { name: 'Princeton University', shortName: 'Prn' }],
+      refs: [...base.refs, ...active.map(({ p, n }) => ref(`fp${p.id}`, n))],
+      identities: [...base.identities, ...active.map(({ p }) => p)],
+      sourcePlayers: [...base.sourcePlayers, ...active.map(({ p, n }) => sourceOf(p, n))],
+      currentAppearances: active.map(({ p }) => ({ playerId: p.id, team: 'Prn' })),
+    })
+    expect(plan.links.filter((l) => l.fantraxId === 'ft')).toEqual([{ id: 't', fantraxId: 'ft', rollingInsightsId: 'ri-t' }])
+  })
+  it('refuses when #3910 learned the same code for another school', () => {
+    // Three active Rider players Fantrax also lists under PRINC: #3910's learner says PRINC = Rider.
+    const riders = ['Eve Epsilon', 'Fay Zeta', 'Gus Eta'].map((n, i) => ({ p: person(`r${i}`, n, 'RIDER UNIVERSITY'), n }))
+    const input = {
+      ...base,
+      refs: [...base.refs, ...riders.map(({ p, n }) => ref(`fr${p.id}`, n))],
+      identities: [...base.identities, ...riders.map(({ p }) => p)],
+      sourcePlayers: [...base.sourcePlayers, ...riders.map(({ p, n }) => sourceOf(p, n))],
+      currentAppearances: riders.map(({ p }) => ({ playerId: p.id, team: 'Rider' })),
+    }
+    // The target is active at Princeton (so #3910's own rule would accept him there) and has a Fantrax
+    // namesake elsewhere (so he cannot vote): only the disagreement between the learners can refuse him.
+    const plan = planNcaabFantraxIdentityLinks({ ...input, refs: [...input.refs, { fantraxId: 'fdup', name: 'Delta, Dee', team: 'Rider', position: 'G' }],
+      currentAppearances: [...input.currentAppearances, { playerId: 't', team: 'PRIN' }] })
+    expect(plan.links).toEqual([])
+  })
+  it('does not refuse a player over a box-score code that is ambiguous or collides with ours', () => {
+    // Production 2026-11-19: New Haven players appear as "UNH" (our New Hampshire); NOVA/UWG/MER are held
+    // twice. A per-player box-score veto refused 45 correct links, so the code-level reading has none.
+    expect(planNcaabFantraxIdentityLinks({ ...args, teams, currentAppearances: [{ playerId: 'ri-1', team: 'PRIN' }] }).links).toHaveLength(1)
   })
 })
