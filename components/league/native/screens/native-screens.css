@@ -413,3 +413,20 @@
   .nls-lrow-empty { grid-template-columns: 40px minmax(0, 1fr); }
 }
 @container (max-width: 560px) and (pointer: coarse) { .nls-lrow .nls-btn[data-size=sm] { min-height: 44px; } }
+
+/* Guillotine: the week's scores against the chop line (Matchup tab). */
+.nls-gl-me { margin: 0; padding: 12px 16px; border: 1px solid var(--line2); border-radius: 8px; color: var(--text); font-size: 14px; }
+.nls-gl-me[data-tier=chop_zone] { border-color: color-mix(in srgb, var(--bad) 55%, transparent); color: var(--bad); }
+.nls-gl-me[data-tier=danger] { border-color: color-mix(in srgb, var(--warn, #ffc46b) 55%, transparent); }
+.nls-gl-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 56px; padding: 8px 20px; }
+.nls-gl-row[data-me=true] { background: color-mix(in srgb, var(--accent) 6%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+.nls-gl-rank { color: var(--faint); font: 600 13px var(--nl-mono); }
+.nls-gl-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nls-gl-name strong { overflow: hidden; color: var(--text); font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.nls-gl-name em { color: var(--accent); font-size: 12px; font-style: normal; font-weight: 600; }
+.nls-gl-name small { color: var(--muted); font: 12px var(--nl-mono); }
+.nls-gl-row[data-tier=danger] .nls-gl-name small { color: var(--warn, #ffc46b); }
+.nls-gl-row[data-tier=chop_zone] .nls-gl-name small, .nls-gl-row[data-tier=chop_zone] .nls-gl-pts { color: var(--bad); }
+.nls-gl-pts { color: var(--text); font: 600 18px var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-gl-cut { display: flex; align-items: center; gap: 10px; padding: 4px 20px; color: var(--bad); font: 700 11px var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
+.nls-gl-cut::before, .nls-gl-cut::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in srgb, var(--bad) 60%, transparent); }
