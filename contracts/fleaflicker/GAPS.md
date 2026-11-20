@@ -277,3 +277,39 @@ it should not rest on a guessed shape.
 **Needed:** the `G-07` decision (whose league's activity this public repo may publish),
 then one `FetchLeagueTransactions` capture with a completed trade via `scripts/probe.sh`.
 Commit it with the parser fix that reads it.
+
+---
+
+## `G-08` — a LIVE, in-season league's scoreboard is refused as "season unknown" (UNVERIFIED, 2026-11-20)
+
+**Observed in production, read-only, no provider call made for this entry.** The one Fleaflicker
+league on file (`344624`, NFL, season 2026, in season: rosters sync every few minutes and its teams
+hold 16,098 points for) has **zero** `WeeklyMatchup` rows. `runFleaflickerMatchupParity` runs on
+schedule and skips it every time; its own cache row (`fleaflicker_matchup_sync:344624:2026`) says:
+
+```
+status: skipped   returnedSeason: null
+note:   league has no 2026 season — provider returned unknown (silently clamped); not syncing stale results
+```
+
+So `FetchLeagueScoreboard` answered a request for 2026 with a body whose `schedulePeriod.low` has
+**no `season` key**, and `fetchFleaflickerScoreboard` treats a missing season as a mismatch.
+
+**What is known:** `schedulePeriod.low.season` is present on a finished past season
+(`fixtures/scoreboard.NFL.2021.week1.json`: 2021) and absent on a pre-draft league
+(`fixtures/scoreboard.NFL.json`). **What is not:** what a league that is mid-season in the CURRENT
+season returns. No committed fixture is of such a league (the same hole as `G-05`(b)).
+
+**Inferred, not observed — do not build on it:** Fleaflicker omits default values (the false-boolean
+rule in `G-01`), so the current season may be omitted from `low` the way `false` is. If so, "absent"
+means "the current season" for a league with games, and the clamp guard is refusing exactly the
+leagues that are live. The clamp case it exists for (league 206154) DOES carry a season, so the two
+may be separable — but only a capture can say.
+
+**Blocks:** every weekly-score surface for a live Fleaflicker league (scores, matchups, power board,
+season outlook).
+
+**Needed:** one `FetchLeagueScoreboard` capture of a mid-season league via `scripts/probe.sh`
+(league `344624` is the owner's customer's league, so `G-07`'s question of whose league this public
+repo may publish applies to the committed fixture), committed with the guard change that reads it.
+This would also close `G-05`(b).
