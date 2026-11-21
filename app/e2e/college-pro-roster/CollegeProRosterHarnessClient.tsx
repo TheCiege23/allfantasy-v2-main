@@ -99,17 +99,33 @@ const COLLEGE: CollegeProSide = {
   score: { week: 11, total: 111.8, opponent: null, note: 'College points use standard college scoring, so Fantrax may show slightly different numbers.' },
 }
 
+const SLEEPER_TEAMS = [
+  ['8', '(F) SF TEP', 'TheCiege24'], ['5', 'Connor0488', 'Connor0488'], ['6', 'Georgia Bulldogs', 'unclerayrayy'],
+  ['11', 'GrindingFFB', 'GrindingFFB'], ['12', 'It hurts to puka', 'yourdyinggranpa'], ['1', 'JMasc', 'JMasc'],
+  ['2', 'KingGustov', 'KingGustov'], ['3', 'Lou Holtz & Company', 'loganhall17'], ['10', 'Scoresscotty', 'Scoresscotty'],
+  ['9', 'TQ Trojans', 'TQ34'], ['4', 'jws452', 'jws452'], ['7', 'rfasti', 'rfasti'],
+].map(([rosterId, teamName, ownerName]) => ({ rosterId: rosterId!, teamName: teamName!, ownerName: ownerName! }))
+const FANTRAX_TEAMS = [
+  ['scot', 'Scorescotty'], ['gran', 'Yourdyinggrandpa'], ['conn', 'Connor0488'], ['uga', 'Georgia Bulldogs'], ['jws', 'Jws452'],
+  ['ciege', 'Ciege82'], ['logan', 'loganhall'], ['jmasc', 'Team JMasc'], ['king', 'king gustov'], ['tq', 'TQ Trojans'],
+  ['grind', 'Grindingffb'], ['rf', 'rfasti'],
+].map(([teamId, name]) => ({ teamId: teamId!, name: name! }))
+const SUGGESTED: Record<string, string> = { '8': 'ciege', '5': 'conn', '6': 'uga', '11': 'grind', '12': 'gran', '1': 'jmasc', '2': 'king', '3': 'logan', '10': 'scot', '9': 'tq', '4': 'jws', '7': 'rf' }
+
 let installed = false
-function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean, showPipeline: boolean) {
+function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean, showPipeline: boolean, mapped: boolean) {
   let scoring = initialScoring
+  let saved: Record<string, string> = mapped ? { ...SUGGESTED } : {}
   if (installed || typeof window === 'undefined') return
   installed = true
   const real = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (url.includes('/api/league/college-pro-roster') && init?.method === 'POST') {
-      scoring = (JSON.parse(String(init.body)) as { scoring: 'separate' | 'combined' }).scoring
-      return Promise.resolve(new Response(JSON.stringify({ ok: true, scoring }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      const body = JSON.parse(String(init.body)) as { scoring?: 'separate' | 'combined'; teamMap?: Record<string, string> }
+      if (body.teamMap) saved = body.teamMap
+      else if (body.scoring) scoring = body.scoring
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     }
     if (url.includes('/api/league/college-pro-roster')) {
       const body: CollegeProRosterPayload = {
@@ -121,6 +137,14 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
         scoring,
         combinedTotal: scoring === 'combined' ? Math.round(((PRO.score.total ?? 0) + (COLLEGE.score.total ?? 0)) * 100) / 100 : null,
         canEditScoring: commish,
+        proLeagueId: 'harness',
+        headToHead:
+          scoring !== 'combined'
+            ? null
+            : saved['5']
+              ? { me: 205.36, opponent: { name: 'Connor0488', total: 198.1 }, missing: null }
+              : { me: 205.36, opponent: null, missing: 'Match each Sleeper team to its Fantrax team to compare combined scores.' },
+        teamMap: scoring === 'combined' && commish ? { sleeperTeams: SLEEPER_TEAMS, fantraxTeams: FANTRAX_TEAMS, saved, suggested: SUGGESTED } : null,
         drafts: [
           { role: 'pro', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },
           { role: 'pro', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
@@ -147,7 +171,7 @@ export function CollegeProRosterHarnessClient() {
   const lead = params.get('lead') === 'college' ? 'college' : 'pro'
   const format = params.get('format') === 'devy' ? 'devy' : 'c2c'
   const scoring = params.get('scoring') === 'combined' ? 'combined' : 'separate'
-  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0')
+  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0', params.get('mapped') === '1')
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">

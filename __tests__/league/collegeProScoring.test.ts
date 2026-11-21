@@ -82,3 +82,24 @@ describe('POST /api/league/college-pro-roster', () => {
     expect((await post({ leagueId: 'peach', scoring: 'combined' })).status).toBe(401)
   })
 })
+
+describe('POST team map', () => {
+  it('saves the commissioner map on the league, cleaned, without touching other settings', async () => {
+    const res = await post({ leagueId: 'peach', teamMap: { '5': 'conn', '8': 'ciege', '9': '' } })
+    expect(res.status).toBe(200)
+    expect(h.update).toHaveBeenCalledWith({
+      where: { id: 'peach' },
+      data: { settings: { scoring_settings: { rec: 1 }, inviteCode: 'abc', collegeProTeamMap: { '5': 'conn', '8': 'ciege' } } },
+    })
+  })
+
+  it('refuses one Fantrax team for two Sleeper teams', async () => {
+    expect((await post({ leagueId: 'peach', teamMap: { '5': 'conn', '6': 'conn' } })).status).toBe(400)
+    expect(h.update).not.toHaveBeenCalled()
+  })
+
+  it('refuses a non-commissioner', async () => {
+    h.session = { user: { id: 'manager' } }
+    expect((await post({ leagueId: 'peach', teamMap: { '5': 'conn' } })).status).toBe(403)
+  })
+})
