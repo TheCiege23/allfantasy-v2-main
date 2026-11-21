@@ -17,7 +17,16 @@ import { fetchSleeperJson } from './liveLeagueFetch'
  * MAX_ENTRIES; the oldest entry goes first.
  */
 
-export type WireRoster = { roster_id: number; owner_id: string | null; players?: string[] | null; starters?: string[] | null }
+export type WireRoster = {
+  roster_id: number
+  owner_id: string | null
+  players?: string[] | null
+  starters?: string[] | null
+  taxi?: string[] | null
+  reserve?: string[] | null
+  /** Co-owners manage the roster as much as `owner_id` does. */
+  co_owners?: string[] | null
+}
 export type WireDraft = { draft_id: string; status: string }
 export type WireDraftPick = { player_id?: string | null; picked_by?: string | null; round: number; pick_no: number }
 
