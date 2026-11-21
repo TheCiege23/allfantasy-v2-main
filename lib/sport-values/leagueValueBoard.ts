@@ -1,10 +1,11 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { loadSportPointsBase, type SportPointsBaseResult, type SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
+import type { SportPointsBaseResult, SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
 import { MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
 import { MIN_AT_BATS, MIN_INNINGS } from '@/lib/decision-os/trade/mlbTeamGame'
 import { isDynastyGradedSport, missingAgeAssumption, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
+import { loadCachedLeagueBoardBase, type CachedBoardResult } from '@/lib/decision-os/value-os/leagueBoard'
 
 /**
  * A league's own value board, for the surfaces that price a player OUTSIDE a trade (2026-11-16, re-score
@@ -35,7 +36,7 @@ export type LeagueBoardRow = SportPointsLeague & { sport: string }
 
 export type LeagueValueBoardDeps = {
   league: (leagueId: string) => Promise<LeagueBoardRow | null>
-  base: (sport: PointsGradedSport, league: SportPointsLeague) => Promise<SportPointsBaseResult>
+  base: (sport: PointsGradedSport, league: SportPointsLeague) => Promise<SportPointsBaseResult | CachedBoardResult>
 }
 
 export const defaultLeagueValueBoardDeps: LeagueValueBoardDeps = {
@@ -44,7 +45,8 @@ export const defaultLeagueValueBoardDeps: LeagueValueBoardDeps = {
       where: { id: leagueId },
       select: { id: true, sport: true, platform: true, platformLeagueId: true, settings: true, leagueType: true, leagueSize: true, season: true, status: true },
     }) as Promise<LeagueBoardRow | null>,
-  base: (sport, league) => loadSportPointsBase({ sport, league }),
+  // Through Value OS's three-minute league board, the one the in-league trade grade reads too (2026-11-21).
+  base: (sport, league) => loadCachedLeagueBoardBase({ sport, league }),
 }
 
 export type LeagueValueBoard =
@@ -52,7 +54,7 @@ export type LeagueValueBoard =
   | { kind: 'not_board_sport' }
   /** A board sport whose board could not be built here — the reason is the board's own words. */
   | { kind: 'unavailable'; sport: PointsGradedSport; reason: string }
-  | { kind: 'ok'; sport: PointsGradedSport; ctx: SportPointsContext; byId: ReadonlyMap<string, BoardPlayer> }
+  | { kind: 'ok'; sport: PointsGradedSport; ctx: SportPointsContext; byId: ReadonlyMap<string, BoardPlayer>; servedFrom?: 'store' | 'live' }
 
 /** The board for one league, or why not. Never throws. */
 export async function loadLeagueValueBoard(
@@ -66,7 +68,8 @@ export async function loadLeagueValueBoard(
   const base = await d.base(sport, league).catch(() => null)
   if (!base) return { kind: 'unavailable', sport, reason: 'The league’s value board could not be read just now.' }
   if (!base.ok) return { kind: 'unavailable', sport, reason: base.reason }
-  return { kind: 'ok', sport, ctx: base.ctx, byId: new Map(base.ctx.board.map((p) => [p.id, p])) }
+  const servedFrom = 'servedFrom' in base ? base.servedFrom : undefined
+  return { kind: 'ok', sport, ctx: base.ctx, byId: new Map(base.ctx.board.map((p) => [p.id, p])), ...(servedFrom ? { servedFrom } : {}) }
 }
 
 /** What a board value measures, as a phrase: "fantasy points" or "category score". */

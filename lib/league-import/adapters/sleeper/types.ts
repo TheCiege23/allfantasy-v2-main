@@ -48,6 +48,8 @@ export interface SleeperUserRaw {
 export interface SleeperRosterRaw {
   roster_id: number
   owner_id?: string | null
+  /** Sleeper user ids that share this team with its owner. */
+  co_owners?: string[] | null
   players?: string[]
   starters?: string[]
   reserve?: string[]

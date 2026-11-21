@@ -175,8 +175,8 @@ export async function processWaiverWindow(
   seasonId: string,
   now: Date = new Date(),
 ): Promise<ProcessedClaim[]> {
-  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } })
-  if (!season) return []
+  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, include: { league: { select: { leagueVariant: true } } } })
+  if (!season || season.league?.leagueVariant === 'survivor_guillotine') return []
   /*
    * 🛑 THIS ENGINE TOOK NO LOCK. It reads "who is rostered" from `RedraftRosterPlayer` and then writes
    * from that read — the same check-then-write the native waiver run and the instant add hold

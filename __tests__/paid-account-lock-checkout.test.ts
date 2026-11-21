@@ -67,10 +67,12 @@ describe("checkout refuses a card-locked account before Stripe", () => {
       expect(appUserFindUniqueMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "user-1" } }))
     })
 
-    it(`${route}: a Washington-locked account is refused too`, async () => {
+    // Nov 2026: Washington is paid-block, so a legacy `full_block` row reads as the card lock —
+    // still refused at checkout, now with the card lock's 451 rather than the full lock's 403.
+    it(`${route}: a legacy Washington-locked account is refused too`, async () => {
       appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: "full_block" })
       const res = await postTo(route, body)
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(451)
       expect(buildSessionMock).not.toHaveBeenCalled()
       expect(stripeSessionsCreateMock).not.toHaveBeenCalled()
     })

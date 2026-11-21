@@ -453,6 +453,11 @@ export function TradeCenterPanel(props: {
             {rm.tradeRecord(letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.aheadPct, letterRecord.verdict)}
           </p>
         ) : null}
+        {letterRecord?.confidence ? (
+          <p className="af-tcp-grade-confidence" data-level={letterRecord.confidence.level} data-testid="tcp-grade-confidence">
+            {rm.tradeConfidence(letterRecord.confidence.letter, letterRecord.confidence.level, letterRecord.confidence.heldPct, letterRecord.confidence.decided)}
+          </p>
+        ) : null}
         {sides.map((s) => {
           const standing = teamStanding(t, s.rosterId, proposerId)
           return (

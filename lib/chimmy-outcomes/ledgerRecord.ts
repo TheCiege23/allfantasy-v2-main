@@ -30,6 +30,14 @@
 
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
+import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import type { DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
+import {
+  readTradeLetterCalibration,
+  tradeLetterCalibrationFrom,
+  type TradeLetterCalibration,
+  type TradeLetterLedger,
+} from '@/lib/decision-os/trade/letterCalibration'
 
 /** Within this many points, a start/sit call is "same" — the Receipts card's AutoCoach band. */
 export const LEDGER_SAME_BAND = 1
@@ -117,6 +125,15 @@ export type BenchRow = {
   withdrawn: boolean
   recPts: number | null
   altPts: number | null
+  /**
+   * What the call knew, for the bench check's own calibration (`decision-os/lineup/benchCalibration.ts`): the sport,
+   * both projections when it was made, and when. Absent on a row read before 2026-11-21 — such a row grades the tally
+   * as always and is simply not folded into an edge band.
+   */
+  sport?: string | null
+  recProjected?: number | null
+  altProjected?: number | null
+  givenAt?: Date | string | null
 }
 
 export type AddRow = {
@@ -154,6 +171,24 @@ export type LedgerSnapshot = {
    * written before 2026-11-20, and on a rebuild with no scored claim to grade.
    */
   waiverEngine?: WaiverEngineLedger
+  /**
+   * NFL bench calls by their projected edge (2–4, 4–8, 8+ points) — the bench check's own calibration
+   * (`lib/decision-os/lineup/benchCalibration.ts`). Absent on a snapshot written before 2026-11-21, and when no
+   * graded NFL call carried both projections.
+   */
+  benchEdges?: BenchEdgeLedger
+  /**
+   * Each directional letter's graded redraft deals — held up or not, decayed by age — the trade grade's own
+   * confidence (`lib/decision-os/trade/letterCalibration.ts`). Absent on a snapshot written before 2026-11-21.
+   */
+  tradeLetters?: TradeLetterLedger
+  /** The same over only the trades a commissioner was shown in a trade review. */
+  commissionerTradeLetters?: TradeLetterLedger
+  /**
+   * Draft OS's served pick tips by round band, held up or not against the board they were given on — the draft pick's
+   * own confidence (`lib/decision-os/draft/tipCalibration.ts`). Absent before 2026-11-21 and with none graded.
+   */
+  draftTips?: DraftTipLedger
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -169,9 +204,13 @@ export function foldLedger(input: {
   trades: LedgerSnapshot['trades']
   commissionerTrades?: LedgerSnapshot['trades']
   waiverEngine?: WaiverEngineLedger
+  tradeLetters?: TradeLetterLedger
+  commissionerTradeLetters?: TradeLetterLedger
+  draftTips?: DraftTipLedger
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
+  const edgeCalls: GradedBenchCall[] = []
   const pickups: PickupTally = { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 }
   const users = new Map<string, { b?: [number, number, number]; p?: [number, number]; calls: number }>()
   const userOf = (id: string) => {
@@ -196,6 +235,15 @@ export function foldLedger(input: {
     const call = gradeStartSit(r.recPts, r.altPts)
     bench[call]++
     bench.gain += r.recPts - r.altPts
+    // The bench check's calibration: NFL calls that carried both projections, by their projected edge.
+    if (String(r.sport ?? '').trim().toUpperCase() === 'NFL' && typeof r.recProjected === 'number' && typeof r.altProjected === 'number') {
+      const given = r.givenAt == null ? NaN : new Date(r.givenAt).getTime()
+      edgeCalls.push({
+        edge: r.recProjected - r.altProjected,
+        call,
+        ageDays: Number.isFinite(given) ? Math.max(0, (now.getTime() - given) / 86_400_000) : 0,
+      })
+    }
     if (r.userId) {
       const u = userOf(r.userId)
       const b = (u.b ??= [0, 0, 0])
@@ -235,6 +283,7 @@ export function foldLedger(input: {
   }
 
   const kept = [...users].sort((a, b) => b[1].calls - a[1].calls).slice(0, MAX_LEDGER_USERS)
+  const benchEdges = edgeCalls.length > 0 ? foldBenchEdgeBands(edgeCalls) : null
   return {
     season: input.season,
     throughWeek: completedThrough(cal, now),
@@ -243,6 +292,12 @@ export function foldLedger(input: {
     trades: input.trades,
     ...(input.commissionerTrades ? { commissionerTrades: input.commissionerTrades } : {}),
     ...(input.waiverEngine && Object.keys(input.waiverEngine).length > 0 ? { waiverEngine: input.waiverEngine } : {}),
+    ...(benchEdges && Object.keys(benchEdges).length > 0 ? { benchEdges } : {}),
+    ...(input.tradeLetters && Object.keys(input.tradeLetters).length > 0 ? { tradeLetters: input.tradeLetters } : {}),
+    ...(input.commissionerTradeLetters && Object.keys(input.commissionerTradeLetters).length > 0
+      ? { commissionerTradeLetters: input.commissionerTradeLetters }
+      : {}),
+    ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
@@ -265,6 +320,13 @@ export type LedgerRecordView = {
   trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
   /** The same, over only trades a commissioner was shown in a trade review. Absent or null when none qualify. */
   commissionerTrades?: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
+  /**
+   * How sure each letter is, from its graded deals: the held-up rate shrunk toward a coin flip
+   * (`letterCalibration.ts`). Absent until a letter has enough decided deals; never moves the letter.
+   */
+  tradeConfidence?: TradeLetterCalibration | null
+  /** The same over only the trades a commissioner reviewed. */
+  commissionerTradeConfidence?: TradeLetterCalibration | null
 }
 
 const nat = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
@@ -321,6 +383,8 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
     })
   const letters = lettersOf(ledger.trades)
   const commissionerLetters = lettersOf(ledger.commissionerTrades)
+  const tradeConfidence = tradeLetterCalibrationFrom(ledger.tradeLetters)
+  const commissionerTradeConfidence = tradeLetterCalibrationFrom(ledger.commissionerTradeLetters)
 
   if (!bench && !pickups && letters.length === 0) return null
   return {
@@ -329,6 +393,8 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
     pickups,
     trades: letters.length ? letters : null,
     ...(commissionerLetters.length ? { commissionerTrades: commissionerLetters } : {}),
+    ...(tradeConfidence ? { tradeConfidence } : {}),
+    ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
   }
 }
 
@@ -368,11 +434,16 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
   // A malformed commissioner list drops only itself: the rest of the record is still good.
   const commissionerTrades = okLetters(v.commissionerTrades) ? (v.commissionerTrades as LedgerRecordView['commissionerTrades']) ?? null : null
   if (bench == null && pickups == null && trades == null) return null
+  // A malformed confidence drops only itself, as the commissioner list does.
+  const tradeConfidence = readTradeLetterCalibration(v.tradeConfidence)
+  const commissionerTradeConfidence = readTradeLetterCalibration(v.commissionerTradeConfidence)
   return {
     season: typeof v.season === 'number' ? v.season : 0,
     bench: bench ?? null,
     pickups: pickups ?? null,
     trades: (trades as LedgerRecordView['trades']) ?? null,
     ...(commissionerTrades?.length ? { commissionerTrades } : {}),
+    ...(tradeConfidence ? { tradeConfidence } : {}),
+    ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
   }
 }

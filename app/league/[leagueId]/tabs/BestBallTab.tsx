@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SupportedSport } from '@/lib/sport-scope'
 
 type SubTab = 'lineup' | 'roster' | 'contest' | 'history'
@@ -35,7 +35,9 @@ type BestBallApiResponse = {
   selectedWeek: number
   weeksAvailable: number[]
   /** `native` when read from AllFantasy's own scoring; absent for the legacy tables. */
-  source?: 'native'
+  source?: 'native' | 'imported'
+  /** `imported`: who picks the lineups, and that only team scores are shown here. */
+  importedNote?: string
   /** A hosted league whose draft is not finished: why nothing is scored yet. */
   draftNotice?: string | null
   /** A daily league whose season has no regular-season opener yet: daily scoring is waiting for it. */
@@ -62,6 +64,12 @@ type BestBallApiResponse = {
   history: Array<{ rosterId: string; week: number; totalPoints: number; status?: 'final' | 'provisional' }>
 }
 
+/** A stored setting value as words: `season_long` reads "Season long", never with its underscore. */
+export function settingWords(value: string | null | undefined): string {
+  const words = String(value ?? '').replace(/[_-]+/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : '—'
+}
+
 const RESULT_LABEL: Record<string, string> = { W: 'Won', L: 'Lost', T: 'Tied' }
 
 type BestBallTabProps = {
@@ -71,18 +79,26 @@ type BestBallTabProps = {
 
 export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
   const [sub, setSub] = useState<SubTab>('lineup')
-  const [week, setWeek] = useState(1)
+  // null until the first answer: the tab opens on the latest scored week, which only the server knows.
+  // It asked for week 1 first, so any league with a scored week 1 opened ten weeks in the past.
+  const [week, setWeek] = useState<number | null>(null)
   const [data, setData] = useState<BestBallApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** The week the server chose for the first, week-less request: already on screen, not fetched again. */
+  const serverChose = useRef<number | null>(null)
 
   useEffect(() => {
+    if (week != null && serverChose.current === week) {
+      serverChose.current = null
+      return
+    }
     let cancelled = false
     const load = async () => {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/bestball?week=${week}`, {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/bestball${week == null ? '' : `?week=${week}`}`, {
           cache: 'no-store',
         })
         const json = (await res.json()) as BestBallApiResponse | { error?: string }
@@ -95,7 +111,9 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
         }
         if (!cancelled) {
           setData(json as BestBallApiResponse)
-          setWeek((current) => (current === week ? (json as BestBallApiResponse).selectedWeek : current))
+          const chosen = (json as BestBallApiResponse).selectedWeek
+          if (week == null) serverChose.current = chosen
+          setWeek((current) => (current === week ? chosen : current))
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load Best Ball data')
@@ -145,11 +163,11 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
         <label className="flex items-center gap-1">
           Week
           <select
-            value={week}
+            value={week ?? data?.selectedWeek ?? 1}
             onChange={(e) => setWeek(Number(e.target.value))}
             className="rounded border border-white/15 bg-[#0a1228] px-2 py-1 text-white"
           >
-            {(data?.weeksAvailable?.length ? data.weeksAvailable : [week]).map((value) => (
+            {(data?.weeksAvailable?.length ? data.weeksAvailable : [week ?? 1]).map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -191,6 +209,11 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
               No scored weeks yet. Lineups appear here once the first games are played.
             </div>
           ) : null}
+          {data.source === 'imported' && data.importedNote && data.lineups.length > 0 ? (
+            <div data-testid="bestball-imported-note" className="rounded-xl border border-white/10 bg-[#0a1228]/60 p-4 text-sm text-white/65">
+              {data.importedNote}
+            </div>
+          ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
             {data.lineups.map((lineup) => (
               <article key={lineup.rosterId} data-testid="bestball-lineup-card" className="min-w-0 rounded-xl border border-white/10 bg-[#0a1228]/80 p-4">
@@ -219,7 +242,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="text-lg font-bold text-[#ffb8d1]">{lineup.totalPoints.toFixed(2)}</div>
-                    <div className="text-[11px] text-white/40">{lineup.starters.length} counted</div>
+                    {data.source === 'imported' ? null : <div className="text-[11px] text-white/40">{lineup.starters.length} counted</div>}
                   </div>
                 </div>
                 {lineup.sealedSeatsNote ? (
@@ -232,7 +255,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     Waiting on stats for {lineup.awaitingStats} player{lineup.awaitingStats === 1 ? '' : 's'}; this total can still change.
                   </p>
                 ) : null}
-                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35">
+                <div className={data.source === 'imported' ? 'hidden' : 'mt-3 text-[11px] font-semibold uppercase tracking-wide text-white/35'}>
                   Counted
                   {lineup.scoringPeriod === 'daily' ? (
                     <span className="normal-case tracking-normal text-white/35"> · points summed over the days each player made that day&apos;s best lineup</span>
@@ -321,10 +344,10 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
           <div className="rounded-xl border border-white/10 bg-[#0a1228]/80 p-4">
             <h2 className="text-sm font-semibold text-white">League Rules</h2>
             <div className="mt-3 space-y-2 text-xs text-white/60">
-              <p>Mode: <span className="text-white">{data.league.settings.mode}</span></p>
-              <p>Draft mode: <span className="text-white">{data.league.settings.draftMode}</span></p>
-              <p>Contest structure: <span className="text-white">{data.league.settings.contestStructure}</span></p>
-              <p>Scoring: <span className="text-white">{data.league.settings.matchupFormat}</span></p>
+              <p>Mode: <span className="text-white">{settingWords(data.league.settings.mode)}</span></p>
+              <p>Draft mode: <span className="text-white">{settingWords(data.league.settings.draftMode)}</span></p>
+              <p>Contest structure: <span className="text-white">{settingWords(data.league.settings.contestStructure)}</span></p>
+              <p>Scoring: <span className="text-white">{settingWords(data.league.settings.matchupFormat)}</span></p>
               <p>Lineups: <span className="text-white">{daily ? 'Daily best ball (each day summed)' : 'Weekly best ball'}</span></p>
               <p>Waivers: <span className="text-white">{data.league.settings.waiversEnabled ? 'On' : 'Off'}</span></p>
               <p>Trades: <span className="text-white">{data.league.settings.tradesEnabled ? 'On' : 'Off'}</span></p>

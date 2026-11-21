@@ -105,6 +105,16 @@ export type DecisionOsFeed =
   | 'draftBoard'
   /** Leaguemates' records (Competitive Edge), on manager questions. */
   | 'managerRecords'
+  /*
+   * 🛑 TWO SLICES WITH NO SWITCH OF THEIR OWN (2026-11-20 re-score). Both stopped only when the whole `projections`
+   * feed was killed, so "every packet slice has its own kill switch" was false for them. Each does its own reads —
+   * the roster priced under the league's own rules, and AllFantasy's league player metrics — so each is sheddable
+   * alone now. Both still stop with `projections`, which they are built on.
+   */
+  /** The asker's roster priced under this league's scoring (`grounding/rosterLeagueProjections.ts`). */
+  | 'rosterProjections'
+  /** AllFantasy's league player metrics (`lib/af-projections/leaguePlayerMetrics.ts`). */
+  | 'leaguePlayerMetrics'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -125,6 +135,8 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'pendingTrades',
   'draftBoard',
   'managerRecords',
+  'rosterProjections',
+  'leaguePlayerMetrics',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

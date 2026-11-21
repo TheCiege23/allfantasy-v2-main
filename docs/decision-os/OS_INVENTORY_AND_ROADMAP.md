@@ -164,6 +164,8 @@ drains, so `DECISION_OS_MAINTENANCE_ENABLED` does nothing there now. Scheduling 
 model calls per league per tool on every refresh. The library under `lib/decision-os/three-brain/` stays, unused;
 `aiAuthorityPolicy` is still read by Chimmy's answer contract. Live Chimmy still takes the first usable model
 answer (`ResponseAggregator.ts`), so the hub's multi-model axis stays ❌ by decision rather than by omission.
+⚠ **Since 2026-11-21 it is ✅ by a narrower decision**: the owner chose a second-model CHECK of decision answers
+(`lib/chimmy/decisionAnswerCheck.ts`) over reviving the synthesis. Three-brain itself stays retired.
 
 **Item 10, 2026-11-19 — the profile engine is fully retired, and "retired" was wrong when this list was written.**
 The re-score called the manager profiles retired, but five live readers still used them: drama detection and
@@ -189,6 +191,247 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**FRESH RE-SCORE, 2026-11-20 — every OS and the hub re-measured from code at `ffab3b550c`, not carried forward
+(owner's choice).** Four independent read-only audits; every surprising claim below was re-read by hand before it went
+in. Same seven axes and weights. ⚠ **One rule is now stricter, and it is the main reason numbers fell: Kernel ✅ needs
+the LIVE path to read through `createOsFeed`.** A feed that is registered but read only behind an env flag or a shadow
+scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-scheduled only; production was not read.
+
+| OS | +10% push | Re-scored on `main` | After the queued PRs | What changed the mark |
+|---|---|---|---|---|
+| League | 100 | 100 | 100 | — (the §0.47 two-rules-readers gap is real but is not an axis) |
+| Projection | 100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this change: NBA, NHL, MLB, college basketball and soccer points leagues are league-scored in Chimmy now, on the league value board My Team reads (owner's call, below). Category leagues have no points and say so |
+| Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
+| Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
+| Player Value | ~93 | ~90 | ~100 | Kernel ⚠ → ✅ in this change: every live league-board read (value answer, Waivers, card, metrics, in-league trade grade, roster grade, daily Guilly) goes through Value OS's `leagueBoard` feed (below). User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
+| Trade | ~86 | ~79 | ~100 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule): the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. Engine ⚠ → ✅ in this change (owner's "build Trade OS out to 100%", 2026-11-21): each letter's graded redraft deals set the confidence stated beside it — never the letter. Cron ⚠ → ✅: the pending-offer reminders re-grade native offers on a schedule, the first grade a native offer gets after it is sent (below) |
+| Draft | ~79 | ~66 | ~100 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a. Engine ⚠ → ✅ in this change (owner's "build it now", 2026-11-21): the served pick tips are graded against the board they were given on, and the record sets the confidence said beside a pick — never the pick (below). No migration: the records table already exists |
+| Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
+| Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
+| Manager Psychology | ~90 | ~63 | ~100 | Feed ❌ → ✅ and Kernel ⚠ → ✅: manager records read through the `psychology` feed (below). Cron ⚠ → ✅ in this change (owner's "daily current-season refresh", 2026-11-21, reversing the import-only quota choice): ESPN and MFL waiver claims are re-read once a day, this season only. Fantrax trades stay upload-only — Fantrax has no feed to schedule, so that half is n/a (below) |
+| Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below) |
+
+**Stale or false claims this re-score corrected** (each checked in code):
+- "Retired label engine still runs in two crons" — false since 2026-11-19 (item 10 already said so; the gap column did not).
+- "ESPN/Yahoo/MFL/Fantrax/Fleaflicker records carry no trades or drafts" — partly: Fantrax trades now count (from the
+  commissioner's upload); drafts are still absent for every non-Sleeper platform; ESPN/Yahoo/MFL/Fleaflicker trades too.
+- "Manager facts reach Chimmy … never the packet" (Manager Psychology row of the OS census) — false since the
+  `managerRecords` slice.
+- "Every packet slice has its own kill switch" — false for two slices until this build.
+- "User ⚠ (soccer) stays" (Player Value) — stale: soccer is a board sport on the player card and Waivers.
+- "The offer sweep stays Sleeper-only (no other provider contract carries pending offers)" — true but misleading: no
+  contract has captured a pending-offer shape, Sleeper's included (Fleaflicker `FetchTrades` is documented, not captured).
+- "Draft OS is warmed hourly, 242 rows" (draft-os header) — stale since 2026-11-17; rewritten by #3962.
+- Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
+
+**Built in this change (no migration):**
+- **Draft OS learns how sure to be from its own graded pick tips** (owner's "build it now", 2026-11-21). Every tip the
+  decision card or Chimmy serves has been recorded since 2026-11-14 with the projections the pool carried at that
+  moment (`draft_recommendation_records`); only a hand-run script read them. The six-hourly ledger rebuild now grades
+  each SERVED tip (`lib/decision-os/draft/tipCalibration.ts`): it held up when the pick out-scored the median
+  of the 12 best-projected other players on that board (at least 5 of them placed), standard PPR from the first week
+  not kicked off through the last played. Tips fold by round — 1–3, 4–8, 9+ — silent below 20 decided, shrunk toward a
+  coin flip, and the decision's own confidence line (`how_confident`, which the draft card and Chimmy both show) gains
+  how picks in that part of the draft have held up; a low one says the pick is closer than it looks.
+  - 🛑 The pick is never touched — the ranking, the pick rules and "what to do" are the engine's (`withDraftTipRecord`
+    in `pickDecision.ts`). NFL only, the ledger's week feed.
+  - ⚠ Expect silence until next season: tips have been recorded only since 2026-11-14, after most NFL drafts.
+  - Contained on its own in the rebuild: a failure in the draft grading costs only that line, never the bench,
+    pickup, trade and waiver records beside it.
+- **ESPN and MFL waiver claims stay current** (owner's "daily current-season refresh", 2026-11-21, reversing the
+  import-only quota choice). The manager record counted ESPN/MFL claims from the historical backfill, which runs once
+  at import. `lib/league-import/providerWaiverRefresh.ts` now re-reads THIS SEASON ONLY for each imported ESPN or MFL
+  league once a day — the import's own fetch with the importer's sign-in, and the backfill's own row builder
+  (`espnTransactionFactRows` / `mflTransactionFactRows`, extracted from the two backfill services, byte-for-byte the
+  same rows) — into the immutable, deterministically keyed transaction facts, so a stored claim is a no-op. A stateless
+  rotation on the six-hour `?intel=1` tick (heartbeat `cron-provider-waiver-refresh`): every league once a day while
+  there are at most 48, the lap stated beyond that; each league started only while the run budget allows; a failing
+  league costs only itself. `PROVIDER_WAIVER_REFRESH=off` switches it off.
+  - ⚠ Fantrax trades reach AllFantasy only from the commissioner's own trade-history upload — there is no Fantrax feed
+    to schedule — so that half of the old ⚠ is n/a, not a gap. Yahoo import is off and Fleaflicker imports no waivers.
+- **The hub's multi-model axis: a second model checks Chimmy's decision answers** (owner's "get the hub up to 100%",
+  2026-11-21). The owner retired the three-brain synthesis on 2026-11-19 (3–4 model calls per answer) and, asked how
+  to fill the axis, chose a narrow second-model CHECK instead of bringing it back. On a trade, waiver, start/sit or
+  draft turn on the tool loop (the path that answers most messages), a small fast model — the cheap Anthropic
+  profile, Haiku by default — reads the question, the answer and the facts Chimmy read (what its tools returned plus
+  the packet) and lists every statement the facts CONTRADICT (`lib/chimmy/decisionAnswerCheck.ts`). A contradiction
+  sends the answer back to Chimmy once with the list; the revised answer is what the user sees. It runs BEFORE the
+  deterministic trade-letter check, so that check still holds the final answer.
+  - 🛑 The checker never makes a call: it compares, it does not grade or advise, and a claim the facts do not mention
+    is not a contradiction. The revision is Chimmy's, held to the same facts.
+  - 🛑 Fails open: no key, AI spend off, a 4-second timeout, an unreadable verdict or a failed revision each return
+    the answer exactly as written. One small call per decision answer, none on chat; `CHIMMY_DECISION_CHECK=off`
+    switches it off. Every outcome is recorded as a `decision_check` analytics event (clean / revised / kept /
+    unavailable, with its time and how many contradictions) — the measure of whether it earns its cost.
+  - ⚠ Not on the PECR fallback path, which keeps its own guard; the tool loop answers most messages.
+- **Trade OS to 100%** (owner's "build out trade OS to 100%", 2026-11-21). Two gaps were left: the grade never
+  learned from how its deals turned out (Engine ⚠), and only Sleeper offers were graded on a schedule (Cron ⚠).
+  - **The trade grade says how sure it is, from its own graded deals** (`lib/decision-os/trade/letterCalibration.ts`).
+    The ledger has graded every trade letter since 2026-11-15 and showed the raw record (average net PPR, share ahead)
+    beside the grade. Each directional letter now carries a CONFIDENCE as well: A and B held up when the graded side
+    out-scored what it gave up, D and F when it was out-scored; C promises no direction and a tie decides nothing.
+    Silent below 20 decided deals, the rate shrunk toward a coin flip (worth 20 deals), decayed with a six-week
+    half-life; High ≥ 70%, Medium ≥ 55%, Low below (the bench check's bands), and a low one says the deal is closer
+    than the letter suggests. The six-hourly rebuild stores it as `ledger.tradeLetters` (and the commissioners' own as
+    `commissionerTradeLetters`), and it is shown in the Trade Center (English and Spanish), the commissioner's trade
+    review, Chimmy's record line and Chimmy's graded inbox.
+    - 🛑 **The letter is never touched** — the grade, the values, every counter-offer and the approve/veto
+      recommendation are the engine's. This is the confidence rule waivers and start/sit already follow, and it is
+      not the "let graded trades move letters" the owner declined (⏸ below).
+    - NFL redraft only, where the ledger's measure fits the grade (`letterRecordApplies`).
+    - ⚠ Expect it to read Medium for a while even when a letter has held up every time: decayed old deals weigh less
+      than the prior's 20, which is the point — one early-season run cannot speak for the whole season.
+  - **Waiting offers are re-graded on a schedule** (`lib/automation/jobs/trades/remindPendingTrades.ts`, on the
+    five-minute `trade-grade-notify` route). A native offer was graded once, when sent; the day-later and
+    six-hours-to-expiry reminders said only "an offer is still waiting". Each reminder now re-grades the offer for
+    the receiver through `evaluateStoredTrade` (the Trade Center's path, no receipt written), says what it grades
+    NOW and whether that moved since it was sent ("graded B when it was sent; on today's values AllFantasy grades it
+    D"), and names a player who left the sending roster instead of grading a deal that can no longer be made.
+    Bounded to 45 s of grading a tick with one league world per league; past it, or on any failure, the reminder
+    reads exactly as before — never a guessed grade. `cron-pending-trade-reminders` reports `regraded` and `moved`.
+  - ⚠ **What Cron ✅ covers, stated so it can be challenged.** Every offer AllFantasy holds is graded on a schedule:
+    Sleeper offers by the five-minute sweep, native offers by these reminders. Redraft proposals are graded when
+    Chimmy reads the inbox and have no reminder (the table holds no rows in production). ESPN, Yahoo, MFL,
+    Fleaflicker and Fantrax pending offers are not held at all — no provider contract in `contracts/` captures a
+    pending-offer shape, and the repo rule forbids probing to find one — so there is nothing of theirs to sweep.
+- **My Team's bench check learns from its own graded calls** (owner's call, 2026-11-21: confidence, never the
+  choice). Every "start X over Y" swap is recorded with both projections and graded once the games are played —
+  right, wrong, or the same within a point — and until now that grade fed nothing: a 2.5-point edge and a 12-point
+  edge read alike. The ledger now folds NFL calls by their projected edge (2–4, 4–8, 8+ points,
+  `decision-os/lineup/benchCalibration.ts`), and each swap carries how swaps that size have held up: a line under
+  the call on My Team (English and Spanish), and beside Chimmy's one-swap lineup verdict.
+  - 🛑 **The call is never touched**: which bench player, the verdict, the 2-point threshold and the lineup are the
+    engine's. Only the confidence said beside it comes from the record — the waiver engine's rule.
+  - A band says nothing until 20 of its calls were decided (a tie decides nothing); its rate is shrunk toward a coin
+    flip and decayed with a four-week half-life. A band whose swaps have been right under 55% says the call is
+    closer than the projections suggest.
+  - NFL Sleeper leagues only — the calls the ledger records and grades, in each league's own weekly points. Other
+    sports' edges are in different units and are not folded.
+  - ⚠ **It needs the projection columns.** The calls' projections live in `chimmy_advice.rec_projected` /
+    `alt_projected` (`20261115000000_chimmy_advice_ledger_inputs`). The read tolerates a database without them —
+    the original query runs and the bench record is exactly what it was — so until they exist the line simply
+    never appears. Confirm with `SELECT column_name FROM information_schema.columns WHERE table_name = 'chimmy_advice'`.
+- **League value boards read through Value OS** (ranked item 4, 2026-11-21). Every NBA, NHL, MLB, college basketball
+  and soccer surface — Chimmy's value answer and league metrics, the Waivers board, the player card, the in-league
+  trade grade, the roster grade and a daily-sport Guilly grade — built the league's board from scratch on every read:
+  the sport's season projections, the league's rosters, the schedule, the completed-trade market and, in a dynasty
+  league, every player's age. They read `lib/decision-os/value-os/leagueBoard.ts` now: one board through the kernel,
+  held three minutes (Trade OS's roster TTL, so a trade is never graded on rosters older than Trade OS allows).
+  - **One board for the grade and the values**, as `leagueValueBoard.ts` already promised: the in-league trade grader
+    reads the same entry, so a value answer and a Trade Center grade cannot drift apart for a TTL.
+  - **Stored losslessly** (`domain-os/factCodec.ts`): plain JSON turns a Map into `{}`, a Date into a string and NaN
+    into `null` (which reads as 0); the codec restores each exactly, and refuses — rather than corrupts — anything it
+    cannot encode. A board it cannot encode is still served, live and unstored.
+  - 🛑 **Keyed on what the builder reads, not the league id alone.** Callers pass slightly different league rows (the
+    grader a normalized league type, the roster grade a row with no platform, a Guilly grade its own type), and each
+    builds a different board; the scope carries a fingerprint of those fields, so identical inputs share and different
+    ones never overwrite each other.
+  - A refusal is never cached and reaches the caller with its own reason; a throw is "could not be loaded"; concurrent
+    reads in one process share one read, each decoding its own copy. Off switch: `DECISION_OS_VALUE_BOARD_CACHE=off`.
+  - Still built directly, by design: the open analyzer (no league), the campus-only college board, and a Guilly
+    grade priced on an explicit clock (only tests pass one).
+- **A native league is no longer told its import failed.** With no sync state, every scope rendered "NOT complete on
+  the last run", the sync "never", and the closing line told the model to say the sync was incomplete — beside a note
+  saying no sync is normal here. `ImportAssertions.native` (from `isNativePlatform`) now renders one honest line, the
+  rosters held, and an instruction not to call the league unsynced; a native league that does carry a sync record still
+  renders in full.
+- **Chimmy's lineup verdict is decided at the moment it answers.** `getMyTeamData`'s optimizer ran with the load's
+  clock and the load is shared for 60 s, while the "locked" flags used the answer's clock — so in the minute a game
+  kicked off the block could say "start X" and label X locked. `optimizationAt` re-runs the pure optimizer over the
+  same starters and bench with the answer's clock.
+- **`rosterProjections` and `leaguePlayerMetrics` have their own kill switches** (`DECISION_OS_FEED_ROSTER_PROJECTIONS`,
+  `DECISION_OS_FEED_LEAGUE_PLAYER_METRICS`); both still stop with `projections`.
+- **The waiver decision reads through Waiver OS** (ranked item 1). `loadWaiverDecisionSlice` — every Chimmy waiver
+  question and the weekly engine run — reads `waiverResourceSource` (this manager's FAAB, priority and settings, five
+  minutes, user-scoped) through `createWaiverOsLoaders`, derived by the same `loadWaiverWorldFacts` on a miss. "No
+  roster resolved" is never cached. The user-facing `/api/ai/waivers/recommend` still reads live, so the screen never
+  shows a FAAB balance up to five minutes old.
+- **Manager records read through the `psychology` feed** (`lib/decision-os/manager-records-os`, ranked item 3). Every
+  manager question — the packet's `managerRecords` slice and the `get_manager_record` tool — rebuilt the whole league's
+  trades, waiver claims, FAAB and drafts. The default view (every leaguemate but you) is held five minutes per viewer.
+  ⚠ Membership is proved on EVERY call, before the entry is read; the Competitive Edge gate stays in the caller; the
+  entry is per viewer because your own FAAB is read through your roster; a single team's record and the commissioner's
+  whole directory still build live; an unavailable result is never cached. Facts only — no label, score or prediction
+  is stored, and this is not the retired `psychology-os`.
+- **Small truths** (ranked item 6):
+  - The domain-OS warm keyed the NFL projection and NCAAF devy entries on the calendar year, so in January and
+    February it warmed next year's entries while every league asked for this season's. It uses `currentNflSeason`
+    now (the follow-alert check's rule: January and February belong to last season).
+  - Five feed slices hard-coded `servedFrom: 'store'`; they read each loader's own `drainOutcomes()` record for the
+    build now, so a live derivation on a cache miss says `live` (no record keeps the old label).
+  - The four waiver and trade sources labelled every sport's rows `NFL`; they say `ALL` (the column labels a row for
+    audit only — reads key on domain, kind, level and scope).
+  - The dead `buildPsychologyGroundingLines` call (it returned `[]`, and its comment claimed it grounded manager
+    behaviour) and the function are gone.
+  - ⚠ **NOT done: `transactions` in `IMPORT_SCOPES`.** The collector writes it for Sleeper, but adding it to the
+    freshness list would print "transactions NOT complete" forever for any provider whose sync never runs that
+    scope — the false-warning class this change fixes for native leagues. It needs a per-provider scope list first.
+- **The hub's quiet-manager warning cites its graded record** (the owner chose "hub decision card"; re-scoped). Chimmy's
+  health decision softened its inactive warning by the flag's graded record; the hub's "no moves in 14 days" flag
+  never did, so the two could disagree about the same managers. In a league AllFantasy hosts (the one clock the record
+  is graded on), the flag now adds one sentence after its existing caution — held up, mixed ("message them before
+  replacing anyone") or low ("most came back on their own"), with the counts, in English and Spanish. The bands are the
+  decision's own: `inactiveFlagHubRecord` applies `inactiveFlagPrecision` and the same two thresholds from
+  `commissioner-health/rules.ts`, and both surfaces read one loader (`lib/commissioner-hub/inactiveFlagRecord.ts`). Under
+  the record's floor, or for an imported league, the flag reads exactly as before. Severity is unchanged: the flag
+  counts facts; only the advice beside them learns.
+  - ⚠ The "everyone is quiet" case (a fact about the league, usually the offseason) does not cite the record.
+  - ⚠ Not a card: the decision's risk scores (churn, dispute, abandonment) are still not shown on the hub — the
+    re-scope's point, and an owner call if they ever should be.
+- **The graded trade inbox and Trade OS** (ranked item 5). Read before building, and the item as written was wrong:
+  the inbox does not grade from Trade OS's `TradeWorldFacts` (record, points, FAAB, settings) but from the league's
+  canonical world, through `evaluateStoredTrade`, the same path as every trade screen. That world must be loaded live:
+  `checkRosters` tests each offered player against `world.rosters`, so a stored copy would pass a player already
+  traded away and grade a deal that can no longer be made, and its `Date` fields would not survive the JSON store.
+  So Trade's Kernel is **n/a, not ⚠** — the rule Lineup's Feed and Kernel already follow. ⚠ A reclassification: it
+  moves the mark (~79 → ~83) without new capability, and it is written down so it can be challenged.
+  - **What changed for users:** the inbox graded up to three offers one after another and re-resolved the same
+    league's world for each (league, teams, rosters, performances — four queries an offer), inside the packet's
+    first-wave deadline. It loads it once per build now (`lib/decision-os/trade/sharedWorld.ts`); each evaluation
+    gets its own `structuredClone`, so no offer can change another's input, and a miss is retried rather than
+    shared. Same league, same request, same rows: the grades are unchanged. It also makes the owner decision
+    "grade more than 3 pending offers" cheaper — the world is no longer paid per offer.
+  - **`tradeSettingsSource` and `loadTradeLeagueFacts` are deleted.** Nothing read the league-level entry; the
+    env-gated proposals route reads the three-minute roster entry, which stays.
+- **NBA, NHL, MLB, college basketball and soccer points leagues get their roster in Chimmy under the league's own
+  points** (owner's call, 2026-11-20; college basketball and soccer on the owner's later "use your recommendation"). A projection question ("how many points will my team score?") in these sports reached Chimmy with only
+  the canonical rows — AllFantasy's default scoring, labelled "NOT this league" — while My Team, the Trade Center and
+  the value answer priced the same players on the league's own value board. `rosterProjections` now reads that board
+  for these sports through `loadLeaguePlayerMetrics`, the call My Team makes for the same roster: each player's
+  per-game rate under this league's points, times his games this week where the schedule is known. One source, so
+  the per-game number is the same in all four places.
+  - Not a component re-score: these sports' stat names do not match a rulebook's, and a partial match drops stats
+    silently (every rebound, in a default NBA rulebook — `waiverSportBasis.ts`). The board already bridges them.
+  - Labelled as what it is: a season rate, not a game-by-game forecast (rest days and changed roles are not in it),
+    and a daily league's My Team prices one day where this prices the week. A player off the board is said in words,
+    never 0; unknown games give no week total.
+  - A category league has no points: no new rows, and the slice says why (`not_requested`). Access is checked before
+    the board is read, as the packet's league-metrics slice does; NFL is untouched.
+- **Chimmy's trade inbox grades up to six offers, not three** (owner's "grade more than 3", 2026-11-20). The block is
+  built inside the packet's first-wave deadline (2,400 ms), and a block that misses it reaches Chimmy as nothing, so
+  the rule is time-bounded rather than a bigger number: the three expiring soonest are always graded, as before, and
+  each further offer (up to six) is started only while the build is inside `EXTRA_GRADING_BUDGET_MS` (1,200 ms). The
+  graded offers are always the soonest-expiring prefix, and the header states exactly how many — never a fixed "3".
+  The shared league world above is what makes the extra offers affordable.
+
+**Ranked build list from here** (no migration and no owner decision unless marked):
+
+| # | Build | Moves | Size |
+|---|---|---|---|
+| ✅ | The waiver decision reads through the feed — **done in this change** (below) | Waiver Kernel → ✅ (~100) | S |
+| 2 | Provider drafts in manager records. ⚠ **Needs a read-only production check first**: whether each provider's `dw_draft_facts.managerId` equals its `league_teams.externalId`, and whether earlier seasons can be tied to their owners. Crediting the current season alone gives every manager one draft, under the record's two-draft floor, so it would say nothing but a count; and a wrong id match states false facts about a named leaguemate | Psychology data, user-visible | M–L |
+| ✅ | A manager-record feed — **done in this change** (below). Not refreshed on a schedule: the entry is per viewer, so it is warm exactly when its viewer is asking | Psychology Feed, Kernel → ✅ (~93) | M |
+| ✅ | League value boards cached in Value OS — **done in this change** (below): through the kernel, a lossless codec for the Maps, Dates and non-finite rates, keyed on what the builder reads, and shared by the trade grade | Value Kernel → ✅ (~100) | L |
+| ✅ | The graded trade inbox and Trade OS — **settled in this change** (below): the inbox must not read a stored world, so Kernel is n/a; the inbox loads the world once per build instead of once per offer; the unread `tradeSettingsSource` is deleted | Trade Kernel → n/a (~83) | S |
+| ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
+| ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
+| ✅ | League-scored projections for every board sport's points leagues (NBA, NHL, MLB, college basketball, soccer) — **owner said yes, done in this change** (below). Category leagues have no points and keep the canonical rows | Projection Chimmy → ✅ (~100) | M |
+| ✅ | Grade more than 3 pending offers — **owner said yes, done in this change** (below): up to 6, time-bounded inside the packet deadline | Trade, user-visible | S |
+| ✅ | Trade OS to 100% — **done in this change** (above): each letter's graded deals set the confidence stated beside it (never the letter), and native offers are re-graded by their reminders on a schedule | Trade Engine, Cron → ✅ (~100) | M |
+| ⏸ | Let graded trades move letters — **declined for now** (owner's "use your recommendation", 2026-11-20): the letter IS the trade decision, and waivers and start/sit use their records to tune confidence, never to change the call. It needs a record validated as predictive first; the record already shows beside every grade, and since 2026-11-21 so does the confidence it sets | — | M |
+| ✅ | Draft advice learns from graded tips — **done in this change, no migration** (below): the recorder's table already holds every served tip with the board's projections at that moment | Draft Engine → ✅ (~100) | L |
+| ✅ | ESPN / MFL waiver claims refreshed daily — **owner said yes, done in this change** (below) | Psychology Cron → ✅ (~100) | M |
+
 **THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
 the 2026-11-20 re-score (axes 1–3 = 40%, 4–5 = 30%, 6–7 = 30%; ⚠ counts half; n/a leaves its group). Code-scheduled
 only, like every mark here: production tables were not read.
@@ -203,9 +446,9 @@ only, like every mark here: production tables were not read.
 | Manager Psychology (facts) | ~75 | ~90 | Packet ⚠→✅ and Chimmy ⚠→✅: leaguemates' records in the packet, Competitive Edge only |
 | Lineup | ~75 | ~86 | Chimmy ⚠→✅: My Team's best lineup in every sport that has one, and in the packet. Kernel ⚠ stays |
 | Trade | ~63 | ~86 | Packet ❌→✅ and Chimmy ⚠→✅: the graded inbox in the packet. Engine ⚠ (letters never moved) and Cron ⚠ (Sleeper-only offers) stay |
-| Draft | ~57 | ~79 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed, Engine, Cron ⚠ stay |
-| Commissioner | ~52 | ~85 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag. Cron, User ⚠ stay |
-| Decision OS hub | ~50 | ~71 | Serialization, operability and the learning loop ⚠→✅ — see the hub and learning-loop notes below |
+| Draft | ~57 | ~93 | Packet ❌→✅ and Chimmy ⚠→✅: board and pick in the packet. Feed ⚠→✅: the engine reads its rules through Draft OS (60 s); Cron ⚠→n/a (a 60 s entry is warm only while a draft runs, as League OS). Engine ⚠ stays (no outcome stage) |
+| Commissioner | ~52 | ~93 | Feed ❌→✅ and Kernel ❌→✅: `commissioner` OsDomain; Engine ⚠→✅: the inactive warnings learn from the graded flag; Cron ⚠→n/a (a five-minute entry warmed when the hub is opened). User ⚠ stays: the hub now shows the snapshot Chimmy reads, but not what the decision learned |
+| Decision OS hub | ~50 | ~86 | Serialization, operability, the learning loop, routing and assembly ⚠→✅ — see the hub, learning-loop and routing notes below. Multi-model stays ❌ by the owner's decision |
 
 ⚠ Every one of these rests on a merge: the Import, Lineup and Player Value rows are in PR #3935; the rest are the
 commits after it.
@@ -224,9 +467,32 @@ decision to retire three-brain) · operability ⚠→✅.
 - **Operability ✅.** Every packet slice has its own kill switch (`flags.ts`), the five the +10% push added included;
   killed feeds are listed on the packet (`meta.killedFeeds`); every read has its own deadline and a late packet logs
   its slowest slices by name.
-- Still ⚠/❌: routing and assembly (intent mapping covers each decision domain, but not every slice is intent-aware),
-  the learning loop (graded outcomes move start/sit and waiver confidence only; trade letters and commissioner
-  advice are reported, not applied — by rule), multi-model (retired).
+- Still ⚠/❌ at that point: routing and assembly (intent mapping covers each decision domain, but not every slice is
+  intent-aware), the learning loop (since ✅, below), multi-model (retired). Routing and assembly are ✅ since the
+  routing note below.
+
+**Routing and assembly, 2026-11-20 — ~71 → ~86.** Three changes, each found in the code rather than assumed:
+- **One classification per chat turn** (`classifyChimmyTurn`, `lib/chimmy-orchestration/intent-classifier.ts`). The
+  route classified the message alone for the packet and again, with the last two user turns joined in, for the prompt
+  label and the specialist agent — so on a follow-up ("what about Waddle instead?" after a trade question) the prompt
+  said trade and the packet left out the graded offers. And joining the turns was wrong in itself: the branches are
+  ordered, so "who should I pick up?" then "should I accept Bob's offer?" was a WAIVER turn. Now the current question
+  decides, and the earlier turns only when it names nothing; a rules question stays general. The packet, the label,
+  the agent and the admin proof page read the one result.
+- **The commissioner's activity read follows the same router as the health decision.** It had its own word list
+  (`inactiv`, `pending`, `recent`, `what…happen`), so "which managers are inactive?" got the activity log but never the
+  health decision (the one the inactive-flag record tunes), and "any pending trade offers?" ran the commissioner's log.
+  The classifier's commissioner intent now covers a league's inactive and abandoned managers and its health — a
+  manager or the league must be named, because "is Kupp inactive?" is a player's game status — and both reads follow
+  `want.commissionerHealthDecision`. The word list still serves the older `/api/chimmy` route, which has no router.
+- **What answers the question leads the packet** (`ANSWERING_SLICES_BY_INTENT`, `grounding/serialize.ts`). The packet
+  rendered in one fixed order whatever was asked, so a trade question's graded offers sat behind import state, rules,
+  values and two projection blocks, and a standings question found the table last. The slices the intent calls for
+  now come first, under a line naming them; nothing is dropped or rewritten, a slice that did not render is never
+  named, and with no intent the text is byte-identical to before.
+- ⚠ What this does NOT change: the always-on slices (rules, values, projections, the context engine, league and
+  portfolio intelligence) are still assembled on every turn, by D14 (correctness over speed) — each is bounded by its
+  own deadline, so an irrelevant one costs only itself. Multi-model stays ❌ by the owner's decision.
 
 **Learning loop, 2026-11-20 — the commissioner's inactive warnings learn from the graded flag (owner's choice).** The
 inactive flag is graded two weeks on (`inactiveFlagLedger.ts`); its record now sets how strongly the health decision's
@@ -290,6 +556,19 @@ first-wave deadline; past it the board comes without the pick, which is that bui
 the tool still runs the full budget. Not asked for from inside the draft room, which already hands the loop the same
 board. "No draft session" is stated as a fact; a failed read is a gap; a late read is stamped late.
 
+**Draft OS, 2026-11-20 — the feed has a reader (owner's choice of the two Draft builds).** Draft OS cached
+`resolveCanonicalLeagueRules` for six hours for a resolver deleted on 2026-09-06; a cron warmed it until the owner retired
+that warm on 2026-11-17, leaving a module with no reader and no writer. Meanwhile the draft engine assembled its own
+rules on every call — the IDP lookup and the roster template, on every poll of a live draft. Draft OS now caches exactly
+those rules (`DraftRosterRules`: template slots, IDP, superflex / 2QB, scoring format, TE premium), derived by the one
+function that computed them inline (`deriveDraftRosterRules`), for 60 seconds, and `buildDraftDecisionContext` and the
+queue reorder read them through `readDraftRosterRules`, which falls back to the same derivation when the cache cannot
+answer. ⚠ Not League OS's ruleset: it carries the raw `starters`, not the roster template the engine counts, and for a
+native football redraft league fills `starters` from the saved layout — a second derivation that would disagree. ⚠ 60 s,
+not 6 h: a commissioner editing roster slots minutes before the draft is seen within a minute. Still never cached: the
+draft state and the available pool, which change on every pick. Feed ⚠ → ✅; Cron ⚠ → n/a; Draft ~79 → ~93. The engine
+still has no outcome stage (graded only by `scripts/draft-backtest.ts --recorded`) — the one Draft axis left.
+
 **Commissioner OS, 2026-11-20 — league health reads through the domain-OS kernel.** It was the one Decision OS
 decision with no maintained facts: Chimmy's league-health slice rebuilt the hub's whole snapshot (rosters, seven days of
 counts, the owner-action clock, dynasty reads) on every question. `'commissioner'` is now an `OsDomain`, and
@@ -298,6 +577,21 @@ import, five-minute TTL. ⚠ USER-scoped on purpose: with dynasty signals on, th
 viewer's (`dynastyHealthReads.ts`), so a league-scoped entry would tell a co-commissioner another's team is theirs.
 Commissioner access is still proved on every request before the read. Not done: no scheduled warm (nothing shows one
 is needed at a five-minute TTL), and the hub screen still builds its own snapshot live.
+
+**Commissioner OS, 2026-11-20 — the hub screen's snapshot is the one Chimmy reads.** Both halves of the "not done"
+above, closed by one change. The hub builds the health snapshot live for its own page (`lib/core-app/commissionerHub.ts`),
+and Chimmy read a separately derived cached one — up to five minutes apart, so a commissioner could open the hub and ask
+Chimmy and get two different counts. The hub now hands what it built to the fact (`primeCommissionerHealthSnapshot`,
+over a new kernel `OsFeed.prime`), after its own commissioner check, not awaited and never throwing; Chimmy's next read
+inside five minutes serves exactly the screen's numbers. Opening the hub is also the warm, which is when the entry is
+about to be read, so no scheduled job is added. ⚠ Only a snapshot the derivation itself would produce is stored: built
+from the database (never the dashboard fallback, which is assembled from the caller's league metadata), with dynasty
+signals whenever the league uses them (the same `usesDynastyBackground` test both sides apply), for the league it is
+keyed on; the kernel never stores a null fact. Cron ⚠ → n/a; Commissioner ~85 → ~93 by code. ⚠ User stays ⚠ (the
+fresh re-score's stricter reading): one snapshot is not the decision, and the hub still does not say what the
+decision learned from the graded inactive flag. ⚠ "By
+code" still means what it says everywhere in this file: the 13 Commissioner OS UI namespaces' production
+`commissioner_os_live_ready_*` rows are a separate, owner-set switch and were not read.
 
 **Manager Psychology (facts only), 2026-11-20 — leaguemates' records are in the packet, behind the plan.** They
 reached Chimmy only through the paid `get_manager_record` tool, so a manager question the model did not route to the

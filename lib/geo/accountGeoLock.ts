@@ -1,7 +1,13 @@
 /**
- * The ACCOUNT-level Washington lock: once an account is seen in Washington on a
- * normal connection, it stays locked out of the whole product — from any
+ * The ACCOUNT-level full-block lock: once an account is seen in a full-block state
+ * on a normal connection, it stays locked out of the whole product — from any
  * location, over any connection — until support unlocks it.
+ *
+ * ⚠ NOVEMBER 2026: NO STATE IS FULL-BLOCK ANY MORE. Washington, the only one, moved
+ * to paid-block, so the sighting lock below never fires and existing `full_block`
+ * rows read as the card lock (see accountGeoLockFromLevel). The mechanism is kept
+ * so a future full-block state needs only a `restrictedStates.ts` edit. The notes
+ * below describe it as built for Washington.
  *
  * ⚠ WHY AN ACCOUNT LOCK AT ALL. Every other gate reads the location of the
  * request's IP. A residential proxy that the VPN vendor has not catalogued looks
@@ -48,16 +54,27 @@ import { clientIpFromHeaders } from "@/lib/http/clientIp"
 
 import { resolveAnonymizerByIp } from "./anonymizerCache"
 import { isTorExit, resolveEdgeGeo } from "./geoHeaders"
-import { isFullyBlocked } from "./restrictedStates"
+import { hasFullBlockStates, isFullyBlocked } from "./restrictedStates"
 
 export const ACCOUNT_FULL_BLOCK = "full_block" as const
 /** Paid surfaces only. Set when a purchase's card billing address was in a restricted state. */
 export const ACCOUNT_CARD_PAID_BLOCK = "card_paid_block" as const
 export type AccountGeoLock = typeof ACCOUNT_FULL_BLOCK | typeof ACCOUNT_CARD_PAID_BLOCK | null
 
-/** The lock a stored `stateRestrictionLevel` means. The signup route's `paid_block` means none. */
+/**
+ * The lock a stored `stateRestrictionLevel` means. The signup route's `paid_block` means none.
+ *
+ * ⚠ A stored `full_block` now reads as the CARD lock (paid surfaces only). Every such row was
+ * written for Washington, which moved to paid-block in November 2026 (owner, on counsel's
+ * confirmation), so those accounts get free features back and stay off paid ones — exactly
+ * what a Washington card or sighting means today. Mapped here rather than by a data
+ * migration, so no production write is needed and support can still clear a row.
+ * Only while NO state is full-block (`hasFullBlockStates`) — so the full lock still
+ * works if one is ever added. ⚠ Adding one would also RE-LOCK every old Washington
+ * row; clear those first (they carry `detectedStateCode = 'WA'` or a WA card).
+ */
 export function accountGeoLockFromLevel(level: string | null | undefined): AccountGeoLock {
-  if (level === ACCOUNT_FULL_BLOCK) return ACCOUNT_FULL_BLOCK
+  if (level === ACCOUNT_FULL_BLOCK) return hasFullBlockStates() ? ACCOUNT_FULL_BLOCK : ACCOUNT_CARD_PAID_BLOCK
   if (level === ACCOUNT_CARD_PAID_BLOCK) return ACCOUNT_CARD_PAID_BLOCK
   return null
 }

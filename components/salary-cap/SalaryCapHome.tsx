@@ -18,6 +18,7 @@ import { SalaryCapRulesView } from './SalaryCapRulesView'
 import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { SalaryCapSpecialtyHome } from '@/components/league/specialty/salary/SalaryCapSpecialtyHome'
 import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCapBidCheck'
+import { ImportedContractsUpload } from './ImportedContractsUpload'
 
 interface SalaryCapHomeProps {
   leagueId: string
@@ -114,6 +115,13 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
   return (
     <SpecialtyShell format="salary" testId="salary-specialty">
     <div className="space-y-6">
+      {/* Shown above every cap view: an imported league whose contracts AllFantasy does not hold. */}
+      {summary?.contractsNote ? (
+        <p role="note" data-testid="salary-cap-imported-note" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+          {summary.contractsNote}
+        </p>
+      ) : null}
+      {summary?.canImportContracts ? <ImportedContractsUpload leagueId={leagueId} onSaved={() => void load()} /> : null}
       {view === 'home' && summary && (
         <SalaryCapSpecialtyHome
           summary={summary}

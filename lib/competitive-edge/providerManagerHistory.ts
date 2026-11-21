@@ -39,7 +39,11 @@ const WAIVER_TEAM_PLATFORMS = new Set(['espn', 'mfl'])
 /** ...and of those, the ones that also record the winning bid. */
 const WAIVER_BID_PLATFORMS = new Set(['espn'])
 
-/** Past this, the history may be out of date: provider history is refreshed by the import, not daily. */
+/**
+ * Past this since the newest claim, the history may be out of date. ESPN and MFL claims are re-read daily since
+ * 2026-11-21 (`lib/league-import/providerWaiverRefresh.ts`), so this now flags a quiet league or a failed refresh
+ * rather than an import that was never repeated.
+ */
 const STALE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
 
 export function providerTradesReason(platform: string): string {

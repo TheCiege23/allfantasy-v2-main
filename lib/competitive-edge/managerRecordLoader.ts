@@ -38,7 +38,7 @@ function displayName(t: { ownerName: string | null; teamName: string | null }): 
   return t.ownerName?.trim() || t.teamName?.trim() || 'A manager'
 }
 
-export async function loadLeagueManagerRecords(input: {
+type LoadLeagueManagerRecordsInput = {
   leagueId: string
   userId: string
   /** Only this team's record. Without it: every manager but the viewer. */
@@ -46,12 +46,36 @@ export async function loadLeagueManagerRecords(input: {
   /** Every manager INCLUDING the viewer — the commissioner's directory of the whole league. */
   includeViewer?: boolean
   now?: Date
-}): Promise<SectionState<LeagueManagerRecords>> {
-  const now = input.now ?? new Date()
+}
 
+export async function loadLeagueManagerRecords(input: LoadLeagueManagerRecordsInput): Promise<SectionState<LeagueManagerRecords>> {
   const membership = await resolveLeagueMembership(input.leagueId, input.userId).catch(() => null)
   if (!membership) return { available: false, reason: 'Membership in this league could not be checked just now.' }
   if (!membership.ok) return { available: false, reason: 'Manager records are read only for a league you are in.' }
+
+  /*
+   * THE LEAGUE'S RECORDS, AS THE VIEWER SEES THEM, THROUGH MANAGER PSYCHOLOGY'S FEED (2026-11-20 re-score, Feed ❌ → ✅).
+   * Every manager question — the packet's `managerRecords` slice and the `get_manager_record` tool — rebuilt the whole
+   * league's history (trades, waiver claims and FAAB, drafts) on every turn. The default view (every leaguemate but
+   * you) is now held for five minutes per viewer (`lib/decision-os/manager-records-os`). ⚠ Membership is proved above
+   * on EVERY call, before the cache is read; the plan gate stays in the caller; and the entry is per viewer because
+   * your own FAAB is found through your roster (`waiverEdgeLoader.ts`), so one viewer's view is never another's. A
+   * single team's record and the commissioner's whole directory still build live. An unavailable result is not cached.
+   */
+  if (!input.teamExternalId && !input.includeViewer && !input.now) {
+    const { loadViewerManagerRecords } = await import('@/lib/decision-os/manager-records-os')
+    const cached = await loadViewerManagerRecords({ userId: input.userId, leagueId: input.leagueId }).catch(() => null)
+    if (cached) return { available: true, data: cached }
+  }
+  return buildLeagueManagerRecords(input)
+}
+
+/**
+ * The records, built. ⚠ Assumes membership was already proved — `loadLeagueManagerRecords` does that, and the feed's
+ * derive is only ever reached from there. Never export a path to this that skips the check.
+ */
+export async function buildLeagueManagerRecords(input: LoadLeagueManagerRecordsInput): Promise<SectionState<LeagueManagerRecords>> {
+  const now = input.now ?? new Date()
 
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },

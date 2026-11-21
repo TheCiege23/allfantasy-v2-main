@@ -21,6 +21,7 @@
  * So this returns a discriminated result. A caller must SAY what it does when
  * the answer is "we could not ask", and it can no longer do so by accident.
  */
+import { cfbdFetch } from './cfbd-quota'
 
 export type CfbdFailureKind =
   /** Monthly allowance is gone. Retrying now will not help; the month must turn. */
@@ -89,7 +90,7 @@ export async function cfbdGet<T = unknown>(path: string, apiKey: string): Promis
 
   let res: Response
   try {
-    res = await fetch(`${CFBD_BASE_URL}${path}`, {
+    res = await cfbdFetch(`${CFBD_BASE_URL}${path}`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
   } catch (err) {

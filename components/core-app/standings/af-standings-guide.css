@@ -13,14 +13,19 @@
 }
 .af-core .af-stg-teach b { color: var(--accent); }
 
-/* "How the table got here" / "Your season so far": the detail behind the answer, one tap away. */
+/* The page's one "More detail" fold (MoreDetail.tsx, 2026-11-20): the detail behind the answer, one tap
+   away. Its look comes from more-detail.css; only the spacing above it stays here. */
 .af-core .af-stg-deeper {
   margin: 18px 0 0;
+}
+/* "How the table got here" (StandingsBoardView) is still its own fold inside the board, not the page's
+   More detail, so it keeps the original look. `:not(.af-more-detail)` keeps these off the shared fold. */
+.af-core .af-stg-deeper:not(.af-more-detail) {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
 }
-.af-core .af-stg-deeper > summary {
+.af-core .af-stg-deeper:not(.af-more-detail) > summary {
   display: flex;
   align-items: center;
   min-height: 44px;
@@ -31,9 +36,9 @@
   line-height: 1.35;
   cursor: pointer;
 }
-.af-core .af-stg-deeper[open] > summary { border-bottom: 1px solid var(--line); }
-.af-core .af-stg-deeper > :not(summary) { margin-left: 16px; margin-right: 16px; }
-.af-core .af-stg-deeper > :last-child { margin-bottom: 16px; }
+.af-core .af-stg-deeper:not(.af-more-detail)[open] > summary { border-bottom: 1px solid var(--line); }
+.af-core .af-stg-deeper:not(.af-more-detail) > :not(summary) { margin-left: 16px; margin-right: 16px; }
+.af-core .af-stg-deeper:not(.af-more-detail) > :last-child { margin-bottom: 16px; }
 
 /* ── 2026-11-14: the board's controls, folded to what a reader needs first ─────────────────────────── */
 

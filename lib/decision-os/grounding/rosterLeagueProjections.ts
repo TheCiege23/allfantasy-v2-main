@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds, sleeperLookupId } from '@/lib/core-app/rosterIdCrosswalk'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { loadLeaguePlayerMetrics, type LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { authorizeLeagueRead } from '../leagueReadAuthorization'
 import {
   defaultLeagueWeekPricingDeps,
   isLeagueWeekRefusal,
@@ -34,8 +36,14 @@ import type { GroundedSlice, GroundingGap } from './packet'
  * ⚠ WHAT THIS DOES NOT APPLY, said in the prompt rather than left out: byes and injuries. My Team counts a bye or a
  * ruled-out player as 0; this list is the projection itself.
  *
- * NFL only, like the weekly feed it reads. Every other sport is `not_requested` — not a gap: the projection slice
- * still carries those sports' numbers.
+ * NBA · NHL · MLB · COLLEGE BASKETBALL · SOCCER POINTS LEAGUES (owner's call, 2026-11-20). These sports have no weekly
+ * component feed, and their
+ * stat names do not match a rulebook's, so re-scoring a component line here would drop stats silently (every rebound,
+ * in a default NBA rulebook — `waiverSportBasis.ts`). They are priced instead on the league's own value board, through
+ * `loadLeaguePlayerMetrics` — the call My Team makes for the same roster: the board's per-game rate under THIS league's
+ * points, times this week's games where the schedule is known. One source, so Chimmy, My Team, the Trade Center and
+ * the value answer quote the same per-game number. A CATEGORY league has no points to project: it keeps the canonical
+ * rows and says why. Every other sport is `not_requested` — not a gap: the projection slice still carries its numbers.
  */
 
 /** One rostered player, priced for the feed's week under this league's rules. */
@@ -47,22 +55,36 @@ export interface RosterLeagueProjection {
   slot: 'starter' | 'bench'
   /** Points under this league's scoring. Null when no line could be priced — never 0 for "unknown". */
   points: number | null
-  week: number
+  /** The week priced. Null for a season-rate row whose week is not known. */
+  week: number | null
   season: string
   /** Marks the row for the serializer: this number IS this league's, unlike a canonical projection row. */
   leagueScored: true
+  /**
+   * NBA / NHL / MLB / NCAAB / soccer only: priced from the league value board's per-game rate. Absent on an NFL row, which is a
+   * re-scored weekly line. `points` is then `perGame × weekGames` — null when this week's games are not known.
+   */
+  basis?: 'season_rate'
+  perGame?: number | null
+  weekGames?: number | null
 }
 
 type RosterPlayer = { playerId?: unknown; name?: unknown; position?: unknown }
 
 /** The league facts the pricing needs, read once and early so only the pricing waits for the roster. */
 export type RosterProjectionBasis =
-  | { ok: true; basis: LeagueWeekBasis; platform: string | null }
+  | { ok: true; basis: LeagueWeekBasis; platform: string | null; kind?: 'week_line' }
+  /** NBA / NHL / MLB / NCAAB / soccer: priced on the league's value board at pricing time (it needs the roster's ids). */
+  | { ok: true; kind: 'season_rate'; leagueId: string; sport: string }
   | { ok: false; gap: GroundingGap }
 
 export interface RosterLeagueProjectionDeps extends LeagueWeekPricingDeps {
   loadLeague: (leagueId: string) => Promise<{ sport: string | null; platform: string | null; settings: unknown } | null>
   crosswalk: (platform: string, sport: string, ids: string[]) => Promise<Map<string, string>>
+  /** Whether the asker may read this league — `loadLeaguePlayerMetrics` requires its caller to have checked. */
+  authorize: (leagueId: string, userId: string) => Promise<boolean>
+  /** My Team's own read for the roster, in a board sport: the league value board's per-game rate and the week's games. */
+  loadRosterMetrics: (args: { leagueId: string; rosterIds: string[] }) => Promise<LeaguePlayerMetrics | null>
 }
 
 export const defaultRosterLeagueProjectionDeps: RosterLeagueProjectionDeps = {
@@ -70,11 +92,24 @@ export const defaultRosterLeagueProjectionDeps: RosterLeagueProjectionDeps = {
   loadLeague: (leagueId) =>
     prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, settings: true } }),
   crosswalk: crosswalkToSleeperIds,
+  authorize: async (leagueId, userId) => (await authorizeLeagueRead(leagueId, userId)).authorized,
+  loadRosterMetrics: ({ leagueId, rosterIds }) =>
+    loadLeaguePlayerMetrics({ leagueId, rosterIds, includeTradeValues: false, limit: rosterIds.length }),
 }
+
+/** The sports priced on the league value board here: every board sport (`BOARD_VALUE_SPORTS`), owner's call 2026-11-20. */
+export const SEASON_RATE_PROJECTION_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB', 'NCAAB', 'SOCCER'])
 
 const NOT_NFL: GroundingGap = {
   reason: 'not_requested',
-  detail: 'League-scored roster projections are computed for NFL leagues; the projection slice carries this sport.',
+  detail: 'League-scored roster projections are computed for NFL leagues and NBA, NHL, MLB, college basketball and soccer points leagues; the projection slice carries this sport.',
+  remedy: 'Nothing to do.',
+}
+
+const CATEGORY_LEAGUE: GroundingGap = {
+  reason: 'not_requested',
+  detail:
+    'This is a category league: it scores categories, not fantasy points, so there are no league points to project. The Projections rows are AllFantasy’s default scoring, not this league’s.',
   remedy: 'Nothing to do.',
 }
 
@@ -88,11 +123,23 @@ function absent(g: GroundingGap): GroundedSlice<RosterLeagueProjection[]> {
 
 /** The league's rulebook and the feed's week, or why the roster cannot be priced. Never throws. */
 export async function loadRosterProjectionBasis(
-  args: { leagueId: string; sport: string },
-  deps: Pick<RosterLeagueProjectionDeps, 'loadLeague' | 'latestWeek'> = defaultRosterLeagueProjectionDeps,
+  args: { leagueId: string; sport: string; userId?: string | null },
+  deps: Pick<RosterLeagueProjectionDeps, 'loadLeague' | 'latestWeek' | 'authorize'> = defaultRosterLeagueProjectionDeps,
 ): Promise<RosterProjectionBasis> {
-  // The packet's own sport first: a non-NFL league costs no query at all.
-  if (args.sport.trim().toUpperCase() !== 'NFL') return { ok: false, gap: NOT_NFL }
+  const sport = args.sport.trim().toUpperCase()
+  if (SEASON_RATE_PROJECTION_SPORTS.has(sport)) {
+    // `loadLeaguePlayerMetrics` reads the league as given; the asker's access is checked first, as the packet's
+    // league-metrics slice does. A sync throw must not escape (this promise is awaited by the packet build).
+    const allowed = args.userId
+      ? await Promise.resolve().then(() => deps.authorize(args.leagueId, args.userId as string)).catch(() => false)
+      : false
+    if (!allowed) {
+      return { ok: false, gap: gap('Access to this league could not be confirmed, so your roster was not priced under its scoring.', 'Asking again usually works.') }
+    }
+    return { ok: true, kind: 'season_rate', leagueId: args.leagueId, sport }
+  }
+  // The packet's own sport first: any other non-NFL league costs no query at all.
+  if (sport !== 'NFL') return { ok: false, gap: NOT_NFL }
   // ⚠ A dependency that throws SYNCHRONOUSLY escapes `.catch`; this promise is awaited by the packet build, so
   // it must never reject.
   const league = await Promise.resolve()
@@ -149,7 +196,7 @@ function rosterPlayers(rosterValue: unknown): Array<{ id: string; name: string |
  */
 export async function priceRosterForLeague(
   args: { basis: RosterProjectionBasis; rosterValue: unknown; sport: string },
-  deps: Pick<RosterLeagueProjectionDeps, 'loadWeekLines' | 'crosswalk'> = defaultRosterLeagueProjectionDeps,
+  deps: Pick<RosterLeagueProjectionDeps, 'loadWeekLines' | 'crosswalk' | 'loadRosterMetrics'> = defaultRosterLeagueProjectionDeps,
 ): Promise<GroundedSlice<RosterLeagueProjection[]>> {
   try {
     return await priceRoster(args, deps)
@@ -158,11 +205,68 @@ export async function priceRosterForLeague(
   }
 }
 
+const rankRows = (rows: RosterLeagueProjection[]) => {
+  const rank = (r: RosterLeagueProjection) => (r.slot === 'starter' ? 0 : 1)
+  rows.sort((a, b) => rank(a) - rank(b) || (a.slot === 'bench' ? (b.points ?? b.perGame ?? -1) - (a.points ?? a.perGame ?? -1) : 0))
+  return rows
+}
+
+const presentRows = (rows: RosterLeagueProjection[]): GroundedSlice<RosterLeagueProjection[]> => ({
+  present: true, value: rows, asOf: null, servedFrom: 'live', confidence: null, conclusive: { ok: true }, gap: null,
+})
+
+/** NBA / NHL / MLB / NCAAB / soccer: the roster on the league value board, through My Team's own read. */
+async function priceRosterFromBoard(
+  basis: { leagueId: string; sport: string },
+  rosterValue: unknown,
+  deps: Pick<RosterLeagueProjectionDeps, 'loadRosterMetrics'>,
+): Promise<GroundedSlice<RosterLeagueProjection[]>> {
+  const players = rosterPlayers(rosterValue)
+  if (players.length === 0) {
+    return absent(gap('No rostered players were found for you in this league, so there is nothing to price.', 'Re-sync the league if your roster should be here.'))
+  }
+  const data = await Promise.resolve()
+    .then(() => deps.loadRosterMetrics({ leagueId: basis.leagueId, rosterIds: players.map((p) => p.id) }))
+    .catch(() => null)
+  if (!data || data.sport !== basis.sport) {
+    return absent(gap("This league's value board could not be read, so your roster was not priced under its scoring.", 'Asking again usually works; My Team shows the same numbers.'))
+  }
+  if (data.unit !== 'fantasy points') return absent(CATEGORY_LEAGUE)
+  const byRoster = new Map(data.rows.flatMap((r) => (r.rosterPlayerId ? [[r.rosterPlayerId, r] as const] : [])))
+  const rows: RosterLeagueProjection[] = players.map((p) => {
+    const hit = byRoster.get(p.id)
+    const perGame = hit && Number.isFinite(hit.perGame) ? hit.perGame : null
+    return {
+      playerId: p.id,
+      playerName: p.name ?? hit?.playerName ?? null,
+      position: p.position ?? (hit?.position || null),
+      slot: p.slot,
+      points: perGame != null && typeof hit?.weekly === 'number' ? hit.weekly : null,
+      week: data.week,
+      season: String(data.season),
+      leagueScored: true,
+      basis: 'season_rate',
+      perGame,
+      weekGames: hit?.weekGames ?? null,
+    }
+  })
+  if (!rows.some((r) => r.perGame != null)) {
+    return absent(
+      gap(
+        "None of your rostered players is on this league's value board, so none could be priced under its scoring.",
+        'The board is built from AllFantasy’s season projections; a player it does not carry stays unpriced.',
+      ),
+    )
+  }
+  return presentRows(rankRows(rows))
+}
+
 async function priceRoster(
   args: { basis: RosterProjectionBasis; rosterValue: unknown; sport: string },
-  deps: Pick<RosterLeagueProjectionDeps, 'loadWeekLines' | 'crosswalk'>,
+  deps: Pick<RosterLeagueProjectionDeps, 'loadWeekLines' | 'crosswalk' | 'loadRosterMetrics'>,
 ): Promise<GroundedSlice<RosterLeagueProjection[]>> {
   if (!args.basis.ok) return absent(args.basis.gap)
+  if (args.basis.kind === 'season_rate') return priceRosterFromBoard(args.basis, args.rosterValue, deps)
   const { basis, platform } = args.basis
   const players = rosterPlayers(args.rosterValue)
   if (players.length === 0) {
@@ -205,7 +309,5 @@ async function priceRoster(
       ),
     )
   }
-  const rank = (r: RosterLeagueProjection) => (r.slot === 'starter' ? 0 : 1)
-  rows.sort((a, b) => rank(a) - rank(b) || (a.slot === 'bench' ? (b.points ?? -1) - (a.points ?? -1) : 0))
-  return { present: true, value: rows, asOf: null, servedFrom: 'live', confidence: null, conclusive: { ok: true }, gap: null }
+  return presentRows(rankRows(rows))
 }

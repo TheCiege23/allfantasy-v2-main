@@ -1367,6 +1367,16 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   font-weight: 800;
   color: var(--text);
 }
+/* The swap's graded record (2026-11-21): its own line under the call, quieter than the call itself. */
+.af-mt-bench-check-record {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-mt-bench-check-record[data-level='low'] {
+  color: var(--text2);
+}
 
 /*
   "Fix Lineup in Sleeper ↗" — the one action on a read-only screen.
@@ -1711,6 +1721,11 @@ a.af-mt-lock-fix:focus-visible {
    the lineup right after the fix" at the end of this file (2026-11-07). */
 .af-mt-byes,
 .af-mt-basis {
+  order: 1;
+}
+/* The page's "More detail" fold now holds byes and basis (2026-11-20), so it takes their place:
+   after the roster on a narrow page, in the side column on a wide one. */
+.af-mt-more {
   order: 1;
 }
 

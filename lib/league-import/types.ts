@@ -134,6 +134,8 @@ export interface NormalizedLeagueSettings {
 export interface NormalizedRoster {
   source_team_id: string
   source_manager_id: string
+  /** Provider manager ids that share this team with its owner (Sleeper `co_owners`). */
+  co_owner_ids?: string[]
   owner_name: string
   team_name: string
   avatar_url: string | null

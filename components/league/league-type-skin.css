@@ -67,6 +67,11 @@
   --lsk-text: #e6f7f4; --lsk-text2: #c0e0db; --lsk-muted: #92b5b0; --lsk-heading: #99f6e4;
   --lsk-accent: #2dd4bf; --lsk-accent-strong: #14b8a6; --lsk-accent-ink: #04201c; --lsk-rgb: 20, 184, 166;
 }
+[data-league-skin='c2c'] {
+  --lsk-bg: #060c14; --lsk-surface: #0c1622; --lsk-surface2: #152639; --lsk-line: #1e3550;
+  --lsk-text: #e6f1fb; --lsk-text2: #c2d8ec; --lsk-muted: #93abc2; --lsk-heading: #bae6fd;
+  --lsk-accent: #38bdf8; --lsk-accent-strong: #0ea5e9; --lsk-accent-ink: #031a28; --lsk-rgb: 14, 165, 233;
+}
 [data-league-skin='zombie'] {
   --lsk-bg: #091511; --lsk-surface: #10231c; --lsk-surface2: #1b3529; --lsk-line: #31513c;
   --lsk-text: #f0fff0; --lsk-text2: #d2e8d4; --lsk-muted: #9bbb9f; --lsk-heading: #d9f99d;

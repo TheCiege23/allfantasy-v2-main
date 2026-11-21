@@ -312,8 +312,9 @@ describe('/core home cards stream independently', () => {
      * reader it does not apply to.
      */
     expect([...cards.keys()]).toEqual([
-      'connect', 'headline', 'issues', 'triage', 'trade-band', 'commish', 'season-pulse', 'calendar', 'formats',
-      'following', 'leagues', 'coverage',
+      // 2026-11-20: the guide, teaching and coverage cards sit in the home's "More detail" fold, last.
+      'connect', 'headline', 'issues', 'triage', 'trade-band', 'commish',
+      'following', 'leagues', 'season-pulse', 'calendar', 'formats', 'coverage',
     ])
   })
 
@@ -350,14 +351,8 @@ describe('/core home cards stream independently', () => {
       'carryover',
       'user-os',
       'schedule',
-      // The guide cards (2026-11-12): leagues you run, then where you stand in yours.
+      // The guide card (2026-11-12): leagues you run.
       'commish',
-      'season-pulse',
-      // The teaching cards (2026-11-12): when things happen, and what each format means.
-      'calendar',
-      'formats',
-      // The folded trade evaluator (2026-11-06): one closed row after the bands, before the dashboard.
-      'trade-evaluator',
       'routine',
       'matchups',
       'chimmy',
@@ -368,6 +363,12 @@ describe('/core home cards stream independently', () => {
       'following',
       'receipts',
       'leagues',
+      // The home's "More detail" fold (2026-11-20): where you stand, when things happen, what each
+      // format means, the folded trade evaluator, and the coverage disclosure.
+      'season-pulse',
+      'calendar',
+      'formats',
+      'trade-evaluator',
       'coverage',
     ])
   })

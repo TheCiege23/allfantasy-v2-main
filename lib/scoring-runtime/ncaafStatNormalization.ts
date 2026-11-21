@@ -135,13 +135,85 @@ interface NcaafWeekAggregate {
   unmappedKeys: string[]
 }
 
-/** Sum a player's CFBD game rows for one week (almost always one game; a rare week holds two). */
+/**
+ * Rolling Insights college football box lines (`/live/{date}/NCAAFB`) -> the same canonical keys.
+ *
+ * The row's `normalizedStatMap` is the shape `rollingInsightsGameLogs.normalizedStatMapFor` writes:
+ * `{ stats: { passing_yards: 253, ... }, position, ... }`. The field names are from the committed
+ * fixture (contracts/rolling-insights/fixtures/live.NCAAFB.json, 54 games, captured 2026-10-05):
+ * flat per player, no group level.
+ *
+ * ⚠ THE CONTRACT SAYS WHAT IS MISSING, AND IT IS NOT INVENTED HERE: no two-point conversion fields
+ * and no forced fumbles (`limits: no_verified_player_two_point_or_forced_fumble_fields`). `tackles` is
+ * the total; RI sends no solo/assisted split.
+ */
+export const RI_NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
+  passing_yards: 'pass_yds',
+  passing_touchdowns: 'pass_td',
+  passing_interceptions: 'pass_int',
+  rushing_yards: 'rush_yds',
+  rushing_touchdowns: 'rush_td',
+  receptions: 'rec',
+  receiving_yards: 'rec_yds',
+  receiving_touchdowns: 'rec_td',
+  fumbles_lost: 'fum_lost',
+  kick_return_touchdowns: 'kr_td',
+  punt_return_touchdowns: 'pr_td',
+  extra_points_made: 'xp_made',
+  field_goals_made: 'fg_made',
+  tackles: 'idp_tackle',
+  sacks: 'idp_sack',
+  interceptions: 'idp_int',
+}
+
+/** Informational RI fields the college scoring config does not use. Anything else is reported. */
+const RI_NON_SCORING_KEYS = new Set([
+  // Not a stat: the vendor's own player id rides inside the box line (seen on production, 2026-11-20).
+  'player_id',
+  'completions', 'passing_attempts', 'passer_rating', 'rushing_attempts', 'rushing_long', 'receiving_long',
+  'fumbles', 'fumbles_recoveries', 'kick_returns', 'kick_return_yards', 'kick_return_long', 'punt_returns',
+  'punt_return_yards', 'punt_return_long', 'punts', 'punting_yards', 'punts_long', 'inside_20',
+  'field_goals_attempted', 'field_goals_long', 'extra_points_attempted', 'field_goal_distances',
+])
+
+/** True when a stored row came from Rolling Insights (a nested `stats` object), not CFBD (flat dotted keys). */
+export function isRiNcaafRow(raw: unknown): boolean {
+  const stats = asRecord(asRecord(raw)?.stats)
+  return stats != null
+}
+
+/** One Rolling Insights game row's `normalizedStatMap` -> canonical stats. */
+export function normalizeRiNcaafGameStats(raw: unknown): NcaafGameStats {
+  const stats: Record<string, number> = {}
+  const unmapped: string[] = []
+  const box = asRecord(asRecord(raw)?.stats)
+  if (!box) return { stats, unmappedKeys: unmapped, appeared: false }
+  let appeared = false
+  for (const [key, value] of Object.entries(box)) {
+    const n = asNumber(value)
+    if (n == null || key === 'player_id') continue
+    appeared = true
+    const canonical = RI_NCAAF_STAT_ALIASES[key]
+    if (canonical) stats[canonical] = (stats[canonical] ?? 0) + n
+    else if (!RI_NON_SCORING_KEYS.has(key)) unmapped.push(key)
+  }
+  for (const [made, attempted, missed] of [['field_goals_made', 'field_goals_attempted', 'fg_miss'], ['extra_points_made', 'extra_points_attempted', 'xp_miss']] as const) {
+    const m = asNumber(box[made]), a = asNumber(box[attempted])
+    if (m != null && a != null && a >= m) stats[missed] = a - m
+  }
+  return { stats, unmappedKeys: unmapped, appeared }
+}
+
+/**
+ * Sum a player's game rows for one week (almost always one game; a rare week holds two).
+ * Accepts CFBD rows and Rolling Insights rows; each is read by its own shape.
+ */
 export function aggregateNcaafWeek(rows: readonly unknown[]): NcaafWeekAggregate {
   const stats: Record<string, number> = {}
   const unmapped = new Set<string>()
   let gamesCounted = 0
   for (const row of rows) {
-    const game = normalizeCfbdGameStats(row)
+    const game = isRiNcaafRow(row) ? normalizeRiNcaafGameStats(row) : normalizeCfbdGameStats(row)
     for (const key of game.unmappedKeys) unmapped.add(key)
     if (!game.appeared) continue
     gamesCounted += 1

@@ -63,6 +63,12 @@ export interface OsFeed {
   get<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<TFacts | null>
   /** Populate one fact family without reading. This is the "gathering" half; it needs a scheduler. */
   refresh<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<OsRefreshOutcome>
+  /**
+   * Store a fact the CALLER already derived — the same derivation, run by a screen that needed it anyway — so the
+   * next `get` serves what that screen showed instead of deriving again. True only when the store took it; never
+   * throws. A null fact is never stored (see `get`: unavailable is a fact about the source, not the scope).
+   */
+  prime<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs, facts: TFacts | null): Promise<boolean>
   /** How each family was sourced on this pass — for telemetry and for judging whether the feed earns its keep. */
   drainOutcomes(): Record<string, OsFeedOutcome>
 }
@@ -140,6 +146,15 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
       // Storing is the entire job of this method, so a write that did not land is a failure of
       // the call — never `written`, and never `unavailable` (which would blame the source).
       return persisted ? 'written' : 'write_failed'
+    },
+
+    async prime(source, args, facts) {
+      if (facts == null) return false
+      try {
+        return (await put(source, args, facts)).persisted
+      } catch {
+        return false
+      }
     },
 
     drainOutcomes() {

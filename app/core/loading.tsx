@@ -1,5 +1,8 @@
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
+import { cookies } from 'next/headers'
+import { AfCrest } from '@/components/core-app/AfCrest'
+import { LANG_COOKIE_KEY, resolveLanguage } from '@/lib/i18n/constants'
 
 /**
  * AF Core — the streaming boundary for every /core screen, until its SHELL is ready.
@@ -56,7 +59,19 @@ import '@/components/core-app/af-core-shell.css'
  * imported above for the same reason — a hard load of /core paints this file
  * before anything in AfCoreShell has been asked for.
  */
-export default function AfCoreLoading() {
+/*
+ * 🛑 IT MUST SAY IT IS LOADING, IN WORDS, WHERE THE EYE LANDS. Reported 2026-11-20 from the iOS app:
+ * "closed the app, reopened it and it froze on an empty blue screen". The app opens /core; this
+ * skeleton arrived in ~0.6s, and the rest of the page took 10-18s for a 105-league account
+ * (Railway http logs). Faint grey blocks with a slow sheen on navy read on a phone as a frozen,
+ * empty screen. The crest, a spinner and one line say "working". Reduced motion keeps the words
+ * and drops the spin.
+ */
+const LOADING_TEXT = { en: 'Loading your leagues…', es: 'Cargando tus ligas…' } as const
+
+export default async function AfCoreLoading() {
+  const language = resolveLanguage((await cookies()).get(LANG_COOKIE_KEY)?.value)
+  const text = language === 'es' ? LOADING_TEXT.es : LOADING_TEXT.en
   return (
     <div className="af-core af-shell af-sk-shell" aria-busy="true">
       {/*
@@ -105,7 +120,11 @@ export default function AfCoreLoading() {
             "Loading" once and then the screen itself; announcing every skeleton
             block would bury the page that is about to arrive.
           */}
-          <p className="af-sk-sr">Loading…</p>
+          <div className="af-sk-status" role="status" aria-live="polite">
+            <AfCrest size={56} />
+            <span className="af-sk-spinner" aria-hidden />
+            <p className="af-sk-status-text">{text}</p>
+          </div>
           <div className="af-sk-head" aria-hidden>
             <div className="af-sk-block af-sk-title" />
             <div className="af-sk-block af-sk-sub" />

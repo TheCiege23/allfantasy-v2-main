@@ -170,10 +170,13 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   const cap = MAX_ITEMS_BY_SLICE[name] ?? MAX_ITEMS
   const rows: string[] = []
   if (name === ROSTER_PROJECTIONS_SLICE) {
-    const first = value[0] as { week?: unknown; season?: unknown } | null
+    const first = value[0] as { week?: unknown; season?: unknown; basis?: unknown } | null
     const when = typeof first?.week === 'number' ? `Week ${first.week}${first.season ? ` ${String(first.season)}` : ''}` : 'This week'
     rows.push(
-      `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
+      first?.basis === 'season_rate'
+        ? // NBA / NHL / MLB / NCAAB / soccer (2026-11-20): the league value board's per-game rate, the numbers My Team and the Trade Center use.
+          `    ${when}, priced on this league's own value board: each player's per-game rate under this league's points, times his games this week where the schedule is known — the same per-game numbers My Team, the Trade Center and the value answer use. A season rate, NOT a game-by-game forecast: rest days and changed roles are not in it, and a daily league's My Team prices one day. For anyone on this list, quote THIS number, not the canonical Projections row. Injuries are not applied here.`
+        : `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
     )
   }
   for (const item of ordered.slice(0, cap)) {
@@ -355,6 +358,17 @@ function renderItem(item: unknown): string | null {
   if (o.leagueScored === true && (o.slot === 'starter' || o.slot === 'bench')) {
     const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : 'unidentified player'
     const pos = o.position ? ` (${String(o.position)})` : ''
+    if (o.basis === 'season_rate') {
+      // A per-game rate, and this week's total only when the games are known. A null is said in words, never 0.
+      const rate = typeof o.perGame === 'number' ? `${fmt(o.perGame)} pts/game` : 'not on this league’s value board (NOT zero)'
+      const week =
+        typeof o.perGame !== 'number'
+          ? ''
+          : typeof o.points === 'number' && typeof o.weekGames === 'number'
+            ? ` · ${String(o.weekGames)} game${o.weekGames === 1 ? '' : 's'} this week → ${fmt(o.points)} pts`
+            : ' · this week’s games not known'
+      return `${o.slot === 'starter' ? 'starter' : 'bench'}: ${who}${pos} ${rate}${week}`
+    }
     const pts = typeof o.points === 'number' ? `${fmt(o.points)} pts` : 'no projection line this week (NOT zero)'
     return `${o.slot === 'starter' ? 'starter' : 'bench'}: ${who}${pos} ${pts}`
   }
@@ -580,9 +594,41 @@ export function collapseGapsByCause(
   return order.map((k) => byCause.get(k) as { slices: string[]; reason: string; detail: string; remedy: string })
 }
 
+/**
+ * THE FACTS THAT ANSWER EACH KIND OF QUESTION, by the slice names above (Decision OS hub, assembly, 2026-11-20).
+ *
+ * 🛑 THE PACKET WAS ASSEMBLED IN ONE FIXED ORDER WHATEVER WAS ASKED. A trade question's graded offers sat behind import
+ * state, the rules, the market table and two projection blocks; a standings question found the table at the very end,
+ * after nine other slices. Nothing was dropped — every slice still renders, whole — but the slice the router
+ * requested FOR this question was buried in the slices every question gets. These lead now, in this order, under a
+ * line naming them; everything else follows in the usual order.
+ *
+ * ⚠ ONLY SLICES THAT RENDERED ARE NAMED. An absent slice is a gap and stays in the gap block, so the line never claims
+ * a fact the packet does not hold.
+ */
+export const ANSWERING_SLICES_BY_INTENT: Readonly<Record<string, readonly string[]>> = {
+  start_sit: [MY_TEAM_LINEUP_SLICE, ROSTER_PROJECTIONS_SLICE, 'Matchup'],
+  matchup: ['Matchup', ROSTER_PROJECTIONS_SLICE],
+  trade: [PENDING_TRADES_SLICE, ROSTER_BOARD_VALUES_SLICE, 'Market player values'],
+  waiver: ['Waiver decision'],
+  draft: [DRAFT_BOARD_SLICE],
+  player_value: ['Roster value grade', ROSTER_BOARD_VALUES_SLICE, 'Market player values'],
+  commissioner: ['Commissioner health decision', 'Commissioner intelligence', 'League rules'],
+  manager_psychology: [MANAGER_RECORDS_SLICE],
+  league_strength: ['Standings', 'Rankings', 'League difficulty'],
+}
+
+export interface SerializeGroundingOptions {
+  /** The turn's intent (`classifyChimmyTurn`), so the slices that answer it lead. Omitted = the usual order. */
+  intent?: string | null
+  /** That intent's label ("Trade analysis"), named on the lead line. */
+  intentLabel?: string | null
+}
+
 export function serializeDecisionOsGroundingForPrompt(
   packet: DecisionOsGroundingPacket,
   now: number = Date.now(),
+  options: SerializeGroundingOptions = {},
 ): string {
   const lines: string[] = []
 
@@ -680,7 +726,19 @@ export function serializeDecisionOsGroundingForPrompt(
    * empty set for that, making the ordering a no-op rather than an error.
    */
   const onRoster = rosterPlayerKeys(packet.contextFacts?.roster)
-  const available = slices.flatMap(([n, s]) => sliceLine(n, s, now, onRoster))
+  const rendered = slices.map(([n, s]) => [n, sliceLine(n, s, now, onRoster)] as const)
+  const answering = (options.intent ? ANSWERING_SLICES_BY_INTENT[options.intent] ?? [] : []).filter((name) =>
+    rendered.some(([n, l]) => n === name && l.length > 0),
+  )
+  const available =
+    answering.length === 0
+      ? rendered.flatMap(([, l]) => l)
+      : [
+          `  (${options.intentLabel ? `This question: ${options.intentLabel}. ` : ''}` +
+            `What answers it is listed first: ${answering.join('; ')}.)`,
+          ...answering.flatMap((name) => rendered.find(([n]) => n === name)?.[1] ?? []),
+          ...rendered.filter(([n]) => !answering.includes(n)).flatMap(([, l]) => l),
+        ]
 
   if (available.length > 0) {
     lines.push('WHAT IS AVAILABLE:')

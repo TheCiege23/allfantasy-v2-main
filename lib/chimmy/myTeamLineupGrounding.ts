@@ -1,10 +1,12 @@
 import 'server-only'
 
 import { getMyTeamData, type LineupPlayer, type LineupSlot, type MyTeamData } from '@/lib/core-app/myTeam'
-import type { LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
+import { optimizeLineup, type LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import type { ChatStartCall } from './tools/chimmyTools'
+import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
+import { BENCH_EDGE_LABEL, benchCallRecord, type BenchCalibration } from '@/lib/decision-os/lineup/benchCalibration'
 
 /**
  * ONE START/SIT ANSWER: Chimmy reads My Team's (Lineup OS, 2026-11-16 re-score item 6).
@@ -29,7 +31,11 @@ import type { ChatStartCall } from './tools/chimmyTools'
  * AllFantasy never sets a lineup: this explains My Team's recommendation; the user makes the move.
  */
 
-export type MyTeamLineupDeps = { load: (leagueId: string, userId: string) => Promise<MyTeamData | null> }
+export type MyTeamLineupDeps = {
+  load: (leagueId: string, userId: string) => Promise<MyTeamData | null>
+  /** The bench check's graded record (2026-11-21): said beside a one-swap verdict, never changing it. */
+  calibration: (league: { sport: string | null | undefined; platform: string | null | undefined }) => Promise<BenchCalibration | null>
+}
 
 /*
  * ONE MY TEAM LOAD PER TURN (2026-11-20). A lineup question now asks for this answer twice: the grounding packet's
@@ -57,7 +63,7 @@ export function __resetMyTeamLoadsForTests(): void {
   loads.clear()
 }
 
-const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => loadShared(leagueId, userId) }
+const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => loadShared(leagueId, userId), calibration: loadBenchCalibration }
 
 const BENCH_SHOWN = 6
 
@@ -95,6 +101,27 @@ async function loadMyTeam(args: { leagueId: string; userId: string }, d: MyTeamL
 }
 
 const isFallback = (x: MyTeamData | MyTeamFallback): x is MyTeamFallback => 'fallback' in x
+
+/**
+ * My Team's best lineup, re-run at the moment of ANSWERING (2026-11-20 re-score).
+ *
+ * 🛑 THE SHARED LOAD IS UP TO 60 SECONDS OLD, AND SO WAS ITS VERDICT. `getMyTeamData` runs the optimizer with the clock
+ * of the load (`adviceAt`), and the load is shared for a minute (`loadShared`). The "locked" flags below are drawn with
+ * the clock of the answer. So in the minute a game kicks off — when the question is asked most — the block could say
+ * "start X instead of Y" while labelling X or Y "game started — locked". The optimizer is pure and cheap, so it runs
+ * again here over the same starters and bench with the same clock the flags use: one answer, one moment.
+ * No answer at load time (best ball, no starters, an unpriced seat) stays no answer.
+ */
+function optimizationAt(data: MyTeamData, now: number): LineupOptimization | null {
+  if (!data.lineupOptimizer) return null
+  return optimizeLineup({
+    starters: data.starters.available ? data.starters.data : [],
+    bench: data.bench.available ? data.bench.data : [],
+    sport: data.league.sport ?? null,
+    bestBall: Boolean(data.league.bestBall),
+    now: new Date(now),
+  })
+}
 
 function weekOf(data: MyTeamData): string {
   const p = data.projections
@@ -143,7 +170,7 @@ export async function buildMyTeamLineupContext(
   const now = (args.now ?? new Date()).getTime()
   const starters = data.starters.available ? data.starters.data : []
   const bench = data.bench.available ? data.bench.data : []
-  const opt = data.lineupOptimizer ?? null
+  const opt = optimizationAt(data, now)
 
   const lines = [
     `BEST LINEUP for ${data.league.name} (${weekOf(data)}) — THE SAME ANSWER THE MY TEAM SCREEN SHOWS: the exact lineup optimizer on AllFantasy projections under this league's scoring. A bye or ruled-out player counts 0; a player whose game has started is locked.`,
@@ -167,6 +194,27 @@ export async function buildMyTeamLineupContext(
     // One clear swap is a start/sit call worth grading later (the advice ledger); a reshuffle or a close call is not.
     const p = data.projections
     const only = opt.changes.length === 1 ? opt.changes[0]! : null
+    /*
+     * The bench check's own graded record for one swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`)
+     * — the same record My Team shows beside its bench check. It is said beside the verdict and never changes it.
+     */
+    const edge =
+      opt.verdict === 'swap' && only?.outName && typeof only.inProjected === 'number' && typeof only.outProjected === 'number'
+        ? only.inProjected - only.outProjected
+        : null
+    if (edge != null) {
+      const calibration = await Promise.resolve()
+        .then(() => d.calibration({ sport: data.league.sport ?? null, platform: data.league.platform ?? null }))
+        .catch(() => null)
+      const record = benchCallRecord(edge, calibration)
+      if (record) {
+        lines.push(
+          `How My Team's bench calls like this have held up: swaps with an edge of ${BENCH_EDGE_LABEL[record.band]} were right ${record.rightPct}% of ${record.decided} graded calls` +
+            (record.level === 'low' ? ' — closer than the projections suggest; say this call is closer than it looks.' : '.') +
+            ' Quote these numbers if asked how sure this is; never call the swap certain.',
+        )
+      }
+    }
     if (args.onStartCall && opt.verdict === 'swap' && only?.outName && p && p.available) {
       const idOf = (name: string) => [...starters.flatMap((s) => (s.player ? [s.player] : [])), ...bench].find((x) => x.name === name)?.sleeperId
       const recId = idOf(only.inName)
@@ -217,7 +265,7 @@ export async function buildMyTeamStartSitContext(
   // A name not on this roster is the scenario tool's question to answer (it says so); not a My Team failure.
   if (!a || !b || a.sleeperId === b.sleeperId) return { fallback: 'not_nfl' }
 
-  const opt = data.lineupOptimizer ?? null
+  const opt = optimizationAt(data, (args.now ?? new Date()).getTime())
   const head = `START/SIT: ${a.name} or ${b.name} (${weekOf(data)}) — FROM MY TEAM'S BEST LINEUP, the same answer the My Team screen shows (AllFantasy projections under this league's scoring).`
   const line = (p: LineupPlayer) => `${p.name} (${p.position ?? '?'}): ${pts(valueOf(p))}${flags(p, (args.now ?? new Date()).getTime())}`
   if (!opt) {

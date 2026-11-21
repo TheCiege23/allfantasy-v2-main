@@ -55,9 +55,10 @@ export function parseSGPowerCommand(raw: string): { powerId: string; targetId: s
   return match ? { powerId: match[1], targetId: match[2] ?? null } : null
 }
 
-export function parseSGActionCommand(raw: string): { powerId: string; targetId: string | null; dropPlayerId: string | null } | null {
-  const match = raw.trim().match(/^@chimmy\s+(?:use|play)\s+(?:idol|token)\s+([a-z0-9_-]+)(?:\s+on\s+([a-z0-9_-]+))?(?:\s+drop\s+([a-z0-9_-]+))?\s*$/i)
-  return match ? { powerId: match[1], targetId: match[2] ?? null, dropPlayerId: match[3] ?? null } : null
+export function parseSGActionCommand(raw: string): { powerId: string; targetId: string | null; dropPlayerId: string | null; swapWithId?: string } | null {
+  const match = raw.trim().match(/^@chimmy\s+(?:use|play)\s+(?:idol|token)\s+([a-z0-9_-]+)(?:\s+on\s+([a-z0-9_-]+))?(?:\s+with\s+([a-z0-9_-]+))?(?:\s+drop\s+([a-z0-9_-]+))?\s*$/i)
+  return match ? { powerId: match[1], targetId: match[2] ?? null, dropPlayerId: match[4] ?? null,
+    ...(match[3] ? { swapWithId: match[3] } : {}) } : null
 }
 
 export function sgPowerRevealMoment(kind: SGPowerKind): 'chop' | 'execution' {

@@ -98,14 +98,8 @@ export function presentProfile(
   return redactForLock(profile)
 }
 
-/** Compatibility boundary: unrestricted profiles must not enter model context. */
-export async function buildPsychologyGroundingLines(input: {
-  leagueId: string
-  userId: string | undefined | null
-  email?: string | null
-  limit?: number
-}): Promise<string[]> {
-  // Profile labels and scores must not enter model context where they can be repeated.
-  // Decision-scoped evidence is supplied separately after validating the selected action.
-  return []
-}
+/*
+ * `buildPsychologyGroundingLines` was removed 2026-11-20: it returned [] (profile labels and scores must not enter
+ * model context) and its only caller, the chat route, has gone. Manager FACTS reach the model through
+ * `lib/chimmy/managerRecordGrounding.ts`.
+ */

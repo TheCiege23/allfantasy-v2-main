@@ -337,6 +337,20 @@ const NFL_MOCK_STAT_KEYS: Record<string, readonly string[]> = {
   RB: ['pts', 'avg', 'ru_yds', 'ru_td'],
   WR: ['pts', 'avg', 'rec', 'rec_yds'],
   TE: ['pts', 'avg', 'rec', 'rec_yds'],
+  // Team defenses: fantasy points per game (scored game by game, nflTeamDefenseSeason.ts), then the counting stats.
+  DEF: ['avg', 'dst_sack', 'dst_int', 'dst_pa'],
+  DST: ['avg', 'dst_sack', 'dst_int', 'dst_pa'],
+}
+
+/**
+ * College football: each position's own season stats (mockPoolSeasonStats.ts reads them), with the
+ * NFL mock's labels. A WR's line is catches and yards, not passing.
+ */
+const NCAAF_MOCK_STAT_KEYS: Record<string, ReadonlyArray<readonly [key: string, label: string]>> = {
+  QB: [['pass_yds', 'PA YDS'], ['pass_td', 'PA TD'], ['rush_yds', 'RU YDS'], ['rush_td', 'RU TD']],
+  RB: [['rush_yds', 'RU YDS'], ['rush_td', 'RU TD'], ['rec', 'REC'], ['rec_yds', 'REC YDS']],
+  WR: [['rec', 'REC'], ['rec_yds', 'REC YDS'], ['rec_td', 'REC TD'], ['rush_yds', 'RU YDS']],
+  TE: [['rec', 'REC'], ['rec_yds', 'REC YDS'], ['rec_td', 'REC TD']],
 }
 
 /**
@@ -346,8 +360,15 @@ const NFL_MOCK_STAT_KEYS: Record<string, readonly string[]> = {
  */
 export function mockPoolStatCells(player: Pick<AvailablePlayer, 'position' | 'display' | 'nflDraftProjectionSplits' | 'adp'>, sport: string) {
   const defs = buildSleeperPoolStatColumnDefs(sport, { position: player.position })
-  const wanted = String(sport).toUpperCase() === 'NFL' ? NFL_MOCK_STAT_KEYS[String(player.position).toUpperCase()] : undefined
-  const picked = wanted ? wanted.flatMap((key) => defs.filter((d) => d.key === key)) : defs
+  const upperSport = String(sport).toUpperCase()
+  const position = String(player.position).toUpperCase()
+  const college = upperSport === 'NCAAF' ? NCAAF_MOCK_STAT_KEYS[position] : undefined
+  const wanted = upperSport === 'NFL' ? NFL_MOCK_STAT_KEYS[position] : undefined
+  const picked = college
+    ? college.flatMap(([key, label]) => defs.filter((d) => d.key === key).map((d) => ({ ...d, label })))
+    : wanted
+      ? wanted.flatMap((key) => defs.filter((d) => d.key === key))
+      : defs
   return picked
     .slice(0, 4)
     .map((column) => ({
@@ -2547,8 +2568,8 @@ export default function MockDraftSleeperRoomClient({
                   {/* Laptop and tablet: the sport's stat columns, each with its own label. */}
                   <div className="hidden shrink-0 items-center gap-3 md:flex" data-testid={`mock-draft-player-stats-${player.id}`}>
                     {mockPoolStatCells(player, sport).map((cell) => (
-                      <div key={cell.key} className="flex w-11 flex-col items-end leading-tight">
-                        <span className="text-[11px] uppercase tracking-wide text-white/40">{cell.label}</span>
+                      <div key={cell.key} className="flex min-w-11 flex-col items-end leading-tight">
+                        <span className="whitespace-nowrap text-[11px] uppercase tracking-wide text-white/40">{cell.label}</span>
                         <span className="font-mono text-[12px] text-white/85">{cell.value}</span>
                       </div>
                     ))}

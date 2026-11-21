@@ -17,8 +17,8 @@ export function wizardWaiverPreviewDefaults<T extends object>(
   leagueType: string | null | undefined,
 ): T | undefined {
   const formatId = getLeagueFormatDefinition(leagueType).id
-  // Guillotine bids in every sport (SportDefaultsRegistry.getWaiverDefaults); creation writes that row too.
-  if (formatId !== 'redraft' && formatId !== 'guillotine') return presetWaiver
+  // Guillotine and keeper bid in every sport (SportDefaultsRegistry.getWaiverDefaults); creation writes that row too.
+  if (formatId !== 'redraft' && formatId !== 'guillotine' && formatId !== 'keeper') return presetWaiver
   const created: WaiverDefaults = getWaiverDefaults(String(sport).toUpperCase() as SportType, formatId)
   // The preset's own shape is a loose copy of WaiverDefaults, so the registry row fits it.
   return (presetWaiver ? { ...presetWaiver, ...created } : created) as unknown as T

@@ -1,4 +1,5 @@
 import { normalizePlayerName } from '@/lib/team-abbrev'
+import { buildNcaabSchoolIndex, schoolForAppearance, schoolKey, type NcaabSchoolIndex, type NcaabTeamRow } from './ncaabSchoolCodes'
 
 type NcaabFantraxRef = { fantraxId: string; name: string; team: string; position: string }
 export type NcaabIdentity = {
@@ -10,9 +11,9 @@ export type NcaabIdentity = {
   fantraxId: string | null
 }
 type NcaabSourcePlayer = { externalId: string; name: string; position: string | null; team: string | null }
-type NcaabTeam = { name: string; shortName: string | null }
+type NcaabTeam = NcaabTeamRow
 
-const teamKey = (value: string | null | undefined) => String(value ?? '').trim().toUpperCase()
+const teamKey = schoolKey
 /*
  * Letters and spaces only. Fantrax drops apostrophes and hyphens ("OConnor, Collin", "Hayes, Jaichaunn")
  * where the registry keeps them (Collin O'Connor, Jai'chaunn Hayes) — measured 2026-11-19, the largest
@@ -60,9 +61,11 @@ function learnSchoolCodes(
   for (const ref of refs) {
     const code = teamKey(ref.team)
     const rows = linked.get(ref.fantraxId)
-    if (!code || schoolByCode.has(code) || rows?.length !== 1 || !rows[0]!.currentTeam) continue
-    const bySchool = anchors.get(code) ?? new Map<string, Set<string>>()
+    const held = schoolByCode.get(code)
+    if (!code || held?.size === 1 || rows?.length !== 1 || !rows[0]!.currentTeam) continue
     const school = teamKey(rows[0]!.currentTeam)
+    if (held && !held.has(school)) continue
+    const bySchool = anchors.get(code) ?? new Map<string, Set<string>>()
     bySchool.set(school, (bySchool.get(school) ?? new Set<string>()).add(ref.fantraxId))
     anchors.set(code, bySchool)
   }
@@ -75,9 +78,10 @@ function learnSchoolCodes(
   const bootstrap = new Map<string, Map<string, Set<string>>>()
   for (const ref of refs) {
     const code = teamKey(ref.team)
-    if (!code || schoolByCode.has(code) || anchors.has(code)) continue
+    const held = schoolByCode.get(code)
+    if (!code || held?.size === 1 || anchors.has(code)) continue
     const school = uniqueNameSchool(ref)
-    if (!school) continue
+    if (!school || (held && !held.has(school))) continue
     const bySchool = bootstrap.get(code) ?? new Map<string, Set<string>>()
     bySchool.set(school, (bySchool.get(school) ?? new Set<string>()).add(ref.fantraxId))
     bootstrap.set(code, bySchool)
@@ -96,7 +100,9 @@ function learnSchoolCodes(
   return (code) => {
     const key = teamKey(code)
     const held = schoolByCode.get(key)
-    if (held) return held.size === 1 ? [...held][0]! : ''
+    if (held?.size === 1) return [...held][0]!
+    // A shared code (Fantrax's UNH is New Hampshire; ours is New Hampshire AND New Haven) resolves only
+    // to a candidate its anchors agree on — learned above, never outside the held set.
     return learned.get(key) ?? ''
   }
 }
@@ -112,14 +118,14 @@ function learnFromAppearances(args: {
   identities: readonly NcaabIdentity[]
   sourceById: ReadonlyMap<string, NcaabSourcePlayer[]>
   schoolByCode: ReadonlyMap<string, ReadonlySet<string>>
-  currentAppearances?: readonly { playerId: string; team: string | null }[]
+  schoolIndex: NcaabSchoolIndex
+  currentAppearances?: readonly { playerId: string; team: string | null; gameId?: string | null }[]
 }) {
   const strictKey = (value: string) => { const parts = value.split(','); return normalizePlayerName(parts.length === 2 ? `${parts[1]} ${parts[0]}` : value) }
   const gameSchools = new Map<string, Set<string>>()
   for (const row of args.currentAppearances ?? []) {
-    const schools = args.schoolByCode.get(teamKey(row.team))
     const claims = gameSchools.get(row.playerId) ?? new Set<string>()
-    claims.add(schools?.size === 1 ? [...schools][0]! : '')
+    claims.add(schoolForAppearance(args.schoolIndex, row.team, row.gameId))
     gameSchools.set(row.playerId, claims)
   }
   const activeByName = new Map<string, NcaabIdentity[]>()
@@ -174,16 +180,12 @@ export function planNcaabFantraxIdentityLinks(args: {
   sourcePlayers: readonly NcaabSourcePlayer[]
   teams: readonly NcaabTeam[]
   rosterIds: ReadonlySet<string>
-  currentAppearances?: readonly { playerId: string; team: string | null }[]
+  currentAppearances?: readonly { playerId: string; team: string | null; gameId?: string | null }[]
 }) {
-  const schoolByCode = new Map<string, Set<string>>()
-  for (const team of args.teams) {
-    const code = teamKey(team.shortName)
-    if (!code) continue
-    const names = schoolByCode.get(code) ?? new Set<string>()
-    names.add(teamKey(team.name))
-    schoolByCode.set(code, names)
-  }
+  // Collision-aware: Rolling Insights rows win within a code, dash variants are one school, and a code that
+  // still names two schools (MER, UNH) is resolved per game or per anchor — see `./ncaabSchoolCodes`.
+  const schoolIndex = buildNcaabSchoolIndex(args.teams)
+  const schoolByCode = schoolIndex.byCode
 
   const sourceById = new Map<string, NcaabSourcePlayer[]>()
   for (const player of args.sourcePlayers) {
@@ -247,7 +249,7 @@ export function planNcaabFantraxIdentityLinks(args: {
    * tried here refused 45 correct links, all players appearing for their own school.
    */
   const mineOf = learnSchoolCodes(args.refs, args.identities, schoolByCode, uniqueNameSchool)
-  const appearances = learnFromAppearances({ refs: args.refs, identities: args.identities, sourceById, schoolByCode, currentAppearances: args.currentAppearances })
+  const appearances = learnFromAppearances({ refs: args.refs, identities: args.identities, sourceById, schoolByCode, schoolIndex, currentAppearances: args.currentAppearances })
   const schoolFor = (code: string | null | undefined): { school: string; via: 'held' | 'mine' | 'both' | 'appearances' | 'none' } => {
     const key = teamKey(code)
     if (schoolByCode.has(key)) return { school: mineOf(code), via: 'held' }

@@ -611,7 +611,7 @@ export interface GroundingPacketArgs {
   week?: number | null
   /** Market value format, when the question touches player prices. */
   valueFormat?: { format: string; qbFormat: string } | null
-  /** The user's question, so the commissioner-intelligence intent gate can run. */
+  /** The user's question. Which slices it calls for is `want`; commissioner intelligence follows `commissionerHealthDecision`. */
   question?: string | null
   /** This league's IDP rules, so projections arrive rescored. Null = canonical. */
   leagueIdpRules?: Record<string, number> | null
@@ -800,6 +800,21 @@ export async function buildDecisionOsGroundingPacket(
   const valueOs = createValueOsLoaders()
   const projectionOs = createProjectionOsLoaders()
   const leagueOs = createLeagueOsLoaders()
+  /*
+   * WHERE EACH FEED READ WAS ACTUALLY SERVED FROM, BY THE LOADER'S OWN RECORD OF THIS BUILD (2026-11-20 re-score).
+   * Five slices hard-coded `servedFrom: 'store'`, so a fact derived live on a cache miss was labelled as maintained
+   * state. Each loader keeps `drainOutcomes()`; this collects it as each read lands. With no record (an older loader,
+   * a test double) the label stays 'store', exactly as before.
+   */
+  const feedServed: Record<string, 'store' | 'live' | 'unavailable'> = {}
+  const collectServed = (domain: string, loaders: { drainOutcomes?: () => Record<string, { servedFrom: 'store' | 'live' | 'unavailable' }> }) => {
+    try {
+      for (const [kind, o] of Object.entries(loaders.drainOutcomes?.() ?? {})) feedServed[`${domain}:${kind}`] = o.servedFrom
+    } catch {
+      /* a telemetry read never costs the packet */
+    }
+  }
+  const servedFromFeed = (key: string): 'store' | 'live' => (feedServed[key] === 'live' ? 'live' : 'store')
 
   /*
    * ⚠ `meta.durationMs` ALONE CANNOT BE ACTED ON, WHICH IS WHY THESE EXIST.
@@ -899,6 +914,9 @@ export async function buildDecisionOsGroundingPacket(
   const pendingTradesKill = killed('pendingTrades')
   const draftBoardKill = killed('draftBoard')
   const managerRecordsKill = killed('managerRecords')
+  // Their own switches since 2026-11-20 (they used to stop only with `projections`) — see `flags.ts`.
+  const rosterProjectionsKill = killed('rosterProjections')
+  const leaguePlayerMetricsKill = killed('leaguePlayerMetrics')
 
   const pAssertions =
     leagueId && !importKill
@@ -1026,7 +1044,7 @@ export async function buildDecisionOsGroundingPacket(
       )
     : Promise.resolve(null)
 
-  const pLeaguePlayerMetrics = want.projections && !projectionKill && leagueId && args.userId
+  const pLeaguePlayerMetrics = want.projections && !projectionKill && !leaguePlayerMetricsKill && leagueId && args.userId
     ? kick('leaguePlayerMetrics', (async () => {
         const access = await authorizeLeagueRead(leagueId, args.userId)
         if (!access.authorized) return null
@@ -1037,11 +1055,12 @@ export async function buildDecisionOsGroundingPacket(
 
   /*
    * The league's rulebook and the feed's week for the roster projections, read now so only the pricing waits for
-   * the roster (`rosterLeagueProjections.ts`). A non-NFL league answers without a query.
+   * the roster (`rosterLeagueProjections.ts`). A board-sport league (NBA, NHL, MLB, NCAAB, soccer) checks access here and is priced on its
+   * value board once the roster is in; any other non-NFL league answers without a query.
    */
   const pRosterBasis: Promise<RosterProjectionBasis | null> =
-    want.projections && !projectionKill && leagueId && args.userId
-      ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport }))
+    want.projections && !projectionKill && !rosterProjectionsKill && leagueId && args.userId
+      ? kick('rosterProjections', loadRosterProjectionBasis({ leagueId, sport: args.sport, userId: args.userId }))
       : Promise.resolve(null)
 
   /*
@@ -1116,14 +1135,24 @@ export async function buildDecisionOsGroundingPacket(
         )
       : Promise.resolve(null)
 
+  /*
+   * 🛑 ROUTED BY THE SAME QUESTION AS THE HEALTH DECISION (2026-11-20). This read used to decide for itself, with its
+   * own word list (`detectCommissionerIntelligenceIntent`: `inactiv`, `pending`, `recent`, `what…happen`), while the
+   * health decision beside it was routed by the chat's intent. Two routers for one question, and they disagreed both
+   * ways: "which managers are inactive?" got the activity log but never the health decision (the one the inactive-flag
+   * record now tunes), and "any pending trade offers?" — a trade question — ran the commissioner's activity log.
+   * Both now follow `want.commissionerHealthDecision`, which the chat sets on a commissioner question; the word list
+   * still serves the older `/api/chimmy` route, which has no intent router.
+   */
   const pCommissioner =
-    leagueId && args.userId && !commishKill
+    want.commissionerHealthDecision && leagueId && args.userId && !commishKill
       ? kick(
           'commissionerIntelligence',
           resolveCommissionerGroundingOutcome({
             leagueId,
             userId: args.userId,
             question: args.question ?? null,
+            commissionerFlag: true,
           }).catch((): CommissionerGroundingOutcome => ({ status: 'unavailable' })),
         )
       : null
@@ -1178,13 +1207,14 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── The assertions first: everything else is judged against them. ─────────────────────────
   const assertions = await pAssertions
+  collectServed('import', importOs)
 
   let importSlice: GroundedSlice<ImportAssertions> = importKill
     ? absent<ImportAssertions>(importKill)
     : assertions
     ? present(assertions, {
         asOf: assertions.lastSuccessfulSyncAt,
-        servedFrom: 'store',
+        servedFrom: servedFromFeed('import:assertions'),
         conclusive: { ok: true },
       })
     : absent<ImportAssertions>({
@@ -1203,9 +1233,10 @@ export async function buildDecisionOsGroundingPacket(
   if (want.leagueRules && leagueId && rulesKill) leagueRules = absent(rulesKill)
   else if (want.leagueRules && leagueId) {
     const rules = await pRules
+    collectServed('league', leagueOs)
     const v = verdictFor('leagueRules')
     leagueRules = rules
-      ? present(rules, { servedFrom: 'store', conclusive: v })
+      ? present(rules, { servedFrom: servedFromFeed('league:rules'), conclusive: v })
       : absent({
           reason: 'not_computed',
           detail: 'This league\'s rules could not be resolved.',
@@ -1220,6 +1251,7 @@ export async function buildDecisionOsGroundingPacket(
     const v = verdictFor('globalPlayerValue') // global — no league import can block it
     const vf = await pValueFormat
     const rows = await pMarket
+    collectServed('value', valueOs)
     if (!vf) {
       // ⚠ A DISTINCT REASON FROM "no values held". The market is fine; we could not work out
       // which of its four format buckets to read, which is a LEAGUE-side gap with a different
@@ -1240,7 +1272,7 @@ export async function buildDecisionOsGroundingPacket(
       const priced = (rows ?? []).some((r) => r.status === 'ok')
       const noMarketForSport = hasSubstance(rows) && rows.every((r) => r.status === 'no_producer')
       marketValues = priced
-        ? present(rows!, { servedFrom: 'store', conclusive: v })
+        ? present(rows!, { servedFrom: servedFromFeed('value:market'), conclusive: v })
         : noMarketForSport
         ? absent({
             reason: 'not_requested',
@@ -1283,8 +1315,9 @@ export async function buildDecisionOsGroundingPacket(
   else if (wantsDevy) {
     const v = verdictFor('globalPlayerValue')
     const rows = await pDevy
+    collectServed('value', valueOs)
     devyValues = hasSubstance(rows)
-      ? present(rows, { servedFrom: 'store', conclusive: v })
+      ? present(rows, { servedFrom: servedFromFeed('value:devy'), conclusive: v })
       : absent({
           reason: devyBoardApplies ? 'not_computed' : 'no_producer',
           detail: devyBoardApplies
@@ -1302,6 +1335,7 @@ export async function buildDecisionOsGroundingPacket(
   else if (want.projections) {
     const v = verdictFor('lineupDecision')
     const facts = await pProjections
+    collectServed('projection', projectionOs)
     if (!hasSubstance(facts)) {
       projections = absent({
         reason: 'not_computed',
@@ -1311,7 +1345,7 @@ export async function buildDecisionOsGroundingPacket(
     } else {
       // ⚠ Present but possibly INCONCLUSIVE: we have the numbers, the league may be too stale to
       // act on them. The verdict travels with the slice rather than gating its presence.
-      const slice = present(facts, { asOf: oldestAsOf(facts), servedFrom: 'store', conclusive: v })
+      const slice = present(facts, { asOf: oldestAsOf(facts), servedFrom: servedFromFeed('projection:canonical'), conclusive: v })
       projections = v.ok ? slice : { ...slice, gap: gapFromVerdict(v) }
     }
   }
@@ -1465,8 +1499,8 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Commissioner intelligence (4.4): the one slice with its own access rule ────────────────
   let commissionerIntelligence: GroundedSlice<string> = absent(NOT_REQUESTED)
-  if (leagueId && args.userId && commishKill) commissionerIntelligence = absent(commishKill)
-  else if (leagueId && args.userId) {
+  if (want.commissionerHealthDecision && leagueId && args.userId && commishKill) commissionerIntelligence = absent(commishKill)
+  else if (want.commissionerHealthDecision && leagueId && args.userId) {
     const outcome = (await pCommissioner) ?? ({ status: 'unavailable' } as CommissionerGroundingOutcome)
 
     if (outcome.status === 'ok') {
@@ -1626,6 +1660,7 @@ export async function buildDecisionOsGroundingPacket(
   let pRosterProjections: Promise<GroundedSlice<RosterLeagueProjection[]>> | null = null
   const rosterBasis = await pRosterBasis
   if (want.projections && projectionKill) rosterProjections = absent<RosterLeagueProjection[]>(projectionKill)
+  else if (want.projections && rosterProjectionsKill) rosterProjections = absent<RosterLeagueProjection[]>(rosterProjectionsKill)
   else if (rosterBasis && !contextFacts) {
     rosterProjections = absent<RosterLeagueProjection[]>({
       reason: 'not_computed',
@@ -1716,7 +1751,9 @@ export async function buildDecisionOsGroundingPacket(
     if (board) {
       const r = renderRosterBoardValues(board, contextFacts?.roster?.value ?? null)
       if (r.kind === 'ok') {
-        rosterBoardValues = present(r.text, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+        // The board's own record of where it came from: Value OS's three-minute store, or built for this turn.
+        const servedFrom = board.kind === 'ok' && board.servedFrom === 'store' ? 'store' : 'live'
+        rosterBoardValues = present(r.text, { servedFrom, asOf: new Date().toISOString(), conclusive: { ok: true } })
       } else if (r.kind === 'unavailable') {
         rosterBoardValues = absent<string>({
           reason: 'not_computed',

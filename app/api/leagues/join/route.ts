@@ -21,7 +21,8 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
-import { notifyCommissionerOfJoin, notifyInviterOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { managersHere } from '@/lib/league/managersHere'
+import { notifyCommissionerOfJoin, notifyInviterOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 
 /**
  * Give a week, get a week (lib/referral/proWeek.ts): a referred leaguemate JOINING a league through an
@@ -568,6 +569,9 @@ export async function POST(req: NextRequest) {
     void notifyInviterOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
       console.warn('[league-join] inviter join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
     })
+    void notifyLeagueMatesOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] league mates join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
   }
 
   return NextResponse.json(joinResult)
@@ -631,12 +635,23 @@ export async function GET(req: NextRequest) {
     resolveGuillotineSeatSummary(leagueId).catch(() => null),
   ])
 
+  // Who is already here (lib/league/managersHere.ts): names for the people in this league to see.
+  const claimedTeams = await prisma.leagueTeam.findMany({
+    where: { leagueId, claimedByUserId: { not: null } },
+    select: { teamName: true, ownerName: true, claimedByUserId: true },
+  }).catch(() => [])
+  const claimedIds = [...new Set(claimedTeams.map((t) => t.claimedByUserId).filter((id): id is string => Boolean(id)))]
+  const profiles = claimedIds.length
+    ? await prisma.userProfile.findMany({ where: { userId: { in: claimedIds } }, select: { userId: true, displayName: true, sleeperUsername: true } }).catch(() => [])
+    : []
+  const nameById = new Map(profiles.map((p) => [p.userId, p.displayName?.trim() || p.sleeperUsername?.trim() || '']))
+
   return NextResponse.json({
     leagueName: league.name,
     inviteCode: result.inviteCode,
     inviteLink: result.inviteLink,
     inviteExpiresAt: result.inviteExpiresAt,
-    claim: { teamCount, claimedCount },
+    claim: { teamCount, claimedCount, managersHere: managersHere(claimedTeams, nameById, userId) },
     guillotineSeats,
   })
 }

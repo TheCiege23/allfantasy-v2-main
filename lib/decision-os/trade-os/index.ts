@@ -1,9 +1,9 @@
 import 'server-only'
 
-import { loadTradeWorldFacts, loadTradeLeagueFacts } from '../trade/loader'
+import { loadTradeWorldFacts } from '../trade/loader'
 import { createOsFeed, type OsFactSource, type OsFeed } from '../domain-os/feed'
-import { HOURS, MINUTES } from '../domain-os/types'
-import type { TradeWorldFacts, TradeLeagueFacts } from '../trade/loader'
+import { MINUTES } from '../domain-os/types'
+import type { TradeWorldFacts } from '../trade/loader'
 
 /**
  * Trade OS — maintained fact state for `manager.trade.evaluate`.
@@ -12,11 +12,8 @@ import type { TradeWorldFacts, TradeLeagueFacts } from '../trade/loader'
  *
  * WHAT IT GATHERS, AND AT WHICH LEVEL
  *
- *   LEAGUE  trade settings and the deadline state
- *           Rules and a date. Effectively static within a season, and shared by everyone in the
- *           league — the single best caching candidate in this domain.
- *
- *   USER    the two rosters in the proposal (record, points, FAAB)
+ *   USER    the two rosters in the proposal (record, points, FAAB), with the league's trade settings
+ *           and week. (The league-level settings entry was deleted 2026-11-20 — nothing read it.)
  *           Changes with every transaction, so it is held briefly.
  *
  * ⚠ TRADE IS THE HIGHEST-STAKES DOMAIN, so the TTLs here are the shortest of the three feeds.
@@ -37,35 +34,13 @@ async function deriveWorldFacts(args: TradeOsArgs): Promise<TradeWorldFacts | nu
   return loadTradeWorldFacts(args).catch(() => null)
 }
 
-/** Args for the league+season source. No roster pair, deliberately — see below. */
-type TradeLeagueOsArgs = { leagueId: string; seasonId: string }
-
-/**
- * League rules + deadline: shared, slow, and the reason this feed is worth having.
- *
- * 🛑 THIS USED TO SHARE `deriveWorldFacts` WITH THE ROSTER SOURCE, WHICH MADE ITS `level:
- * 'league'` UNDELIVERABLE. That derive needs an ordered pair of roster ids and returns BOTH
- * sides' record, points and FAAB, so warming this entry from a scheduler meant storing two
- * specific managers' standings under a key scoped to the whole league. In the domain this file
- * itself calls "the highest-stakes", that is precisely the confidently-wrong input the short TTLs
- * here exist to prevent.
- *
- * `loadTradeLeagueFacts` derives the league+season half from two deps and no rosters.
- *
- * ⚠ SCHEDULABLE IN PRINCIPLE, NOT YET SCHEDULED, AND THE GAP IS THE SCOPE KEY. This fact is keyed
- * `${leagueId}:${seasonId}` while `/api/cron/domain-os-refresh` walks LEAGUES. Bridging that means
- * deciding which season is "current" for a league and what to do when more than one qualifies —
- * a wrong answer warms the wrong season's entry, which is worse than warming nothing. That
- * belongs in its own change with its own reasoning, not smuggled into this split.
+/*
+ * 🗑 `tradeSettingsSource` (league rules + deadline, 2h, league level) was DELETED 2026-11-20. Nothing read it: the
+ * proposals route reads the roster entry below, and the graded inbox grades against the canonical world, which it
+ * must load live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a
+ * player already traded away (and its Dates would not survive JSON). A league-level entry nobody reads is the waste
+ * retired on 2026-09-06; the deadline in particular must never be served from a copy taken before it passed.
  */
-export const tradeSettingsSource: OsFactSource<TradeLeagueOsArgs, TradeLeagueFacts> = {
-  kind: 'settings',
-  level: 'league',
-  ttlMs: 2 * HOURS,
-  scopeKey: (a) => `${a.leagueId}:${a.seasonId}`,
-  sport: () => 'NFL',
-  derive: (a) => loadTradeLeagueFacts({ leagueId: a.leagueId, seasonId: a.seasonId }).catch(() => null),
-}
 
 /**
  * The specific pair of rosters in this proposal.
@@ -79,7 +54,8 @@ export const tradeRosterSource: OsFactSource<TradeOsArgs, TradeWorldFacts> = {
   level: 'user',
   ttlMs: 3 * MINUTES,
   scopeKey: (a) => `${a.leagueId}:${a.proposerRosterId}>${a.receiverRosterId}`,
-  sport: () => 'NFL',
+  // Every sport's facts land here, so 'ALL' (2026-11-20): this column labels a row for audit and pruning only.
+  sport: () => 'ALL',
   derive: deriveWorldFacts,
 }
 
@@ -91,13 +67,9 @@ function createTradeOs(deps: Parameters<typeof createOsFeed>[1] = {}): OsFeed {
  * Shaped for `TradeShadowDeps.loadWorldFacts`, so the feed can be adopted without touching the
  * decision path.
  *
- * ⚠ READS THROUGH THE **ROSTER** SOURCE, NOT SETTINGS, for the same reason Waiver OS reads
- * through its user entry: both sources share one `derive` and return the same whole
- * `TradeWorldFacts`, so the source chosen decides how stale the WHOLE object may be. Settings
- * lives 2h; rosters lives 3min because a roster changes the moment either side moves a player,
- * and evaluating a trade against a stale roster grades a deal that cannot be made.
- *
- * The 2h settings entry is a `refresh()` target for a scheduler that does not exist yet.
+ * ⚠ THREE MINUTES, BECAUSE THE WHOLE OBJECT IS AS OLD AS ITS ROSTERS. A roster changes the moment
+ * either side moves a player, and evaluating a trade against a stale roster grades a deal that
+ * cannot be made.
  */
 export function createTradeOsLoaders(deps: Parameters<typeof createOsFeed>[1] = {}) {
   const feed = createTradeOs(deps)
@@ -107,4 +79,4 @@ export function createTradeOsLoaders(deps: Parameters<typeof createOsFeed>[1] = 
   }
 }
 
-export const tradeOsSources = [tradeSettingsSource, tradeRosterSource] as const
+export const tradeOsSources = [tradeRosterSource] as const
