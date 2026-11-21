@@ -486,6 +486,8 @@ const spanish: Record<string, string> = {
   "Win": 'Victoria',
   "Loss": 'Derrota',
   "Tie": 'Empate',
+  "Ahead": 'Por delante',
+  "Behind": 'Por detrás',
   "Opponent not identified": 'Rival no identificado',
   'Your week, every matchup': 'Tu semana, todos los enfrentamientos',
   'No matchups are on file for this week.': 'No hay enfrentamientos registrados para esta semana.',
