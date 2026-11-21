@@ -95,10 +95,110 @@ export function CollegeProRoster({
         </div>
       </div>
 
+      <ScoringBar
+        leagueId={leagueId}
+        scoring={data.scoring}
+        canEdit={data.canEditScoring}
+        total={data.combinedTotal}
+        sides={data.sides}
+        onSaved={load}
+      />
+
       {sides.map((side) => (
         <HalfLineup key={side.role} side={side} format={data.format} onPlayerClick={onPlayerClick} />
       ))}
     </div>
+  )
+}
+
+/**
+ * Separate (two matchups, the default) or combined (one weekly total). The commissioner can switch
+ * it; everyone else sees which one the league plays.
+ */
+function ScoringBar({
+  leagueId,
+  scoring,
+  canEdit,
+  total,
+  sides,
+  onSaved,
+}: {
+  leagueId: string
+  scoring: 'separate' | 'combined'
+  canEdit: boolean
+  total: number | null
+  sides: CollegeProSide[]
+  onSaved: () => Promise<void>
+}) {
+  const [saving, setSaving] = useState<'separate' | 'combined' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const pro = sides.find((s) => s.role === 'pro')
+  const college = sides.find((s) => s.role === 'college')
+
+  const save = async (next: 'separate' | 'combined') => {
+    if (next === scoring || saving) return
+    setSaving(next)
+    setError(null)
+    try {
+      const res = await fetch('/api/league/college-pro-roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, scoring: next }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(body?.error ?? 'Could not change scoring. Try again.')
+      } else {
+        await onSaved()
+      }
+    } catch {
+      setError('Could not change scoring. Try again.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-subtle bg-surface-muted/40 px-3 py-2.5 sm:px-4" data-testid="college-pro-scoring" data-scoring={scoring}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {scoring === 'combined' ? (
+          <p className="text-xs text-secondary" data-testid="college-pro-combined-total">
+            <span className="mr-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">This week</span>
+            <span className="text-base font-bold tabular-nums text-primary">{total == null ? '—' : total.toFixed(2)}</span>
+            <span className="ml-2 tabular-nums text-muted">
+              {pro ? sideTitle(pro) : 'Pro'} {fmt(pro?.score.total ?? null)} + College {fmt(college?.score.total ?? null)}
+            </span>
+          </p>
+        ) : (
+          <p className="text-xs text-secondary">College and {pro ? sideTitle(pro) : 'pro'} are scored as separate matchups.</p>
+        )}
+        {canEdit ? (
+          <div className="flex items-center gap-1.5" role="group" aria-label="How college points count">
+            <span className="text-[11px] text-muted">Scoring</span>
+            {(['separate', 'combined'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => void save(mode)}
+                aria-pressed={scoring === mode}
+                disabled={saving != null}
+                className={[
+                  'rounded-full border px-3 py-1 text-[11px] font-semibold capitalize transition disabled:opacity-60',
+                  scoring === mode
+                    ? 'border-cyan-400/50 bg-cyan-400/15 text-[var(--badge-text-cyan)]'
+                    : 'border-subtle text-secondary hover:bg-white/[0.04]',
+                ].join(' ')}
+              >
+                {saving === mode ? 'Saving…' : mode}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[11px] text-muted">{scoring === 'combined' ? 'Combined scoring' : 'Separate scoring'}</span>
+        )}
+      </div>
+      {error ? <p className="mt-1.5 text-[11px] text-rose-500">{error}</p> : null}
+    </section>
   )
 }
 

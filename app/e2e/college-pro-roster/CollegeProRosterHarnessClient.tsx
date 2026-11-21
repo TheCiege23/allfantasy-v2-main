@@ -100,12 +100,17 @@ const COLLEGE: CollegeProSide = {
 }
 
 let installed = false
-function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy') {
+function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean) {
+  let scoring = initialScoring
   if (installed || typeof window === 'undefined') return
   installed = true
   const real = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.includes('/api/league/college-pro-roster') && init?.method === 'POST') {
+      scoring = (JSON.parse(String(init.body)) as { scoring: 'separate' | 'combined' }).scoring
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, scoring }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
     if (url.includes('/api/league/college-pro-roster')) {
       const body: CollegeProRosterPayload = {
         applies: true,
@@ -113,6 +118,9 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy') {
         lead,
         leadReason: lead === 'college' ? 'live' : 'today',
         sides: lead === 'college' ? [COLLEGE, PRO] : [PRO, COLLEGE],
+        scoring,
+        combinedTotal: scoring === 'combined' ? Math.round(((PRO.score.total ?? 0) + (COLLEGE.score.total ?? 0)) * 100) / 100 : null,
+        canEditScoring: commish,
         fetchedAt: new Date().toISOString(),
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -125,7 +133,8 @@ export function CollegeProRosterHarnessClient() {
   const params = useSearchParams()
   const lead = params.get('lead') === 'college' ? 'college' : 'pro'
   const format = params.get('format') === 'devy' ? 'devy' : 'c2c'
-  installFetch(lead, format)
+  const scoring = params.get('scoring') === 'combined' ? 'combined' : 'separate'
+  installFetch(lead, format, scoring, params.get('commish') === '1')
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">

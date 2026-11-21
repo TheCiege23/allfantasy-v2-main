@@ -23,3 +23,28 @@ export function collegeProFormatOf(league: { leagueType?: string | null; leagueV
 export function collegeSportFor(proSport: string): string {
   return String(proSport).trim().toUpperCase() === 'NBA' ? 'NCAAB' : 'NCAAF'
 }
+
+/**
+ * Whether the college half's points count toward the week, the commissioner's call.
+ *
+ * `separate`: college and pro are two matchups, each with its own score. That is how every
+ * published C2C league runs, and the owner's default (2026-11-21).
+ * `combined`: one weekly total, pro plus college, the way many C2C leagues let college players count.
+ *
+ * Stored on `League.settings.collegeProScoring`, registered in AF_OWNED_LEAGUE_SETTINGS_KEYS so a
+ * re-import from Sleeper never deletes it. NOT on `C2CLeague.scoringMode`: that table drives the
+ * native C2C engine, has no row for any imported league, and defaults to combined.
+ */
+export type CollegeProScoring = 'separate' | 'combined'
+export const COLLEGE_PRO_SCORING_KEY = 'collegeProScoring'
+
+export function readCollegeProScoring(settings: unknown): CollegeProScoring {
+  const value = settings && typeof settings === 'object' ? (settings as Record<string, unknown>)[COLLEGE_PRO_SCORING_KEY] : null
+  return value === 'combined' ? 'combined' : 'separate'
+}
+
+/** Pro plus college for the week, or null when neither half has a number yet. */
+export function combinedTotal(pro: number | null, college: number | null): number | null {
+  if (pro == null && college == null) return null
+  return Math.round(((pro ?? 0) + (college ?? 0)) * 100) / 100
+}
