@@ -84,20 +84,27 @@ const slotRank = (slot: string) => {
 
 export function buildFantraxLists(
   rows: Array<{ id: string; slot: string | null; status: string | null }>,
+  /**
+   * A PRO half on Fantrax (NBA / NHL): MINORS is the taxi squad there, as the Fantrax import already
+   * reads it (contracts/fantrax/GAPS.md F-04). Never set for a college half, which has no taxi.
+   */
+  opts: { minorsAsTaxi?: boolean } = {},
 ): CollegeProLists {
   const starters: CollegeProSlotRow[] = []
   const bench: string[] = []
   const ir: string[] = []
+  const taxi: string[] = []
   for (const row of rows) {
     const status = String(row.status ?? '').trim().toUpperCase()
     if (status === 'ACTIVE') starters.push({ slot: normalizeFantraxSlot(row.slot), playerId: row.id })
     else if (status === 'INJURED_RESERVE' || status === 'IR') ir.push(row.id)
+    else if (opts.minorsAsTaxi && status === 'MINORS') taxi.push(row.id)
     // RESERVE, MINORS and anything unrecognised sit on the bench: the college half has no taxi.
     else bench.push(row.id)
   }
   // A stable sort keeps Fantrax's own order within a slot type (RB1 before RB2).
   starters.sort((a, b) => slotRank(a.slot) - slotRank(b.slot))
-  return { starters, bench, taxi: [], ir }
+  return { starters, bench, taxi, ir }
 }
 
 /** A half's score for the week: its starters' points, or null when no starter has a number yet. */

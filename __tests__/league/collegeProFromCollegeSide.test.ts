@@ -37,8 +37,9 @@ const proSide = { role: 'pro', platform: 'sleeper', leagueId: 'peach', memberLea
 
 beforeEach(() => {
   h.paired.clear()
-  h.paired.set('cream', { sides: [collegeSide, proSide] })
-  h.paired.set('peach', { sides: [proSide, collegeSide] })
+  // resolvePairedHalf reports which half the viewed league is, as the real one does.
+  h.paired.set('cream', { viewingRole: 'college', sides: [collegeSide, proSide] })
+  h.paired.set('peach', { viewingRole: 'pro', sides: [proSide, collegeSide] })
 })
 
 // A Sunday with no fixtures on file, so the weekday rule would put the NFL lineup first.

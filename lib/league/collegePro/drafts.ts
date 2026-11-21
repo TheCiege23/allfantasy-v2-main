@@ -12,6 +12,8 @@ import { phaseOf, type DraftPhase } from '@/lib/core-app/draftHqAll'
 
 export type CollegeProDraft = {
   role: 'pro' | 'college'
+  /** Where the draft is run. */
+  platform: 'sleeper' | 'fantrax'
   season: number | null
   phase: DraftPhase
   /** "Done", "Live now", "Not started", or the provider's own word when it is not one we know. */
@@ -43,6 +45,7 @@ export function sleeperDraftCards(
       const startsAt = typeof d.start_time === 'number' && d.start_time > 0 ? new Date(d.start_time).toISOString() : null
       return {
         role: 'pro' as const,
+        platform: 'sleeper' as const,
         season: seasonOf(d.season),
         phase,
         status: phase === 'unknown' ? d.status || STATUS.unknown : STATUS[phase],
@@ -58,6 +61,8 @@ export function sleeperDraftCards(
 export function fantraxDraftCard(
   board: { draftState: string | null; slots: number; picks: readonly unknown[] } | null,
   season: number | null,
+  /** The college half by default; a pro half hosted on Fantrax (an NBA league) passes 'pro'. */
+  role: 'pro' | 'college' = 'college',
 ): CollegeProDraft | null {
   if (!board) return null
   const made = board.picks.length
@@ -71,7 +76,8 @@ export function fantraxDraftCard(
           ? 'upcoming'
           : phaseOf(state)
   return {
-    role: 'college',
+    role,
+    platform: 'fantrax',
     season,
     phase,
     status: phase === 'unknown' ? board.draftState || STATUS.unknown : STATUS[phase],

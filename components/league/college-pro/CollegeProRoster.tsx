@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Link from 'next/link'
 import { RosterRow } from '@/app/league/[leagueId]/tabs/TeamTab'
 import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
+import type { CollegeProLink, CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 import type { CollegeProDraft } from '@/lib/league/collegePro/drafts'
 import type { CollegeProPipeline } from '@/lib/league/collegePro/pipeline'
 import type { HeadToHead, TeamMapEditor } from '@/lib/league/collegePro/headToHead'
@@ -61,7 +61,20 @@ export function CollegeProRoster({
       </div>
     )
   }
-  if (state.status === 'error' || !state.data.applies) return <>{fallback}</>
+  if (state.status === 'error') return <>{fallback}</>
+  if (!state.data.applies) {
+    // An unlinked C2C / Devy league: offer the link above its standard page.
+    return (
+      <>
+        {state.data.link ? (
+          <div className="px-4 pt-4 lg:px-6">
+            <LinkHalfCard leagueId={leagueId} link={state.data.link} onLinked={load} />
+          </div>
+        ) : null}
+        {fallback}
+      </>
+    )
+  }
 
   const data = state.data
   const lead = manualLead ?? data.lead
@@ -99,6 +112,8 @@ export function CollegeProRoster({
             ))}
         </div>
       </div>
+
+      {data.link ? <LinkHalfCard leagueId={leagueId} link={data.link} onLinked={load} /> : null}
 
       <ScoringBar
         leagueId={data.proLeagueId}
@@ -138,7 +153,7 @@ function DraftsCard({ drafts, pipeline, proSport }: { drafts: CollegeProRosterPa
             <div className="min-w-0">
               <p className="text-xs font-semibold text-primary">
                 {d.season ?? ''} {d.role === 'pro' ? `${proSport} draft` : 'College draft'}
-                <span className="ml-1.5 font-normal text-muted">{d.role === 'pro' ? 'on Sleeper' : 'on Fantrax'}</span>
+                <span className="ml-1.5 font-normal text-muted">{d.platform === 'sleeper' ? 'on Sleeper' : 'on Fantrax'}</span>
               </p>
               {d.detail || d.startsAt ? (
                 <p className="text-[11px] text-muted">
@@ -393,6 +408,65 @@ function TeamMatchPanel({ leagueId, editor, onSaved }: { leagueId: string; edito
         {error ? <span className="text-[11px] text-rose-500">{error}</span> : null}
       </div>
     </div>
+  )
+}
+
+/**
+ * Link this league to its other half: the viewer picks it from their own leagues in the paired sport.
+ * Nothing is linked on a guess.
+ */
+function LinkHalfCard({ leagueId, link, onLinked }: { leagueId: string; link: CollegeProLink; onLinked: () => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const half = link.needRole === 'college' ? 'college' : 'pro'
+  const linkTo = async (otherLeagueId: string) => {
+    setBusy(otherLeagueId)
+    setError(null)
+    try {
+      const res = await fetch('/api/league/college-pro-roster/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, otherLeagueId }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(body?.error ?? 'Could not link these leagues. Try again.')
+      } else {
+        await onLinked()
+      }
+    } catch {
+      setError('Could not link these leagues. Try again.')
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/[0.06] p-3 sm:p-4" data-testid="college-pro-link">
+      <h2 className="text-sm font-bold text-primary">Link your {half} league</h2>
+      <p className="mt-0.5 text-xs text-secondary">See both lineups on one page, and score them together if your league does.</p>
+      {link.candidates.length === 0 ? (
+        <p className="mt-2 text-xs text-muted">Import your {half} league first, then link it here.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {link.candidates.map((c) => (
+            <li key={c.leagueId} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-primary">
+                {c.name} <span className="text-muted">· {c.sport} · {c.platform === 'fantrax' ? 'Fantrax' : c.platform === 'sleeper' ? 'Sleeper' : c.platform}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void linkTo(c.leagueId)}
+                disabled={busy != null}
+                className="rounded-full border border-cyan-400/50 bg-cyan-400/15 px-3 py-1 text-[11px] font-semibold text-[var(--badge-text-cyan)] disabled:opacity-60"
+              >
+                {busy === c.leagueId ? 'Linking…' : 'Link'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error ? <p className="mt-1.5 text-[11px] text-rose-500">{error}</p> : null}
+    </section>
   )
 }
 
