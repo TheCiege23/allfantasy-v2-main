@@ -12,6 +12,8 @@ import {
 export type ConnectedRosterPlayer = {
   id: string; name: string; position: string | null; team: string | null
   imageUrl: string | null; logoUrl: string | null
+  /** Fantrax only: the slot the row occupies (e.g. 'QB', 'RWT', 'SFX') and its ACTIVE/RESERVE status. */
+  rosterSlot?: string | null; rosterStatus?: string | null
 }
 
 /**
@@ -74,6 +76,7 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
         ?? asHeadshotUrl(images.find((img) => img.source === 'cfbd' && img.externalId === p?.cfbdId)?.imageUrl)
         ?? asHeadshotUrl(images.find((img) => img.source === 'rolling_insights' && img.externalId === p?.rollingInsightsId)?.imageUrl)
         ?? (p?.sleeperId ? asHeadshotUrl(images.find((img) => img.sleeperId === p.sleeperId && img.imageUrl)?.imageUrl) : null),
-      logoUrl: college ? school?.logo ?? null : teamLogoUrl(normalizedSport, team) }
+      logoUrl: college ? school?.logo ?? null : teamLogoUrl(normalizedSport, team),
+      rosterSlot: rosterPosition, rosterStatus: field(r.status) }
   })
 }
