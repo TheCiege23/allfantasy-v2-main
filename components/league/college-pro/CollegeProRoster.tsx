@@ -6,6 +6,7 @@ import { RosterRow } from '@/app/league/[leagueId]/tabs/TeamTab'
 import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 import type { CollegeProDraft } from '@/lib/league/collegePro/drafts'
+import type { CollegeProPipeline } from '@/lib/league/collegePro/pipeline'
 
 type CollegeProRosterPayloadDrafts = CollegeProDraft[]
 
@@ -111,14 +112,14 @@ export function CollegeProRoster({
         <HalfLineup key={side.role} side={side} format={data.format} onPlayerClick={onPlayerClick} />
       ))}
 
-      <DraftsCard drafts={data.drafts} proSport={data.sides.find((s) => s.role === 'pro')?.sport ?? 'NFL'} />
+      <DraftsCard drafts={data.drafts} pipeline={data.pipeline} proSport={data.sides.find((s) => s.role === 'pro')?.sport ?? 'NFL'} />
     </div>
   )
 }
 
 /** The year's two drafts on one card: the pro rookie draft and the college draft. */
-function DraftsCard({ drafts, proSport }: { drafts: CollegeProRosterPayloadDrafts; proSport: string }) {
-  if (drafts.length === 0) return null
+function DraftsCard({ drafts, pipeline, proSport }: { drafts: CollegeProRosterPayloadDrafts; pipeline: CollegeProPipeline | null; proSport: string }) {
+  if (drafts.length === 0 && !pipeline) return null
   const phaseClass: Record<string, string> = {
     live: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-500',
     upcoming: 'border-cyan-400/40 bg-cyan-400/10 text-[var(--badge-text-cyan)]',
@@ -150,7 +151,41 @@ function DraftsCard({ drafts, proSport }: { drafts: CollegeProRosterPayloadDraft
           </li>
         ))}
       </ul>
+      {pipeline ? <PipelineSection pipeline={pipeline} proSport={proSport} /> : null}
     </section>
+  )
+}
+
+/** Who moves up from your college team, and how big the shortened rookie draft is. */
+function PipelineSection({ pipeline, proSport }: { pipeline: CollegeProPipeline; proSport: string }) {
+  const { year, movingUp, rookiePool } = pipeline
+  return (
+    <div className="mt-3 border-t border-subtle pt-3" data-testid="college-pro-pipeline">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Moving up · {year} {proSport} draft</p>
+      {movingUp.length === 0 ? (
+        <p className="mt-1 px-2 text-xs text-muted">None of your college players were drafted in {year}.</p>
+      ) : (
+        <>
+          <ul className="mt-1 space-y-1">
+            {movingUp.map((p) => (
+              <li key={p.playerId} className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg px-2 py-1">
+                <span className="text-xs font-semibold text-primary">
+                  {p.name} <span className="font-normal text-muted">{p.position}</span>
+                </span>
+                <span className="text-[11px] tabular-nums text-secondary">
+                  Rd {p.round}, pick {p.pick}{p.nflTeam ? ` · ${p.nflTeam}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 px-2 text-[11px] text-muted">Add {movingUp.length === 1 ? 'him' : 'them'} to your Sleeper roster as {movingUp.length === 1 ? 'a rookie' : 'rookies'}.</p>
+        </>
+      )}
+      <p className="mt-2 px-2 text-xs text-secondary" data-testid="college-pro-rookie-pool">
+        <span className="font-semibold text-primary">{year} rookie draft pool:</span> {rookiePool.unheld} of {rookiePool.drafted} drafted players
+        were not on any college roster in this league.
+      </p>
+    </div>
   )
 }
 
