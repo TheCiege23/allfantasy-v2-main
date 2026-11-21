@@ -4,6 +4,7 @@ import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { liveLeagueDrafts, liveLeagueMatchups, liveLeagueRosters, liveLeagueUsers, liveNflState } from '@/lib/sleeper/liveLeagueFeed'
 import { readStoredFantraxDraft } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './drafts'
+import { buildPipeline, parseStoredDraftPicks, type CollegeProPipeline } from './pipeline'
 import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import {
@@ -81,6 +82,8 @@ export type CollegeProRosterPayload =
       canEditScoring: boolean
       /** This year's drafts on both halves: the NFL rookie draft and the college draft. */
       drafts: CollegeProDraft[]
+      /** Drafted college players moving up, and the rookie draft's pool. Null until draft results are on file. */
+      pipeline: CollegeProPipeline | null
       fetchedAt: string
     }
 
@@ -113,7 +116,7 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
   const season = Number(nflState?.season) || now.getFullYear()
 
   const collegePlayers = collegeHalf?.players ?? []
-  const [pro, games, collegePoints, drafts] = await Promise.all([
+  const [pro, games, collegePoints, drafts, pipeline] = await Promise.all([
     loadSleeperProSide(league, userId, week),
     loadTodaysGames([proSport, collegeSport], now),
     collegeHalf && week
@@ -124,6 +127,9 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
         }).catch(() => null)
       : Promise.resolve(null),
     loadDrafts(league.platformLeagueId, collegeHalf?.platform === 'fantrax' ? collegeHalf.memberLeagueId : null),
+    collegeHalf?.platform === 'fantrax'
+      ? loadPipeline(collegeHalf.memberLeagueId, collegePlayers, now).catch(() => null)
+      : Promise.resolve(null),
   ])
 
   const college: CollegeProSide = collegeHalf
@@ -189,6 +195,7 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
     combinedTotal: scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null,
     canEditScoring,
     drafts,
+    pipeline,
     fetchedAt: now.toISOString(),
   }
 }
@@ -261,6 +268,45 @@ async function loadDrafts(sleeperLeagueId: string, fantraxSnapshotId: string | n
   ])
   const college = snapshot ? fantraxDraftCard(readStoredFantraxDraft(snapshot.transactions), snapshot.season ?? null) : null
   return [...sleeperDraftCards(sleeperDrafts ?? []), ...(college ? [college] : [])]
+}
+
+/**
+ * The newest NFL draft on file (this year's, else last year's) against the league's college rosters.
+ * Null when no draft results are stored yet, which is the case until CFBD answers again.
+ */
+async function loadPipeline(
+  fantraxSnapshotId: string,
+  myPlayers: ReadonlyArray<{ id: string; cfbdId?: string | null; name: string }>,
+  now: Date,
+): Promise<CollegeProPipeline | null> {
+  const thisYear = now.getUTCFullYear()
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { in: [`cfbd:draft-picks:v1:${thisYear}`, `cfbd:draft-picks:v1:${thisYear - 1}`] } },
+    select: { data: true },
+  })
+  const stored = rows
+    .map((r) => parseStoredDraftPicks(r.data))
+    .filter((x): x is NonNullable<typeof x> => x != null && x.picks.length > 0)
+    .sort((a, b) => b.year - a.year)[0]
+  if (!stored) return null
+
+  // Every college roster in the league: the snapshot holds all teams, tagged by teamName.
+  const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: fantraxSnapshotId }, select: { roster: true } })
+  const fantraxIds = (Array.isArray(snapshot?.roster) ? (snapshot!.roster as unknown[]) : [])
+    .map((r) => String((r as { fantraxId?: unknown; id?: unknown })?.fantraxId ?? (r as { id?: unknown })?.id ?? '').trim())
+    .filter(Boolean)
+  const identities = fantraxIds.length
+    ? await prisma.playerIdentityMap.findMany({
+        where: { sport: 'NCAAF', fantraxId: { in: fantraxIds }, cfbdId: { not: null } },
+        select: { cfbdId: true },
+      })
+    : []
+  return buildPipeline({
+    year: stored.year,
+    picks: stored.picks,
+    myPlayers: myPlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, name: p.name })),
+    leagueCfbdIds: new Set(identities.map((i) => i.cfbdId!).filter(Boolean)),
+  })
 }
 
 async function loadTodaysGames(sports: string[], now: Date) {

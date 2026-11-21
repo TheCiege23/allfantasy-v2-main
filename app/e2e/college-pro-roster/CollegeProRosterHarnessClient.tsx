@@ -100,7 +100,7 @@ const COLLEGE: CollegeProSide = {
 }
 
 let installed = false
-function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean) {
+function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean, showPipeline: boolean) {
   let scoring = initialScoring
   if (installed || typeof window === 'undefined') return
   installed = true
@@ -126,6 +126,14 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
           { role: 'pro', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
           { role: 'college', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null },
         ],
+        pipeline: showPipeline ? {
+          year: 2026,
+          movingUp: [
+            { playerId: 'c-x1', name: 'Travis Hunter', position: 'WR', nflTeam: 'JAX', round: 1, pick: 2 },
+            { playerId: 'c-x2', name: 'Tetairoa McMillan', position: 'WR', nflTeam: 'CAR', round: 1, pick: 8 },
+          ],
+          rookiePool: { drafted: 257, heldInCollege: 41, unheld: 216 },
+        } : null,
         fetchedAt: new Date().toISOString(),
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -139,7 +147,7 @@ export function CollegeProRosterHarnessClient() {
   const lead = params.get('lead') === 'college' ? 'college' : 'pro'
   const format = params.get('format') === 'devy' ? 'devy' : 'c2c'
   const scoring = params.get('scoring') === 'combined' ? 'combined' : 'separate'
-  installFetch(lead, format, scoring, params.get('commish') === '1')
+  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0')
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">
