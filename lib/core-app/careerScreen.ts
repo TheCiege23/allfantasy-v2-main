@@ -19,6 +19,7 @@ import {
   type CareerTradeCount,
 } from '@/lib/core-app/careerProfile'
 import { computeCareerAwards, type CareerAward } from '@/lib/core-app/careerAwards'
+import { buildCareerWidgetSnapshot, type CareerWidgetSnapshot } from '@/lib/core-app/careerWidgetSnapshot'
 import { getCareerRecords, WEEKLY_MISSING, type CareerRival } from '@/lib/core-app/careerRecords'
 import { readCareerRecordsSummary } from '@/lib/core-app/careerRecordsSummary'
 import {
@@ -291,4 +292,20 @@ export async function getCareerAwardCards(userId: string): Promise<{
     titles: data.championships,
     seasons: data.seasonsPlayed,
   }
+}
+
+/**
+ * The iOS "Your career" widget's data (`/api/core/career/widget-snapshot`), read when the app opens.
+ *
+ * ⚠ SAME SOURCE AS THE OVERVIEW, NO FILTER, so the home screen never shows a number the Career
+ * screen would not. `updatedAt` is the READ time, not the profile's `builtAt`: `readCareerProfile`
+ * serves a stored profile only while its stamp still matches the sources, so a profile built
+ * yesterday and verified now IS current now. Stamping `builtAt` is what made the widget say
+ * "Updated 19 hr ago" about data that had just been checked.
+ */
+export async function getCareerWidgetSnapshot(userId: string, now: Date = new Date()): Promise<CareerWidgetSnapshot | null> {
+  const { source, trades } = await loadSource(userId)
+  const data = buildCareerData(source)
+  if (data.isEmpty) return null
+  return buildCareerWidgetSnapshot(data, computeCareerAwards({ rows: source.rows, trades }), now)
 }
