@@ -74,6 +74,7 @@ html[data-mode='light'] .af-core:is(.nl-workspace,.af-shell)[data-format=redraft
 .nl-rd-track{display:flex;flex-direction:column;gap:10px;width:100%;margin:4px 0 0}
 .nl-rd-track-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;color:var(--faint);font:700 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.1em;text-transform:uppercase}
 .nl-rd-track-head strong{color:var(--rd-accent-text);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nl-rd-track-head>span{color:var(--muted);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:13px;letter-spacing:0;text-transform:none}
 .nl-rd-track-bar{position:relative;height:8px;border-radius:999px;background:var(--rd-track);margin:6px 0}
 .nl-rd-track-fill{position:absolute;inset:0 auto 0 0;width:var(--rd-at,0%);border-radius:inherit;background:var(--rd-accent)}
 .nl-rd-track-dot{position:absolute;top:50%;left:var(--rd-at,0%);width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);background:var(--surface);border:3px solid var(--rd-track)}
