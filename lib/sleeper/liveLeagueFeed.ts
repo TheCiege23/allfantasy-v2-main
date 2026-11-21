@@ -27,7 +27,16 @@ export type WireRoster = {
   /** Co-owners manage the roster as much as `owner_id` does. */
   co_owners?: string[] | null
 }
-export type WireDraft = { draft_id: string; status: string }
+export type WireDraft = {
+  draft_id: string
+  status: string
+  season?: string | null
+  /** snake | linear | auction */
+  type?: string | null
+  /** Epoch ms; null or absent until the commissioner sets a date. */
+  start_time?: number | null
+  settings?: { rounds?: number | null } | null
+}
 export type WireDraftPick = { player_id?: string | null; picked_by?: string | null; round: number; pick_no: number }
 
 export const ROSTER_TTL_MS = 60_000

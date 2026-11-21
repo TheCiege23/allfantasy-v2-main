@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { RosterRow } from '@/app/league/[leagueId]/tabs/TeamTab'
 import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
+import type { CollegeProDraft } from '@/lib/league/collegePro/drafts'
+
+type CollegeProRosterPayloadDrafts = CollegeProDraft[]
 
 /**
  * The roster tab for a college + pro league (C2C / Devy): the pro lineup and the college lineup on
@@ -107,7 +110,47 @@ export function CollegeProRoster({
       {sides.map((side) => (
         <HalfLineup key={side.role} side={side} format={data.format} onPlayerClick={onPlayerClick} />
       ))}
+
+      <DraftsCard drafts={data.drafts} proSport={data.sides.find((s) => s.role === 'pro')?.sport ?? 'NFL'} />
     </div>
+  )
+}
+
+/** The year's two drafts on one card: the pro rookie draft and the college draft. */
+function DraftsCard({ drafts, proSport }: { drafts: CollegeProRosterPayloadDrafts; proSport: string }) {
+  if (drafts.length === 0) return null
+  const phaseClass: Record<string, string> = {
+    live: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-500',
+    upcoming: 'border-cyan-400/40 bg-cyan-400/10 text-[var(--badge-text-cyan)]',
+    done: 'border-subtle bg-surface text-muted',
+    unknown: 'border-subtle bg-surface text-muted',
+  }
+  return (
+    <section className="rounded-2xl border border-subtle bg-surface-muted/40 p-3 sm:p-4" data-testid="college-pro-drafts">
+      <h2 className="mb-2 text-sm font-bold text-primary">Drafts</h2>
+      <ul className="space-y-1.5">
+        {drafts.map((d, i) => (
+          <li key={`${d.role}-${d.season}-${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-primary">
+                {d.season ?? ''} {d.role === 'pro' ? `${proSport} draft` : 'College draft'}
+                <span className="ml-1.5 font-normal text-muted">{d.role === 'pro' ? 'on Sleeper' : 'on Fantrax'}</span>
+              </p>
+              {d.detail || d.startsAt ? (
+                <p className="text-[11px] text-muted">
+                  {[d.detail, d.startsAt ? `starts ${new Date(d.startsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              ) : null}
+            </div>
+            <span className={['rounded-full border px-2 py-0.5 text-[11px] font-semibold', phaseClass[d.phase] ?? phaseClass.unknown].join(' ')}>
+              {d.status}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

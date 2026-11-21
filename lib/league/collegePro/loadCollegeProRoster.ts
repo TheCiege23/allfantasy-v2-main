@@ -1,7 +1,9 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
-import { liveLeagueMatchups, liveLeagueRosters, liveLeagueUsers, liveNflState } from '@/lib/sleeper/liveLeagueFeed'
+import { liveLeagueDrafts, liveLeagueMatchups, liveLeagueRosters, liveLeagueUsers, liveNflState } from '@/lib/sleeper/liveLeagueFeed'
+import { readStoredFantraxDraft } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
+import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './drafts'
 import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import {
@@ -16,7 +18,7 @@ import {
 } from './buildSides'
 import { decideLeadSide, type LeadReason, type LeadSide } from './leadSide'
 import { collegeProFormatOf, collegeSportFor, combinedTotal, readCollegeProScoring, type CollegeProFormat, type CollegeProScoring } from './format'
-import { isCommissioner } from '@/lib/commissioner/permissions'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { loadCollegePoints } from './collegePoints'
 
 export type { CollegeProFormat, CollegeProScoring }
@@ -75,8 +77,10 @@ export type CollegeProRosterPayload =
       scoring: CollegeProScoring
       /** Pro plus college this week, when scoring is combined. Null otherwise, or before anyone scores. */
       combinedTotal: number | null
-      /** Whether this viewer may change `scoring` (the head commissioner). */
+      /** Whether this viewer may change `scoring`: the head commissioner, or a co-commissioner with scoring. */
       canEditScoring: boolean
+      /** This year's drafts on both halves: the NFL rookie draft and the college draft. */
+      drafts: CollegeProDraft[]
       fetchedAt: string
     }
 
@@ -109,7 +113,7 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
   const season = Number(nflState?.season) || now.getFullYear()
 
   const collegePlayers = collegeHalf?.players ?? []
-  const [pro, games, collegePoints] = await Promise.all([
+  const [pro, games, collegePoints, drafts] = await Promise.all([
     loadSleeperProSide(league, userId, week),
     loadTodaysGames([proSport, collegeSport], now),
     collegeHalf && week
@@ -119,6 +123,7 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
           players: collegePlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
         }).catch(() => null)
       : Promise.resolve(null),
+    loadDrafts(league.platformLeagueId, collegeHalf?.platform === 'fantrax' ? collegeHalf.memberLeagueId : null),
   ])
 
   const college: CollegeProSide = collegeHalf
@@ -172,7 +177,8 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
 
   const { lead, reason } = decideLeadSide({ now, proSport, collegeSport, games })
   const scoring = readCollegeProScoring(league.settings)
-  const canEditScoring = await isCommissioner(leagueId, userId).catch(() => false)
+  // The same rule the save route asks, so the switch never shows for someone the save would refuse.
+  const canEditScoring = await canCommissionerAct(leagueId, userId, 'scoring').catch(() => false)
   return {
     applies: true,
     format,
@@ -182,6 +188,7 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
     scoring,
     combinedTotal: scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null,
     canEditScoring,
+    drafts,
     fetchedAt: now.toISOString(),
   }
 }
@@ -242,6 +249,18 @@ async function loadSleeperProSide(
     note: matchups ? null : 'Live points are unavailable right now.',
   }
   return { ...base, ...lists, players: toPlayerMap(players), unavailable: null, points, score }
+}
+
+/** Both halves' drafts. A half we cannot read contributes nothing, rather than a made-up status. */
+async function loadDrafts(sleeperLeagueId: string, fantraxSnapshotId: string | null): Promise<CollegeProDraft[]> {
+  const [sleeperDrafts, snapshot] = await Promise.all([
+    liveLeagueDrafts(sleeperLeagueId).catch(() => null),
+    fantraxSnapshotId
+      ? prisma.fantraxLeague.findUnique({ where: { id: fantraxSnapshotId }, select: { transactions: true, season: true } }).catch(() => null)
+      : Promise.resolve(null),
+  ])
+  const college = snapshot ? fantraxDraftCard(readStoredFantraxDraft(snapshot.transactions), snapshot.season ?? null) : null
+  return [...sleeperDraftCards(sleeperDrafts ?? []), ...(college ? [college] : [])]
 }
 
 async function loadTodaysGames(sports: string[], now: Date) {
