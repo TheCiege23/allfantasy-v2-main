@@ -45,8 +45,15 @@ export const maxDuration = 300
  *
  * ── ⚠ COVERAGE, WITH THE ARITHMETIC RATHER THAN A CLAIM ─────────────────────────────────────
  *
- * Every 4 hours: 6 fires x <=25 leagues = 150 a day. Measured on production, the rotation holds
- * 199 Sleeper leagues, so it laps in roughly 1.3 days.
+ * Every 4 hours: 6 fires x <=60 leagues = 360 a day. Measured on production 2026-11-21, the
+ * rotation holds about 770 Sleeper leagues, so it laps in roughly 2.1 days.
+ *
+ * The cap was 25 (150 a day) while the rotation was 199 leagues. By 2026-11-21 that was a lap of
+ * over five days. Seven fires of 25 leagues on 2026-11-20/21 took 48 to 73 seconds each, about
+ * 2 to 3 seconds a league, so 60 leagues is roughly 120 to 175 seconds against the 240s budget.
+ * Weekly scores do not wait on this lap: the league sync writes them
+ * (`currentSeasonMatchupFacts.ts`). This rotation sets how fresh brackets, drafts, transactions
+ * and past seasons are.
  *
  * 🛑 AN EARLIER VERSION OF THIS HEADER SAID "a 543-league account laps in roughly eleven days".
  * That was wrong in a way worth keeping: 543 is one owner's Sleeper import HISTORY count from the
@@ -55,22 +62,25 @@ export const maxDuration = 300
  *
  * ⚠ AND THE LAP GROWS LINEARLY WITH SIGNUPS, WHICH IS THE PART FREQUENCY CANNOT FIX.
  * lap = leagues / (LEAGUE_CAP * fires per day). The denominator is fixed; the numerator is the
- * user base. At 150/day: 1.3 days at 199 leagues, 3.3 at 500, 6.7 at 1000. Hourly is the
- * practical ceiling (300s per fire) at 600/day and holds ~3 days out to about 2000. So frequency
+ * user base. At 360/day: 2.1 days at 770 leagues, 2.8 at 1000, 5.6 at 2000. Hourly at this cap
+ * would be 1440/day. So frequency
  * buys one order of magnitude and then stops — which is why the ordering below exists, and why
  * making each league cheaper matters more than firing more often.
  *
- * Bounds: two-bucket ordering (see `mergeRotation`), <=25 leagues a fire, 240s budget checked
+ * Bounds: two-bucket ordering (see `mergeRotation`), <=60 leagues a fire, 240s budget checked
  * BETWEEN leagues, per-league failure isolation, `SyncJobRun` telemetry.
  *
- * ⚠ ONE NUMBER HERE IS ARITHMETIC, NOT MEASUREMENT. LEAGUE_CAP assumes ~9.6s per league against
- * the budget. If a league takes 20s, twelve complete per fire and every figure above doubles.
- * `leaguesRefreshed`, `skippedForTime` and `elapsedMs` are returned so the cap can be tuned from
- * a real run instead of from this paragraph.
+ * ⚠ THE PER-LEAGUE COST IS A MEASUREMENT OF SEVEN FIRES, NOT A GUARANTEE. If leagues get slower
+ * the budget stops the fire between leagues and `skippedForTime` counts the rest, which are then
+ * first in line next time. `leaguesRefreshed`, `skippedForTime` and `elapsedMs` are returned so
+ * the cap can be tuned from real runs.
  */
 
 /** Leagues per fire. Ordering is decided by `mergeRotation`, not by this constant. */
-const LEAGUE_CAP = 25
+const LEAGUE_CAP = 60
+
+/** Slots held for the least recently refreshed leagues: the same 60% share the cap of 25 gave them. */
+const STARVED_SLOTS = 36
 
 /**
  * 240s against the 300s platform ceiling, matching `CRON_RUN_BUDGET_MS`.
@@ -175,6 +185,7 @@ export async function GET(request: Request) {
         starvedLeagueIds: starvedRows.slice(0, LEAGUE_CAP).map((r) => r.leagueId),
         demandLeagueIds: demandRows.map((r) => r.id),
         cap: LEAGUE_CAP,
+        starvedReserve: STARVED_SLOTS,
       })
 
       /*
