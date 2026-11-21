@@ -477,7 +477,9 @@ export function Career({
    * Phase 6: keep the iOS home-screen widget in step with what this screen shows. A no-op outside
    * the iOS app, under a filter, and when nothing changed since the last send this session.
    */
-  const snapshotAt = nowIso ?? screen.profile.builtAt
+  // The read time, not `profile.builtAt`: a stored profile is served only while it still matches
+  // its sources, so it is current as of this read (see `getCareerWidgetSnapshot`).
+  const snapshotAt = nowIso ?? null
   useEffect(() => {
     void syncCareerWidget(buildCareerWidgetSnapshot(screen.data, screen.awards, snapshotAt ? new Date(snapshotAt) : new Date()))
   }, [screen.data, screen.awards, snapshotAt])
