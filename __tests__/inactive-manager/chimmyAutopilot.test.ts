@@ -91,6 +91,14 @@ describe('how many teams Chimmy may run', () => {
     expect(autopilotRosterIds(readManagedLineups(m.state.settings))).toHaveLength(12)
   })
 
+  it('and Chimmy plays all of them there, whatever the plan says', async () => {
+    const { autopilotEntitled } = await import('@/lib/inactive-manager/inactiveManagerService')
+    m.state.ownerHasPlan = false
+    expect(await autopilotEntitled('league-owner')).toBe(false)
+    m.state.owner = { email: 'founder@example.com', username: 'TheCiege26' }
+    expect(await autopilotEntitled('league-owner')).toBe(true)
+  })
+
   it('a site admin who is only the one clicking, in someone else\'s league, gets the ordinary limit', async () => {
     // The owner lookup is by the LEAGUE owner; the acting user is never consulted.
     const results = await hand(5)
