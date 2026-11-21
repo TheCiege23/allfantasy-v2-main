@@ -31,7 +31,8 @@ import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds } from './lineupCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap, withNewestKickoffs } from './nextGameMap'
 import { collegeFixturesByPlayerTeam } from './collegeNextGame'
@@ -581,7 +582,15 @@ async function resolvePlayers(
    * name-only bridge, then to the descriptive-id parse, then to an honest
    * "could not identify" — none of which this removes.
    */
-  const playerCrosswalk = await crosswalkToSleeperIds(platform, sport, ids).catch(
+  /*
+   * 🛑 FANTRAX NFL GOES THROUGH THE SAME BRIDGE AS THE MATCHUP BOARD. Production 2026-11-21: every
+   * starter of a Fantrax NFL team read "no game found for this week" and the lock read "no week 11
+   * game found for any of your starters yet", while /core/matchup showed the same players' kickoffs.
+   * The shared crosswalk has no Fantrax entry, so nothing here reached the Sleeper-keyed joins below
+   * (fixture, injury, weather). `lineupCrosswalkToSleeperIds` reads the registry's `fantraxId` for
+   * NFL and is the shared crosswalk for everything else.
+   */
+  const playerCrosswalk = await lineupCrosswalkToSleeperIds(platform, sport, ids).catch(
     () => new Map<string, string>(),
   )
   /*
@@ -904,8 +913,18 @@ async function resolvePlayers(
     const players = await fantraxPlayersRead
     for (const player of players) {
       if (player.name === `Player ${player.id}`) continue
-      const existing = out.get(player.id)
-      out.set(player.id, existing ? { ...existing, imageUrl: player.imageUrl ?? existing.imageUrl, logoUrl: player.logoUrl } : {
+      /*
+       * A translated player keeps ONE entry, edited in place. The bye and scoring passes below find
+       * him by his Sleeper id and the lineup finds him by his Fantrax id; a copy here would leave
+       * the bye flag on an entry the lineup never reads. Only an id the bridge translated counts.
+       */
+      const existing = sleeperIdByRosterId.has(player.id) ? out.get(player.id) : undefined
+      if (existing) {
+        existing.imageUrl = player.imageUrl ?? existing.imageUrl
+        existing.logoUrl = player.logoUrl
+        continue
+      }
+      out.set(player.id, {
         sleeperId: player.id, name: player.name, position: player.position, team: player.team,
         sport, imageUrl: player.imageUrl, logoUrl: player.logoUrl, gameContext: null, kickoff: null,
         preseason: false, venue: null, injuryStatus: null, ruledOut: false, projectedPoints: null,
