@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
-import { loadSportPointsBase } from '@/lib/decision-os/trade/sportPointsContext'
+import { loadCachedLeagueBoardBase } from '@/lib/decision-os/value-os/leagueBoard'
 import { readDailySportForm, readPriorDailySportForm } from '@/lib/projections/dailySportFormStore'
 import { scoreFormBlob } from '@/lib/projections/dailySportForm'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
@@ -205,7 +205,8 @@ export async function getRosterGrade(args: {
     if (!league) return null
     const [bridge, model] = await Promise.all([
       bridgeImportedGameLogIds({ provider: 'sleeper', sport: 'NBA', rosterIds: everyId }),
-      loadSportPointsBase({ sport: 'NBA', league }),
+      // Through Value OS's league board (2026-11-21); this row has no platform, so it is its own entry there.
+      loadCachedLeagueBoardBase({ sport: 'NBA', league }),
     ])
     const threshold = 0.8
     function reportCoverage(modelUnavailableReason: string | null) {

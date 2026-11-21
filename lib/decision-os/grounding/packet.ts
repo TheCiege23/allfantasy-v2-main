@@ -1751,7 +1751,9 @@ export async function buildDecisionOsGroundingPacket(
     if (board) {
       const r = renderRosterBoardValues(board, contextFacts?.roster?.value ?? null)
       if (r.kind === 'ok') {
-        rosterBoardValues = present(r.text, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
+        // The board's own record of where it came from: Value OS's three-minute store, or built for this turn.
+        const servedFrom = board.kind === 'ok' && board.servedFrom === 'store' ? 'store' : 'live'
+        rosterBoardValues = present(r.text, { servedFrom, asOf: new Date().toISOString(), conclusive: { ok: true } })
       } else if (r.kind === 'unavailable') {
         rosterBoardValues = absent<string>({
           reason: 'not_computed',
