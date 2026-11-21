@@ -19,6 +19,19 @@ export function collegeProFormatOf(league: { leagueType?: string | null; leagueV
   return null
 }
 
+/**
+ * Our sport code for a college half. Fantrax snapshots say `CFB` / `CBB`. Measured on Cream Bowl
+ * 2026-11-21: `CFB`, which matched none of the 274 NCAAF games on file that day, so the page could
+ * not tell a college game day from any other Saturday.
+ */
+export function normalizeCollegeSport(sport: string | null | undefined): string | null {
+  const s = String(sport ?? '').trim().toUpperCase()
+  if (!s) return null
+  if (s === 'CFB' || s === 'NCAAFB' || s === 'NCAA_FB') return 'NCAAF'
+  if (s === 'CBB' || s === 'NCAABB' || s === 'NCAA_BB') return 'NCAAB'
+  return s
+}
+
 /** The college sport that pairs with a pro sport. */
 export function collegeSportFor(proSport: string): string {
   return String(proSport).trim().toUpperCase() === 'NBA' ? 'NCAAB' : 'NCAAF'
