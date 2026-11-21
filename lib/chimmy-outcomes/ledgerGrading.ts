@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
+import { foldTradeLetterCalls, type TradeLetterLedger } from '@/lib/decision-os/trade/letterCalibration'
 import {
   addWindowEnd,
   completedThrough,
@@ -244,7 +245,7 @@ export function gradeEngineClaims(rows: readonly EngineClaimRow[], cal: WeekCale
 }
 
 export type TradeLedgerInputs = {
-  rows: Array<TradeLedgerRow & { completed: boolean }>
+  rows: Array<TradeLedgerRow & { completed: boolean; capturedAtMs: number }>
   skips: Record<string, number>
   read: number
   /** Standard PPR per week over [from, through] for a set of receipt player ids; null when one cannot be placed. */
@@ -301,7 +302,7 @@ export async function loadTradeLedgerInputs(
   for (const s of snaps) {
     const r = tradeLedgerRow({ receipt: s.receipt, surface: s.surface, isTrade: s.is_trade, fromWeek: firstWeekNotKickedOff(cal, new Date(s.captured_at)) })
     if ('skip' in r) skips[r.skip] = (skips[r.skip] ?? 0) + 1
-    else rows.push({ ...r, completed: Boolean(s.completed) })
+    else rows.push({ ...r, completed: Boolean(s.completed), capturedAtMs: new Date(s.captured_at).getTime() })
   }
 
   const ids = [...new Set(rows.flatMap((r) => [...r.getPlayerIds, ...r.givePlayerIds]))]
@@ -326,7 +327,9 @@ export async function loadTradeLedgerInputs(
   return { rows, skips, read: snaps.length, pointsPerWeek, idsTotal: ids.length, idsPlaced: ids.filter((id) => placed(id) != null).length }
 }
 
-async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db, surface?: string): Promise<LedgerSnapshot['trades']> {
+type GradedTrades = { tally: LedgerSnapshot['trades']; letters: TradeLetterLedger }
+
+async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db, surface?: string): Promise<GradedTrades> {
   const inputs = await loadTradeLedgerInputs(season, cal, { db, surface })
   const redraft = inputs.rows.filter((r) => r.format === 'redraft')
   const g = gradeTradeRows(redraft, completedThrough(cal, now), inputs.pointsPerWeek)
@@ -335,7 +338,15 @@ async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db,
     const s = g.byLetter.get(letter)
     if (s) byLetter[letter as TradeLetter] = { n: s.n, netPerWeek: s.netPerWeek, ahead: s.positive, behind: s.negative }
   }
-  return { byLetter, pending: g.pending, unscored: g.unscored, read: inputs.read, gradable: redraft.length }
+  // Each letter's held-up record, decayed by the grade's age — the trade grade's own confidence (`letterCalibration.ts`).
+  const letters = foldTradeLetterCalls(
+    g.scored.map(({ row, netPerWeek }) => ({
+      letter: row.letter,
+      netPerWeek,
+      ageDays: Number.isFinite(row.capturedAtMs) ? (now.getTime() - row.capturedAtMs) / 86_400_000 : 0,
+    })),
+  )
+  return { tally: { byLetter, pending: g.pending, unscored: g.unscored, read: inputs.read, gradable: redraft.length }, letters }
 }
 
 /** Swallow only "this part's table/column is not there"; anything else is the caller's to see. */
@@ -361,8 +372,8 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
   if (cal.size === 0) return null
-  const noTrades = { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }
-  const [bench, adds, trades, commissionerTrades, engineClaims] = await Promise.all([
+  const noTrades: GradedTrades = { tally: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, letters: {} }
+  const [bench, adds, graded, commissionerGraded, engineClaims] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
     part(() => loadAddRows(season, db), [] as AddRow[]),
     part(() => gradeTrades(season, cal, now, db), noTrades),
@@ -372,7 +383,18 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     part(() => loadEngineClaimRows(season, db), [] as EngineClaimRow[]),
   ])
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
-  return foldLedger({ season, cal, now, bench, adds, trades, commissionerTrades, waiverEngine })
+  return foldLedger({
+    season,
+    cal,
+    now,
+    bench,
+    adds,
+    trades: graded.tally,
+    commissionerTrades: commissionerGraded.tally,
+    waiverEngine,
+    tradeLetters: graded.letters,
+    commissionerTradeLetters: commissionerGraded.letters,
+  })
 }
 
 /**

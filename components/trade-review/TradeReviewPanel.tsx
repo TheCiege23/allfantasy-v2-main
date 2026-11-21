@@ -158,6 +158,11 @@ export function TradeReviewPanel(props: {
                   {rm.commissionerTradeRecord(letterRecord.scope, letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.verdict)}
                 </p>
               ) : null}
+              {letterRecord?.confidence ? (
+                <p className="text-white/60" data-level={letterRecord.confidence.level} data-testid="trade-review-letter-confidence">
+                  {rm.tradeConfidence(letterRecord.confidence.letter, letterRecord.confidence.level, letterRecord.confidence.heldPct, letterRecord.confidence.decided)}
+                </p>
+              ) : null}
 
               {data.explanation.noteToLeague ? (
                 <p className="text-white/75" data-testid="trade-review-note">
