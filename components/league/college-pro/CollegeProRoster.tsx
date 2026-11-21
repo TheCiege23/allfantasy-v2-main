@@ -67,7 +67,7 @@ export function CollegeProRoster({
     <div className="flex flex-col gap-4 px-4 py-4 lg:px-6" data-testid="college-pro-roster" data-lead={lead}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-secondary">
-          <span className="mr-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-200">
+          <span className="mr-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[var(--badge-text-cyan)]">
             {data.format === 'c2c' ? 'C2C' : 'Devy'}
           </span>
           {manualLead ? `${leadLabel} on top.` : leadMessage(data.leadReason, leadLabel)}
@@ -85,7 +85,7 @@ export function CollegeProRoster({
                 className={[
                   'rounded-full border px-3 py-1 text-[11px] font-semibold transition',
                   lead === side.role
-                    ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100'
+                    ? 'border-cyan-400/50 bg-cyan-400/15 text-[var(--badge-text-cyan)]'
                     : 'border-subtle text-secondary hover:bg-white/[0.04]',
                 ].join(' ')}
               >
@@ -179,7 +179,7 @@ function HalfLineup({
         <div className="flex items-center gap-3">
           <ScoreLine score={side.score} />
           {side.role === 'college' && side.leagueHref ? (
-            <Link href={side.leagueHref} className="text-[11px] font-semibold text-cyan-300 hover:underline">
+            <Link href={side.leagueHref} className="text-[11px] font-semibold text-[var(--badge-text-cyan)] hover:underline">
               Open college league
             </Link>
           ) : null}
