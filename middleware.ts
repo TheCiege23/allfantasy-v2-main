@@ -27,6 +27,7 @@ import {
   isIosAppPurchaseApi,
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
+import { APP_START_PATH, shouldSendIosLaunchToAppStart } from "@/lib/platform/iosAppLaunch"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
 import {
   CSP_ENFORCED_POLICY,
@@ -85,7 +86,12 @@ async function iosAppSignedOutLanding(request: NextRequest, pathname: string): P
   const token = await getToken({ req: request, secret })
   const id = typeof token?.id === "string" ? token.id.trim() : ""
   // A session that was signed out (but whose cookie the device kept) counts as signed out.
-  if (id && !(await isSessionRevoked(token))) return null
+  if (id && !(await isSessionRevoked(token))) {
+    // Signed in: the app's launch load of /core paints a loading screen first, then builds /core
+    // behind it (lib/platform/iosAppLaunch.ts — the 2026-11-20 "empty blue screen" report).
+    if (!shouldSendIosLaunchToAppStart({ pathname, search: request.nextUrl.search, headers: request.headers })) return null
+    return NextResponse.redirect(new URL(APP_START_PATH, request.url), 307)
+  }
   const landing = new URL("/", request.url)
   landing.search = ""
   return NextResponse.redirect(landing, 307)
