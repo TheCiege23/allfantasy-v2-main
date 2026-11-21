@@ -376,7 +376,7 @@ function TeamMatchPanel({ leagueId, editor, onSaved }: { leagueId: string; edito
                   </option>
                 ))}
               </select>
-              <span className="w-16 text-[10px] text-muted">{suggested ? 'suggested' : ''}</span>
+              <span className="w-16 text-[11px] text-muted">{suggested ? 'suggested' : ''}</span>
             </li>
           )
         })}
