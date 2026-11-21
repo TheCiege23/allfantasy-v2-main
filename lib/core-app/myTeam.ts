@@ -29,6 +29,8 @@ import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
+import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
+import { benchCallRecord, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
@@ -237,6 +239,12 @@ export type BenchCheck = {
   benchProjected: number
   starterName: string
   starterProjected: number
+  /**
+   * How swaps with an edge this size have held up, graded against what was scored (2026-11-21,
+   * `decision-os/lineup/benchCalibration.ts`). A swap only, NFL Sleeper leagues only, and only once its edge
+   * band has enough decided calls. It never changes the verdict — only what is said about how sure it is.
+   */
+  record?: BenchCallRecord | null
 }
 
 export type LineupSlot = {
@@ -1660,15 +1668,22 @@ async function loadMyTeamData(
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
   const ledgerCalls: BenchLedgerCall[] = []
+  // The bench check's own graded record, by the size of a swap's edge. Null outside NFL Sleeper leagues.
+  const benchCalibration = base.league.bestBall
+    ? null
+    : await loadBenchCalibration({ sport, platform: league.platform ?? null }).catch(() => null)
   for (const c of benchCandidates) {
     if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
     claimedBench.add(c.bench.sleeperId)
+    const swap = c.gap >= BENCH_SWAP_POINTS
+    const record = swap ? benchCallRecord(c.gap, benchCalibration) : null
     checkBySlot.set(c.slotIndex, {
-      verdict: c.gap >= BENCH_SWAP_POINTS ? 'swap' : 'close',
+      verdict: swap ? 'swap' : 'close',
       benchName: c.bench.name,
       benchProjected: c.benchProj,
       starterName: c.starter.name,
       starterProjected: c.starterProj,
+      ...(record ? { record } : {}),
     })
     if (c.gap >= BENCH_SWAP_POINTS) {
       ledgerCalls.push({

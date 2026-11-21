@@ -185,6 +185,13 @@ export const myTeamScreenMessages = defineMessages({
       `Should I start ${bench} instead of ${starter} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
     benchAskChimmy: 'Ask Chimmy about this swap',
     benchCaveat: 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.',
+    /* The bench check's graded record for a swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`). */
+    benchCheckRecord: (pct: number, n: number, band: 'narrow' | 'clear' | 'wide', low: boolean) => {
+      const edge = band === 'narrow' ? '2–4 point' : band === 'clear' ? '4–8 point' : '8+ point'
+      return low
+        ? `Swaps with a ${edge} edge have been right only ${pct}% of the time (${n} graded calls) — closer than the projections suggest.`
+        : `Swaps with a ${edge} edge have been right ${pct}% of the time (${n} graded calls).`
+    },
 
     // TaxiYears
     taxiUnknownTitle: "This needs the league's taxi-year limit and its season-end roster history. One of them is missing, so we are not going to guess.",
@@ -384,6 +391,12 @@ export const myTeamScreenMessages = defineMessages({
       `¿Debería poner de titular a ${bench} en lugar de ${starter} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`,
     benchAskChimmy: 'Preguntar a Chimmy por este cambio',
     benchCaveat: 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.',
+    benchCheckRecord: (pct, n, band, low) => {
+      const edge = band === 'narrow' ? '2 a 4 puntos' : band === 'clear' ? '4 a 8 puntos' : 'más de 8 puntos'
+      return low
+        ? `Los cambios con una ventaja de ${edge} solo han acertado el ${pct}% de las veces (${n} decisiones evaluadas): más ajustado de lo que sugieren las proyecciones.`
+        : `Los cambios con una ventaja de ${edge} han acertado el ${pct}% de las veces (${n} decisiones evaluadas).`
+    },
 
     taxiUnknownTitle: 'Hace falta el límite de años de taxi de la liga y su historial de plantillas a fin de temporada. Falta uno de los dos, así que no vamos a adivinar.',
     taxiUnknown: 'años restantes desconocidos',
