@@ -638,7 +638,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   if (!userTeam) {
     return (
       <div className="nls" data-testid="native-lineup-screen">
-        <ScreenHead eyebrow={`${league.name} · My team`} title="My team" />
+        <ScreenHead title="My team" />
         <Card><p>You have not claimed a team in this league yet. Ask your commissioner for an invite.</p></Card>
       </div>
     )
@@ -909,7 +909,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · My team`} title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
+      <ScreenHead eyebrow="My team" title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
         {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
         {league.bestBallMode ? null : <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>}
         <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
