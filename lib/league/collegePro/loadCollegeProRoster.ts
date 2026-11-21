@@ -109,7 +109,7 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
       ? loadCollegePoints({
           season,
           nflWeek: week,
-          players: collegePlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, position: p.position })),
+          players: collegePlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
         }).catch(() => null)
       : Promise.resolve(null),
   ])
@@ -125,7 +125,9 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
           ? null
           : !collegePoints.statsOnFile
             ? "College stats for this week haven't come in yet."
-            : 'College points use standard college scoring, so Fantrax may show slightly different numbers.'
+            : collegePoints.live
+              ? 'College points update live during games, using standard college scoring, so Fantrax may differ slightly.'
+              : 'College points use standard college scoring, so Fantrax may show slightly different numbers.'
         return {
           role: 'college' as const,
           sport: collegeSport,
