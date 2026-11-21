@@ -13,8 +13,8 @@ import { deriveFantasyEligibility, normalizeProviderPosition, REFERENCE_NFL_BUCK
  * are Sleeper-keyed rather than Rolling-Insights-keyed:
  *
  *   1. BY ID FIRST. A row already carrying this Fantrax id IS the answer; nothing is written.
- *   2. BY NAME SECOND, and never by name alone: exact normalized name + a recognised CURRENT NFL
- *      team + a compatible position group. Two candidates is ambiguous and skipped; an id is never
+ *   2. BY NAME SECOND, and never by name alone: the same normalized name, punctuation aside
+ *      (`looseNflNameKey`) + a recognised CURRENT NFL team + a compatible position group. Two candidates is ambiguous and skipped; an id is never
  *      written over an existing link or onto a second row.
  *
  * ⚠ `getPlayerIds?sport=NFL` IS NOT CAPTURED (contracts/fantrax/GAPS.md F-12). Its shape is assumed
@@ -76,6 +76,29 @@ export function fantraxNflNameKey(name: string): string {
   return normalizePlayerName(parts.length === 2 ? `${parts[1]!.trim()} ${parts[0]!.trim()}` : String(name ?? ''))
 }
 
+/**
+ * A name key with its punctuation removed, for comparing a Fantrax name with a registry name.
+ *
+ * 🛑 FANTRAX DROPS THE APOSTROPHE AND THE REGISTRY KEEPS IT. Fantrax sends "Chase, JaMarr" and
+ * "Brown, JiAyir"; the registry holds "Ja'Marr Chase" and "Ji'Ayir Brown", and `normalizePlayerName`
+ * keeps an apostrophe. So the exact-name rule never matched them: 26 of one league's 139 unlinked
+ * players on staging (2026-11-21), each with the same club and a compatible position on file.
+ * The club and position rules are unchanged; only the spelling comparison is looser.
+ */
+export function looseNflNameKey(nameKey: string): string {
+  return String(nameKey ?? '').replace(/[^a-z0-9 ]/g, '').replace(/ +/g, ' ').trim()
+}
+
+/**
+ * ⚠ AN EDGE RUSHER IS A DE ON ONE FEED AND A LB ON THE OTHER. With the same name and the same
+ * current club, DL against LB is one player filed two ways (Fantrax "Curry, Caden | IND | DE", registry
+ * "Caden Curry / IND / LB"). No other pair of groups is treated as compatible.
+ */
+function compatibleRoles(a: Set<string>, b: Set<string>): boolean {
+  if ([...a].some((g) => b.has(g))) return true
+  return (a.has('DL') && b.has('LB')) || (a.has('LB') && b.has('DL'))
+}
+
 function isTeamUnit(ref: FantraxPlayerRef): boolean {
   return TEAM_UNITS.has(String(ref.position ?? '').trim().toUpperCase()) || !String(ref.name ?? '').includes(',')
 }
@@ -84,7 +107,7 @@ export function planNflFantraxIdentityLinks(refs: FantraxPlayerRef[], identities
   const linkedIds = new Set(identities.map((r) => r.fantraxId?.trim()).filter((id): id is string => Boolean(id)))
   const byName = new Map<string, NflIdentityRow[]>()
   for (const row of identities) {
-    const key = normalizePlayerName(row.canonicalName ?? '')
+    const key = looseNflNameKey(normalizePlayerName(row.canonicalName ?? ''))
     if (key) byName.set(key, [...(byName.get(key) ?? []), row])
   }
 
@@ -98,8 +121,8 @@ export function planNflFantraxIdentityLinks(refs: FantraxPlayerRef[], identities
     const team = nflTeamCode(ref.team)
     const roles = nflPositionGroups(ref.position)
     if (!team || roles.size === 0) { unmatched++; continue }
-    const candidates = (byName.get(fantraxNflNameKey(ref.name)) ?? []).filter(
-      (row) => nflTeamCode(row.currentTeam) === team && [...nflPositionGroups(row.position)].some((g) => roles.has(g)),
+    const candidates = (byName.get(looseNflNameKey(fantraxNflNameKey(ref.name))) ?? []).filter(
+      (row) => nflTeamCode(row.currentTeam) === team && compatibleRoles(nflPositionGroups(row.position), roles),
     )
     if (candidates.length === 0) { unmatched++; continue }
     if (candidates.length > 1) { ambiguous++; continue }
