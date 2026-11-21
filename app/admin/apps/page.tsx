@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 
 import { getAdminAccessState } from "@/lib/adminAuth"
-import { getAppPlatformReport, readPostHogQueryConfig } from "@/lib/admin-dashboard/AppPlatformStatsService"
+import { getAppPlatformReport } from "@/lib/admin-dashboard/AppPlatformStatsService"
 import { normalizeWindow, type AppPlatformReport } from "@/lib/admin-dashboard/appPlatformStats"
 import { appleCard, googleCard } from "@/lib/admin-dashboard/storeDownloads"
 import { getAppStoreDownloads, type AppStoreDownloadsResult } from "@/lib/app-store/appStoreDownloads"
@@ -21,8 +21,8 @@ function withBudget<T>(work: Promise<T>, fallback: T): Promise<T> {
 
 /**
  * Apps (2026-11-20): who uses AllFantasy in the iOS app, the Android app and the browser
- * (PostHog's app_platform label), and how many download it (each store's own reports).
- * Every source is optional and independent: a missing key shows that source's setup steps.
+ * (our own "app_open" rows — lib/analytics/appOpen.ts), and how many download it (each
+ * store's own reports). Each store is optional: a missing key shows its setup steps.
  */
 export default async function AdminAppsPage(props: { searchParams?: Promise<{ days?: string }> }) {
   const searchParams = await props.searchParams
@@ -37,16 +37,13 @@ export default async function AdminAppsPage(props: { searchParams?: Promise<{ da
   }
 
   const days = normalizeWindow(searchParams?.days)
-  const config = readPostHogQueryConfig()
   const timedOut = { status: "error" as const, reason: "The store took too long to answer — reload in a minute" }
 
   const [report, apple, google] = await Promise.all([
-    config
-      ? getAppPlatformReport({ days, config }).catch((err): AppPlatformReport => ({
-          days, generatedAt: new Date().toISOString(), totalActive: null, platforms: [], daily: null,
-          errors: [err instanceof Error ? err.message : "Could not build the report"],
-        }))
-      : Promise.resolve(null),
+    getAppPlatformReport({ days }).catch((): AppPlatformReport => ({
+      days, generatedAt: new Date().toISOString(), totalActive: null, countingSince: null, platforms: [], daily: null,
+      errors: ["Could not build the report"],
+    })),
     withBudget<AppStoreDownloadsResult>(getAppStoreDownloads({ days }), timedOut),
     withBudget<PlayInstallStatsResult>(getPlayInstallStats(), timedOut),
   ])
