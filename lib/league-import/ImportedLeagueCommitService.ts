@@ -19,6 +19,7 @@ import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import { hasIdpRosterSlot } from './idpRosterSlots'
 import { IMPORT_CO_COMMISSIONERS_KEY, importCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
 import { notifyCommissionerOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { joinExistingLeagueAsLeagueMate, otherAccountsCopy } from './joinExistingLeagueAsLeagueMate'
 import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
@@ -29,6 +30,12 @@ import type {
 } from './types'
 
 export class ImportedLeagueConflictError extends Error {}
+
+/**
+ * Another account already holds this league, and this importer could not be placed in it (the provider
+ * did not vouch for them). No second copy is made; they join through the commissioner's invite link.
+ */
+export class ImportedLeagueAlreadyHereError extends Error {}
 
 /**
  * The user previously DELETED this league and has not confirmed they want it
@@ -93,6 +100,11 @@ export interface PersistImportedLeagueOptions {
    * already imported, as a co-commissioner, instead of creating a duplicate copy of it.
    */
   importerIsProvenCommissioner?: boolean
+  /**
+   * Refuse to create this league when another account already holds it and this importer could not be
+   * placed in it. Set by the import route; other callers (a commissioner's own tools) keep creating.
+   */
+  refuseSecondCopy?: boolean
 }
 
 export interface PersistImportedLeagueResult {
@@ -110,6 +122,8 @@ export interface PersistImportedLeagueResult {
    * recognised as an existing member of a league that was already on AllFantasy.
    */
   joinedExisting: boolean
+  /** How a team-less league mate joined an existing copy; unset for a team claim or a commissioner. */
+  joinedAs?: 'co_owner' | 'viewer'
   /**
    * Post-create steps that did not complete.
    *
@@ -1154,6 +1168,40 @@ export async function persistImportedLeagueFromNormalization(
   if (!existing && options.importerIsProvenCommissioner) {
     const joinedAsCo = await joinExistingLeagueAsCoCommissioner({ userId, provider, platformLeagueId, seasonYear })
     if (joinedAsCo) return joinedAsCo
+  }
+
+  /*
+   * Everyone sees the same copy (owner's rule, 2026-11-21). A league mate the provider vouches for who
+   * has no team of their own joins the copy that is already here: on the team they co-own, or as a
+   * viewer (lib/league-import/joinExistingLeagueAsLeagueMate.ts). Someone the provider cannot vouch
+   * for gets no second copy either: the caller that asks for it is refused and pointed at the invite.
+   */
+  if (!existing) {
+    if (options.importerSourceManagerId) {
+      const mate = await joinExistingLeagueAsLeagueMate({
+        userId, provider, platformLeagueId, seasonYear,
+        sourceManagerId: options.importerSourceManagerId,
+        rosters: normalized.rosters,
+      })
+      if (mate) {
+        if (!mate.alreadyJoined) {
+          void notifyCommissionerOfJoin({ leagueId: mate.leagueId, joinerUserId: userId }).catch(() => {})
+          void notifyLeagueMatesOfJoin({ leagueId: mate.leagueId, joinerUserId: userId }).catch(() => {})
+        }
+        return {
+          league: { id: mate.leagueId, name: mate.name, sport: mate.sport },
+          historicalBackfill: null,
+          existed: mate.alreadyJoined,
+          joinedExisting: true,
+          joinedAs: mate.joinedAs,
+          incompleteSteps: [],
+        }
+      }
+    } else if (options.refuseSecondCopy && await otherAccountsCopy({ userId, provider, platformLeagueId, seasonYear })) {
+      throw new ImportedLeagueAlreadyHereError(
+        'This league is already on AllFantasy. Ask its commissioner for the league invite link to join it.',
+      )
+    }
   }
 
   const resolvedSport = resolveImportedLeagueSport(normalized)

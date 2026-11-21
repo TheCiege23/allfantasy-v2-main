@@ -9,6 +9,7 @@ import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
+import { IMPORT_VIEWERS_KEY } from '@/lib/league/importViewers'
 import { IMPORT_CO_COMMISSIONERS_KEY, isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
@@ -104,6 +105,8 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
                 // …and one who joined an already-imported league as its commissioner, with no team in it.
                 { settings: { path: [IMPORT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and a league mate with no team who joined it as a viewer (lib/league/importViewers.ts).
+                { settings: { path: [IMPORT_VIEWERS_KEY], array_contains: [userId] } },
               ],
             },
             { OR: [{ leagueVariant: null }, { leagueVariant: { notIn: VARIANT_NOT_IN } }] },
@@ -568,6 +571,8 @@ export async function getDashboardLeagueListForUser(
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
                 // …and one who joined an already-imported league as its commissioner, with no team in it.
                 { settings: { path: [IMPORT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and a league mate with no team who joined it as a viewer (lib/league/importViewers.ts).
+                { settings: { path: [IMPORT_VIEWERS_KEY], array_contains: [userId] } },
               ],
             },
             {

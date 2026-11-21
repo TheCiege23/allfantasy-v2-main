@@ -280,6 +280,8 @@ type Phase =
        * theirs was imported, and the league was not new.
        */
       joinedExisting: boolean
+      /** A team-less league mate: co-owner of a shared team, or a viewer. Null for a team claim. */
+      joinedAs?: 'co_owner' | 'viewer' | null
     }
 
 interface PreviewTeam {
@@ -1491,6 +1493,7 @@ export function ImportV4({
         league_existed?: boolean
         skipped?: boolean
         joinedExisting?: boolean
+        joinedAs?: 'co_owner' | 'viewer' | null
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -1533,6 +1536,7 @@ export function ImportV4({
            still reports existed:true, because the league does still exist. */
         skipped: Boolean(data?.skipped),
         joinedExisting: Boolean(data?.joinedExisting),
+        joinedAs: data?.joinedAs === 'co_owner' || data?.joinedAs === 'viewer' ? data.joinedAs : null,
       })
     },
     // `leagues` is read for the deleted-league confirmation; see importOneLeague.
@@ -3670,7 +3674,11 @@ export function ImportV4({
             issue={doneIssue}
             noteText={
               phase.joinedExisting
-                ? `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
+                ? phase.joinedAs === 'co_owner'
+                  ? `${phase.leagueName} was already on AllFantasy. You've been added to the team you share, as its co-owner. Nothing was changed on ${providerLabel}.`
+                  : phase.joinedAs === 'viewer'
+                    ? `${phase.leagueName} was already on AllFantasy. You don't have a team in it right now, so you've been added as a viewer: you can follow the league and its chat. Nothing was changed on ${providerLabel}.`
+                    : `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
                 : phase.skipped
                   ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
                   : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
