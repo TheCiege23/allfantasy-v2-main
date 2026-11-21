@@ -14,6 +14,7 @@ import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { dailySportWeekForInstant, resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { indexBoard, sampleGamesFromReasons, type BoardPlayer } from './sportPointsValue'
 import { lineupSlotsFor, loadSportPointsBase, seasonLabelFor } from './sportPointsContext'
+import { loadCachedLeagueBoardBase } from '../value-os/leagueBoard'
 import {
   guillotineTradeSport,
   minReplacementGamesFor,
@@ -101,7 +102,7 @@ export type GuillotineLeague = {
 }
 
 /** NFL or a supported daily sport, by the league's sport. */
-export async function loadGuillotineContext(league: GuillotineLeague, now: Date = new Date()): Promise<GuillotineContextResult> {
+export async function loadGuillotineContext(league: GuillotineLeague, now?: Date): Promise<GuillotineContextResult> {
   const sport = league.sport == null ? 'NFL' : guillotineTradeSport(league.sport)
   if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') return loadDailyGuillotineContext(league, sport, now)
   if (sport !== 'NFL') return { ok: false, reason: 'This sport does not have a Guilly trade model.' }
@@ -264,14 +265,16 @@ function dailySeats(sport: DailyRedraftSport, settings: unknown): GuillotineSeat
  * own scoring, `AFProjectionSnapshot` keyed on `PlayerIdentityMap.id`, its readiness and dynasty refusals),
  * put on the WEEK — see `./guillotineValue.ts`. No provider call.
  */
-async function loadDailyGuillotineContext(league: GuillotineLeague, sport: DailyRedraftSport, now: Date): Promise<GuillotineContextResult> {
+async function loadDailyGuillotineContext(league: GuillotineLeague, sport: DailyRedraftSport, clock?: Date): Promise<GuillotineContextResult> {
+  const now = clock ?? new Date()
   const seats = dailySeats(sport, league.settings)
   if (!seats) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
-  const base = await loadSportPointsBase({
-    sport,
-    league: { id: league.id, settings: league.settings, leagueType: 'guillotine', leagueSize: league.leagueSize },
-    now,
-  })
+  const boardLeague = { id: league.id, settings: league.settings, leagueType: 'guillotine', leagueSize: league.leagueSize }
+  // Through Value OS's league board (2026-11-21) when priced on today's clock; an explicit clock is a different
+  // board (its window counts from that date), so it is built for that call alone.
+  const base = clock
+    ? await loadSportPointsBase({ sport, league: boardLeague, now })
+    : await loadCachedLeagueBoardBase({ sport, league: boardLeague })
   if (!base.ok) return base
   // A guillotine chops the lowest POINTS total; a category score answers a different question.
   if (base.ctx.valueKind === 'categories') {

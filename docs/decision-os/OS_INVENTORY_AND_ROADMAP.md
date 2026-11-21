@@ -201,7 +201,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Projection | 100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this change: NBA, NHL, MLB, college basketball and soccer points leagues are league-scored in Chimmy now, on the league value board My Team reads (owner's call, below). Category leagues have no points and say so |
 | Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
 | Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
-| Player Value | ~93 | ~90 | ~90 | Kernel ⚠: NBA/MLB/NHL/NCAAB/soccer boards are read live outside the kernel. User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
+| Player Value | ~93 | ~90 | ~100 | Kernel ⚠ → ✅ in this change: every live league-board read (value answer, Waivers, card, metrics, in-league trade grade, roster grade, daily Guilly) goes through Value OS's `leagueBoard` feed (below). User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
 | Trade | ~86 | ~79 | ~83 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule) in this change: the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. A reclassification, not new capability (below). Engine ⚠ and Cron ⚠ as before |
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
 | Lineup | ~86 | ~80 | ~80 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠: graded start/sit is reported, not fed back into the optimizer |
@@ -223,6 +223,25 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 - Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
 
 **Built in this change (no migration):**
+- **League value boards read through Value OS** (ranked item 4, 2026-11-21). Every NBA, NHL, MLB, college basketball
+  and soccer surface — Chimmy's value answer and league metrics, the Waivers board, the player card, the in-league
+  trade grade, the roster grade and a daily-sport Guilly grade — built the league's board from scratch on every read:
+  the sport's season projections, the league's rosters, the schedule, the completed-trade market and, in a dynasty
+  league, every player's age. They read `lib/decision-os/value-os/leagueBoard.ts` now: one board through the kernel,
+  held three minutes (Trade OS's roster TTL, so a trade is never graded on rosters older than Trade OS allows).
+  - **One board for the grade and the values**, as `leagueValueBoard.ts` already promised: the in-league trade grader
+    reads the same entry, so a value answer and a Trade Center grade cannot drift apart for a TTL.
+  - **Stored losslessly** (`domain-os/factCodec.ts`): plain JSON turns a Map into `{}`, a Date into a string and NaN
+    into `null` (which reads as 0); the codec restores each exactly, and refuses — rather than corrupts — anything it
+    cannot encode. A board it cannot encode is still served, live and unstored.
+  - 🛑 **Keyed on what the builder reads, not the league id alone.** Callers pass slightly different league rows (the
+    grader a normalized league type, the roster grade a row with no platform, a Guilly grade its own type), and each
+    builds a different board; the scope carries a fingerprint of those fields, so identical inputs share and different
+    ones never overwrite each other.
+  - A refusal is never cached and reaches the caller with its own reason; a throw is "could not be loaded"; concurrent
+    reads in one process share one read, each decoding its own copy. Off switch: `DECISION_OS_VALUE_BOARD_CACHE=off`.
+  - Still built directly, by design: the open analyzer (no league), the campus-only college board, and a Guilly
+    grade priced on an explicit clock (only tests pass one).
 - **A native league is no longer told its import failed.** With no sync state, every scope rendered "NOT complete on
   the last run", the sync "never", and the closing line told the model to say the sync was incomplete — beside a note
   saying no sync is normal here. `ImportAssertions.native` (from `isNativePlatform`) now renders one honest line, the
@@ -314,7 +333,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | ✅ | The waiver decision reads through the feed — **done in this change** (below) | Waiver Kernel → ✅ (~100) | S |
 | 2 | Provider drafts in manager records. ⚠ **Needs a read-only production check first**: whether each provider's `dw_draft_facts.managerId` equals its `league_teams.externalId`, and whether earlier seasons can be tied to their owners. Crediting the current season alone gives every manager one draft, under the record's two-draft floor, so it would say nothing but a count; and a wrong id match states false facts about a named leaguemate | Psychology data, user-visible | M–L |
 | ✅ | A manager-record feed — **done in this change** (below). Not refreshed on a schedule: the entry is per viewer, so it is warm exactly when its viewer is asking | Psychology Feed, Kernel → ✅ (~93) | M |
-| 4 | League value boards cached in Value OS. ⚠ **Re-sized to L after reading it (2026-11-20):** the board carries `ReadonlyMap`s (`rosterIndex`, `replacementByPosition`, the dynasty context) that `domain_os_facts` cannot store as JSON without a custom codec, and a baseball board is ~1,500 players (~450 KB per league per write). A per-process share of the built board is the cheaper latency win, but does not move the Kernel axis | Value Kernel → ✅ (~100) | L |
+| ✅ | League value boards cached in Value OS — **done in this change** (below): through the kernel, a lossless codec for the Maps, Dates and non-finite rates, keyed on what the builder reads, and shared by the trade grade | Value Kernel → ✅ (~100) | L |
 | ✅ | The graded trade inbox and Trade OS — **settled in this change** (below): the inbox must not read a stored world, so Kernel is n/a; the inbox loads the world once per build instead of once per offer; the unread `tradeSettingsSource` is deleted | Trade Kernel → n/a (~83) | S |
 | ✅ | Small truths — **done in this change** except `IMPORT_SCOPES`: see below | honesty, no axis | S each |
 | ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
