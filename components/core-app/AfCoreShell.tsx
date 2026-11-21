@@ -45,6 +45,8 @@ import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { ScreenGuide } from '@/components/core-app/ScreenGuide'
+import { HowItWorks } from '@/components/core-app/HowItWorks'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
@@ -572,6 +574,11 @@ type AfCoreShellProps = {
   /** Expected active-game window, including a provider status that is one poll late. */
   gameDayActive?: boolean
   children: React.ReactNode
+  /**
+   * The /core path the "What's this page?" strip explains. Unset in the app, where it reads the URL;
+   * the DB-free harness at /e2e/screen-guide sets it, because its own URL is not a /core one.
+   */
+  screenGuidePath?: string
 }
 
 /**
@@ -2833,6 +2840,9 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             </details>
 
+            {/* "How it works" (2026-11-20, HowItWorks.tsx): every page explained, one tap from anywhere. */}
+            <HowItWorks leagueCount={leagues.length} />
+
             {/*
               Notifications, with its count, while a league is open (2026-11-15). The rail drops its
               "Manage" group inside a league, and this count was only ever there. Not on a phone
@@ -3002,6 +3012,12 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               ))}
             </nav>
           ) : null}
+          {/*
+            "What's this page?" (2026-11-20, ScreenGuide.tsx): one line above every screen that
+            opens into what the page is for and where to start. Open the first time a page is seen,
+            one quiet line after that. In the shell so no screen can be left unexplained.
+          */}
+          <ScreenGuide path={props.screenGuidePath} />
           <ShellSignalsContext.Provider value={setPublishedSignals}>
             <CoreNavPendingContext.Provider value={navPending != null}>
               <PlayerCardProvider>{children}</PlayerCardProvider>
