@@ -30,6 +30,7 @@
 
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
+import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
 
 /** Within this many points, a start/sit call is "same" — the Receipts card's AutoCoach band. */
 export const LEDGER_SAME_BAND = 1
@@ -117,6 +118,15 @@ export type BenchRow = {
   withdrawn: boolean
   recPts: number | null
   altPts: number | null
+  /**
+   * What the call knew, for the bench check's own calibration (`decision-os/lineup/benchCalibration.ts`): the sport,
+   * both projections when it was made, and when. Absent on a row read before 2026-11-21 — such a row grades the tally
+   * as always and is simply not folded into an edge band.
+   */
+  sport?: string | null
+  recProjected?: number | null
+  altProjected?: number | null
+  givenAt?: Date | string | null
 }
 
 export type AddRow = {
@@ -154,6 +164,12 @@ export type LedgerSnapshot = {
    * written before 2026-11-20, and on a rebuild with no scored claim to grade.
    */
   waiverEngine?: WaiverEngineLedger
+  /**
+   * NFL bench calls by their projected edge (2–4, 4–8, 8+ points) — the bench check's own calibration
+   * (`lib/decision-os/lineup/benchCalibration.ts`). Absent on a snapshot written before 2026-11-21, and when no
+   * graded NFL call carried both projections.
+   */
+  benchEdges?: BenchEdgeLedger
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -172,6 +188,7 @@ export function foldLedger(input: {
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
+  const edgeCalls: GradedBenchCall[] = []
   const pickups: PickupTally = { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 }
   const users = new Map<string, { b?: [number, number, number]; p?: [number, number]; calls: number }>()
   const userOf = (id: string) => {
@@ -196,6 +213,15 @@ export function foldLedger(input: {
     const call = gradeStartSit(r.recPts, r.altPts)
     bench[call]++
     bench.gain += r.recPts - r.altPts
+    // The bench check's calibration: NFL calls that carried both projections, by their projected edge.
+    if (String(r.sport ?? '').trim().toUpperCase() === 'NFL' && typeof r.recProjected === 'number' && typeof r.altProjected === 'number') {
+      const given = r.givenAt == null ? NaN : new Date(r.givenAt).getTime()
+      edgeCalls.push({
+        edge: r.recProjected - r.altProjected,
+        call,
+        ageDays: Number.isFinite(given) ? Math.max(0, (now.getTime() - given) / 86_400_000) : 0,
+      })
+    }
     if (r.userId) {
       const u = userOf(r.userId)
       const b = (u.b ??= [0, 0, 0])
@@ -235,6 +261,7 @@ export function foldLedger(input: {
   }
 
   const kept = [...users].sort((a, b) => b[1].calls - a[1].calls).slice(0, MAX_LEDGER_USERS)
+  const benchEdges = edgeCalls.length > 0 ? foldBenchEdgeBands(edgeCalls) : null
   return {
     season: input.season,
     throughWeek: completedThrough(cal, now),
@@ -243,6 +270,7 @@ export function foldLedger(input: {
     trades: input.trades,
     ...(input.commissionerTrades ? { commissionerTrades: input.commissionerTrades } : {}),
     ...(input.waiverEngine && Object.keys(input.waiverEngine).length > 0 ? { waiverEngine: input.waiverEngine } : {}),
+    ...(benchEdges && Object.keys(benchEdges).length > 0 ? { benchEdges } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }

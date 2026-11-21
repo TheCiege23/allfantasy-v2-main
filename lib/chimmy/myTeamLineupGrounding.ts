@@ -5,6 +5,8 @@ import { optimizeLineup, type LineupOptimization } from '@/lib/decision-os/lineu
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import type { ChatStartCall } from './tools/chimmyTools'
+import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
+import { BENCH_EDGE_LABEL, benchCallRecord, type BenchCalibration } from '@/lib/decision-os/lineup/benchCalibration'
 
 /**
  * ONE START/SIT ANSWER: Chimmy reads My Team's (Lineup OS, 2026-11-16 re-score item 6).
@@ -29,7 +31,11 @@ import type { ChatStartCall } from './tools/chimmyTools'
  * AllFantasy never sets a lineup: this explains My Team's recommendation; the user makes the move.
  */
 
-export type MyTeamLineupDeps = { load: (leagueId: string, userId: string) => Promise<MyTeamData | null> }
+export type MyTeamLineupDeps = {
+  load: (leagueId: string, userId: string) => Promise<MyTeamData | null>
+  /** The bench check's graded record (2026-11-21): said beside a one-swap verdict, never changing it. */
+  calibration: (league: { sport: string | null | undefined; platform: string | null | undefined }) => Promise<BenchCalibration | null>
+}
 
 /*
  * ONE MY TEAM LOAD PER TURN (2026-11-20). A lineup question now asks for this answer twice: the grounding packet's
@@ -57,7 +63,7 @@ export function __resetMyTeamLoadsForTests(): void {
   loads.clear()
 }
 
-const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => loadShared(leagueId, userId) }
+const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => loadShared(leagueId, userId), calibration: loadBenchCalibration }
 
 const BENCH_SHOWN = 6
 
@@ -188,6 +194,27 @@ export async function buildMyTeamLineupContext(
     // One clear swap is a start/sit call worth grading later (the advice ledger); a reshuffle or a close call is not.
     const p = data.projections
     const only = opt.changes.length === 1 ? opt.changes[0]! : null
+    /*
+     * The bench check's own graded record for one swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`)
+     * — the same record My Team shows beside its bench check. It is said beside the verdict and never changes it.
+     */
+    const edge =
+      opt.verdict === 'swap' && only?.outName && typeof only.inProjected === 'number' && typeof only.outProjected === 'number'
+        ? only.inProjected - only.outProjected
+        : null
+    if (edge != null) {
+      const calibration = await Promise.resolve()
+        .then(() => d.calibration({ sport: data.league.sport ?? null, platform: data.league.platform ?? null }))
+        .catch(() => null)
+      const record = benchCallRecord(edge, calibration)
+      if (record) {
+        lines.push(
+          `How My Team's bench calls like this have held up: swaps with an edge of ${BENCH_EDGE_LABEL[record.band]} were right ${record.rightPct}% of ${record.decided} graded calls` +
+            (record.level === 'low' ? ' — closer than the projections suggest; say this call is closer than it looks.' : '.') +
+            ' Quote these numbers if asked how sure this is; never call the swap certain.',
+        )
+      }
+    }
     if (args.onStartCall && opt.verdict === 'swap' && only?.outName && p && p.available) {
       const idOf = (name: string) => [...starters.flatMap((s) => (s.player ? [s.player] : [])), ...bench].find((x) => x.name === name)?.sleeperId
       const recId = idOf(only.inName)

@@ -1144,6 +1144,12 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
           starter: check.starterName,
           starterPts: <span className="af-num">{check.starterProjected.toFixed(1)}</span>,
         })}
+        {/* The bench check's graded record for a swap of this size — said beside the call, never changing it. */}
+        {check.verdict === 'swap' && check.record ? (
+          <span className="af-mt-bench-check-record" data-level={check.record.level}>
+            {m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low')}
+          </span>
+        ) : null}
       </span>
       <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
         tab: 'chimmy', leagueId,

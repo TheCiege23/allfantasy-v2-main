@@ -204,7 +204,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Player Value | ~93 | ~90 | ~100 | Kernel ⚠ → ✅ in this change: every live league-board read (value answer, Waivers, card, metrics, in-league trade grade, roster grade, daily Guilly) goes through Value OS's `leagueBoard` feed (below). User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
 | Trade | ~86 | ~79 | ~83 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule) in this change: the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. A reclassification, not new capability (below). Engine ⚠ and Cron ⚠ as before |
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
-| Lineup | ~86 | ~80 | ~80 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠: graded start/sit is reported, not fed back into the optimizer |
+| Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
 | Manager Psychology | ~90 | ~63 | ~93 | Feed ❌ → ✅ and Kernel ⚠ → ✅ in this change: manager records read through the `psychology` feed (below). Cron ⚠ stays: ESPN/MFL waivers and Fantrax trades refresh only at import or upload (a provider-quota decision) |
 | Decision OS hub | ~86 | ~79 | ~86 | Operability ⚠ → ✅ in this build: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own |
@@ -223,6 +223,23 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 - Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
 
 **Built in this change (no migration):**
+- **My Team's bench check learns from its own graded calls** (owner's call, 2026-11-21: confidence, never the
+  choice). Every "start X over Y" swap is recorded with both projections and graded once the games are played —
+  right, wrong, or the same within a point — and until now that grade fed nothing: a 2.5-point edge and a 12-point
+  edge read alike. The ledger now folds NFL calls by their projected edge (2–4, 4–8, 8+ points,
+  `decision-os/lineup/benchCalibration.ts`), and each swap carries how swaps that size have held up: a line under
+  the call on My Team (English and Spanish), and beside Chimmy's one-swap lineup verdict.
+  - 🛑 **The call is never touched**: which bench player, the verdict, the 2-point threshold and the lineup are the
+    engine's. Only the confidence said beside it comes from the record — the waiver engine's rule.
+  - A band says nothing until 20 of its calls were decided (a tie decides nothing); its rate is shrunk toward a coin
+    flip and decayed with a four-week half-life. A band whose swaps have been right under 55% says the call is
+    closer than the projections suggest.
+  - NFL Sleeper leagues only — the calls the ledger records and grades, in each league's own weekly points. Other
+    sports' edges are in different units and are not folded.
+  - ⚠ **It needs the projection columns.** The calls' projections live in `chimmy_advice.rec_projected` /
+    `alt_projected` (`20261115000000_chimmy_advice_ledger_inputs`). The read tolerates a database without them —
+    the original query runs and the bench record is exactly what it was — so until they exist the line simply
+    never appears. Confirm with `SELECT column_name FROM information_schema.columns WHERE table_name = 'chimmy_advice'`.
 - **League value boards read through Value OS** (ranked item 4, 2026-11-21). Every NBA, NHL, MLB, college basketball
   and soccer surface — Chimmy's value answer and league metrics, the Waivers board, the player card, the in-league
   trade grade, the roster grade and a daily-sport Guilly grade — built the league's board from scratch on every read:

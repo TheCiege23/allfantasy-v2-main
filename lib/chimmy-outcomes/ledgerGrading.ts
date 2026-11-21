@@ -101,9 +101,14 @@ function leagueScope(column: Prisma.Sql, leagueIds: readonly string[] | undefine
   return leagueIds ? Prisma.sql`AND ${column} = ANY(${[...leagueIds]}::text[])` : Prisma.empty
 }
 
-async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
-  const rows = await db.$queryRaw<Array<{ user_id: string; week: number; withdrawn: boolean; rec_pts: number | null; alt_pts: number | null }>>`
-    SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
+type BenchRowSql = {
+  user_id: string; week: number; withdrawn: boolean; rec_pts: number | null; alt_pts: number | null
+  sport?: string | null; rec_projected?: number | null; alt_projected?: number | null; given_at?: Date | null
+}
+
+/** Exported for its fallback test (`__tests__/decision-os/bench-calibration.test.ts`). */
+export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
+  const from = Prisma.sql`
     FROM chimmy_advice a
     JOIN leagues l ON l.id = a.league_id
     LEFT JOIN league_player_weekly_scores r
@@ -112,12 +117,34 @@ async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string
       ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
     WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}
       ${leagueScope(Prisma.sql`a.league_id`, leagueIds)}`
+  /*
+   * What each call knew (2026-11-21), for the bench check's own calibration: the sport, both projections when it was
+   * made, and when. ⚠ `rec_projected` / `alt_projected` arrive with `20261115000000_chimmy_advice_ledger_inputs`, and
+   * the writer already tolerates a database without them — so does this read: if the wider SELECT fails, the original
+   * one runs and the tally is exactly what it was, with no edge bands. A missing column is "no calibration", never a
+   * lost bench record.
+   */
+  let rows: BenchRowSql[]
+  try {
+    rows = await db.$queryRaw<BenchRowSql[]>`
+      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts,
+             a.sport, a.rec_projected, a.alt_projected, a.given_at
+      ${from}`
+  } catch {
+    rows = await db.$queryRaw<BenchRowSql[]>`
+      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
+      ${from}`
+  }
   return rows.map((r) => ({
     userId: r.user_id,
     week: Number(r.week),
     withdrawn: Boolean(r.withdrawn),
     recPts: r.rec_pts == null ? null : Number(r.rec_pts),
     altPts: r.alt_pts == null ? null : Number(r.alt_pts),
+    sport: r.sport ?? null,
+    recProjected: r.rec_projected == null ? null : Number(r.rec_projected),
+    altProjected: r.alt_projected == null ? null : Number(r.alt_projected),
+    givenAt: r.given_at ?? null,
   }))
 }
 
