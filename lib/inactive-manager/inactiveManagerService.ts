@@ -57,6 +57,9 @@ export const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot' as const
 /** Chimmy autopilot is on the AF Commissioner plan — the LEAGUE OWNER's, as with the other commissioner tools. */
 export async function autopilotEntitled(leagueOwnerUserId: string | null | undefined): Promise<boolean> {
   if (!leagueOwnerUserId) return false
+  // A site admin's own league is a test league: every Chimmy team in it plays, plan or no plan. Without
+  // this, such a league took twelve Chimmy teams and then drafted instantly for one of them.
+  if ((await chimmyTeamLimitFor(leagueOwnerUserId)) > CHIMMY_MANAGER_LIMIT) return true
   try {
     return Boolean((await new EntitlementResolver().resolveForUser(leagueOwnerUserId, AUTOPILOT_FEATURE)).hasAccess)
   } catch {
@@ -238,8 +241,7 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
   // Without the plan Chimmy still runs one team for free (CHIMMY_FREE_TEAMS); the plan raises it to the
   // league limit. Which one is free is decided under the league lock below, with the limit.
   const teamLimit = await chimmyTeamLimitFor(league.userId)
-  // A site admin's own league is a test league: the plan question does not apply to it.
-  const entitled = nextStyle === null ? true : teamLimit > CHIMMY_MANAGER_LIMIT || (await autopilotEntitled(league.userId))
+  const entitled = nextStyle === null ? true : await autopilotEntitled(league.userId)
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
