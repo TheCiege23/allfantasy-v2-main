@@ -834,6 +834,26 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     }
 
     /*
+     * NFL draft picks keyed by COLLEGE athlete id: the link the C2C / Devy pipeline needs to move a
+     * drafted college player to the NFL roster and to size the shortened rookie draft
+     * (lib/devy/cfbdDraftPicksStore.ts). One CFBD call per draft year at most daily, behind the
+     * same quota reserve as the other devy phases.
+     */
+    let cfbdDraftPicks: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
+    if (budget.exhausted()) {
+      deferredPhases.push('cfbdDraftPicks')
+    } else if (!cfbdGate.allowed) {
+      cfbdDraftPicks = cfbdReserved('cfbdDraftPicks')
+    } else try {
+      const { refreshCfbdDraftPicks } = await import('@/lib/devy/cfbdDraftPicksStore')
+      cfbdDraftPicks = await refreshCfbdDraftPicks()
+    } catch (picksError) {
+      const message = picksError instanceof Error ? picksError.message : String(picksError)
+      console.error('[cron/import-players] CFBD draft picks failed:', message)
+      cfbdDraftPicks = { error: message.slice(0, 200) }
+    }
+
+    /*
      * ── Sleeper player rows ───────────────────────────────────────────────
      *
      * ⚠ THE SEED SERVICE THAT WRITES THESE HAS NO CALLER. `SleeperPlayerSeedService`
@@ -1023,6 +1043,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyDraftStatus,
       devyIntelSources,
       devyIntel,
+      cfbdDraftPicks,
       sleeperRows,
       sleeperNbaRows,
       sleeperNbaIdentities,
