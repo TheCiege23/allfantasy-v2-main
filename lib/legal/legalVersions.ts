@@ -29,9 +29,10 @@ export const LEGAL_LAST_UPDATED_BY_PAGE = {
   privacy: "October 11, 2026",
   // Nov 21 2026: Terms 3.2/definitions moved Washington from "not available" to a Restricted
   // State. Owner's call to re-date: `terms` is also the Effective Date Terms 18.9's arbitration
-  // opt-out window runs from (lib/legal/termsUpdateNotice). The disclaimer stamp was NOT moved.
+  // opt-out window runs from (lib/legal/termsUpdateNotice). The State Notice (/disclaimer) §3 got the
+  // same Washington edit and was re-dated with it, also on the owner's call.
   terms: "November 21, 2026",
-  disclaimer: DOCUMENT_SET_2026_10_EFFECTIVE,
+  disclaimer: "November 21, 2026",
   smsTerms: DOCUMENT_SET_2026_10_EFFECTIVE,
   copyright: DOCUMENT_SET_2026_10_EFFECTIVE,
   dataDeletion: "September 2026",
