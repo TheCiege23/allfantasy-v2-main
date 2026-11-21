@@ -15,10 +15,11 @@ import {
   type CollegeProRole,
 } from './buildSides'
 import { decideLeadSide, type LeadReason, type LeadSide } from './leadSide'
-import { collegeProFormatOf, collegeSportFor, type CollegeProFormat } from './format'
+import { collegeProFormatOf, collegeSportFor, combinedTotal, readCollegeProScoring, type CollegeProFormat, type CollegeProScoring } from './format'
+import { isCommissioner } from '@/lib/commissioner/permissions'
 import { loadCollegePoints } from './collegePoints'
 
-export type { CollegeProFormat }
+export type { CollegeProFormat, CollegeProScoring }
 
 /**
  * One roster page for a league that is really two: the pro half and the college half.
@@ -70,6 +71,12 @@ export type CollegeProRosterPayload =
       leadReason: LeadReason
       /** Pro first or college first, already ordered for the page. */
       sides: CollegeProSide[]
+      /** Separate matchups (the default) or one combined weekly total. */
+      scoring: CollegeProScoring
+      /** Pro plus college this week, when scoring is combined. Null otherwise, or before anyone scores. */
+      combinedTotal: number | null
+      /** Whether this viewer may change `scoring` (the head commissioner). */
+      canEditScoring: boolean
       fetchedAt: string
     }
 
@@ -83,7 +90,7 @@ const emptyLists = (): CollegeProLists => ({ starters: [], bench: [], taxi: [], 
 export async function loadCollegeProRoster(leagueId: string, userId: string, now = new Date()): Promise<CollegeProRosterPayload> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
-    select: { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true },
+    select: { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true },
   })
   if (!league || league.platform !== 'sleeper' || !league.platformLeagueId) return { applies: false }
 
@@ -164,12 +171,17 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
       }
 
   const { lead, reason } = decideLeadSide({ now, proSport, collegeSport, games })
+  const scoring = readCollegeProScoring(league.settings)
+  const canEditScoring = await isCommissioner(leagueId, userId).catch(() => false)
   return {
     applies: true,
     format,
     lead,
     leadReason: reason,
     sides: lead === 'college' ? [college, pro] : [pro, college],
+    scoring,
+    combinedTotal: scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null,
+    canEditScoring,
     fetchedAt: now.toISOString(),
   }
 }
