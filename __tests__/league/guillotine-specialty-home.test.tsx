@@ -128,9 +128,11 @@ describe('GuillotineSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getAllByText('Guilly League 26').length).toBeGreaterThan(0)
-    expect(screen.getByText('14 teams · 3 alive')).toBeTruthy()
-    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5 · You’re 35.9 points over the cut')
+    // One header, not two: the workspace banner carries the name and team count, so the hero leads with the week.
+    expect(screen.queryByText('Guilly League 26')).toBeNull()
+    expect(screen.queryByText('14 teams · 3 alive')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('35.9 over the cut')
+    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5')
     expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('92.7')
     expect(screen.getByTestId('guillotine-cut-line').textContent).toBe('CUT LINE · 92.7')
     expect(screen.getByTestId('guillotine-your-survival').textContent).toContain('You’re 1st of 3. The cut is at 92.7.')

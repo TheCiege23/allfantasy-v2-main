@@ -29,12 +29,6 @@
 }
 
 .phone { flex-direction: column; gap: 16px; }
-.phoneHead { position: relative; overflow: hidden; border-radius: 16px; min-height: 150px; padding: 18px 16px; display: flex; align-items: flex-start; gap: 12px; }
-.phoneHead>img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.phoneHead>.veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 8, 13, .55), rgba(7, 8, 13, .92)); }
-.phoneHead>.emblem { position: relative; width: 56px; flex: none; }
-.phoneHeadText { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.phoneTitle { margin: 0; font-size: 32px; line-height: 1; color: #fff; }
 .phoneStatus { text-align: center; padding: 20px 18px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
 .phoneMargin { font-size: 64px; line-height: 1; color: #bff3d0; }
 .phoneCtas { display: flex; flex-direction: column; gap: 12px; }
