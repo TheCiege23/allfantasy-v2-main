@@ -15,6 +15,10 @@ describe('sleeperDraftCards', () => {
     expect(cards[0]).toMatchObject({ role: 'pro', detail: '4 rounds · linear', startsAt: '2027-05-02T00:00:00.000Z' })
   })
 
+  it('says "1 round", not "1 rounds"', () => {
+    expect(sleeperDraftCards([{ status: 'complete', season: '2026', type: 'linear', settings: { rounds: 1 } }])[0]?.detail).toBe('1 round · linear')
+  })
+
   it('says live while drafting, and passes an unknown status through instead of guessing', () => {
     expect(sleeperDraftCards([{ status: 'drafting', season: '2027' }])[0]).toMatchObject({ phase: 'live', status: 'Live now', detail: null })
     expect(sleeperDraftCards([{ status: 'weird_state', season: '2027' }])[0]).toMatchObject({ phase: 'unknown', status: 'weird_state' })
@@ -24,7 +28,7 @@ describe('sleeperDraftCards', () => {
 describe('fantraxDraftCard', () => {
   it("reports Cream Bowl's real board: completed with 156 of 192 slots used", () => {
     const card = fantraxDraftCard({ draftState: 'completed', slots: 192, picks: new Array(156).fill({}) }, 2026)
-    expect(card).toEqual({ role: 'college', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null })
+    expect(card).toEqual({ role: 'college', platform: 'fantrax', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null })
   })
 
   it('a board with no picks yet is upcoming, one mid-draft is live', () => {

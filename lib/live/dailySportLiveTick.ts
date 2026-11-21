@@ -60,7 +60,8 @@ import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
  * roster page reads these rows itself (lib/league/collegePro/collegePoints.ts). College football is
  * on the SECOND Rolling Insights account, which `riFetchRows` already iterates.
  */
-export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB', 'NCAAF'] as const
+// NCAAB joined 2026-11-21 for the basketball C2C roster page (lib/league/collegePro/dailyPoints.ts), write-only like NCAAF.
+export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'] as const
 export type DailyLiveSport = (typeof DAILY_LIVE_SPORTS)[number]
 
 /** Persisted per-(sport, Eastern date) poll state lives under this `sports_data_cache` key prefix. */
@@ -81,6 +82,7 @@ export const MAX_GAME_LENGTH_MS: Record<DailyLiveSport, number> = {
   NBA: 3.25 * 3_600_000,
   NHL: 3.5 * 3_600_000, // overtime + shootout
   NCAAF: 4.5 * 3_600_000, // college games run long: clock rules, overtime periods, weather delays
+  NCAAB: 3 * 3_600_000, // two halves, media timeouts, overtime
 }
 
 /** Most seasons one pass will rescore per sport; the 5-minute score-sync still reconciles every one. */
@@ -408,7 +410,7 @@ export async function runDailySportLiveTick(opts: {
 }
 
 /** Sports whose live rows feed a reader directly and have no redraft rescore here. */
-const WRITE_ONLY_LIVE_SPORTS: ReadonlySet<DailyLiveSport> = new Set(['NCAAF'])
+const WRITE_ONLY_LIVE_SPORTS: ReadonlySet<DailyLiveSport> = new Set(['NCAAF', 'NCAAB'])
 
 async function rescoreSport(
   sport: DailyLiveSport,

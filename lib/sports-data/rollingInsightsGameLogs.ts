@@ -349,7 +349,7 @@ function goalieLinePlayed(raw: Record<string, unknown>): boolean {
 }
 
 /** RI's `status` vocabulary (ENDPOINTS.yaml): only these two mean the box is settled. */
-function isFinalRiStatus(status: string | null | undefined): boolean {
+export function isFinalRiStatus(status: string | null | undefined): boolean {
   const s = String(status ?? '').trim().toLowerCase()
   return s === 'final' || s === 'completed'
 }
@@ -605,7 +605,9 @@ export async function writeRiGameRows(opts: {
       season: box.season ?? fallbackSeason,
       weekOrRound: box.weekOrRound,
       statPayload: toPrismaJsonInput(line.raw),
-      normalizedStatMap: toPrismaJsonInput(normalized),
+      normalizedStatMap: toPrismaJsonInput(sport === 'NCAAB' || sport === 'NCAAF'
+        ? { ...normalized, gameFinal: isFinalRiStatus(box.status) }
+        : normalized),
       source: SOURCE,
       confidence,
       team: line.team,

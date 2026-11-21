@@ -258,6 +258,14 @@ function toRuntimeTransaction(row: {
   }
 }
 
+/**
+ * Where a READ path gets the league ruleset (2026-11-21 re-score: this read went around League OS). A GET route passes
+ * League OS's `loadRules` (`createLeagueOsLoaders`), which holds the ruleset for 60 s; every other caller — proposal
+ * validation, roster limits, move sync, matchup completion, anything that PERSISTS on the result — passes nothing and
+ * keeps reading it live, as League OS's own header requires.
+ */
+export type WaiverRuntimeRulesDeps = { loadRules?: (leagueId: string) => ReturnType<typeof resolveCanonicalLeagueRules> }
+
 export async function resolveNflRedraftWaiverRuntime(input: {
   seasonId?: string | null
   leagueId?: string | null
@@ -265,12 +273,12 @@ export async function resolveNflRedraftWaiverRuntime(input: {
   now?: Date
   includeFreeAgents?: boolean
   extraFreeAgents?: NflRedraftWaiverPlayerInput[]
-}): Promise<NflRedraftWaiverRuntimeResolved> {
+}, deps: WaiverRuntimeRulesDeps = {}): Promise<NflRedraftWaiverRuntimeResolved> {
   const season = await resolveSeason(input)
   if (!season) return { ok: false, reason: 'season_not_found' }
   if (String(season.sport).toUpperCase() !== 'NFL') return { ok: false, reason: 'not_nfl_redraft' }
 
-  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  const rules = await (deps.loadRules ?? resolveCanonicalLeagueRules)(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 

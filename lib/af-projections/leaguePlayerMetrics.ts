@@ -162,8 +162,17 @@ async function readFootballSeasonRows(sport: string, season: number): Promise<Fo
     for (const p of played) returning.add(p.playerId)
     for (const p of enrolled) if (p.cfbdId) returning.add(p.cfbdId)
   }
+  const verifiedKeys = rows.filter(row => {
+    const factors = row.adjustmentFactors
+    return factors && typeof factors === 'object' && !Array.isArray(factors) && typeof factors.verifiedBoxVersion === 'string'
+  }).map(row => row.playerId)
+  const identities = sport === 'NCAAF' && verifiedKeys.length ? await prisma.playerIdentityMap.findMany({
+    where: { sport, id: { in: verifiedKeys }, cfbdId: { not: null } }, select: { id: true, cfbdId: true },
+  }) : []
+  const currentKeys = new Set(rows.filter(row => !oldKeys.has(row.playerId) || returning.has(row.playerId)).map(row => row.playerId))
+  const replaced = new Set(identities.filter(identity => identity.cfbdId && currentKeys.has(identity.cfbdId)).map(identity => identity.id))
   return rows.flatMap((row) => {
-    if (oldKeys.has(row.playerId) && !returning.has(row.playerId)) return []
+    if (!currentKeys.has(row.playerId) || replaced.has(row.playerId)) return []
     const factors = row.adjustmentFactors
     const rates = sport === 'NFL' && factors && typeof factors === 'object' && !Array.isArray(factors)
       ? nflComponentRates(factors) : field(factors, 'perGameRates')
@@ -255,11 +264,12 @@ export async function loadLeaguePlayerMetrics(args: {
       playerId: player.id, playerName: player.name, position: player.position, perGame: player.perGame,
     }] : [])
     : sport === 'NCAAB' ? await loadCollegeBasketballRates(season, league.settings) : footballRates
+  const projectedKeys = sport === 'NCAAF' ? new Set(rates.map(row => row.playerId)) : undefined
   const rosterKeys = new Map<string, string>()
   if (args.rosterIds) {
     const namespace = leagueIdColumn(league.platform, sport)
     const column = sport === 'NFL' && namespace === 'rollingInsightsId' ? 'sleeperId' : namespace
-    const linked = column ? await resolveRosterIdsToKeys(prisma, sport, column, args.rosterIds) : new Map<string, string>()
+    const linked = column ? await resolveRosterIdsToKeys(prisma, sport, column, args.rosterIds, projectedKeys) : new Map<string, string>()
     for (const id of args.rosterIds) {
       const key = activeBoard?.ctx.rosterIndex?.get(id)?.id ?? linked.get(id)
       if (key) rosterKeys.set(key, id)
@@ -281,7 +291,7 @@ export async function loadLeaguePlayerMetrics(args: {
         OR p."normalizedName" = ${wantedName} OR lower(trim(p."canonicalName")) = lower(trim(${args.playerName}::text))
       )`
     if (matches.length) {
-      const linked = await resolveRosterIdsToKeys(prisma, sport, 'fantraxId', matches.map(row => row.rosterId))
+      const linked = await resolveRosterIdsToKeys(prisma, sport, 'fantraxId', matches.map(row => row.rosterId), projectedKeys)
       namedRosterKeys = new Set(linked.values())
     }
   }

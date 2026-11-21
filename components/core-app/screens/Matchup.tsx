@@ -1363,7 +1363,13 @@ export function Matchup({ data }: MatchupProps) {
                     <span>
                       {g.result == null
                         ? copy('Not scored yet')
-                        : `${g.yourPoints.toFixed(2)} – ${g.opponentPoints.toFixed(2)} · ${copy(g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Tie')}`}
+                        : `${g.yourPoints.toFixed(2)} – ${g.opponentPoints.toFixed(2)} · ${copy(
+                            /* A result only once the week is final. Production 2026-11-21: "0.00 – 25.40 · Loss"
+                               on a Saturday, under a headline that read "Behind by 25.4 so far". */
+                            weekState === 'final'
+                              ? (g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Tie')
+                              : (g.result === 'win' ? 'Ahead' : g.result === 'loss' ? 'Behind' : 'Level'),
+                          )}`}
                     </span>
                   </Link>
                 </li>

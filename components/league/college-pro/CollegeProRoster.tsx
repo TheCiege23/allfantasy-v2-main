@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Link from 'next/link'
 import { RosterRow } from '@/app/league/[leagueId]/tabs/TeamTab'
 import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
+import type { CollegeProLink, CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 import type { CollegeProDraft } from '@/lib/league/collegePro/drafts'
 import type { CollegeProPipeline } from '@/lib/league/collegePro/pipeline'
+import type { HeadToHead, TeamMapEditor } from '@/lib/league/collegePro/headToHead'
 
 type CollegeProRosterPayloadDrafts = CollegeProDraft[]
 
@@ -60,7 +61,20 @@ export function CollegeProRoster({
       </div>
     )
   }
-  if (state.status === 'error' || !state.data.applies) return <>{fallback}</>
+  if (state.status === 'error') return <>{fallback}</>
+  if (!state.data.applies) {
+    // An unlinked C2C / Devy league: offer the link above its standard page.
+    return (
+      <>
+        {state.data.link ? (
+          <div className="px-4 pt-4 lg:px-6">
+            <LinkHalfCard leagueId={leagueId} link={state.data.link} onLinked={load} />
+          </div>
+        ) : null}
+        {fallback}
+      </>
+    )
+  }
 
   const data = state.data
   const lead = manualLead ?? data.lead
@@ -99,8 +113,12 @@ export function CollegeProRoster({
         </div>
       </div>
 
+      {data.link ? <LinkHalfCard leagueId={leagueId} link={data.link} onLinked={load} /> : null}
+
       <ScoringBar
-        leagueId={leagueId}
+        leagueId={data.proLeagueId}
+        headToHead={data.headToHead}
+        teamMap={data.teamMap}
         scoring={data.scoring}
         canEdit={data.canEditScoring}
         total={data.combinedTotal}
@@ -135,7 +153,7 @@ function DraftsCard({ drafts, pipeline, proSport }: { drafts: CollegeProRosterPa
             <div className="min-w-0">
               <p className="text-xs font-semibold text-primary">
                 {d.season ?? ''} {d.role === 'pro' ? `${proSport} draft` : 'College draft'}
-                <span className="ml-1.5 font-normal text-muted">{d.role === 'pro' ? 'on Sleeper' : 'on Fantrax'}</span>
+                <span className="ml-1.5 font-normal text-muted">{d.platform === 'sleeper' ? 'on Sleeper' : 'on Fantrax'}</span>
               </p>
               {d.detail || d.startsAt ? (
                 <p className="text-[11px] text-muted">
@@ -195,13 +213,18 @@ function PipelineSection({ pipeline, proSport }: { pipeline: CollegeProPipeline;
  */
 function ScoringBar({
   leagueId,
+  headToHead,
+  teamMap,
   scoring,
   canEdit,
   total,
   sides,
   onSaved,
 }: {
+  /** The PRO league: the setting lives there even when the page was opened from the college league. */
   leagueId: string
+  headToHead: HeadToHead | null
+  teamMap: TeamMapEditor | null
   scoring: 'separate' | 'combined'
   canEdit: boolean
   total: number | null
@@ -210,7 +233,10 @@ function ScoringBar({
 }) {
   const [saving, setSaving] = useState<'separate' | 'combined' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [matching, setMatching] = useState(false)
   const pro = sides.find((s) => s.role === 'pro')
+  const opp = headToHead?.opponent ?? null
+  const winning = opp && total != null && opp.total != null ? total >= opp.total : null
   const college = sides.find((s) => s.role === 'college')
 
   const save = async (next: 'separate' | 'combined') => {
@@ -242,7 +268,16 @@ function ScoringBar({
         {scoring === 'combined' ? (
           <p className="text-xs text-secondary" data-testid="college-pro-combined-total">
             <span className="mr-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">This week</span>
-            <span className="text-base font-bold tabular-nums text-primary">{total == null ? '—' : total.toFixed(2)}</span>
+            <span className={['text-base font-bold tabular-nums', winning === true ? 'text-emerald-500' : winning === false ? 'text-rose-500' : 'text-primary'].join(' ')}>
+              {total == null ? '—' : total.toFixed(2)}
+            </span>
+            {opp ? (
+              <span data-testid="college-pro-h2h">
+                <span className="mx-1.5 text-muted">vs</span>
+                <span className="text-secondary">{opp.name ?? 'Opponent'}</span>
+                <span className="ml-1.5 text-base font-bold tabular-nums text-primary">{opp.total == null ? '—' : opp.total.toFixed(2)}</span>
+              </span>
+            ) : null}
             <span className="ml-2 tabular-nums text-muted">
               {pro ? sideTitle(pro) : 'Pro'} {fmt(pro?.score.total ?? null)} + College {fmt(college?.score.total ?? null)}
             </span>
@@ -275,6 +310,161 @@ function ScoringBar({
           <span className="text-[11px] text-muted">{scoring === 'combined' ? 'Combined scoring' : 'Separate scoring'}</span>
         )}
       </div>
+      {scoring === 'combined' && headToHead?.missing ? (
+        <p className="mt-1.5 text-[11px] text-muted" data-testid="college-pro-h2h-missing">
+          {headToHead.missing}
+          {teamMap ? (
+            <button type="button" onClick={() => setMatching((v) => !v)} className="ml-2 font-semibold text-[var(--badge-text-cyan)] hover:underline">
+              {matching ? 'Close' : 'Match teams'}
+            </button>
+          ) : null}
+        </p>
+      ) : scoring === 'combined' && teamMap ? (
+        <button type="button" onClick={() => setMatching((v) => !v)} className="mt-1.5 text-[11px] font-semibold text-[var(--badge-text-cyan)] hover:underline">
+          {matching ? 'Close team matching' : 'Edit team matching'}
+        </button>
+      ) : null}
+      {matching && teamMap ? <TeamMatchPanel leagueId={leagueId} editor={teamMap} onSaved={async () => { setMatching(false); await onSaved() }} /> : null}
+      {error ? <p className="mt-1.5 text-[11px] text-rose-500">{error}</p> : null}
+    </section>
+  )
+}
+
+/**
+ * The commissioner confirms which Fantrax team is whose. Name matches arrive pre-filled and marked
+ * "suggested"; nothing counts until it is saved.
+ */
+function TeamMatchPanel({ leagueId, editor, onSaved }: { leagueId: string; editor: TeamMapEditor; onSaved: () => Promise<void> }) {
+  const [choice, setChoice] = useState<Record<string, string>>(() => ({ ...editor.suggested, ...editor.saved }))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const taken = (teamId: string, rosterId: string) => Object.entries(choice).some(([r, t]) => t === teamId && r !== rosterId)
+  const matched = editor.sleeperTeams.filter((t) => choice[t.rosterId]).length
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const teamMap = Object.fromEntries(Object.entries(choice).filter(([, t]) => t))
+      const res = await fetch('/api/league/college-pro-roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, teamMap }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(body?.error ?? 'Could not save. Try again.')
+      } else {
+        await onSaved()
+      }
+    } catch {
+      setError('Could not save. Try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-subtle pt-3" data-testid="college-pro-team-match">
+      <p className="mb-2 text-xs text-secondary">
+        Match each pro team to its college team. {matched} of {editor.sleeperTeams.length} matched.
+      </p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {editor.sleeperTeams.map((t) => {
+          const value = choice[t.rosterId] ?? ''
+          const suggested = !editor.saved[t.rosterId] && value && editor.suggested[t.rosterId] === value
+          return (
+            <li key={t.rosterId} className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-xs text-primary" title={t.ownerName ?? undefined}>
+                {t.teamName ?? t.ownerName ?? `Team ${t.rosterId}`}
+              </span>
+              <select
+                value={value}
+                onChange={(e) => setChoice((c) => ({ ...c, [t.rosterId]: e.target.value }))}
+                aria-label={`Fantrax team for ${t.teamName ?? t.rosterId}`}
+                className="w-40 rounded-md border border-subtle bg-surface px-2 py-1 text-xs text-primary"
+              >
+                <option value="">Not matched</option>
+                {editor.fantraxTeams.map((f) => (
+                  <option key={f.teamId} value={f.teamId} disabled={taken(f.teamId, t.rosterId)}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              <span className="w-16 text-[11px] text-muted">{suggested ? 'suggested' : ''}</span>
+            </li>
+          )
+        })}
+      </ul>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving}
+          className="rounded-full border border-cyan-400/50 bg-cyan-400/15 px-3 py-1 text-[11px] font-semibold text-[var(--badge-text-cyan)] disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : 'Save matches'}
+        </button>
+        {error ? <span className="text-[11px] text-rose-500">{error}</span> : null}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Link this league to its other half: the viewer picks it from their own leagues in the paired sport.
+ * Nothing is linked on a guess.
+ */
+function LinkHalfCard({ leagueId, link, onLinked }: { leagueId: string; link: CollegeProLink; onLinked: () => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const half = link.needRole === 'college' ? 'college' : 'pro'
+  const linkTo = async (otherLeagueId: string) => {
+    setBusy(otherLeagueId)
+    setError(null)
+    try {
+      const res = await fetch('/api/league/college-pro-roster/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, otherLeagueId }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(body?.error ?? 'Could not link these leagues. Try again.')
+      } else {
+        await onLinked()
+      }
+    } catch {
+      setError('Could not link these leagues. Try again.')
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/[0.06] p-3 sm:p-4" data-testid="college-pro-link">
+      <h2 className="text-sm font-bold text-primary">Link your {half} league</h2>
+      <p className="mt-0.5 text-xs text-secondary">See both lineups on one page, and score them together if your league does.</p>
+      {link.candidates.length === 0 ? (
+        <p className="mt-2 text-xs text-muted">Import your {half} league first, then link it here.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {link.candidates.map((c) => (
+            <li key={c.leagueId} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-primary">
+                {c.name} <span className="text-muted">· {c.sport} · {c.platform === 'fantrax' ? 'Fantrax' : c.platform === 'sleeper' ? 'Sleeper' : c.platform}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void linkTo(c.leagueId)}
+                disabled={busy != null}
+                className="rounded-full border border-cyan-400/50 bg-cyan-400/15 px-3 py-1 text-[11px] font-semibold text-[var(--badge-text-cyan)] disabled:opacity-60"
+              >
+                {busy === c.leagueId ? 'Linking…' : 'Link'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {error ? <p className="mt-1.5 text-[11px] text-rose-500">{error}</p> : null}
     </section>
   )
