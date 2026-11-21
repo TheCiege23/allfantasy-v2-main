@@ -55,6 +55,8 @@ const PRO: CollegeProSide = {
     ].map((x) => [x.id, x]),
   ),
   unavailable: null,
+  points: { hurts: 21.36, crod: 8.4, giddens: 12.1, mclaurin: 14.7, teslaa: 3.2, kelce: 9.8, qj: 16.5, barner: 6.0, daniels: 0, young: 11.2, juszczyk: 1.5 },
+  score: { week: 11, total: 93.56, opponent: { name: 'Connor0488', total: 101.2 }, note: null },
 }
 
 const COLLEGE: CollegeProSide = {
@@ -93,6 +95,8 @@ const COLLEGE: CollegeProSide = {
     ].map((x) => [x.id, x]),
   ),
   unavailable: null,
+  points: { 'c-qb1': 24.9, 'c-qb2': 18.3, 'c-rb1': 22.4, 'c-wr1': 11.0, 'c-wr2': 7.6, 'c-te1': 5.3, 'c-wr3': 13.1, 'c-rb2': 9.2, 'c-wr4': 4.4 },
+  score: { week: 11, total: 111.8, opponent: null, note: 'College points use standard college scoring, so Fantrax may show slightly different numbers.' },
 }
 
 let installed = false

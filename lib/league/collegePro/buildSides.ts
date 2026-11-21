@@ -99,3 +99,42 @@ export function buildFantraxLists(
   starters.sort((a, b) => slotRank(a.slot) - slotRank(b.slot))
   return { starters, bench, taxi: [], ir }
 }
+
+/** A half's score for the week: its starters' points, or null when no starter has a number yet. */
+export function sumStarterPoints(starters: CollegeProSlotRow[], points: Record<string, number>): number | null {
+  let total = 0
+  let any = false
+  for (const s of starters) {
+    if (!s.playerId) continue
+    const v = points[s.playerId]
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      total += v
+      any = true
+    }
+  }
+  return any ? Math.round(total * 100) / 100 : null
+}
+
+/**
+ * This roster's Sleeper matchup and its opponent's. `matchup_id` null is a bye (or a non-H2H week),
+ * which has no opponent. Two rosters sharing a matchup_id are the pairing.
+ */
+export function pairSleeperMatchup<T extends { roster_id: number; matchup_id: number | null }>(
+  matchups: readonly T[],
+  rosterId: number,
+): { mine: T | null; opponent: T | null } {
+  const mine = matchups.find((m) => m.roster_id === rosterId) ?? null
+  if (!mine || mine.matchup_id == null) return { mine, opponent: null }
+  const opponent = matchups.find((m) => m.matchup_id === mine.matchup_id && m.roster_id !== rosterId) ?? null
+  return { mine, opponent }
+}
+
+/** The name a Sleeper league shows for a team: the team name if set, else the manager's display name. */
+export function sleeperTeamName(
+  users: ReadonlyArray<{ user_id: string; display_name?: string | null; metadata?: { team_name?: string | null } | null }>,
+  ownerId: string | null | undefined,
+): string | null {
+  const u = users.find((x) => x.user_id === ownerId)
+  const team = u?.metadata?.team_name?.trim()
+  return team || u?.display_name?.trim() || null
+}

@@ -106,3 +106,40 @@ describe('collegeProFormatOf', () => {
     expect(collegeProFormatOf({ leagueType: 'dynasty' })).toBeNull()
   })
 })
+
+describe('scores', () => {
+  it('sums only starters that have a number, and says null when none do', async () => {
+    const { sumStarterPoints } = await import('@/lib/league/collegePro/buildSides')
+    const starters = [
+      { slot: 'QB', playerId: 'a' },
+      { slot: 'RB', playerId: 'b' },
+      { slot: 'FLEX', playerId: null },
+    ]
+    expect(sumStarterPoints(starters, { a: 10.125, b: 5, bench: 99 })).toBe(15.13)
+    expect(sumStarterPoints(starters, {})).toBeNull()
+  })
+
+  it('pairs a Sleeper matchup by matchup_id, and a bye has no opponent', async () => {
+    const { pairSleeperMatchup } = await import('@/lib/league/collegePro/buildSides')
+    const rows = [
+      { roster_id: 1, matchup_id: 3 },
+      { roster_id: 2, matchup_id: 4 },
+      { roster_id: 5, matchup_id: 3 },
+      { roster_id: 7, matchup_id: null },
+    ]
+    expect(pairSleeperMatchup(rows, 1).opponent?.roster_id).toBe(5)
+    expect(pairSleeperMatchup(rows, 7).opponent).toBeNull()
+    expect(pairSleeperMatchup(rows, 9)).toEqual({ mine: null, opponent: null })
+  })
+
+  it('names a Sleeper team by its team name, else its manager', async () => {
+    const { sleeperTeamName } = await import('@/lib/league/collegePro/buildSides')
+    const users = [
+      { user_id: 'u1', display_name: 'Connor0488', metadata: { team_name: '' } },
+      { user_id: 'u2', display_name: 'guap', metadata: { team_name: '(F) SF TEP' } },
+    ]
+    expect(sleeperTeamName(users, 'u1')).toBe('Connor0488')
+    expect(sleeperTeamName(users, 'u2')).toBe('(F) SF TEP')
+    expect(sleeperTeamName(users, 'nobody')).toBeNull()
+  })
+})

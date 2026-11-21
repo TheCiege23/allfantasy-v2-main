@@ -14,6 +14,8 @@ export type ConnectedRosterPlayer = {
   imageUrl: string | null; logoUrl: string | null
   /** Fantrax only: the slot the row occupies (e.g. 'QB', 'RWT', 'SFX') and its ACTIVE/RESERVE status. */
   rosterSlot?: string | null; rosterStatus?: string | null
+  /** Fantrax college players: the CFBD athlete id their game stats are stored under, when known. */
+  cfbdId?: string | null
 }
 
 /**
@@ -77,6 +79,6 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
         ?? asHeadshotUrl(images.find((img) => img.source === 'rolling_insights' && img.externalId === p?.rollingInsightsId)?.imageUrl)
         ?? (p?.sleeperId ? asHeadshotUrl(images.find((img) => img.sleeperId === p.sleeperId && img.imageUrl)?.imageUrl) : null),
       logoUrl: college ? school?.logo ?? null : teamLogoUrl(normalizedSport, team),
-      rosterSlot: rosterPosition, rosterStatus: field(r.status) }
+      rosterSlot: rosterPosition, rosterStatus: field(r.status), cfbdId: p?.cfbdId ?? null }
   })
 }
