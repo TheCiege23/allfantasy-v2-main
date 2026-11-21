@@ -23,6 +23,7 @@ import { attachTeamDefenseStats, loadNflTeamDefenseSeason } from '@/lib/draft-ro
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { CFBPlayerStats } from '@/lib/cfb-player-data'
+import { collegeNameKey } from '@/lib/mock-draft/collegeMockPoolOrder'
 
 type Row = Record<string, unknown>
 
@@ -126,16 +127,6 @@ async function storedFields(sport: 'NBA' | 'NHL' | 'MLB', entries: Row[]): Promi
 }
 
 const COLLEGE_SKILL_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE'])
-
-/** Mirrors `normalizeDevyName` (lib/devy/devyPlayerReads.ts), the key the college lines are stored under. */
-function collegeNameKey(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
-    .replace(/[^a-z ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 /**
  * Pure: each college row's season line, keyed the way the college stat columns read it.

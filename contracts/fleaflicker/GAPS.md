@@ -283,7 +283,8 @@ Commit it with the parser fix that reads it.
 ## `G-08` (live league) — a LIVE, in-season league's scoreboard was refused as "season unknown" (RESOLVED 2026-11-21)
 
 ⚠ This shares the id `G-08` with the older entry above about which endpoints reject `season`. They
-are unrelated; this is the one production notes and PR #3973 call `G-08`.
+are unrelated; this is the one production notes and PR #3973 call `G-08`. #3973 landed it as
+UNVERIFIED on 2026-11-20; this entry replaces that text with what the capture showed.
 
 **What was wrong.** The one Fleaflicker league in production (`344624`, NFL, season 2026, in season)
 had zero `WeeklyMatchup` rows. `runFleaflickerMatchupParity` skipped it every run with

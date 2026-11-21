@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { survivorPhaseWords } from '@/lib/survivor/survivorPhaseWords'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -123,7 +124,7 @@ type DashboardPayload = {
     tribalDeadline: string | null
   } | null
   week: number
-  tribes: { id: string; name: string; emoji?: string | null; members: { rosterId: string; userId?: string | null; displayName?: string | null }[] }[]
+  tribes: { id: string; name: string; emoji?: string | null; inGameCount?: number; members: { rosterId: string; userId?: string | null; displayName?: string | null }[] }[]
   tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null; defaultDecision?: string; options?: string[] } | null
   /** Older servers omit it. */
   todo?: SurvivorCommissionerTodo
@@ -136,6 +137,14 @@ type DashboardPayload = {
   eliminatedCount: number
   auditTail: { eventType: string; metadata: unknown; createdAt: string }[]
   monetization: { afPlan: AfPlanId | null; afTokensRemaining: number; subscriptionStatus: string }
+}
+
+/** "3 in the game" (and how many were voted out), not the tribe's all-time membership. */
+function tribeInGameText(tribe: { inGameCount?: number; members?: unknown[] }): string {
+  const all = Array.isArray(tribe.members) ? tribe.members.length : 0
+  const inGame = typeof tribe.inGameCount === 'number' ? tribe.inGameCount : all
+  const out = all - inGame
+  return out > 0 ? `${inGame} in the game · ${out} voted out` : `${inGame} in the game`
 }
 
 export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }) {
@@ -318,7 +327,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                     {data ? (
                       <>
                         {data.league.sport} · Week {data.week} ·{' '}
-                        <span className="font-medium text-amber-100/90">{gs?.phase ?? 'loading'}</span>
+                        <span className="font-medium text-amber-100/90">{survivorPhaseWords(gs?.phase) ?? 'loading'}</span>
                       </>
                     ) : (
                       'Loading island…'
@@ -384,7 +393,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             <>
               {data.todo ? <SurvivorCommissionerTodoCard todo={data.todo} /> : null}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <WarRoomStatOrb label="Phase" value={gs?.phase ?? '—'} hint="Game state" accent="emerald" />
+                <WarRoomStatOrb label="Phase" value={survivorPhaseWords(gs?.phase) ?? '—'} hint="Game state" accent="emerald" />
                 <WarRoomStatOrb
                   label="Players / roster"
                   value={`${Math.max(0, data.rosterCount - data.eliminatedCount)} active`}
@@ -536,7 +545,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                       <div key={tribe.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <p className="text-sm font-semibold text-white">{tribe.name}</p>
-                          <span className="text-xs text-white/45">{Array.isArray(tribe.members) ? tribe.members.length : 0} members</span>
+                          <span className="text-xs text-white/45" data-testid="survivor-tribe-in-game">{tribeInGameText(tribe)}</span>
                         </div>
                         <div className="grid gap-3 lg:grid-cols-[120px_minmax(0,1fr)_auto]">
                           <div>
