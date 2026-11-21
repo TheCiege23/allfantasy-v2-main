@@ -831,9 +831,13 @@ describe('🛑 one late read costs ITS slice, never the packet (re-score 2026-11
   it('a read that never finishes becomes a "did not finish in time" gap, and the packet still lands with the rest', async () => {
     const { PACKET_SLICE_DEADLINE_MS, SLICE_LATE_GAP } = await import('@/lib/decision-os/grounding/packet')
     leagueIntel.mockImplementation(never)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const started = Date.now()
     const p = await buildDecisionOsGroundingPacket(ARGS)
     const took = Date.now() - started
+    // Logged although the packet itself landed in time (2026-11-21), by name only.
+    expect(warn).toHaveBeenCalledWith('[decision-os/packet] slices did not finish in time', expect.objectContaining({ slices: ['leagueIntelligence'] }))
+    warn.mockRestore()
     // Bounded by the packet's own budget — under the chat route's 3,000 ms ceiling, which used to drop EVERYTHING.
     expect(took).toBeGreaterThanOrEqual(PACKET_SLICE_DEADLINE_MS - 50)
     expect(took).toBeLessThan(3000)

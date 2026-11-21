@@ -1797,6 +1797,18 @@ export async function buildDecisionOsGroundingPacket(
   }
   importSlice = stamp('importAssertions', importSlice)
   leagueRules = stamp('leagueRules', leagueRules)
+  /*
+   * A late slice is logged even when the packet itself lands in time (2026-11-21 re-score: the chat route only logs the
+   * slowest slices when the WHOLE packet misses its ceiling, so a slice that kept going late inside an on-time packet
+   * showed up only as a gap in one prompt). Names and times only — no league content.
+   */
+  if (lateSlices.size > 0) {
+    console.warn('[decision-os/packet] slices did not finish in time', {
+      slices: [...lateSlices].sort(),
+      ms: Object.fromEntries([...lateSlices].map((name) => [name, sliceMs.get(name) ?? null])),
+      deadlineMs: PACKET_SLICE_DEADLINE_MS,
+    })
+  }
   let pendingTrades: GroundedSlice<string> = absent<string>(NOT_REQUESTED)
   if (want.pendingTrades && pendingTradesKill) pendingTrades = absent<string>(pendingTradesKill)
   else if (want.pendingTrades && leagueId && args.userId) {

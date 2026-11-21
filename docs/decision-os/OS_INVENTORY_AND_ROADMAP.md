@@ -191,6 +191,47 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**INDEPENDENT CODE RE-SCORE, 2026-11-21 — supersedes the "~100" column below (owner's "continue": re-measure from
+code).** Three read-only audits at `7adb7a9ad1`, each told to treat the roadmap's ~100 as a claim to break, every mark
+cited to a file and line. 🛑 **The "~100" marks were the building session scoring its own work, and they did not
+survive.** Same seven axes and weights. Where an audit was stricter than this file's own recorded rules (the owner's
+"n/a by design" decisions), both readings are given.
+
+| OS | Audit | Under this file's rules | What is genuinely left |
+|---|---|---|---|
+| League | ~90 | ~90 | Kernel ⚠: three live redraft runtimes read rules directly — `resolveNflRedraftTradeRuntime.ts`, `resolveNflRedraftWaiverRuntime.ts`, `resolveNflRedraftLiveScoringRuntime.ts` |
+| Import | ~82 | ~82 | Kernel ⚠: only the packet reads the feed. Cron ⚠: `fantasy-os-exec-sync` writes nothing unless `FANTASY_OS_EXEC_SYNC_LIVE=true` (code default off; production not read here) |
+| Projection | ~93 | ~93 | Kernel ⚠: every live projection read (`readAfProjections`: the projections route, Chimmy's tool, the draft pool) bypasses the feed. Engine is ✅, not n/a: graded accuracy moves the projected number |
+| Player Value | ~90 | ~90 | Kernel ⚠: the NFL market lane (the card, Chimmy's value tool) reads `playerValueSnapshot` directly; only the non-NFL league board reads through the feed |
+| Waiver | ~93 | ~93 | Kernel ⚠: the AI waiver panel's route (`/api/ai/waivers/recommend`) calls `loadWaiverWorldFacts` directly |
+| Lineup | ~72.5 | ~85 → **~100 in this change** | Feed is n/a by this file's rule, not ❌. Cron ⚠ was REAL: the lineup and slate-lock alerts used the weekly-feed optimizer, not My Team's `optimizeLineup` — **fixed in this change** (below) |
+| Trade | ~93 | ~100 | Kernel ⚠ in the audit is the recorded n/a (pending trades are graded on rosters loaded live) |
+| Commissioner | ~78 | ~85 | Kernel ⚠: the hub rebuilds health live; only Chimmy reads the feed. Chimmy ⚠: no commissioner tool — the slice arrives only on a commissioner-classified turn |
+| Draft | ~93 | ~93 → ~100 in this change | Engine ⚠: the record was an appended sentence with no level — **it now states High / Medium / Low** (below) |
+| Manager Psychology | ~90 | ~90 | Kernel ⚠: both user screens (`ManagerRecordSheet`, the commissioner Managers view) build live; only Chimmy reads the feed |
+| **Decision OS hub** | ~86 | ~93 → ~100 in this change | Learning ✅ by the waiver, bench and trade evidence the second audit verified (the third missed them). Operability ⚠: a late slice inside an on-time packet was never logged — **logged now** (below) |
+
+`DECISION_OS_GROUNDING_ENABLED` gates the whole packet (code default off); **the owner confirmed it is on in Railway**,
+so the Packet and Chimmy marks stand.
+
+**The one class of gap left is Kernel: live paths that read around their feed.** Rewiring them is the build list, one
+system per PR: League → Waiver → Projection → Player Value → Commissioner hub → the manager-record screens.
+
+**Built in this change (no migration):**
+- **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster
+  with `buildLineupOptimization` (the weekly-feed optimizer and the Trade Center's greedy fill), while My Team and
+  Chimmy use `optimizeLineup` — so an alert could push a swap the screen it opened did not show.
+  `lib/chimmy-alerts/myTeamLineupOptimization.ts` turns My Team's own load into the shape the alerts read: My Team's
+  changes, only on a `swap` verdict (a `close` call is not pushed), byes and ruled-out players at 0 as My Team prices
+  them, and no alert at all from a lineup My Team cannot answer honestly (an unidentified starter, best ball, no
+  projections).
+- **The draft record states a level**, as the trade grade does: "How sure, from the record: High / Medium / Low", then
+  the record behind it.
+- **A late slice is logged even inside an on-time packet** (`[decision-os/packet] slices did not finish in time`, names
+  and times only).
+- `FANTASY_OS_EXEC_SYNC_LIVE` is **left as it is**: switching it on is a Railway variable write (a redeploy) that starts
+  scheduled provider syncs, and the "35 syncs" measured earlier suggests production already has it on. To confirm.
+
 **FRESH RE-SCORE, 2026-11-20 — every OS and the hub re-measured from code at `ffab3b550c`, not carried forward
 (owner's choice).** Four independent read-only audits; every surprising claim below was re-read by hand before it went
 in. Same seven axes and weights. ⚠ **One rule is now stricter, and it is the main reason numbers fell: Kernel ✅ needs
