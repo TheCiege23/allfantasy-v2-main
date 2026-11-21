@@ -99,11 +99,45 @@ function compatibleRoles(a: Set<string>, b: Set<string>): boolean {
   return (a.has('DL') && b.has('LB')) || (a.has('LB') && b.has('DL'))
 }
 
+/** A loose name key split into the first name and everything after it. */
+export function nflNameParts(looseKey: string): { first: string; surname: string } {
+  const [first, ...rest] = String(looseKey ?? '').split(' ')
+  return { first: first ?? '', surname: rest.join(' ') }
+}
+
+/**
+ * Two first names that are one name written short and long: one begins or ends with the other
+ * ("cam" / "cameron", "matt" / "matthew", "dru" / "andru"). Three letters at least, and never equal.
+ *
+ * ⚠ DELIBERATELY NARROW. "Sauce" for "Ahmad" and "Quan" for "Jartavius" are the same players too, and
+ * are refused: nothing in the two names says so, and a wrong link puts a stranger on a roster.
+ */
+export function relatedFirstNames(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+  return short.length >= 3 && short !== long && (long.startsWith(short) || long.endsWith(short))
+}
+
 function isTeamUnit(ref: FantraxPlayerRef): boolean {
   return TEAM_UNITS.has(String(ref.position ?? '').trim().toUpperCase()) || !String(ref.name ?? '').includes(',')
 }
 
-export function planNflFantraxIdentityLinks(refs: FantraxPlayerRef[], identities: NflIdentityRow[]) {
+export function planNflFantraxIdentityLinks(
+  refs: FantraxPlayerRef[],
+  identities: NflIdentityRow[],
+  /**
+   * EVERY NFL registry row sharing a surname with a player the name rule could not place, for the
+   * short-name rule below. Empty (the default) switches that rule off.
+   *
+   * 🛑 IT MUST BE THE COMPLETE SET FOR EACH SURNAME. The rule links only when exactly ONE row has that
+   * surname at that club in a compatible position; over a partial set "exactly one" proves nothing.
+   */
+  surnameRows: NflIdentityRow[] = [],
+) {
+  const bySurname = new Map<string, NflIdentityRow[]>()
+  for (const row of surnameRows) {
+    const { surname } = nflNameParts(looseNflNameKey(normalizePlayerName(row.canonicalName ?? '')))
+    if (surname) bySurname.set(surname, [...(bySurname.get(surname) ?? []), row])
+  }
   const linkedIds = new Set(identities.map((r) => r.fantraxId?.trim()).filter((id): id is string => Boolean(id)))
   const byName = new Map<string, NflIdentityRow[]>()
   for (const row of identities) {
@@ -121,9 +155,23 @@ export function planNflFantraxIdentityLinks(refs: FantraxPlayerRef[], identities
     const team = nflTeamCode(ref.team)
     const roles = nflPositionGroups(ref.position)
     if (!team || roles.size === 0) { unmatched++; continue }
-    const candidates = (byName.get(looseNflNameKey(fantraxNflNameKey(ref.name))) ?? []).filter(
-      (row) => nflTeamCode(row.currentTeam) === team && compatibleRoles(nflPositionGroups(row.position), roles),
-    )
+    const fits = (row: NflIdentityRow) =>
+      nflTeamCode(row.currentTeam) === team && compatibleRoles(nflPositionGroups(row.position), roles)
+    const nameKey = looseNflNameKey(fantraxNflNameKey(ref.name))
+    let candidates = (byName.get(nameKey) ?? []).filter(fits)
+    if (candidates.length === 0) {
+      /*
+       * The registry files him under a short name ("Dru Phillips" for Fantrax's "Phillips, Andru":
+       * 17 of one league's unlinked players on staging, 2026-11-21). Linked only when he is the ONE
+       * registry row with that surname at that club in a compatible position, and the two first
+       * names are one name written short and long.
+       */
+      const { first, surname } = nflNameParts(nameKey)
+      const pool = surname ? (bySurname.get(surname) ?? []).filter(fits) : []
+      const only = pool.length === 1 ? pool[0]! : null
+      const onlyFirst = only ? nflNameParts(looseNflNameKey(normalizePlayerName(only.canonicalName ?? ''))).first : ''
+      if (only && relatedFirstNames(first, onlyFirst)) candidates = [only]
+    }
     if (candidates.length === 0) { unmatched++; continue }
     if (candidates.length > 1) { ambiguous++; continue }
     const target = candidates[0]!
