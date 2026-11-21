@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
-import { isSiteAdmin } from '@/lib/auth/admin'
+import { isSiteAdminLeagueOwner } from './siteAdminLeague'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
@@ -59,7 +59,7 @@ export async function autopilotEntitled(leagueOwnerUserId: string | null | undef
   if (!leagueOwnerUserId) return false
   // A site admin's own league is a test league: every Chimmy team in it plays, plan or no plan. Without
   // this, such a league took twelve Chimmy teams and then drafted instantly for one of them.
-  if ((await chimmyTeamLimitFor(leagueOwnerUserId)) > CHIMMY_MANAGER_LIMIT) return true
+  if (await isSiteAdminLeagueOwner(leagueOwnerUserId)) return true
   try {
     return Boolean((await new EntitlementResolver().resolveForUser(leagueOwnerUserId, AUTOPILOT_FEATURE)).hasAccess)
   } catch {
@@ -73,13 +73,7 @@ export async function autopilotEntitled(leagueOwnerUserId: string | null | undef
  * Any failure to read the account falls back to the product limit.
  */
 export async function chimmyTeamLimitFor(leagueOwnerUserId: string | null | undefined): Promise<number> {
-  if (!leagueOwnerUserId) return CHIMMY_MANAGER_LIMIT
-  try {
-    const owner = await prisma.appUser.findUnique({ where: { id: leagueOwnerUserId }, select: { email: true, username: true } })
-    return owner && isSiteAdmin(owner) ? CHIMMY_SITE_ADMIN_LIMIT : CHIMMY_MANAGER_LIMIT
-  } catch {
-    return CHIMMY_MANAGER_LIMIT
-  }
+  return (await isSiteAdminLeagueOwner(leagueOwnerUserId)) ? CHIMMY_SITE_ADMIN_LIMIT : CHIMMY_MANAGER_LIMIT
 }
 
 const settingsObject = (s: unknown) => (s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>) : {})
