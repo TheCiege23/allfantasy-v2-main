@@ -56,10 +56,10 @@ describe('a team\'s games in one week', () => {
   })
 })
 
-function data(weekGames?: MatchupData['weekGames']): MatchupData {
+function data(weekGames?: MatchupData['weekGames'], isFinal = false): MatchupData {
   return {
     league: { id: 'l1', name: 'Test League', platform: 'fantrax', logoUrl: null, sourceLink: null, lineupLink: null },
-    week: { available: true, data: { week: 4, season: 2026, isFinal: false } },
+    week: { available: true, data: { week: 4, season: 2026, isFinal } },
     teams: {
       available: true,
       data: {
@@ -87,13 +87,24 @@ describe('the matchup screen', () => {
     expect(list).toHaveTextContent("This week's games (3)")
     const first = screen.getByTestId('matchup-week-game-1')
     expect(first).toHaveTextContent('Game 1 · vs Bravo')
-    expect(first).toHaveTextContent('110.00 – 90.00 · Win')
+    // The week is still being played: a standing, not a result.
+    expect(first).toHaveTextContent('110.00 – 90.00 · Ahead')
+    expect(first).not.toHaveTextContent('Win')
     expect(first).toHaveAttribute('aria-current', 'true')
     const second = screen.getByTestId('matchup-week-game-2')
-    expect(second).toHaveTextContent('95.00 – 120.00 · Loss')
+    expect(second).toHaveTextContent('95.00 – 120.00 · Behind')
+    expect(second).not.toHaveTextContent('Loss')
     expect(second).toHaveAttribute('href', '/core/matchup?league=l1&week=4&game=2')
     expect(second).not.toHaveAttribute('aria-current')
     expect(screen.getByTestId('matchup-week-game-3')).toHaveTextContent('Not scored yet')
+  })
+
+  /** Production 2026-11-21: "0.00 – 25.40 · Loss" on a Saturday, with two days of games left. */
+  it('names a win or a loss only once the week is final', () => {
+    const mine = teamGamesInWeek(week, 'a')
+    render(<Matchup data={data(weekGameLines(week, mine, mine[0]!, (id) => names[id] ?? null), true)} />)
+    expect(screen.getByTestId('matchup-week-game-1')).toHaveTextContent('110.00 – 90.00 · Win')
+    expect(screen.getByTestId('matchup-week-game-2')).toHaveTextContent('95.00 – 120.00 · Loss')
   })
 
   it('shows no list in a league that plays one game a week', () => {
