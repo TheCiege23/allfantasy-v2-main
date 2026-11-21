@@ -4,6 +4,7 @@ import type { Decision } from '@/lib/decision-os/core/decision'
 import type { DraftPickRecommendation } from '@/lib/decision-os/draft'
 import type { RecommendationInput, RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
 import type { DraftDecisionContext } from './DraftContextAssembler'
+import { draftTipConfidence, draftTipRecordLine, type DraftTipCalibration } from '@/lib/decision-os/draft/tipCalibration'
 
 /**
  * THE DRAFT PICK DECISION FOR ONE ROSTER — one sequence for every surface that says "take X" (2026-11-16 re-score
@@ -42,6 +43,11 @@ export type PickDecisionDeps = {
     existingPicks: Array<{ rosterId: string; position: string }>
     newPickPosition: string
   }) => Promise<{ valid: boolean; error?: string }>
+  /**
+   * How Draft OS's graded pick tips have held up, by round band (`decision-os/draft/tipCalibration.ts`). NFL only; null — the
+   * decision reads exactly as before — until a band has enough graded tips, or on any failure.
+   */
+  draftCalibration: () => Promise<DraftTipCalibration | null>
 }
 
 async function defaultDeps(): Promise<PickDecisionDeps> {
@@ -58,7 +64,34 @@ async function defaultDeps(): Promise<PickDecisionDeps> {
     context: (input) => buildDraftDecisionContext({ ...input, planForOwnTurn: true }),
     recommend: computeDraftRecommendation,
     validateRosterFit: validateRosterFitForDraftPick as PickDecisionDeps['validateRosterFit'],
+    draftCalibration: async () => {
+      try {
+        const [{ readAdviceLearningSnapshot }, { draftTipCalibrationFrom }] = await Promise.all([
+          import('@/lib/chimmy-outcomes/learningStore'),
+          import('@/lib/decision-os/draft/tipCalibration'),
+        ])
+        return draftTipCalibrationFrom((await readAdviceLearningSnapshot())?.ledger?.draftTips)
+      } catch {
+        return null
+      }
+    },
   }
+}
+
+/**
+ * The decision with its graded record said beside its own confidence (`how_confident`), which the draft card and
+ * Chimmy both show. 🛑 Only that line changes: the pick, the ranking, the rule verdicts and "what to do" are the
+ * engine's. PURE.
+ */
+export function withDraftTipRecord(
+  decision: Decision<DraftPickRecommendation>,
+  input: { sport: string | null | undefined; round: number | null | undefined; calibration: DraftTipCalibration | null | undefined },
+): Decision<DraftPickRecommendation> {
+  if (String(input.sport ?? '').trim().toUpperCase() !== 'NFL') return decision
+  if (!decision.recommended_actions?.length) return decision
+  const c = draftTipConfidence(input.round, input.calibration)
+  if (!c) return decision
+  return { ...decision, four_answers: { ...decision.four_answers, how_confident: `${decision.four_answers.how_confident} ${draftTipRecordLine(c)}` } }
 }
 
 export async function decideDraftPickForRoster(
@@ -109,7 +142,15 @@ export async function decideDraftPickForRoster(
       },
     },
   )
-  return { ok: true, decision, engineResult, context, forOverall: snapshot.currentPick?.overall ?? null }
+  const round = context.plannedFor?.round ?? snapshot.currentPick?.round ?? null
+  const calibration = String(context.sport ?? '').toUpperCase() === 'NFL' ? await d.draftCalibration().catch(() => null) : null
+  return {
+    ok: true,
+    decision: withDraftTipRecord(decision, { sport: context.sport, round, calibration }),
+    engineResult,
+    context,
+    forOverall: snapshot.currentPick?.overall ?? null,
+  }
 }
 
 /**
