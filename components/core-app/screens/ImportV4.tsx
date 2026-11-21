@@ -4,6 +4,7 @@ import Link from 'next/link'
 import posthog from 'posthog-js'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { IMPORT_SEARCH_MIN_ROWS, matchesImportSearch } from '@/lib/league-import/importListSearch'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
  * page and again on LeagueHome. This screen's root is <div className="af-core af-im">, and the
@@ -994,6 +995,12 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* Search boxes for the two long lists. Each clears when its list is replaced. */
+  const [leagueSearch, setLeagueSearch] = useState('')
+  const [teamSearch, setTeamSearch] = useState('')
+  useEffect(() => setLeagueSearch(''), [leagues])
+  const previewSourceId = phase.k === 'preview' ? phase.sourceId : null
+  useEffect(() => setTeamSearch(''), [previewSourceId])
   /* The step an unverified account was refused at, or null. Cleared by any other outcome. */
   const [verifyGate, setVerifyGate] = useState<VerifyResume | null>(null)
   /*
@@ -2415,8 +2422,27 @@ export function ImportV4({
             </p>
           ) : null}
 
+          {leagues.length >= IMPORT_SEARCH_MIN_ROWS ? (
+            <div className="af-im-field af-im-list-search">
+              <input
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                value={leagueSearch}
+                onChange={(e) => setLeagueSearch(e.target.value)}
+                placeholder={rowsAreTeams ? 'Search by team name' : 'Search by league name'}
+                aria-label={rowsAreTeams ? 'Search teams' : 'Search leagues'}
+                data-testid="import-league-search"
+              />
+            </div>
+          ) : null}
+          {leagueSearch.trim() && !leagues.some((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])) ? (
+            <p className="af-im-field-help" role="status" data-testid="import-league-search-empty">
+              Nothing matches &ldquo;{leagueSearch.trim()}&rdquo;. Check the spelling or clear the search.
+            </p>
+          ) : null}
           <ul className="af-im-league-list">
-            {leagues.map((l) => {
+            {leagues.filter((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])).map((l) => {
               /*
                * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
                * DOING. It marked the one row being previewed or committed while the
@@ -3510,8 +3536,28 @@ export function ImportV4({
                   </>
                 )}
               </p>
+              {phase.teams.length >= IMPORT_SEARCH_MIN_ROWS ? (
+                <div className="af-im-field af-im-list-search">
+                  <input
+                    type="search"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
+                    placeholder="Search by team or manager name"
+                    aria-label="Search teams"
+                    data-testid="import-preview-team-search"
+                  />
+                </div>
+              ) : null}
+              {teamSearch.trim() && !phase.teams.some((t) => matchesImportSearch(teamSearch, [t.teamName, t.ownerName])) ? (
+                <p className="af-im-field-help" role="status" data-testid="import-preview-team-search-empty">
+                  No team matches &ldquo;{teamSearch.trim()}&rdquo;. Try the manager&rsquo;s name, or clear the search.
+                </p>
+              ) : null}
               <ul className="af-im-league-list">
-                {phase.teams.map((t) => {
+                {/* The picked team stays on screen whatever is typed, so the choice is never hidden. */}
+                {phase.teams.filter((t) => phase.claimTeamId === t.teamId || matchesImportSearch(teamSearch, [t.teamName, t.ownerName])).map((t) => {
                   const picked = phase.claimTeamId === t.teamId
                   /* A commissioner's team is claimable only with proof — the server refuses it too. */
                   const locked = previewImportState(provider, phase).espnMember && t.commissionerTeam === true
