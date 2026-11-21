@@ -1,12 +1,11 @@
 /**
  * Counting rules for /admin/apps — who uses AllFantasy in the iOS app, the Android
- * app and the browser. Pure: builds the PostHog (HogQL) queries and turns their rows
- * into the report. The fetch lives in ./AppPlatformStatsService.ts.
+ * app and the browser. Pure: turns query rows into the report. The queries live in
+ * ./AppPlatformStatsService.ts and read our own `AnalyticsEvent` "app_open" rows
+ * (lib/analytics/appOpen.ts) — no third-party analytics service.
  *
- * Every number comes from browser events (`$lib = 'web'`), labelled by the
- * `app_platform` super property that PostHogProvider registers on each load
- * (lib/platform/appPlatform.ts). Server-side captures carry no label and are left
- * out, so "Not labelled yet" only ever means events from before the label shipped.
+ * Each device sends one app_open row per platform per day, labelled by
+ * lib/platform/appPlatform.ts. An unrecognised label folds into "Not labelled yet".
  */
 
 export const APP_WINDOWS = [7, 14, 30] as const
@@ -29,21 +28,8 @@ export function normalizeWindow(days: unknown): number {
   return (APP_WINDOWS as readonly number[]).includes(n) ? n : 7
 }
 
-const BROWSER_EVENTS = "properties.$lib = 'web'"
-const PLATFORM = "coalesce(properties.app_platform, 'unlabelled')"
-
-/** `days` must come through normalizeWindow — it is interpolated into the query. */
-export function buildAppPlatformQueries(days: number) {
-  const d = normalizeWindow(days)
-  return {
-    total: `SELECT count(DISTINCT person_id) FROM events WHERE ${BROWSER_EVENTS} AND timestamp >= now() - toIntervalDay(${d})`,
-    active: `SELECT ${PLATFORM} AS platform, count(DISTINCT person_id) AS users FROM events WHERE ${BROWSER_EVENTS} AND timestamp >= now() - toIntervalDay(${d}) GROUP BY platform LIMIT 100`,
-    daily: `SELECT toString(toDate(timestamp)) AS day, ${PLATFORM} AS platform, count(DISTINCT person_id) AS users FROM events WHERE ${BROWSER_EVENTS} AND timestamp >= toStartOfDay(now()) - toIntervalDay(${d - 1}) GROUP BY day, platform ORDER BY day LIMIT 1000`,
-    newUsers: `SELECT platform, count() AS new_users, countIf(active_days > 1) AS came_back FROM (SELECT person_id, argMin(${PLATFORM}, timestamp) AS platform, min(timestamp) AS first_seen, uniqExact(toDate(timestamp)) AS active_days FROM events WHERE ${BROWSER_EVENTS} AND timestamp >= now() - toIntervalDay(${NEW_USER_LOOKBACK_DAYS}) GROUP BY person_id) WHERE first_seen >= now() - toIntervalDay(${d}) GROUP BY platform LIMIT 100`,
-  }
-}
-
-export type HogQLRows = Array<Array<unknown>>
+/** Query rows as plain arrays: [platform, count, …] or [day, platform, count]. */
+export type Rows = Array<Array<unknown>>
 
 export type PlatformRow = {
   platform: AppPlatformKey
@@ -63,6 +49,8 @@ export type AppPlatformReport = {
   generatedAt: string
   /** Distinct people across every platform — not the sum of the rows, which double-counts. */
   totalActive: number | null
+  /** The first app_open row ever recorded (ISO), or null when there is none yet. */
+  countingSince: string | null
   platforms: PlatformRow[]
   daily: DailyRow[] | null
   errors: string[]
@@ -81,12 +69,12 @@ function emptyCounts(): Record<AppPlatformKey, number> {
   return { ios_app: 0, android_app: 0, web: 0, unlabelled: 0 }
 }
 
-export function parseTotal(rows: HogQLRows): number {
+export function parseTotal(rows: Rows): number {
   return toCount(rows[0]?.[0])
 }
 
 /** platform → [a, b] from rows of [platform, a, b?]. An unknown platform folds into "unlabelled". */
-function byPlatform(rows: HogQLRows, cols: number[]): Record<AppPlatformKey, number[]> {
+function byPlatform(rows: Rows, cols: number[]): Record<AppPlatformKey, number[]> {
   const out = Object.fromEntries(APP_PLATFORMS.map((p) => [p, cols.map(() => 0)])) as Record<AppPlatformKey, number[]>
   for (const row of rows) {
     const p = toPlatform(row[0])
@@ -97,7 +85,7 @@ function byPlatform(rows: HogQLRows, cols: number[]): Record<AppPlatformKey, num
   return out
 }
 
-export function parseDaily(rows: HogQLRows): DailyRow[] {
+export function parseDaily(rows: Rows): DailyRow[] {
   const days = new Map<string, Record<AppPlatformKey, number>>()
   for (const row of rows) {
     const day = String(row[0] ?? "")
@@ -109,7 +97,7 @@ export function parseDaily(rows: HogQLRows): DailyRow[] {
   return [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, counts]) => ({ day, counts }))
 }
 
-export function buildPlatformRows(active: HogQLRows | null, newUsers: HogQLRows | null): PlatformRow[] {
+export function buildPlatformRows(active: Rows | null, newUsers: Rows | null): PlatformRow[] {
   const a = active ? byPlatform(active, [1]) : null
   const n = newUsers ? byPlatform(newUsers, [1, 2]) : null
   return APP_PLATFORMS.map((platform) => ({

@@ -1,33 +1,19 @@
+// @vitest-environment node
 /**
- * /admin/apps counting rules and the PostHog read (2026-11-20).
+ * /admin/apps people counts (2026-11-21): the counting rules, the queries over our own
+ * "app_open" rows, and how those rows are recorded. No third-party analytics service.
  */
 import { describe, expect, it, vi } from 'vitest'
-import {
-  buildAppPlatformQueries,
-  buildPlatformRows,
-  cameBackRate,
-  normalizeWindow,
-  parseDaily,
-} from '@/lib/admin-dashboard/appPlatformStats'
-import { getAppPlatformReport, readPostHogQueryConfig, runHogQL } from '@/lib/admin-dashboard/AppPlatformStatsService'
-
-const KEY = 'test-personal-key-not-real'
-const config = { host: 'https://us.posthog.com', projectId: '12345', apiKey: KEY }
-
-function ok(results: unknown[][]) {
-  return new Response(JSON.stringify({ results }), { status: 200 })
-}
+import type { Prisma } from '@prisma/client'
+import { buildPlatformRows, cameBackRate, normalizeWindow, parseDaily } from '@/lib/admin-dashboard/appPlatformStats'
+import { appPlatformQueries, getAppPlatformReport } from '@/lib/admin-dashboard/AppPlatformStatsService'
+import { APP_OPEN_EVENT, recordAppOpen, resolveAppPlatform } from '@/lib/analytics/appOpen'
 
 describe('appPlatformStats', () => {
-  it('only accepts the offered windows, so nothing else reaches the query text', () => {
+  it('only accepts the offered windows', () => {
     expect(normalizeWindow('14')).toBe(14)
     expect(normalizeWindow('1; DROP')).toBe(7)
     expect(normalizeWindow(undefined)).toBe(7)
-    const q = buildAppPlatformQueries(30)
-    expect(q.active).toContain('toIntervalDay(30)')
-    expect(q.daily).toContain('toIntervalDay(29)')
-    // Browser events only: server captures carry no platform label.
-    for (const text of Object.values(q)) expect(text).toContain("properties.$lib = 'web'")
   })
 
   it('folds unknown platform values into "Not labelled yet" and hides that row when empty', () => {
@@ -63,39 +49,82 @@ describe('appPlatformStats', () => {
 })
 
 describe('AppPlatformStatsService', () => {
-  it('needs both the personal key and a numeric project id', () => {
-    expect(readPostHogQueryConfig({})).toBeNull()
-    expect(readPostHogQueryConfig({ POSTHOG_PERSONAL_API_KEY: KEY, POSTHOG_PROJECT_ID: 'abc' })).toBeNull()
-    expect(readPostHogQueryConfig({ POSTHOG_PERSONAL_API_KEY: KEY, POSTHOG_PROJECT_ID: '12345', POSTHOG_API_HOST: 'https://eu.posthog.com/' }))
-      .toEqual({ host: 'https://eu.posthog.com', projectId: '12345', apiKey: KEY })
-  })
-
-  it('🛑 sends the key in the Authorization header only — never in the URL or an error', async () => {
-    const fetchImpl = vi.fn(async () => new Response('{"detail":"nope"}', { status: 403 })) as unknown as typeof fetch
-    const err = await runHogQL(config, 'SELECT 1', fetchImpl).catch((e: Error) => e)
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
-    expect(String(url)).toBe('https://us.posthog.com/api/projects/12345/query/')
-    expect(String(url)).not.toContain(KEY)
-    expect((init as RequestInit).headers).toMatchObject({ Authorization: `Bearer ${KEY}` })
-    expect(err).toBeInstanceOf(Error)
-    expect((err as Error).message).toContain('403')
-    expect((err as Error).message).not.toContain(KEY)
+  it('🛑 the window and event name travel as bound values, never in the query text', () => {
+    const q = appPlatformQueries(30)
+    expect(q.active.values).toContain(APP_OPEN_EVENT)
+    expect(q.active.values).toContain(30)
+    expect(q.daily.values).toContain(29)
+    expect(q.newUsers.values).toEqual(expect.arrayContaining([90, 30]))
+    for (const query of Object.values(q)) {
+      expect(query.sql).toContain('"AnalyticsEvent"')
+      expect(query.sql).not.toContain('app_open')
+    }
   })
 
   it('reports a failed query and leaves only that section empty', async () => {
-    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      const q = JSON.parse(String(init?.body)).query.query as string
-      if (q.includes('toString(toDate')) return new Response('', { status: 500 })
-      if (q.includes('argMin')) return ok([['ios_app', 2, 1]])
-      if (q.includes('GROUP BY platform')) return ok([['ios_app', 5], ['web', 9]])
-      return ok([[13]])
-    }) as unknown as typeof fetch
-
-    const report = await getAppPlatformReport({ days: '14', config, fetchImpl })
+    const $queryRaw = vi.fn(async (query: Prisma.Sql) => {
+      const sql = query.sql
+      if (sql.includes('to_char')) throw new Error('connection reset — secret detail')
+      if (sql.includes('array_agg')) return [{ platform: 'ios_app', new_users: 2, came_back: 1 }]
+      if (sql.includes('min("createdAt") AS first')) return [{ first: new Date('2026-11-21T03:00:00Z') }]
+      if (sql.includes('GROUP BY 1')) return [{ platform: 'ios_app', users: 5 }, { platform: 'web', users: 9 }]
+      return [{ n: 13 }]
+    })
+    const report = await getAppPlatformReport({ days: '14', db: { $queryRaw } as never })
     expect(report.days).toBe(14)
     expect(report.totalActive).toBe(13)
+    expect(report.countingSince).toBe('2026-11-21T03:00:00.000Z')
     expect(report.daily).toBeNull()
-    expect(report.errors).toEqual(['Daily chart: PostHog answered 500'])
+    expect(report.errors).toEqual(['Daily chart: the database query failed'])
     expect(report.platforms.find((p) => p.platform === 'ios_app')).toMatchObject({ active: 5, newUsers: 2, cameBack: 1 })
+  })
+
+  it('no rows yet: counting has not started, and nothing reads as an error', async () => {
+    const $queryRaw = vi.fn(async (query: Prisma.Sql) => (query.sql.includes('AS first') ? [{ first: null }] : query.sql.includes('AS n') ? [{ n: 0 }] : []))
+    const report = await getAppPlatformReport({ days: 7, db: { $queryRaw } as never })
+    expect(report).toMatchObject({ countingSince: null, totalActive: 0, errors: [] })
+  })
+})
+
+describe('app_open recording', () => {
+  it('trusts the iOS marker over the page, and drops anything it does not know', () => {
+    expect(resolveAppPlatform('web', 'Mozilla/5.0 AllFantasyiOS/1.1')).toBe('ios_app')
+    expect(resolveAppPlatform('ios_app', 'Mozilla/5.0 Safari')).toBeNull()
+    expect(resolveAppPlatform('android_app', 'Mozilla/5.0 Chrome')).toBe('android_app')
+    expect(resolveAppPlatform('tv_app', null)).toBeNull()
+    expect(resolveAppPlatform(undefined, null)).toBeNull()
+  })
+
+  function fakeDb() {
+    const rows: Array<{ event: string; sessionId: string | null; userId: string | null; meta: unknown; createdAt: Date }> = []
+    return {
+      rows,
+      analyticsEvent: {
+        findMany: vi.fn(async ({ where }: { where: { event: string; createdAt: { gte: Date }; sessionId?: string; userId?: string } }) =>
+          rows.filter((r) => r.event === where.event && r.createdAt >= where.createdAt.gte &&
+            (where.sessionId ? r.sessionId === where.sessionId : r.userId === where.userId))),
+        create: vi.fn(async ({ data }: { data: (typeof rows)[number] }) => {
+          rows.push(data)
+        }),
+      },
+    }
+  }
+
+  it('one row per device, per platform, per UTC day', async () => {
+    const db = fakeDb()
+    const at = (iso: string) => ({ platform: 'android_app' as const, sessionId: 'anon-1', userId: null, now: new Date(iso) })
+    expect(await recordAppOpen(db as never, at('2026-11-21T01:00:00Z'))).toBe('recorded')
+    expect(await recordAppOpen(db as never, at('2026-11-21T23:00:00Z'))).toBe('duplicate')
+    // Same Chrome storage, plain browser tab: a different platform counts separately.
+    expect(await recordAppOpen(db as never, { ...at('2026-11-21T23:30:00Z'), platform: 'web' })).toBe('recorded')
+    expect(await recordAppOpen(db as never, at('2026-11-22T00:05:00Z'))).toBe('recorded')
+    expect(db.rows).toHaveLength(3)
+    expect(db.rows[0]!.meta).toEqual({ app_platform: 'android_app' })
+  })
+
+  it('needs a device or a user to count anyone', async () => {
+    const db = fakeDb()
+    expect(await recordAppOpen(db as never, { platform: 'web', sessionId: null, userId: null })).toBe('no_person')
+    expect(db.analyticsEvent.create).not.toHaveBeenCalled()
   })
 })

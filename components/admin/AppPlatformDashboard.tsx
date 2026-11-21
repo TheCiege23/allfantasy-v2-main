@@ -14,7 +14,7 @@ import type { StoreCard } from "@/lib/admin-dashboard/storeDownloads"
 
 /**
  * /admin/apps — the view only (data: lib/admin-dashboard/AppPlatformStatsService.ts for
- * people, lib/admin-dashboard/storeDownloads.ts for downloads).
+ * people, from our own database; lib/admin-dashboard/storeDownloads.ts for downloads).
  * Series colours: categorical slots 1–3 (dark steps), validated against this page's
  * #020817 surface; "Not labelled yet" is a neutral grey, never a fourth hue. The App
  * Store and Google Play cards reuse the iOS and Android colours.
@@ -30,9 +30,11 @@ const STORE_COLOR: Record<StoreCard["store"], string> = { apple: COLOR.ios_app, 
 
 const fmt = (n: number | null) => (n == null ? "—" : n.toLocaleString("en-US"))
 
-export function AppPlatformDashboard({ days, report, stores }: { days: number; report: AppPlatformReport | null; stores: StoreCard[] }) {
-  const hasUnlabelled = report?.platforms.some((p) => p.platform === "unlabelled") ?? false
-  const errors = [...new Set(report?.errors ?? [])]
+export function AppPlatformDashboard({ days, report, stores }: { days: number; report: AppPlatformReport; stores: StoreCard[] }) {
+  const errors = [...new Set(report.errors)]
+  const since = report.countingSince ? report.countingSince.slice(0, 10) : null
+  // Until the lookback has filled up, "new" also includes everyone already using the app.
+  const newIsPartial = since ? Date.parse(report.generatedAt) - Date.parse(`${since}T00:00:00Z`) < NEW_USER_LOOKBACK_DAYS * 86_400_000 : false
 
   return (
     <Frame days={days}>
@@ -42,11 +44,12 @@ export function AppPlatformDashboard({ days, report, stores }: { days: number; r
         </ul>
       ) : null}
 
-      {report ? (
+      {since || errors.length ? (
         <>
           <p className="text-3xl font-black" data-testid="admin-apps-headline">
             {fmt(report.totalActive)} <span className="text-lg font-semibold text-white/70">people used AllFantasy in the last {days} days</span>
           </p>
+          {since ? <p className="-mt-3 text-xs text-white/55" data-testid="admin-apps-since">Counting since {shortDay(since)}.</p> : null}
 
           <div className="grid gap-3 sm:grid-cols-3" data-testid="admin-apps-platforms">
             {report.platforms.filter((p) => p.platform !== "unlabelled").map((p) => (
@@ -63,15 +66,11 @@ export function AppPlatformDashboard({ days, report, stores }: { days: number; r
               </div>
             ))}
           </div>
-
-          {hasUnlabelled ? (
-            <p className="text-xs text-white/55">
-              Some visits are from before the app label went live (Nov 20, 2026), so they can&apos;t be split by platform. They show as grey below and fade out of the window on their own.
-            </p>
-          ) : null}
         </>
       ) : (
-        <PostHogSetup />
+        <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/75" data-testid="admin-apps-empty">
+          No app opens recorded yet. Counting starts as soon as people open AllFantasy after this update goes live.
+        </p>
       )}
 
       <Section title={`Downloads, last ${days} days`} hint="From each store's own reports. Both stores publish a day or more late, so each card says how recent it is.">
@@ -80,8 +79,8 @@ export function AppPlatformDashboard({ days, report, stores }: { days: number; r
         </div>
       </Section>
 
-      {report ? (
-        <Section title="People each day" hint="One bar per day. Hover a segment for its number.">
+      {since ? (
+        <Section title="People each day" hint="One bar per day (UTC). Hover a segment for its number.">
           {report.daily ? <DailyChart rows={report.daily} /> : <p className="text-sm text-white/50">The daily chart couldn&apos;t load.</p>}
         </Section>
       ) : null}
@@ -89,12 +88,12 @@ export function AppPlatformDashboard({ days, report, stores }: { days: number; r
       <details className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-sm text-white/65">
         <summary className="cursor-pointer font-semibold text-white/80">How these are counted</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li><b>Active</b>: people who opened a page in the window. Someone who used two platforms counts on both, so the cards can add up to more than the headline.</li>
-          <li><b>New</b>: first seen in the window, with no visit in the {NEW_USER_LOOKBACK_DAYS} days before. Counted on the platform they arrived on.</li>
+          <li><b>Active</b>: devices that opened AllFantasy in the window. Someone who used two platforms counts on both, so the cards can add up to more than the headline.</li>
+          <li><b>New</b>: first seen in the window, with no visit in the {NEW_USER_LOOKBACK_DAYS} days before. Counted on the platform they arrived on.{newIsPartial ? ` Counting started ${since ? shortDay(since) : "recently"}, so until ${NEW_USER_LOOKBACK_DAYS} days have passed this also includes people who were already using AllFantasy.` : ""}</li>
           <li><b>Came back</b>: of those new people, the share who returned on a later day. Recent arrivals have had less time, so it reads low for short windows.</li>
           <li><b>App Store downloads</b>: first-time downloads from Apple&apos;s daily sales reports (Pacific days). Re-downloads are people installing again on a new or reset device.</li>
           <li><b>Google Play downloads</b>: daily user installs from the Play Console export, over the {days} days ending on its newest day.</li>
-          <li>People counts come from PostHog. Visitors who block analytics aren&apos;t counted.</li>
+          <li>People counts come from our own database: each device sends one &ldquo;app opened&rdquo; note a day. One person on two devices counts twice, and clearing cookies counts as a new device.</li>
         </ul>
       </details>
     </Frame>
@@ -144,18 +143,6 @@ function StoreDownloadCard({ card }: { card: StoreCard }) {
         </div>
       )}
     </div>
-  )
-}
-
-function PostHogSetup() {
-  return (
-    <Section title="Connect PostHog to see who uses each app" hint="One-time setup, about 5 minutes. The key is read-only.">
-      <ol className="list-decimal space-y-2 pl-5 text-sm text-white/80" data-testid="admin-apps-setup">
-        <li>In PostHog, open <b>Settings → Personal API keys</b> and create a key with only the <b>Query: read</b> scope, limited to the AllFantasy project.</li>
-        <li>Copy the project ID — the number in the PostHog address bar after <code>/project/</code>.</li>
-        <li>In Railway, on the <b>allfantasy-v2-main</b> service, add <code>POSTHOG_PERSONAL_API_KEY</code> and <code>POSTHOG_PROJECT_ID</code>. Saving redeploys the site (~20 min).</li>
-      </ol>
-    </Section>
   )
 }
 

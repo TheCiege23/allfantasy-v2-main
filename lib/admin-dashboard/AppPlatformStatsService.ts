@@ -1,86 +1,78 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
+
+import { prisma } from '@/lib/prisma'
+import { APP_OPEN_EVENT } from '@/lib/analytics/appOpen'
 import {
-  buildAppPlatformQueries,
   buildPlatformRows,
+  NEW_USER_LOOKBACK_DAYS,
   normalizeWindow,
   parseDaily,
   parseTotal,
   type AppPlatformReport,
-  type HogQLRows,
+  type Rows,
 } from './appPlatformStats'
 
 /**
- * The data behind /admin/apps, read from PostHog's query API. Read-only, admin-only.
+ * The data behind /admin/apps, read from our own `AnalyticsEvent` "app_open" rows
+ * (lib/analytics/appOpen.ts). Read-only, admin-only, no third-party service or key.
  *
- * Needs a PostHog PERSONAL API key (Settings → Personal API keys, scope "Query: read"),
- * which is different from the public project token the browser uses:
- *   POSTHOG_PERSONAL_API_KEY   phx_…   (secret — never logged, never sent to the client)
- *   POSTHOG_PROJECT_ID         the number in the PostHog project URL
- *   POSTHOG_API_HOST           optional, default https://us.posthog.com
+ * A person is a device: the `af_anon_id` cookie, or the signed-in user when there is
+ * no cookie. `createdAt` is stored in UTC, so days are UTC days.
  *
- * The key travels in the Authorization header only, never in a URL. Each query is read
- * on its own; a failed one is REPORTED in `errors` and leaves its section null — never
- * a zero, which here would read as "nobody used the app".
+ * Each query is read on its own; a failed one is REPORTED in `errors` and leaves its
+ * section null — never a zero, which here would read as "nobody used the app".
  */
 
-export type PostHogQueryConfig = { host: string; projectId: string; apiKey: string }
+const PERSON = Prisma.raw(`coalesce("sessionId", "userId")`)
+const PLATFORM = Prisma.raw(`coalesce(meta->>'app_platform', 'unlabelled')`)
+const NOW = Prisma.raw(`(now() AT TIME ZONE 'UTC')`)
 
-export function readPostHogQueryConfig(env: Record<string, string | undefined> = process.env): PostHogQueryConfig | null {
-  const apiKey = env.POSTHOG_PERSONAL_API_KEY?.trim()
-  const projectId = env.POSTHOG_PROJECT_ID?.trim()
-  if (!apiKey || !projectId || !/^\d+$/.test(projectId)) return null
-  const host = (env.POSTHOG_API_HOST?.trim() || 'https://us.posthog.com').replace(/\/+$/, '')
-  return { host, projectId, apiKey }
-}
-
-const QUERY_TIMEOUT_MS = 15_000
-
-export async function runHogQL(config: PostHogQueryConfig, query: string, fetchImpl: typeof fetch = fetch): Promise<HogQLRows> {
-  const res = await fetchImpl(`${config.host}/api/projects/${config.projectId}/query/`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: { kind: 'HogQLQuery', query } }),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
-  })
-  if (!res.ok) {
-    // Status only: PostHog's error body can echo request details, and this text reaches the page.
-    const hint = res.status === 401 || res.status === 403 ? ' — check POSTHOG_PERSONAL_API_KEY and its "Query: read" scope' : ''
-    throw new Error(`PostHog answered ${res.status}${hint}`)
+export function appPlatformQueries(days: number) {
+  const d = normalizeWindow(days)
+  const opens = Prisma.sql`event = ${APP_OPEN_EVENT} AND ${PERSON} IS NOT NULL`
+  const since = (n: number) => Prisma.sql`"createdAt" >= ${NOW} - make_interval(days => ${n}::int)`
+  return {
+    total: Prisma.sql`SELECT count(DISTINCT ${PERSON})::int AS n FROM "AnalyticsEvent" WHERE ${opens} AND ${since(d)}`,
+    active: Prisma.sql`SELECT ${PLATFORM} AS platform, count(DISTINCT ${PERSON})::int AS users FROM "AnalyticsEvent" WHERE ${opens} AND ${since(d)} GROUP BY 1`,
+    daily: Prisma.sql`SELECT to_char("createdAt"::date, 'YYYY-MM-DD') AS day, ${PLATFORM} AS platform, count(DISTINCT ${PERSON})::int AS users FROM "AnalyticsEvent" WHERE ${opens} AND "createdAt" >= date_trunc('day', ${NOW}) - make_interval(days => ${d - 1}::int) GROUP BY 1, 2 ORDER BY 1`,
+    newUsers: Prisma.sql`SELECT platform, count(*)::int AS new_users, (count(*) FILTER (WHERE active_days > 1))::int AS came_back FROM (SELECT ${PERSON} AS person, (array_agg(${PLATFORM} ORDER BY "createdAt"))[1] AS platform, min("createdAt") AS first_seen, count(DISTINCT "createdAt"::date) AS active_days FROM "AnalyticsEvent" WHERE ${opens} AND ${since(NEW_USER_LOOKBACK_DAYS)} GROUP BY 1) p WHERE first_seen >= ${NOW} - make_interval(days => ${d}::int) GROUP BY 1`,
+    countingSince: Prisma.sql`SELECT min("createdAt") AS first FROM "AnalyticsEvent" WHERE event = ${APP_OPEN_EVENT}`,
   }
-  const body = (await res.json()) as { results?: unknown }
-  if (!Array.isArray(body.results)) throw new Error('PostHog returned no results')
-  return body.results as HogQLRows
 }
 
-export async function getAppPlatformReport(opts: {
-  days?: unknown
-  now?: Date
-  config: PostHogQueryConfig
-  fetchImpl?: typeof fetch
-}): Promise<AppPlatformReport> {
+type Db = Pick<typeof prisma, '$queryRaw'>
+type Row = Record<string, unknown>
+
+export async function getAppPlatformReport(opts: { days?: unknown; now?: Date; db?: Db } = {}): Promise<AppPlatformReport> {
   const days = normalizeWindow(opts.days)
-  const q = buildAppPlatformQueries(days)
+  const db = opts.db ?? prisma
+  const q = appPlatformQueries(days)
   const errors: string[] = []
-  const read = async (name: string, query: string): Promise<HogQLRows | null> => {
+  const read = async (name: string, query: Prisma.Sql, cols: string[]): Promise<Rows | null> => {
     try {
-      return await runHogQL(opts.config, query, opts.fetchImpl)
-    } catch (err) {
-      errors.push(`${name}: ${err instanceof Error ? err.message : 'query failed'}`)
+      const rows = await db.$queryRaw<Row[]>(query)
+      return rows.map((r) => cols.map((c) => r[c]))
+    } catch {
+      // No error text: a database error can echo query details, and this reaches the page.
+      errors.push(`${name}: the database query failed`)
       return null
     }
   }
-  const [total, active, daily, newUsers] = await Promise.all([
-    read('Active people', q.total),
-    read('Active by platform', q.active),
-    read('Daily chart', q.daily),
-    read('New people', q.newUsers),
+  const [total, active, daily, newUsers, first] = await Promise.all([
+    read('Active people', q.total, ['n']),
+    read('Active by platform', q.active, ['platform', 'users']),
+    read('Daily chart', q.daily, ['day', 'platform', 'users']),
+    read('New people', q.newUsers, ['platform', 'new_users', 'came_back']),
+    read('Counting start', q.countingSince, ['first']),
   ])
+  const firstAt = first?.[0]?.[0]
   return {
     days,
     generatedAt: (opts.now ?? new Date()).toISOString(),
     totalActive: total ? parseTotal(total) : null,
+    countingSince: firstAt instanceof Date ? firstAt.toISOString() : typeof firstAt === 'string' ? firstAt : null,
     platforms: buildPlatformRows(active, newUsers),
     daily: daily ? parseDaily(daily) : null,
     errors,
