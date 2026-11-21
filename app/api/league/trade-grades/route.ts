@@ -1,4 +1,5 @@
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
   const league = await prisma.league.findFirst({
     where: {
       id: leagueId,
-      OR: [{ userId: userId }, { teams: { some: { claimedByUserId: userId } } }],
+      OR: leagueMemberWhere(userId),
     },
     select: { id: true, platform: true, platformLeagueId: true },
   })

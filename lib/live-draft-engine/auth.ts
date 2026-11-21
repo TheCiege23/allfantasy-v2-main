@@ -3,6 +3,7 @@
  */
 
 import { isRosterManagedBy } from '@/lib/league/rosterManager'
+import { isImportViewer } from '@/lib/league/importViewers'
 import { listHeldTeams, rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
 import { chooseDraftRosterId, resolveOnClockRosterIdForLeague } from './onClockRoster'
 import { prisma } from '@/lib/prisma'
@@ -66,6 +67,9 @@ export async function canAccessLeagueDraft(leagueId: string, userId: string | un
   })
   if (team) return true
   if (await acceptedCoOwnerRosterId(leagueId, userId)) return true
+  // A league mate with no team who joined an already-imported league may read it (lib/league/importViewers.ts).
+  const viewerLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (isImportViewer(viewerLeague?.settings, userId)) return true
   return (await getDevBypassFallbackRosterId(leagueId, userId)) != null
 }
 
