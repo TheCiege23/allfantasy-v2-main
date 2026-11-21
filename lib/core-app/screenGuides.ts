@@ -679,7 +679,8 @@ export function screenGuideKeyFor(pathname: string | null | undefined, inLeague:
 
 export function screenGuide(key: ScreenGuideKey, language: string | null | undefined): ScreenGuide {
   const entry = GUIDES[key]
-  return language === 'es' ? entry.es : entry.en
+  // A lookup, not an inline language ternary (the i18n-ternary ratchet): any language we lack reads English.
+  return (entry as Partial<Record<string, ScreenGuide>>)[language ?? 'en'] ?? entry.en
 }
 
 /** Where a guide's page lives. League pages keep the league that is selected. */
