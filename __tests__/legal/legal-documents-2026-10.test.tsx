@@ -68,8 +68,9 @@ describe('2026-10 legal documents', () => {
 
   it('YouTube disclosures revise Privacy and Terms without redating the other owner documents', () => {
     const { terms, privacy, disclaimer, smsTerms, copyright } = LEGAL_LAST_UPDATED_BY_PAGE
-    expect(terms).toBe('October 11, 2026')
-    expect(privacy).toBe(terms)
+    // Terms re-dated 2026-11-21 (Washington moved to a Restricted State); Privacy did not change.
+    expect(terms).toBe('November 21, 2026')
+    expect(privacy).toBe('October 11, 2026')
     expect(new Set([disclaimer, smsTerms, copyright])).toEqual(new Set(['October 6, 2026']))
   })
 })
