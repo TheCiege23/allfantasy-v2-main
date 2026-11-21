@@ -422,6 +422,28 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         error: err instanceof Error ? err.message.slice(0, 160) : 'sleeper trade facts failed',
       }))
 
+      /*
+       * ESPN / MFL WAIVER CLAIMS -> `dw_transaction_facts`, THIS SEASON ONLY, once a day per league
+       * (lib/league-import/providerWaiverRefresh.ts; owner's "daily current-season refresh", 2026-11-21). The manager
+       * record counted these from the import-time backfill alone. On spare runway after the Sleeper trades, its own
+       * heartbeat, each league started only while the run budget allows one more fetch.
+       */
+      const providerWaivers = await withSyncJobRun(
+        { jobName: 'cron-provider-waiver-refresh', trigger: 'cron' },
+        async () => {
+          const { refreshProviderWaivers, defaultRefreshDeps } = await import('@/lib/league-import/providerWaiverRefresh')
+          return refreshProviderWaivers(defaultRefreshDeps(budget))
+        },
+        (r) => ({
+          rowsRead: r.claimsRead,
+          rowsWritten: r.factsWritten,
+          warnings: [...r.errors, ...(r.deferred ? [`${r.deferred} league(s) deferred: run budget`] : [])],
+          metadata: { off: r.off ?? false, leagues: r.leagues, picked: r.picked, refreshed: r.refreshed, lapDays: r.lapDays, slot: r.slot },
+        }),
+      ).catch((err: unknown) => ({
+        error: err instanceof Error ? err.message.slice(0, 160) : 'provider waiver refresh failed',
+      }))
+
       // Run this weekly identity bridge only on spare runway, after the existing intel work.
       const ncaabFantraxIdentities = await withSyncJobRun(
         { jobName: 'ncaab-fantrax-identities', sport: 'NCAAB', provider: 'fantrax', trigger: 'cron' },
@@ -441,6 +463,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         ...outcome,
         espnNcaab,
         sleeperTradeFacts,
+        providerWaivers,
         // After the existing keys: the dispatcher echoes only the first 1500 chars of the body.
         ncaabDevyPool,
         ncaabFantraxIdentities,

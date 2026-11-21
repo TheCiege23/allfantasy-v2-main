@@ -205,10 +205,10 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
 | Player Value | ~93 | ~90 | ~100 | Kernel ⚠ → ✅ in this change: every live league-board read (value answer, Waivers, card, metrics, in-league trade grade, roster grade, daily Guilly) goes through Value OS's `leagueBoard` feed (below). User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
 | Trade | ~86 | ~79 | ~100 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule): the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. Engine ⚠ → ✅ in this change (owner's "build Trade OS out to 100%", 2026-11-21): each letter's graded redraft deals set the confidence stated beside it — never the letter. Cron ⚠ → ✅: the pending-offer reminders re-grade native offers on a schedule, the first grade a native offer gets after it is sent (below) |
-| Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
+| Draft | ~79 | ~66 | ~100 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a. Engine ⚠ → ✅ in this change (owner's "build it now", 2026-11-21): the served pick tips are graded against the board they were given on, and the record sets the confidence said beside a pick — never the pick (below). No migration: the records table already exists |
 | Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
-| Manager Psychology | ~90 | ~63 | ~93 | Feed ❌ → ✅ and Kernel ⚠ → ✅ in this change: manager records read through the `psychology` feed (below). Cron ⚠ stays: ESPN/MFL waivers and Fantrax trades refresh only at import or upload (a provider-quota decision) |
+| Manager Psychology | ~90 | ~63 | ~100 | Feed ❌ → ✅ and Kernel ⚠ → ✅: manager records read through the `psychology` feed (below). Cron ⚠ → ✅ in this change (owner's "daily current-season refresh", 2026-11-21, reversing the import-only quota choice): ESPN and MFL waiver claims are re-read once a day, this season only. Fantrax trades stay upload-only — Fantrax has no feed to schedule, so that half is n/a (below) |
 | Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below) |
 
 **Stale or false claims this re-score corrected** (each checked in code):
@@ -225,6 +225,30 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 - Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
 
 **Built in this change (no migration):**
+- **Draft OS learns how sure to be from its own graded pick tips** (owner's "build it now", 2026-11-21). Every tip the
+  decision card or Chimmy serves has been recorded since 2026-11-14 with the projections the pool carried at that
+  moment (`draft_recommendation_records`); only a hand-run script read them. The six-hourly ledger rebuild now grades
+  each SERVED tip (`lib/decision-os/draft/tipCalibration.ts`): it held up when the pick out-scored the median
+  of the 12 best-projected other players on that board (at least 5 of them placed), standard PPR from the first week
+  not kicked off through the last played. Tips fold by round — 1–3, 4–8, 9+ — silent below 20 decided, shrunk toward a
+  coin flip, and the decision's own confidence line (`how_confident`, which the draft card and Chimmy both show) gains
+  how picks in that part of the draft have held up; a low one says the pick is closer than it looks.
+  - 🛑 The pick is never touched — the ranking, the pick rules and "what to do" are the engine's (`withDraftTipRecord`
+    in `pickDecision.ts`). NFL only, the ledger's week feed.
+  - ⚠ Expect silence until next season: tips have been recorded only since 2026-11-14, after most NFL drafts.
+  - Contained on its own in the rebuild: a failure in the draft grading costs only that line, never the bench,
+    pickup, trade and waiver records beside it.
+- **ESPN and MFL waiver claims stay current** (owner's "daily current-season refresh", 2026-11-21, reversing the
+  import-only quota choice). The manager record counted ESPN/MFL claims from the historical backfill, which runs once
+  at import. `lib/league-import/providerWaiverRefresh.ts` now re-reads THIS SEASON ONLY for each imported ESPN or MFL
+  league once a day — the import's own fetch with the importer's sign-in, and the backfill's own row builder
+  (`espnTransactionFactRows` / `mflTransactionFactRows`, extracted from the two backfill services, byte-for-byte the
+  same rows) — into the immutable, deterministically keyed transaction facts, so a stored claim is a no-op. A stateless
+  rotation on the six-hour `?intel=1` tick (heartbeat `cron-provider-waiver-refresh`): every league once a day while
+  there are at most 48, the lap stated beyond that; each league started only while the run budget allows; a failing
+  league costs only itself. `PROVIDER_WAIVER_REFRESH=off` switches it off.
+  - ⚠ Fantrax trades reach AllFantasy only from the commissioner's own trade-history upload — there is no Fantrax feed
+    to schedule — so that half of the old ⚠ is n/a, not a gap. Yahoo import is off and Fleaflicker imports no waivers.
 - **The hub's multi-model axis: a second model checks Chimmy's decision answers** (owner's "get the hub up to 100%",
   2026-11-21). The owner retired the three-brain synthesis on 2026-11-19 (3–4 model calls per answer) and, asked how
   to fill the axis, chose a narrow second-model CHECK instead of bringing it back. On a trade, waiver, start/sit or
@@ -405,7 +429,8 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | ✅ | Grade more than 3 pending offers — **owner said yes, done in this change** (below): up to 6, time-bounded inside the packet deadline | Trade, user-visible | S |
 | ✅ | Trade OS to 100% — **done in this change** (above): each letter's graded deals set the confidence stated beside it (never the letter), and native offers are re-graded by their reminders on a schedule | Trade Engine, Cron → ✅ (~100) | M |
 | ⏸ | Let graded trades move letters — **declined for now** (owner's "use your recommendation", 2026-11-20): the letter IS the trade decision, and waivers and start/sit use their records to tune confidence, never to change the call. It needs a record validated as predictive first; the record already shows beside every grade, and since 2026-11-21 so does the confidence it sets | — | M |
-| — | **Migration:** draft advice learns from graded tips | Draft Engine → ✅ (~100) | L |
+| ✅ | Draft advice learns from graded tips — **done in this change, no migration** (below): the recorder's table already holds every served tip with the board's projections at that moment | Draft Engine → ✅ (~100) | L |
+| ✅ | ESPN / MFL waiver claims refreshed daily — **owner said yes, done in this change** (below) | Psychology Cron → ✅ (~100) | M |
 
 **THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as
 the 2026-11-20 re-score (axes 1–3 = 40%, 4–5 = 30%, 6–7 = 30%; ⚠ counts half; n/a leaves its group). Code-scheduled
