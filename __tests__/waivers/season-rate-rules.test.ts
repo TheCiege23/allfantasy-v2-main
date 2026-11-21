@@ -191,6 +191,20 @@ describe('seasonRatePool reads', () => {
     expect([...map]).toEqual([['7', 'k1']])
   })
 
+  it('uses a verified registry key while the linked football player has no CFBD projection', async () => {
+    const registryId = '4569c370-e63b-4ef1-81d2-cb16b74e813f'
+    const row = id({ id: registryId, sport: 'NCAAF', fantraxId: 'tracked', rollingInsightsId: 'ri-11' })
+    const db = dbWith([], [row])
+    expect(await resolveRosterIdsToKeys(db, 'NCAAF', 'fantraxId', ['tracked']))
+      .toEqual(new Map([['tracked', registryId]]))
+    expect(leagueIdOf((await loadIdentityForKeys(db, 'NCAAF', [registryId])).get(registryId), 'fantraxId')).toBe('tracked')
+    const linked = dbWith([], [{ ...row, cfbdId: 'cf11' }])
+    expect(await resolveRosterIdsToKeys(linked, 'NCAAF', 'fantraxId', ['tracked'], new Set([registryId])))
+      .toEqual(new Map([['tracked', registryId]]))
+    expect(await resolveRosterIdsToKeys(linked, 'NCAAF', 'fantraxId', ['tracked'], new Set([registryId, 'cf11'])))
+      .toEqual(new Map([['tracked', 'cf11']]))
+  })
+
   it('keys NCAAF by CFBD id, and marks a key whose rows disagree on a column as unusable there', async () => {
     const db = dbWith(
       [],

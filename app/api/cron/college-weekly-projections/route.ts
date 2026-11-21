@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       runCollegeProjectionRecheck,
       runs => ({
         rowsRead: runs.reduce((n, r) => n + (r.checked ?? 0), 0),
-        rowsWritten: runs.flatMap(r => r.writer ?? []).reduce((n, r) => n + r.written, 0),
+        rowsWritten: runs.flatMap(r => r.writer ?? []).reduce((n, r) => n + r.written + (r.boxesWritten ?? 0), 0),
         errors: runs.flatMap(r => r.error ? [r.error] : []),
         warnings: runs.flatMap(r => r.warnings ?? []),
         metadata: { runs },
