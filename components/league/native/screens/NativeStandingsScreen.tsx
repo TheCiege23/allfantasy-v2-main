@@ -262,7 +262,7 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
                       <th scope="col">PF</th>
                       <th scope="col" data-hide="phone">PA</th>
                       <th scope="col" data-hide="phone">Strk</th>
-                      <th scope="col" data-align="left">Playoff odds</th>
+                      <th scope="col" data-align="left"><span className="nls-rd-th-lead">Playoff </span>odds</th>
                     </tr>
                   </thead>
                   <tbody>
