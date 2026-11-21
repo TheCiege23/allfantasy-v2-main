@@ -1,5 +1,31 @@
 import { expect, test } from '@playwright/test'
 
+/*
+ * 🛑 NO REQUEST FROM THESE PREVIEW PAGES REACHES THE DEV SERVER'S API ROUTES.
+ *
+ * The league home screen fires seven API requests on load — /api/league/chat, /api/shared/activity,
+ * /api/i18n/translations, the league's activity, rules-explainer and nfl-scoring, /api/chat/unread — and
+ * nothing here waits for them. The first test finished in ~5s and closed, but `next dev` went on compiling
+ * whichever route was cold: /api/league/chat is 10,805 modules (85s, measured locally), /api/i18n/translations
+ * 12,207 (80.7s). The next test's page request queued behind that compile. So the draft test's first attempt
+ * took 52-67s in EVERY one of 15 mobile-smoke runs (2026-11-20), failing at the 60s timeout in 10 of them on
+ * `page.goto` (ERR_ABORTED / timeout) or mid-test, and passing on retry in 3-30s once the compile was done.
+ * The Safari pass paid it again after the dev server's mid-run memory restart.
+ *
+ * Each is answered here with what it returns to a signed-out visitor, which is what this preview is
+ * (measured with curl against the dev server): 401 `{ error: 'Unauthorized' }`, except /api/shared/activity,
+ * which is 200 with no items. /api/i18n/translations returns 200 signed out; a 401 instead makes
+ * LanguageProviderClient keep the bundled English copy it already rendered, which is its designed fallback.
+ * A test's own `page.route` registered later still wins, as /api/chat/unread's does below.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/**', (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (pathname === '/api/shared/activity') return route.fulfill({ status: 200, json: { status: 'ok', items: [] } })
+    return route.fulfill({ status: 401, json: { error: 'Unauthorized' } })
+  })
+})
+
 test('league section picker and switcher stay tappable through rotation', async ({ page }, testInfo) => {
   await page.route('**/api/chat/unread', route => route.fulfill({ json: { byLeague: {} } }))
   await page.goto('/dev/league-mobile-preview')
