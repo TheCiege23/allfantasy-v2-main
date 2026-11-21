@@ -1935,3 +1935,16 @@
     font-size: 40px;
   }
 }
+
+/*
+ * The page's "More detail" fold (2026-11-20) holds the history and the betting-lines panel, and
+ * either can be absent — the panel draws nothing until its odds arrive. An empty fold is hidden
+ * rather than offered: a "More detail" that opens on nothing is worse than none.
+ */
+.af-mu-more:not(:has(.af-md-body > *)) {
+  display: none;
+}
+/* The two sections inside are already framed; the fold's own padding is enough between them. */
+.af-mu-more .af-md-body > .af-mu-section {
+  margin: 0;
+}

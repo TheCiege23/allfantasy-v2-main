@@ -1713,6 +1713,11 @@ a.af-mt-lock-fix:focus-visible {
 .af-mt-basis {
   order: 1;
 }
+/* The page's "More detail" fold now holds byes and basis (2026-11-20), so it takes their place:
+   after the roster on a narrow page, in the side column on a wide one. */
+.af-mt-more {
+  order: 1;
+}
 
 /* Wide: roster left, matchup + byes + basis in a 320px column beside it. */
 @container af-mt (min-width: 900px) {
