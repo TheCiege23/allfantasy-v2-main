@@ -1,4 +1,5 @@
 import type { LeagueSport } from '@prisma/client'
+import { NCAAB_SLOT_MAP, NCAAB_ZOMBIE_BENCH, NCAAB_ZOMBIE_STARTERS } from '@/lib/ncaab-roster/NcaabRosterTemplates'
 import { getRosterDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import { normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-scope'
 
@@ -89,7 +90,24 @@ function resolveZombieRosterDefaults(
     return resolved
   }
 
-  if (sport === 'NBA' || sport === 'NCAAB') {
+  if (sport === 'NCAAB') {
+    return {
+      sport,
+      starterSlots: { ...NCAAB_ZOMBIE_STARTERS },
+      benchSlots: NCAAB_ZOMBIE_BENCH,
+      irSlots: 0,
+      taxiSlots: 0,
+      devySlots: 0,
+      flexDefinitions: ['G', 'F'].map(slotName => ({
+        slotName,
+        allowedPositions: [...NCAAB_SLOT_MAP.get(slotName)!.eligiblePositions],
+      })),
+      rosterSize: Object.values(NCAAB_ZOMBIE_STARTERS).reduce((sum, count) => sum + count, NCAAB_ZOMBIE_BENCH),
+      modifiers,
+    }
+  }
+
+  if (sport === 'NBA') {
     const resolved: FormatRosterDefaults = {
       sport,
       starterSlots: { PG: 1, SG: 1, SF: 1, PF: 1, C: 1 },
