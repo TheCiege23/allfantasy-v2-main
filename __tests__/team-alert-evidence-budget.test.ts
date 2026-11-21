@@ -40,3 +40,15 @@ describe('empty-bench injury evidence', () => {
  })
 })
 
+
+describe('best ball leagues', () => {
+ it('raises no hurt-starter alert, by the column or by an import\'s settings flag, and keeps deadlines', async () => {
+   for (const row of [{ bestBallMode: true }, { settings: { tradeDeadlineAt: deadline, best_ball: 1 } }]) {
+     m.team.mockResolvedValue(data(true))
+     m.league.mockResolvedValue({ settings: { tradeDeadlineAt: deadline }, lastSyncedAt: new Date(), ...row })
+     const result = await readTeamAlerts('a', 'owner')
+     expect(result.alerts.map(a => a.kind)).toEqual(['deadline'])
+     expect(m.players).not.toHaveBeenCalled()
+   }
+ })
+})
