@@ -202,6 +202,12 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    */
   { name: 'platform-infra', why: 'PostHog analytics SDK assets (extensions, remote config) proxied for the browser', test: /^us-assets\.i\.posthog\.com$/i },
   /*
+   * PostHog's query API, read by lib/admin-dashboard/AppPlatformStatsService.ts for the
+   * admin Apps page (people by iOS app / Android app / web). Our own product analytics,
+   * admin-only — not a fantasy data feed, and not something Postgres holds.
+   */
+  { name: 'platform-infra', why: 'PostHog query API for the admin Apps page; our own analytics, not a data feed', test: /^(us|eu)\.posthog\.com$/i },
+  /*
    * OUTBOUND PUBLISHING, moved out of the data-API ledger on 2026-08-28. We WRITE to
    * these; they are not reads that Postgres could have served, which is what the
    * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
