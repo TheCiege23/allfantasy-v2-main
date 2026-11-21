@@ -17,8 +17,26 @@ import { fetchSleeperJson } from './liveLeagueFetch'
  * MAX_ENTRIES; the oldest entry goes first.
  */
 
-export type WireRoster = { roster_id: number; owner_id: string | null; players?: string[] | null; starters?: string[] | null }
-export type WireDraft = { draft_id: string; status: string }
+export type WireRoster = {
+  roster_id: number
+  owner_id: string | null
+  players?: string[] | null
+  starters?: string[] | null
+  taxi?: string[] | null
+  reserve?: string[] | null
+  /** Co-owners manage the roster as much as `owner_id` does. */
+  co_owners?: string[] | null
+}
+export type WireDraft = {
+  draft_id: string
+  status: string
+  season?: string | null
+  /** snake | linear | auction */
+  type?: string | null
+  /** Epoch ms; null or absent until the commissioner sets a date. */
+  start_time?: number | null
+  settings?: { rounds?: number | null } | null
+}
 export type WireDraftPick = { player_id?: string | null; picked_by?: string | null; round: number; pick_no: number }
 
 export const ROSTER_TTL_MS = 60_000
@@ -77,4 +95,39 @@ export function liveDraftPicks(draftId: string, o: Opts = {}): Promise<WireDraft
   if (!ID.test(draftId)) return Promise.resolve(null)
   const f = o.fetcher ?? fetchSleeperJson
   return cached(`picks:${draftId}`, PICKS_TTL_MS, () => f<WireDraftPick[]>(`/draft/${draftId}/picks`), o.now ?? Date.now)
+}
+
+/*
+ * Live points for the C2C / Devy roster page (2026-11-21). Same shared cache, same reason: every viewer
+ * polling once a minute must not each ask Sleeper. Matchups are kept 30s so a score still moves inside a
+ * poll; the NFL week and team names change rarely and are kept longer.
+ */
+export type WireMatchup = {
+  roster_id: number
+  matchup_id: number | null
+  points?: number | null
+  players_points?: Record<string, number> | null
+}
+export type WireLeagueUser = { user_id: string; display_name?: string | null; metadata?: { team_name?: string | null } | null }
+export type WireNflState = { week?: number | null; display_week?: number | null; season?: string | null; season_type?: string | null }
+
+export const MATCHUPS_TTL_MS = 30_000
+export const USERS_TTL_MS = 10 * 60_000
+export const NFL_STATE_TTL_MS = 5 * 60_000
+
+export function liveLeagueMatchups(sleeperLeagueId: string, week: number, o: Opts = {}): Promise<WireMatchup[] | null> {
+  if (!ID.test(sleeperLeagueId) || !Number.isInteger(week) || week < 1 || week > 25) return Promise.resolve(null)
+  const f = o.fetcher ?? fetchSleeperJson
+  return cached(`matchups:${sleeperLeagueId}:${week}`, MATCHUPS_TTL_MS, () => f<WireMatchup[]>(`/league/${sleeperLeagueId}/matchups/${week}`), o.now ?? Date.now)
+}
+
+export function liveLeagueUsers(sleeperLeagueId: string, o: Opts = {}): Promise<WireLeagueUser[] | null> {
+  if (!ID.test(sleeperLeagueId)) return Promise.resolve(null)
+  const f = o.fetcher ?? fetchSleeperJson
+  return cached(`users:${sleeperLeagueId}`, USERS_TTL_MS, () => f<WireLeagueUser[]>(`/league/${sleeperLeagueId}/users`), o.now ?? Date.now)
+}
+
+export function liveNflState(o: Opts = {}): Promise<WireNflState | null> {
+  const f = o.fetcher ?? fetchSleeperJson
+  return cached('state:nfl', NFL_STATE_TTL_MS, () => f<WireNflState>('/state/nfl'), o.now ?? Date.now)
 }

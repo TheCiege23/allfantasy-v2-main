@@ -141,6 +141,8 @@ import { buildLeagueTabGroups, groupForLeagueTab } from '@/components/decide/lea
 import { LegacyHome } from '@/components/decide/LegacyHome'
 import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
+import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
+import { collegeProFormatOf } from '@/lib/league/collegePro/format'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
 import { AICoachingTab } from './tabs/AICoachingTab'
@@ -2793,8 +2795,8 @@ function LeagueTabRouter({
       return <KeeperSelectionTab leagueId={leagueId} />
     case 'team':
     case 'roster':
-    case 'squad':
-      return (
+    case 'squad': {
+      const standardRoster = (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Draft-aware live roster (Sleeper leagues): current roster incl.
               in-progress draft picks; renders nothing for other platforms. */}
@@ -2831,6 +2833,17 @@ function LeagueTabRouter({
           />
         </div>
       )
+      /*
+        A college + pro league (C2C / Devy) shows both lineups on one page. Every other league,
+        and any failure to read the two halves, keeps the standard roster view above.
+      */
+      if (selectedLeague.platform !== 'sleeper' || !collegeProFormatOf(selectedLeague)) return standardRoster
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <CollegeProRoster leagueId={leagueId} onPlayerClick={onPlayerClick} fallback={standardRoster} />
+        </div>
+      )
+    }
     case 'league':
       return (
         <LeagueTab

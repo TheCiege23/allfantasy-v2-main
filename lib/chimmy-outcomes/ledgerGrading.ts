@@ -6,6 +6,8 @@ import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } fr
 import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
 import { foldTradeLetterCalls, type TradeLetterLedger } from '@/lib/decision-os/trade/letterCalibration'
+import { foldDraftTips, gradeDraftTip, type DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
+import { backtestKey, buildIdSpaces, chooseIdSpace, gameRowsToWeekly, weeklyByKey, windowPoints } from '@/lib/shared-services/draft/backtest/backtestInputs'
 import {
   addWindowEnd,
   completedThrough,
@@ -349,6 +351,58 @@ async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db,
   return { tally: { byLetter, pending: g.pending, unscored: g.unscored, read: inputs.read, gradable: redraft.length }, letters }
 }
 
+/** A recorder key (`name|position`, as `recommendationRecorder.ts` writes it) → the outcome table's key. */
+function recorderKeyToOutcomeKey(key: string): string {
+  const i = key.lastIndexOf('|')
+  return i < 0 ? backtestKey(key, '') : backtestKey(key.slice(0, i), key.slice(i + 1))
+}
+
+/**
+ * Draft OS's served pick tips this NFL season (`draft_recommendation_records`), each graded against the best-projected
+ * alternatives the pool held at that moment (`decision-os/draft/tipCalibration.ts`), standard PPR from the first week not kicked
+ * off through the last one played. Nothing is read beyond the records when there are none.
+ */
+async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<DraftTipLedger> {
+  const records = await db.draftRecommendationRecord.findMany({
+    where: { sport: 'NFL', createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
+    take: 20_000,
+  })
+  if (records.length === 0) return {}
+  const through = completedThrough(cal, now)
+  const [players, gameRaw] = await Promise.all([
+    db.sportsPlayer.findMany({ where: { sport: 'NFL' }, select: { id: true, externalId: true, sleeperId: true, source: true, name: true, position: true } }),
+    db.playerGameStat.findMany({
+      where: { sportType: { in: ['NFL', 'nfl'] }, season },
+      select: { playerId: true, weekOrRound: true, fantasyPoints: true, normalizedStatMap: true },
+    }),
+  ])
+  const game = gameRowsToWeekly(gameRaw)
+  const space = chooseIdSpace(buildIdSpaces(players), game.rows.map((r) => r.playerId)).space
+  const { byKey } = weeklyByKey(game.rows, space)
+  const windows = new Map<number, Map<string, number>>()
+  const calls: Array<{ round: number; grade: 'held' | 'missed' | null }> = []
+  for (const r of records) {
+    const from = firstWeekNotKickedOff(cal, new Date(r.createdAt))
+    if (from == null || from > through) continue
+    let pts = windows.get(from)
+    if (!pts) windows.set(from, (pts = windowPoints(byKey, from, through)))
+    const servedName = r.servedMode === 'active' ? r.activeName : r.observeName
+    const servedPos = r.servedMode === 'active' ? r.activePosition : r.observePosition
+    const detail = (r.detail ?? {}) as { projections?: Record<string, number> }
+    const window = pts
+    calls.push({
+      round: r.round,
+      grade: gradeDraftTip({
+        servedKey: servedName ? `${servedName}|${servedPos ?? ''}` : null,
+        projections: detail.projections && typeof detail.projections === 'object' ? detail.projections : {},
+        points: (key) => window.get(recorderKeyToOutcomeKey(key)) ?? null,
+      }),
+    })
+  }
+  return foldDraftTips(calls)
+}
+
 /** Swallow only "this part's table/column is not there"; anything else is the caller's to see. */
 async function part<T>(fn: () => Promise<T>, empty: T): Promise<T> {
   try {
@@ -382,6 +436,15 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     // The waiver engine's #1 claims, by the score it gave them — its own calibration.
     part(() => loadEngineClaimRows(season, db), [] as EngineClaimRow[]),
   ])
+  /*
+   * Draft OS's served pick tips, graded against the board they were given on — its own calibration. ⚠ Contained on its
+   * own, not through `part()`: it is the newest part and only feeds a confidence line, so any failure in it costs only
+   * that line, never the bench, pickup, trade and waiver records beside it.
+   */
+  const draftTips = await gradeDraftTips(season, cal, now, db).catch((err: unknown) => {
+    console.warn('[ledgerGrading] draft tip grading failed', err instanceof Error ? err.message : err)
+    return {} as DraftTipLedger
+  })
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
   return foldLedger({
     season,
@@ -394,6 +457,7 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     waiverEngine,
     tradeLetters: graded.letters,
     commissionerTradeLetters: commissionerGraded.letters,
+    draftTips,
   })
 }
 

@@ -85,3 +85,19 @@ export async function loadCfbWeeksForNflWeek(
   ])
   return cfbWeeksByNflWeek(nfl, cfb).get(args.nflWeek) ?? []
 }
+
+/**
+ * This NFL week's window `[start, end)` from the stored NFL schedule, or null when it has no games
+ * on file. Rows that carry a game DATE rather than a week number (Rolling Insights college lines,
+ * whose week numbering need not match CFBD's) are selected by this window.
+ */
+export async function loadNflWeekWindow(
+  db: Pick<PrismaClient, 'sportsGame'>,
+  args: { season: number; nflWeek: number },
+): Promise<{ start: number; end: number } | null> {
+  const nfl = await db.sportsGame.findMany({
+    where: { sport: { in: ['NFL', 'nfl'] }, season: args.season, week: args.nflWeek, OR: [{ seasonType: 'regular' }, { seasonType: null }] },
+    select: { week: true, startTime: true },
+  })
+  return nflWeekWindows(nfl).get(args.nflWeek) ?? null
+}
