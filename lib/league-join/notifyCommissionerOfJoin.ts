@@ -88,3 +88,51 @@ export async function notifyInviterOfJoin(params: { leagueId: string; joinerUser
     dedupePrefix: `league_invite_accepted:${leagueId}:${joinerUserId}`,
   })
 }
+
+/**
+ * "Sam joined Dynasty Bros — 5 of 12 managers are here" — to every OTHER manager already in the league
+ * (owner's ask, 2026-11-21: league mates arriving from Sleeper and Fantrax should not feel alone, and
+ * the people already here should hear when one more shows up).
+ *
+ * 🛑 A LEAGUE MATE WHO IMPORTED THE SAME LEAGUE ARRIVED IN SILENCE. An import that finds the league
+ * already here joins that copy by claiming the importer's own team (`claimExistingLeagueForMember`),
+ * and told nobody: not the commissioner, not the managers already in it. Only the invite-link door
+ * (`app/api/leagues/join`) sent an alert, and only to the commissioner and the inviter.
+ *
+ * Sent to the claimed managers other than the joiner. The league owner and the inviter are skipped:
+ * they get their own, more specific line above, and nobody is told twice. Bell and phone only, low
+ * severity, once per league, joiner and recipient. Best-effort: the join has already committed.
+ */
+export async function notifyLeagueMatesOfJoin(params: { leagueId: string; joinerUserId: string }): Promise<void> {
+  const { leagueId, joinerUserId } = params
+  const [league, teams, profile, referral] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, userId: true } }),
+    prisma.leagueTeam.findMany({ where: { leagueId }, select: { claimedByUserId: true } }),
+    prisma.userProfile.findFirst({ where: { userId: joinerUserId }, select: { displayName: true, sleeperUsername: true } }),
+    prisma.referral.findUnique({ where: { referredUserId: joinerUserId }, select: { referrerId: true } }).catch(() => null),
+  ])
+  if (!league) return
+  const here = [...new Set(teams.map((t) => t.claimedByUserId).filter((id): id is string => Boolean(id)))]
+  const skip = new Set([joinerUserId, league.userId, referral?.referrerId].filter((id): id is string => Boolean(id)))
+  const recipients = here.filter((id) => !skip.has(id))
+  if (recipients.length === 0) return
+  const who = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'A league mate'
+  const leagueName = league.name?.trim() || 'your league'
+  const missing = teams.length - here.length
+  await dispatchNotification({
+    userIds: recipients,
+    category: 'league_announcements',
+    type: 'league_mate_joined',
+    title: `${who} joined ${leagueName}`,
+    body: missing > 0
+      ? `${here.length} of ${teams.length} managers are here now. Invite the other ${missing} from the league page.`
+      : `All ${teams.length} managers are here now.`,
+    actionHref: `/league/${leagueId}`,
+    actionLabel: 'Open league',
+    leagueId,
+    meta: { joinerUserId, here: here.length, teams: teams.length },
+    severity: 'low',
+    skipChannels: { email: true, sms: true },
+    dedupePrefix: `league_mate_joined:${leagueId}:${joinerUserId}`,
+  })
+}

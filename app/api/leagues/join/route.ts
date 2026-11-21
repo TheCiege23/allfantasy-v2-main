@@ -21,7 +21,7 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
-import { notifyCommissionerOfJoin, notifyInviterOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { notifyCommissionerOfJoin, notifyInviterOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 
 /**
  * Give a week, get a week (lib/referral/proWeek.ts): a referred leaguemate JOINING a league through an
@@ -567,6 +567,9 @@ export async function POST(req: NextRequest) {
     })
     void notifyInviterOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
       console.warn('[league-join] inviter join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+    void notifyLeagueMatesOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] league mates join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
     })
   }
 
