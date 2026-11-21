@@ -184,7 +184,7 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
             ? null
             : saved['5']
               ? { me: 205.36, opponent: { name: 'Connor0488', total: 198.1 }, missing: null }
-              : { me: 205.36, opponent: null, missing: 'Match each Sleeper team to its Fantrax team to compare combined scores.' },
+              : { me: 205.36, opponent: null, missing: 'Match each pro team to its college team to compare combined scores.' },
         teamMap: scoring === 'combined' && commish ? { sleeperTeams: SLEEPER_TEAMS, fantraxTeams: FANTRAX_TEAMS, saved, suggested: SUGGESTED } : null,
         drafts: [
           { role: 'pro', platform: 'sleeper', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },

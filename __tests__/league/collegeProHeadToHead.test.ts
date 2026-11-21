@@ -54,7 +54,7 @@ describe('loadHeadToHead', () => {
   it('with no saved map, says what to do and never scores from a suggestion', async () => {
     const r = await loadHeadToHead({ ...base, proSettings: {}, wantEditor: true })
     expect(r.headToHead.opponent).toBeNull()
-    expect(r.headToHead.missing).toMatch(/Match each Sleeper team/)
+    expect(r.headToHead.missing).toMatch(/Match each pro team/)
     // The suggestion is there for the commissioner to confirm, including your own pair from the link.
     expect(r.editor?.suggested).toEqual({ '8': 'ciege', '5': 'conn' })
     expect(r.editor?.saved).toEqual({})

@@ -425,7 +425,8 @@ async function loadTodaysGames(sports: string[], now: Date) {
  *   - the period: the pro league's stored Fantrax scoring periods;
  *   - points: both halves scored from RI box lines over that period (dailyPoints.ts);
  *   - the opponent: the pro snapshot's stored matchups, scored the same way as you.
- * Combined head-to-head across two Fantrax leagues is not built yet: the team map is Sleeper-keyed.
+ * Combined head-to-head uses the same commissioner team map, keyed here by the pro league's Fantrax
+ * team ids, and the opponent's college starters scored over the same period.
  */
 async function loadFantraxProPair(args: {
   league: { id: string; name: string | null; sport: string | null; settings: unknown; leagueType: string | null; leagueVariant: string | null }
@@ -457,7 +458,7 @@ async function loadFantraxProPair(args: {
       : Promise.resolve(null),
     loadTodaysGames([proSport, collegeSport], now),
     prisma.fantraxLeague
-      .findUnique({ where: { id: proHalf.memberLeagueId }, select: { transactions: true, season: true, matchups: true, roster: true } })
+      .findUnique({ where: { id: proHalf.memberLeagueId }, select: { transactions: true, season: true, matchups: true, roster: true, standings: true } })
       .catch(() => null),
     prisma.fantraxLeague.findUnique({ where: { id: collegeHalf.memberLeagueId }, select: { transactions: true, season: true } }).catch(() => null),
   ])
@@ -470,7 +471,9 @@ async function loadFantraxProPair(args: {
   // The opponent this period, from the pro snapshot's own schedule, scored exactly as you are.
   const lower = (v: unknown) => String(v ?? '').trim().toLowerCase()
   const myTeam = lower(proHalf.teamLabel)
-  const matchups = Array.isArray(proSnap?.matchups) ? (proSnap!.matchups as Array<{ week?: unknown; homeTeam?: unknown; awayTeam?: unknown }>) : []
+  const matchups = Array.isArray(proSnap?.matchups)
+    ? (proSnap!.matchups as Array<{ week?: unknown; homeTeam?: unknown; awayTeam?: unknown; homeTeamId?: unknown; awayTeamId?: unknown }>)
+    : []
   const matchup = period ? matchups.find((m) => Number(m.week) === period.number && (lower(m.homeTeam) === myTeam || lower(m.awayTeam) === myTeam)) : undefined
   const oppName = matchup ? String((lower(matchup.homeTeam) === myTeam ? matchup.awayTeam : matchup.homeTeam) ?? '') || null : null
   let oppTotal: number | null = null
@@ -533,6 +536,37 @@ async function loadFantraxProPair(args: {
   const scoring = readCollegeProScoring(league.settings)
   const canEditScoring = await canCommissionerAct(league.id, userId, 'scoring').catch(() => false)
   const myCombined = scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null
+
+  // Combined head to head: the pro league's own teams, keyed by Fantrax team id.
+  const proTeams = (Array.isArray(proSnap?.standings) ? (proSnap!.standings as Array<{ team?: unknown; fantraxTeamId?: unknown }>) : [])
+    .filter((t) => typeof t.fantraxTeamId === 'string' && typeof t.team === 'string')
+    .map((t) => ({ rosterId: t.fantraxTeamId as string, teamName: t.team as string, ownerName: null }))
+  const idOf = (name: unknown) => proTeams.find((t) => lower(t.teamName) === lower(name))?.rosterId ?? null
+  const myProId = idOf(proHalf.teamLabel)
+  const oppProId = matchup
+    ? String((lower(matchup.homeTeam) === myTeam ? matchup.awayTeamId : matchup.homeTeamId) ?? '') || idOf(oppName)
+    : null
+  const h2h =
+    scoring === 'combined' && myProId && period && collegeSport === 'NCAAB'
+      ? await loadHeadToHead({
+          proSettings: league.settings,
+          fantraxSnapshotId: collegeHalf.memberLeagueId,
+          myCollegeTeamName: collegeHalf.teamLabel,
+          myCombined,
+          opponentProTotal: oppTotal,
+          opponentName: oppName,
+          myRosterId: myProId,
+          opponentRosterId: oppProId,
+          sleeperTeams: proTeams,
+          season: proSnap?.season ?? now.getFullYear(),
+          nflWeek: null,
+          wantEditor: canEditScoring,
+          collegeSport: 'NCAAB',
+          scoreCollegePlayers: (players) =>
+            loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(players) }).then((r) => r.points),
+        }).catch(() => null)
+      : null
+
   const drafts = [
     fantraxDraftCard(proSnap ? readStoredFantraxDraft(proSnap.transactions) : null, proSnap?.season ?? null, 'pro'),
     fantraxDraftCard(collegeSnap ? readStoredFantraxDraft(collegeSnap.transactions) : null, collegeSnap?.season ?? null, 'college'),
@@ -550,11 +584,8 @@ async function loadFantraxProPair(args: {
     drafts,
     pipeline: null,
     proLeagueId: league.id,
-    headToHead:
-      scoring === 'combined'
-        ? { me: myCombined, opponent: null, missing: 'Combined head-to-head for two Fantrax leagues is not available yet.' }
-        : null,
-    teamMap: null,
+    headToHead: h2h?.headToHead ?? (scoring === 'combined' ? { me: myCombined, opponent: null, missing: "This week's matchup could not be read." } : null),
+    teamMap: h2h?.editor ?? null,
     fetchedAt: now.toISOString(),
   }
 }

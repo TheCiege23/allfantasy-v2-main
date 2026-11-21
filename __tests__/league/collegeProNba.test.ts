@@ -23,10 +23,19 @@ vi.mock('@/lib/prisma', () => ({
           ? {
               transactions: null,
               season: 2026,
-              matchups: [{ week: 5, homeTeam: 'Golden State Warriors', awayTeam: 'Boston Celtics' }],
+              matchups: [{ week: 5, homeTeam: 'Golden State Warriors', awayTeam: 'Boston Celtics', homeTeamId: 'gsw', awayTeamId: 'bos' }],
               roster: [{ fantraxId: 'opp1', teamName: 'Boston Celtics', position: 'G', status: 'ACTIVE' }],
+              standings: [{ team: 'Golden State Warriors', fantraxTeamId: 'gsw' }, { team: 'Boston Celtics', fantraxTeamId: 'bos' }],
             }
-          : { transactions: null, season: 2026 },
+          : {
+              transactions: null,
+              season: 2026,
+              standings: [{ team: '#51 Butler Bulldogs', fantraxTeamId: 'but' }, { team: 'Duke', fantraxTeamId: 'duke' }],
+              roster: [
+                { fantraxId: 'dk1', teamName: 'Duke', position: 'G', status: 'ACTIVE' },
+                { fantraxId: 'dk2', teamName: 'Duke', position: 'F', status: 'RESERVE' },
+              ],
+            },
       ),
     },
   },
@@ -135,6 +144,23 @@ describe('the combined page for an NBA league on Fantrax', () => {
     expect(proSide.taxi).toEqual(['p3'])
     expect(proSide.score).toMatchObject({ week: 5, total: 10, opponent: { name: 'Boston Celtics', total: 10 } })
     expect(r.sides.find((s) => s.role === 'college')?.score.total).toBe(10)
+  })
+
+  it('combined scoring is head to head across two Fantrax leagues once the teams are matched', async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    h.leagues.nba!.settings = { fantrax_scoring_periods: PERIODS, collegeProScoring: 'combined', collegeProTeamMap: { gsw: 'but', bos: 'duke' } }
+    const r = await loadCollegeProRoster('nba', 'u1', new Date('2026-11-21T18:00:00Z'))
+    expect(r.applies).toBe(true)
+    if (!r.applies) return
+    // You: 10 NBA + 10 college. Boston: 10 NBA + Duke's one STARTER (10); Duke's bench player does not count.
+    expect(r.headToHead).toEqual({ me: 20, opponent: { name: 'Boston Celtics', total: 20 }, missing: null })
+  })
+
+  it('combined with no saved matches asks the commissioner to match teams', async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    h.leagues.nba!.settings = { fantrax_scoring_periods: PERIODS, collegeProScoring: 'combined' }
+    const r = await loadCollegeProRoster('nba', 'u1', new Date('2026-11-21T18:00:00Z'))
+    expect(r.applies && r.headToHead?.missing).toMatch(/Match each pro team/)
   })
 
   it('opened from the college league, it is the same page with college first', async () => {

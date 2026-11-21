@@ -367,7 +367,7 @@ function TeamMatchPanel({ leagueId, editor, onSaved }: { leagueId: string; edito
   return (
     <div className="mt-3 border-t border-subtle pt-3" data-testid="college-pro-team-match">
       <p className="mb-2 text-xs text-secondary">
-        Match each Sleeper team to its Fantrax college team. {matched} of {editor.sleeperTeams.length} matched.
+        Match each pro team to its college team. {matched} of {editor.sleeperTeams.length} matched.
       </p>
       <ul className="grid gap-1.5 sm:grid-cols-2">
         {editor.sleeperTeams.map((t) => {
