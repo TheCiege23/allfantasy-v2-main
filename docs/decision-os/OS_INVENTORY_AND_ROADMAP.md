@@ -199,7 +199,7 @@ survive.** Same seven axes and weights. Where an audit was stricter than this fi
 
 | OS | Audit | Under this file's rules | What is genuinely left |
 |---|---|---|---|
-| League | ~90 | ~90 | Kernel ⚠: three live redraft runtimes read rules directly — `resolveNflRedraftTradeRuntime.ts`, `resolveNflRedraftWaiverRuntime.ts`, `resolveNflRedraftLiveScoringRuntime.ts` |
+| League | ~90 | ~90 → **~100, rewired** | Kernel ⚠ → ✅: three live redraft runtimes read rules directly — `resolveNflRedraftTradeRuntime.ts`, `resolveNflRedraftWaiverRuntime.ts`, `resolveNflRedraftLiveScoringRuntime.ts`. Their GET routes read through League OS now (below) |
 | Import | ~82 | ~82 | Kernel ⚠: only the packet reads the feed. Cron ⚠: `fantasy-os-exec-sync` writes nothing unless `FANTASY_OS_EXEC_SYNC_LIVE=true` (code default off; production not read here) |
 | Projection | ~93 | ~93 | Kernel ⚠: every live projection read (`readAfProjections`: the projections route, Chimmy's tool, the draft pool) bypasses the feed. Engine is ✅, not n/a: graded accuracy moves the projected number |
 | Player Value | ~90 | ~90 | Kernel ⚠: the NFL market lane (the card, Chimmy's value tool) reads `playerValueSnapshot` directly; only the non-NFL league board reads through the feed |
@@ -216,6 +216,13 @@ so the Packet and Chimmy marks stand.
 
 **The one class of gap left is Kernel: live paths that read around their feed.** Rewiring them is the build list, one
 system per PR: League → Waiver → Projection → Player Value → Commissioner hub → the manager-record screens.
+
+**Rewired: League (1 of 6).** The trade, waiver and live-scoring screens' GET routes (`app/api/redraft/{trade-runtime,
+waiver-runtime,live-scoring}`) build `createLeagueOsLoaders()` and hand its `loadRules` to the resolver, which reads the
+ruleset through it (60 s), then report League OS's outcomes (`emitFeedOutcomes('league', …)`). Only the GET reads moved:
+every POST, proposal validation, waiver processing, stat ingest and matchup completion passes nothing and still reads the
+ruleset live, as League OS's own header requires of anything that persists on the result. Tests:
+`__tests__/redraft/runtime-rules-through-league-os.test.ts`, `__tests__/redraft/runtime-routes-league-os-loaders.test.ts`.
 
 **Built in this change (no migration):**
 - **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster
