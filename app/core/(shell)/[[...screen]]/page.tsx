@@ -1,4 +1,5 @@
 import { readHiddenLeagueSections, type LeagueSectionId } from '@/lib/league/leagueSections'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
@@ -520,7 +521,7 @@ async function leagueNameForTitle(leagueId: string, userId: string): Promise<str
     .findFirst({
       where: {
         id: leagueId,
-        OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+        OR: leagueMemberWhere(userId),
       },
       select: { name: true },
     })
