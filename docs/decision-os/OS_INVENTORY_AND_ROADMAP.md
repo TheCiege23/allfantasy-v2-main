@@ -208,7 +208,7 @@ survive.** Same seven axes and weights. Where an audit was stricter than this fi
 | Trade | ~93 | ~100 | Kernel ⚠ in the audit is the recorded n/a (pending trades are graded on rosters loaded live) |
 | Commissioner | ~78 | ~85 → ~93 | Kernel ⚠ → **n/a, not ⚠**: the hub builds health live because it is the feed's WRITER — it primes the entry Chimmy reads (below). Chimmy ⚠ stands: no commissioner tool — the slice arrives only on a commissioner-classified turn |
 | Draft | ~93 | ~93 → ~100 in this change | Engine ⚠: the record was an appended sentence with no level — **it now states High / Medium / Low** (below) |
-| Manager Psychology | ~90 | ~90 | Kernel ⚠: both user screens (`ManagerRecordSheet`, the commissioner Managers view) build live; only Chimmy reads the feed |
+| Manager Psychology | ~90 | ~90 → **~100, rewired** | Kernel ⚠ → ✅: both user screens (`ManagerRecordSheet`, the commissioner Managers view) built live; only Chimmy read the feed. Both read through it now (below) |
 | **Decision OS hub** | ~86 | ~93 → ~100 in this change | Learning ✅ by the waiver, bench and trade evidence the second audit verified (the third missed them). Operability ⚠: a late slice inside an on-time packet was never logged — **logged now** (below) |
 
 `DECISION_OS_GROUNDING_ENABLED` gates the whole packet (code default off); **the owner confirmed it is on in Railway**,
@@ -253,6 +253,18 @@ health snapshot live and hands it to Commissioner OS (`primeCommissionerHealthSn
 five minutes serves exactly the numbers the commissioner is looking at (2026-11-20). Reading the hub back through the
 feed would show a commissioner a five-minute-old count right after they cleared it — approve a trade, reload, still
 pending. The screen stays live and keeps writing.
+
+**Rewired: the manager-record screens (6 of 6).** `loadLeagueManagerRecords` serves both from the `psychology` feed:
+- the record sheet (one team) from the viewer's default view, which holds every leaguemate but the viewer and is built
+  from the same history and the same viewer as a one-team build — so it is the same record. The viewer's own team is not
+  in that view and still builds live;
+- the commissioner's Managers directory from its own entry (`includeViewer`, scope key `…:all`), because the default
+  view leaves the viewer out and one must never answer for the other.
+Membership is still proved on every call before either is read. Test: `__tests__/competitive-edge-manager-records-feed.test.ts`.
+
+**Where the Kernel series ends:** League, Waiver and the manager-record screens read through their feeds; Projection and
+Player Value are n/a by design (the feed cannot serve their screens without making them worse); the commissioner hub is
+n/a as the feed's writer.
 
 **Built in this change (no migration):**
 - **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster

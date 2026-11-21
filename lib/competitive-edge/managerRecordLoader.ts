@@ -62,10 +62,27 @@ export async function loadLeagueManagerRecords(input: LoadLeagueManagerRecordsIn
    * your own FAAB is found through your roster (`waiverEdgeLoader.ts`), so one viewer's view is never another's. A
    * single team's record and the commissioner's whole directory still build live. An unavailable result is not cached.
    */
-  if (!input.teamExternalId && !input.includeViewer && !input.now) {
+  if (!input.now) {
     const { loadViewerManagerRecords } = await import('@/lib/decision-os/manager-records-os')
-    const cached = await loadViewerManagerRecords({ userId: input.userId, leagueId: input.leagueId }).catch(() => null)
-    if (cached) return { available: true, data: cached }
+    /*
+     * THE SCREENS READ THROUGH THE FEED TOO (2026-11-21 re-score, Kernel ⚠ → ✅). The record sheet (one team) and the
+     * commissioner's Managers directory (every team) built live while Chimmy read the feed, so the three could show a
+     * different count for the same manager inside five minutes.
+     *   - One team: served from the viewer's default view, which holds every leaguemate but the viewer — a record there
+     *     is built from the same history and the same viewer as a one-team build. The viewer's own team is not in it,
+     *     so that one still builds live.
+     *   - The directory: its own entry (`includeViewer`), since the default view leaves the viewer out.
+     */
+    if (input.teamExternalId) {
+      const view = await loadViewerManagerRecords({ userId: input.userId, leagueId: input.leagueId }).catch(() => null)
+      // The view never holds the viewer's own team (`buildLeagueManagerRecords` leaves it out), so that one falls through.
+      const record = view?.records.find((r) => r.manager.teamExternalId === input.teamExternalId)
+      if (view && record) return { available: true, data: { ...view, records: [record] } }
+    } else {
+      const includeViewer = input.includeViewer === true
+      const cached = await loadViewerManagerRecords({ userId: input.userId, leagueId: input.leagueId, includeViewer }).catch(() => null)
+      if (cached) return { available: true, data: cached }
+    }
   }
   return buildLeagueManagerRecords(input)
 }
