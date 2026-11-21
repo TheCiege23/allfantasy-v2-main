@@ -781,24 +781,11 @@
   }
 }
 
-/* 2026-11-14: the Assumptions tab became a fold under the panel. */
+/* 2026-11-14: the Assumptions tab became a fold under the panel. Since 2026-11-20 it is the shared
+   "More detail" fold — its look comes from more-detail.css; only the spacing above it stays here. */
 .af-core .af-sol-basis-fold {
   margin-top: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--af-radius-inner);
-  padding: 0 14px;
 }
-.af-core .af-sol-basis-fold > summary {
-  cursor: pointer;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--muted);
-}
-.af-core .af-sol-basis-fold[open] > summary { color: var(--text); }
-.af-core .af-sol-basis-fold[open] { padding-bottom: 14px; }
 
 /*
  * 2026-11-14: four tabs fit on a phone as a 2×2 grid, so none is hidden behind a sideways scroll (the

@@ -56,8 +56,23 @@ import {
   useCareerGuideCopy,
 } from '@/components/core-app/career/CareerGuide'
 import type { ReactNode } from 'react'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { useMessages } from '@/components/i18n/useMessages'
+import { defineMessages } from '@/lib/i18n/messages'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
+
+/* The "More detail" fold's one line saying what is inside (2026-11-20). */
+const careerMoreMessages = defineMessages({
+  en: {
+    phoneNote: 'Career arc · scores · awards · data coverage',
+    deskNote: 'Scores · progression · awards · data coverage · record book',
+  },
+  es: {
+    phoneNote: 'Trayectoria · puntuaciones · premios · cobertura de datos',
+    deskNote: 'Puntuaciones · progresión · premios · cobertura de datos · libro de récords',
+  },
+})
 import '@/components/core-app/af-career-live.css'
 // Last on purpose: the phone/tablet layer overrides the three sheets above.
 import '@/components/core-app/af-career-devices.css'
@@ -239,6 +254,7 @@ function CareerMobile({
       null,
     )
   const acc = data.accomplishments
+  const mm = useMessages(careerMoreMessages)
 
   return (
     <div className="af-crm">
@@ -340,71 +356,6 @@ function CareerMobile({
               </section>
             ) : null}
 
-            {data.seasons.filter((s) => s.winRate != null).length >= 2 ? (
-              <section className="af-crm-card">
-                <div className="af-crm-cardhead">
-                  <h2 className="af-crm-cardtitle">CAREER ARC</h2>
-                  <span className="af-crm-titlesflag">◉ TITLES</span>
-                </div>
-                <MobileArc data={data} />
-                <div className="af-crm-arcfoot">
-                  <span>
-                    {data.firstSeason} — {data.lastSeason} · win rate, games-weighted
-                  </span>
-                  {peak ? <span className="af-crm-peak">PEAK {(peak.winRate * 100).toFixed(0)}%</span> : null}
-                </div>
-              </section>
-            ) : null}
-
-            {screen.awards.length > 0 ? (
-              <section className="af-crm-card">
-                <div className="af-crm-cardhead">
-                  <h2 className="af-crm-cardtitle">AWARDS · {screen.awards.length}</h2>
-                  <Link className="af-crx-mlink" href={careerHref(data.filter, { view: 'awards' })}>
-                    All →
-                  </Link>
-                </div>
-                <div className="af-crx-award-stack">
-                  {screen.awards.slice(0, 3).map((a) => (
-                    <AwardBadge key={a.key} award={a} compact />
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {data.prestige || data.legacy ? (
-              <section className="af-crm-card">
-                {data.prestige ? (
-                  <div className="af-crm-score">
-                    <div className="af-crm-scorerow">
-                      <span className="af-crm-scoreval af-crm-scoreval--accent">{data.prestige.total.toFixed(1)}</span>
-                      <span className="af-crm-scoreof">/ 100</span>
-                      <span className="af-crm-scorelabel">GM PRESTIGE</span>
-                      <TopicTip topic="careerPrestige" />
-                    </div>
-                    <div className="af-crm-bar">
-                      <i style={{ width: `${data.prestige.total}%`, background: 'var(--accent)' }} />
-                    </div>
-                  </div>
-                ) : null}
-                {data.legacy ? (
-                  <div className="af-crm-score">
-                    <div className="af-crm-scorerow">
-                      <span className="af-crm-scoreval af-crm-scoreval--warn">{data.legacy.total}</span>
-                      <span className="af-crm-scoreof">/ 100</span>
-                      <span className="af-crm-scorelabel">LEGACY</span>
-                      <TopicTip topic="careerLegacy" />
-                    </div>
-                    <div className="af-crm-bar">
-                      {data.legacy.dimensions.map((d) => (
-                        <i key={d.key} style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }} />
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-
             {titles.length > 0 ? (
               <section className="af-crm-card">
                 <div className="af-crm-cardhead">
@@ -427,7 +378,80 @@ function CareerMobile({
               </section>
             ) : null}
 
-            <CoverageSummaryCard data={data} href={careerHref(data.filter, { view: 'coverage' })} />
+            {/*
+              2026-11-20 — "More detail" (owner: the core site is confusing). The phone overview leads with
+              what you have won: the tiles, what is in play, best seasons and the shelf. The career arc,
+              the awards preview, the prestige and legacy scores and the data-coverage card moved,
+              unchanged, into the one fold at the bottom. Nothing removed; it still renders closed.
+            */}
+            <MoreDetail note={mm.phoneNote} testId="career-more-phone">
+              {data.seasons.filter((s) => s.winRate != null).length >= 2 ? (
+                <section className="af-crm-card">
+                  <div className="af-crm-cardhead">
+                    <h2 className="af-crm-cardtitle">CAREER ARC</h2>
+                    <span className="af-crm-titlesflag">◉ TITLES</span>
+                  </div>
+                  <MobileArc data={data} />
+                  <div className="af-crm-arcfoot">
+                    <span>
+                      {data.firstSeason} — {data.lastSeason} · win rate, games-weighted
+                    </span>
+                    {peak ? <span className="af-crm-peak">PEAK {(peak.winRate * 100).toFixed(0)}%</span> : null}
+                  </div>
+                </section>
+              ) : null}
+
+              {screen.awards.length > 0 ? (
+                <section className="af-crm-card">
+                  <div className="af-crm-cardhead">
+                    <h2 className="af-crm-cardtitle">AWARDS · {screen.awards.length}</h2>
+                    <Link className="af-crx-mlink" href={careerHref(data.filter, { view: 'awards' })}>
+                      All →
+                    </Link>
+                  </div>
+                  <div className="af-crx-award-stack">
+                    {screen.awards.slice(0, 3).map((a) => (
+                      <AwardBadge key={a.key} award={a} compact />
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {data.prestige || data.legacy ? (
+                <section className="af-crm-card">
+                  {data.prestige ? (
+                    <div className="af-crm-score">
+                      <div className="af-crm-scorerow">
+                        <span className="af-crm-scoreval af-crm-scoreval--accent">{data.prestige.total.toFixed(1)}</span>
+                        <span className="af-crm-scoreof">/ 100</span>
+                        <span className="af-crm-scorelabel">GM PRESTIGE</span>
+                        <TopicTip topic="careerPrestige" />
+                      </div>
+                      <div className="af-crm-bar">
+                        <i style={{ width: `${data.prestige.total}%`, background: 'var(--accent)' }} />
+                      </div>
+                    </div>
+                  ) : null}
+                  {data.legacy ? (
+                    <div className="af-crm-score">
+                      <div className="af-crm-scorerow">
+                        <span className="af-crm-scoreval af-crm-scoreval--warn">{data.legacy.total}</span>
+                        <span className="af-crm-scoreof">/ 100</span>
+                        <span className="af-crm-scorelabel">LEGACY</span>
+                        <TopicTip topic="careerLegacy" />
+                      </div>
+                      <div className="af-crm-bar">
+                        {data.legacy.dimensions.map((d) => (
+                          <i key={d.key} style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+
+              <CoverageSummaryCard data={data} href={careerHref(data.filter, { view: 'coverage' })} />
+            </MoreDetail>
             {/* "Share a card" is in the links row at the top (CareerRankingLinks) since 2026-11-14. */}
           </>
         )}
@@ -805,6 +829,7 @@ function CareerOverview({
   const { prestige, legacy, titles, activeLeagues, leagueCounts, currentSeason } = data
   const openSlot = activeLeagues[0] ?? null
   const leagueHref = (key: string) => careerHref({ ...data.filter, league: key })
+  const mm = useMessages(careerMoreMessages)
 
   return (
     <>
@@ -829,106 +854,16 @@ function CareerOverview({
       */}
       {rivals?.length ? <CareerRivalsCard rivals={rivals} ledgerHref={careerHref(data.filter, { view: 'records' })} /> : null}
 
-      <div className="af-c13-body">
-        {/* ── left column ──────────────────────────────────────────────── */}
+      {/*
+        2026-11-20 — "More detail" (owner: the core site is confusing). The overview's job is what you have
+        won and where you stand: the shelf and your AF rank stay on screen beside each other. GM prestige,
+        career progression, the legacy score with its arithmetic, the awards preview, the completeness
+        card, the record-book pointer and the survival scores moved, unchanged and in their columns, into
+        the one fold at the bottom. `--main` keeps the two visible cards on a two-column grid
+        (af-career-brief.css).
+      */}
+      <div className="af-c13-body af-c13-body--main">
         <div className="af-c13-col">
-          {prestige ? (
-            <section className="af-c13-card">
-              <p className="af-c13-head">
-                GM prestige
-                <span className="sp" />
-                <TopicTip topic="careerPrestige" />
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-                <Gauge value={prestige.total} />
-              </div>
-              {prestige.components.map((c) => (
-                <div key={c.key} className="af-c13-row">
-                  <span>{c.label}</span>
-                  <span className="af-c13-track">
-                    <i style={{ width: `${c.ratio * 100}%`, background: componentTone(c) }} />
-                  </span>
-                  <span className="v">{c.saturated ? 'MAXED' : c.display}</span>
-                </div>
-              ))}
-            </section>
-          ) : null}
-
-          {/*
-            The Career XP card is merged into AF rank (right column), which said the same "XP to next
-            level"; the Reputation card only said reputation is not measured (2026-11-14).
-          */}
-        </div>
-
-        {/* ── centre column ────────────────────────────────────────────── */}
-        <div className="af-c13-col">
-          {/* 6 — progression, one metric at a time. Rank lives on the Progress tab. */}
-          <section className="af-c13-card">
-            <p className="af-c13-head">
-              Career progression
-              <span className="sp">
-                <Link className="af-cr-xplink" href={careerHref(data.filter, { view: 'progress' })}>
-                  With rank →
-                </Link>
-              </span>
-            </p>
-            <CareerProgressChart seasons={data.seasons} rank={null} />
-          </section>
-
-          {legacy ? (
-            <section className="af-c13-card">
-              <p className="af-c13-head">
-                Legacy score
-                <span className="sp" />
-                <span className="af-c13-big warn" style={{ fontSize: 26 }}>
-                  {legacy.total}
-                </span>
-                <TopicTip topic="careerLegacy" />
-              </p>
-              <div className="af-cr-stack">
-                {legacy.dimensions.map((d) => (
-                  <i
-                    key={d.key}
-                    style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }}
-                  />
-                ))}
-              </div>
-              <div className="af-c13-lgrid" style={{ marginTop: 14 }}>
-                {legacy.dimensions.map((d) => (
-                  <div key={d.key} className="af-c13-ldim">
-                    <p className="af-c13-ldimhead">
-                      {d.label}
-                      <b>{d.score}</b>
-                    </p>
-                    <span className="af-c13-track" style={{ display: 'block', marginTop: 7 }}>
-                      <i style={{ width: `${d.score}%`, background: LEGACY_COLORS[d.key] }} />
-                    </span>
-                    {/* Kept from 33a: the arithmetic, not just the weight. */}
-                    <p className="af-c13-ldimmeta">
-                      {d.score} × {Math.round(d.weight * 100)}% = {d.contribution.toFixed(1)}
-                    </p>
-                  </div>
-                ))}
-                {legacy.unavailable.map((label) => (
-                  <div key={label} className="af-c13-ldim af-c13-ldim--none">
-                    <p className="af-c13-ldimhead">
-                      {label}
-                      <b>—</b>
-                    </p>
-                    <span className="af-c13-track" style={{ display: 'block', marginTop: 7 }} />
-                    <p className="af-c13-ldimmeta">NOT MEASURED</p>
-                  </div>
-                ))}
-              </div>
-              <p className="af-c13-note">
-                The legacy score has six dimensions. Rivalry needs head-to-head results against a named
-                manager and awards needs an awards record; an imported season carries a record,
-                not an opponent ledger. Both are shown unweighted rather than scored zero, and the
-                four above are re-normalised across what can be scored.
-              </p>
-            </section>
-          ) : null}
-
           {/* Kept from 33a — 13a has no equivalent that links a ring to its league. */}
           <section className="af-c13-card">
             <div className="af-cr-sechead">
@@ -989,8 +924,6 @@ function CareerOverview({
             )}
           </section>
         </div>
-
-        {/* ── right column ─────────────────────────────────────────────── */}
         <div className="af-c13-col">
           <section className="af-c13-card">
             <p className="af-c13-head">
@@ -1025,26 +958,135 @@ function CareerOverview({
             </p>
           </section>
 
-          <AwardsPreview awards={awards} href={careerHref(data.filter, { view: 'awards' })} />
-          <CoverageSummaryCard data={data} href={careerHref(data.filter, { view: 'coverage' })} />
-          <section className="af-c13-card">
-            <p className="af-c13-head">
-              Record book
-              <span className="sp">
-                <Link className="af-cr-xplink" href={careerHref(data.filter, { view: 'records' })}>
-                  Open →
-                </Link>
-              </span>
-            </p>
-            <p className="af-c13-note" style={{ marginTop: 0 }}>
-              Highest scores, streaks, best seasons, biggest trades, best drafts and your rivalry ledger — each record
-              names the week, league and season it came from.
-            </p>
-          </section>
         </div>
       </div>
 
-      <SurvivalTable results={data.survivalResults} />
+      <MoreDetail note={mm.deskNote} testId="career-more">
+        <div className="af-c13-body">
+          {/* ── left column ──────────────────────────────────────────────── */}
+          <div className="af-c13-col">
+            {prestige ? (
+              <section className="af-c13-card">
+                <p className="af-c13-head">
+                  GM prestige
+                  <span className="sp" />
+                  <TopicTip topic="careerPrestige" />
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+                  <Gauge value={prestige.total} />
+                </div>
+                {prestige.components.map((c) => (
+                  <div key={c.key} className="af-c13-row">
+                    <span>{c.label}</span>
+                    <span className="af-c13-track">
+                      <i style={{ width: `${c.ratio * 100}%`, background: componentTone(c) }} />
+                    </span>
+                    <span className="v">{c.saturated ? 'MAXED' : c.display}</span>
+                  </div>
+                ))}
+              </section>
+            ) : null}
+
+            {/*
+              The Career XP card is merged into AF rank (right column), which said the same "XP to next
+              level"; the Reputation card only said reputation is not measured (2026-11-14).
+            */}
+          </div>
+
+          {/* ── centre column ────────────────────────────────────────────── */}
+          <div className="af-c13-col">
+            {/* 6 — progression, one metric at a time. Rank lives on the Progress tab. */}
+            <section className="af-c13-card">
+              <p className="af-c13-head">
+                Career progression
+                <span className="sp">
+                  <Link className="af-cr-xplink" href={careerHref(data.filter, { view: 'progress' })}>
+                    With rank →
+                  </Link>
+                </span>
+              </p>
+              <CareerProgressChart seasons={data.seasons} rank={null} />
+            </section>
+
+            {legacy ? (
+              <section className="af-c13-card">
+                <p className="af-c13-head">
+                  Legacy score
+                  <span className="sp" />
+                  <span className="af-c13-big warn" style={{ fontSize: 26 }}>
+                    {legacy.total}
+                  </span>
+                  <TopicTip topic="careerLegacy" />
+                </p>
+                <div className="af-cr-stack">
+                  {legacy.dimensions.map((d) => (
+                    <i
+                      key={d.key}
+                      style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }}
+                    />
+                  ))}
+                </div>
+                <div className="af-c13-lgrid" style={{ marginTop: 14 }}>
+                  {legacy.dimensions.map((d) => (
+                    <div key={d.key} className="af-c13-ldim">
+                      <p className="af-c13-ldimhead">
+                        {d.label}
+                        <b>{d.score}</b>
+                      </p>
+                      <span className="af-c13-track" style={{ display: 'block', marginTop: 7 }}>
+                        <i style={{ width: `${d.score}%`, background: LEGACY_COLORS[d.key] }} />
+                      </span>
+                      {/* Kept from 33a: the arithmetic, not just the weight. */}
+                      <p className="af-c13-ldimmeta">
+                        {d.score} × {Math.round(d.weight * 100)}% = {d.contribution.toFixed(1)}
+                      </p>
+                    </div>
+                  ))}
+                  {legacy.unavailable.map((label) => (
+                    <div key={label} className="af-c13-ldim af-c13-ldim--none">
+                      <p className="af-c13-ldimhead">
+                        {label}
+                        <b>—</b>
+                      </p>
+                      <span className="af-c13-track" style={{ display: 'block', marginTop: 7 }} />
+                      <p className="af-c13-ldimmeta">NOT MEASURED</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="af-c13-note">
+                  The legacy score has six dimensions. Rivalry needs head-to-head results against a named
+                  manager and awards needs an awards record; an imported season carries a record,
+                  not an opponent ledger. Both are shown unweighted rather than scored zero, and the
+                  four above are re-normalised across what can be scored.
+                </p>
+              </section>
+            ) : null}
+
+          </div>
+
+          {/* ── right column ─────────────────────────────────────────────── */}
+          <div className="af-c13-col">
+            <AwardsPreview awards={awards} href={careerHref(data.filter, { view: 'awards' })} />
+            <CoverageSummaryCard data={data} href={careerHref(data.filter, { view: 'coverage' })} />
+            <section className="af-c13-card">
+              <p className="af-c13-head">
+                Record book
+                <span className="sp">
+                  <Link className="af-cr-xplink" href={careerHref(data.filter, { view: 'records' })}>
+                    Open →
+                  </Link>
+                </span>
+              </p>
+              <p className="af-c13-note" style={{ marginTop: 0 }}>
+                Highest scores, streaks, best seasons, biggest trades, best drafts and your rivalry ledger — each record
+                names the week, league and season it came from.
+              </p>
+            </section>
+          </div>
+        </div>
+
+        <SurvivalTable results={data.survivalResults} />
+      </MoreDetail>
     </>
   )
 }

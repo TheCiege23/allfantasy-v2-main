@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { summarizeTrades, tradesChips, tradesHeadline, type TradesChip } from '@/lib/core-app/tradesGuide'
 import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
@@ -597,13 +598,6 @@ function AllLeaguesTradeHub(props: {
 
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
-      <section className="af-tg-market" aria-label={guide.marketTitle}>
-        <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
-        <p className="af-tg-teach">
-          <b>{guide.why}</b> {guide.marketTeach}
-        </p>
-      </section>
-
       {props.valueActions.length > 0 ? (
         <section className="af-tc-hub-actions">
           <div className="af-tc-hub-section-head">
@@ -634,11 +628,23 @@ function AllLeaguesTradeHub(props: {
       ) : null}
 
       {/* Your leagues were listed three times (the offer tiles, the builder's picker and this grid); the grid folds. */}
-      <details className="af-tc-hub-leagues af-tg-all">
-        <summary>
-          <b>{guide.allLeagues(props.leagues.length)}</b>
-          <span>{guide.allLeaguesSub}</span>
-        </summary>
+      {/*
+        2026-11-20 — that fold is now the page's one "More detail" (MoreDetail.tsx), same class, its old
+        summary as the `note`. The market board ("Who's rising and falling") is about every player, not
+        your teams, so it moved in here unchanged; the offers board, the evaluator and your value moves
+        stay on screen.
+      */}
+      <MoreDetail
+        className="af-tc-hub-leagues af-tg-all"
+        note={<><b>{guide.allLeagues(props.leagues.length)}</b> · {guide.allLeaguesSub}</>}
+        testId="trades-hub-more"
+      >
+        <section className="af-tg-market" aria-label={guide.marketTitle}>
+          <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
+          <p className="af-tg-teach">
+            <b>{guide.why}</b> {guide.marketTeach}
+          </p>
+        </section>
         <label className="af-tc-hub-search">
           <span className="af-sr-only">{copy('Search leagues')}</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy('Search league or platform')} />
@@ -653,7 +659,7 @@ function AllLeaguesTradeHub(props: {
           ))}
         </div>
         {visibleLeagues.length === 0 ? <p className="af-tc-timeline-empty">{copy('No connected league matches that search.')}</p> : null}
-      </details>
+      </MoreDetail>
     </div>
   )
 }
@@ -3063,31 +3069,6 @@ export function TradeCenter(props: {
       )}
 
       {/*
-        The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
-        team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
-        team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
-      */}
-      {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
-        /* Folded by default (2026-11-14): open, it pushed your offers and the trade history a screen down. */
-        <details className="af-tc-fold af-tc-rebuild-fold">
-          <summary>
-            <span>{copy('Rebuild plan')}</span>
-            <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
-          </summary>
-          {rosterData?.rebuildPlanLocked && depthAccess ? (
-            <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
-          ) : (
-            <RebuildPlanCard
-              plan={rosterData?.rebuildPlan ?? null}
-              onStartWith={(pkg) =>
-                startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
-              }
-            />
-          )}
-        </details>
-      ) : null}
-
-      {/*
         ── EVERYTHING ELSE, IN ONE FOLD (2026-11-13) ───────────────────────────────────────────────
         Trade ideas, offers and drafts, the trade finder, value alerts and the propose flow each used to
         be its own block between the builder and its Analyze button. They are one fold now, under the
@@ -3095,24 +3076,50 @@ export function TradeCenter(props: {
         `?trade=` link (offersOpen) or a `#trade-finder` link opens it. Children stay mounted while
         closed, so the inbox still loads and still reports its count.
       */}
+      {/*
+        2026-11-20 — that fold is now the page's one "More detail" (MoreDetail.tsx), same class, same open
+        rule; its old summary line ("Trade ideas, offers and drafts…", or the offers-waiting count) is the
+        `note`. The Rebuild plan, which sat just above it as a second page-level fold, moved inside
+        unchanged. The trade center panel, the history and the league activity below stay on screen.
+        Its `onToggle` keeps the same open-state sync the bare <details> had.
+      */}
       {props.embedded ? null : (
-        <details
+        <MoreDetail
+          id="af-tc-more"
           className="af-tc-fold af-tlg-more"
           open={moreOpen || offersOpen}
-          onToggle={(e) => {
-            const open = e.currentTarget.open
+          onToggle={(open) => {
             setMoreOpen(open)
             if (!open) setOffersOpen(false)
           }}
+          note={needsYou ? <span className="af-tc-fold-badge af-num">{lg.moreWaiting(needsYou)}</span> : lg.moreNote}
+          testId="trades-more"
         >
-          <summary>
-            <span>{lg.more}</span>
-            {needsYou ? (
-              <span className="af-tc-fold-badge af-num">{lg.moreWaiting(needsYou)}</span>
+        {/*
+          The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
+          team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
+          team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
+        */}
+        {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
+          /* Folded by default (2026-11-14): open, it pushed your offers and the trade history a screen down. */
+          <details className="af-tc-fold af-tc-rebuild-fold">
+            <summary>
+              <span>{copy('Rebuild plan')}</span>
+              <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
+            </summary>
+            {rosterData?.rebuildPlanLocked && depthAccess ? (
+              <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
             ) : (
-              <span className="af-tc-fold-note">{lg.moreNote}</span>
+              <RebuildPlanCard
+                plan={rosterData?.rebuildPlan ?? null}
+                onStartWith={(pkg) =>
+                  startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
+                }
+              />
             )}
-          </summary>
+          </details>
+        ) : null}
+
         {otherRosters.length > 0 && !props.embedded ? (
           <details className="af-tc-fold af-tc-ideas">
             <summary>
@@ -3269,7 +3276,7 @@ export function TradeCenter(props: {
         {props.league?.id && !props.embedded ? (
           <ProposeTradeLaunch rosterData={rosterData} onOpen={() => setProposeOpen(true)} />
         ) : null}
-        </details>
+        </MoreDetail>
       )}
       {proposeOpen && !props.embedded && props.league?.id && rosterData?.viewerRosterId ? (
         <ProposeTradeFlow

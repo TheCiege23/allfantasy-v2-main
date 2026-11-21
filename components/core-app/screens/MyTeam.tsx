@@ -45,7 +45,8 @@ import { InfoTip } from '@/components/core-app/InfoTip'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
-import { messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { useMessages } from '@/components/i18n/useMessages'
 import { myTeamScreenMessages } from '@/lib/core-app/messages/myTeamScreen'
 import { myTeamGuideMessages } from '@/lib/core-app/messages/myTeamGuide'
@@ -56,6 +57,12 @@ import '@/components/core-app/home/af-home-guide.css'
 import '@/components/core-app/myteam/af-my-team-guide.css'
 
 type MyTeamScreenMessages = typeof myTeamScreenMessages extends Catalog<infer M> ? M : never
+
+/* The one "More detail" fold's note line (2026-11-20): what the side column used to show open. */
+const myTeamMoreDetailMessages = defineMessages({
+  en: { note: 'Byes · scoring basis · positions · recent moves' },
+  es: { note: 'Descansos · base de puntuación · posiciones · movimientos recientes' },
+})
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -1651,6 +1658,7 @@ export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
+  const md = useMessages(myTeamMoreDetailMessages)
   const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
   useEffect(() => {
     setDecisionNow(Date.now())
@@ -1749,6 +1757,25 @@ export function MyTeam({ data }: MyTeamProps) {
    *
    * What replaced it is app-wide: see lib/core-app/rosteredMarket.ts.
    */
+
+  const coverageFootnote = afProvider && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
+        <p className="af-mt-footnote">
+          {data.projections.data.unprojected === 0
+            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
+            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
+        </p>
+      ) : (
+        <p className="af-mt-footnote">
+          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
+        </p>
+      )
+  const hasMoreDetail =
+    data.upcomingByes.length > 0 ||
+    !!proj ||
+    (data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1) ||
+    !!data.teamActivity ||
+    !!data.dynasty ||
+    coverageFootnote != null
 
   function askChimmy() {
     window.dispatchEvent(
@@ -2056,6 +2083,16 @@ export function MyTeam({ data }: MyTeamProps) {
         </p>
       ) : null}
 
+      {/*
+        ⚠ ONE "More detail" FOLD FOR THE PAGE (2026-11-20, owner: "the core site is confusing"). Byes,
+        why the two projections differ, positional strength, recent moves, lineup age and the coverage
+        footnote moved in here unchanged; the lineup and what to fix stay open. It stays in the side
+        column on a wide page (where byes and basis already sat) and, like them, drops below the roster
+        on a narrow one (`.af-mt-more { order: 1 }`, af-my-team.css). The column-heading key stays under
+        Starters: it is the table's own key, not the page's.
+      */}
+      {hasMoreDetail ? (
+      <MoreDetail className="af-mt-more" testId="my-team-more" note={md.note}>
       {/* ── Byes forming ────────────────────────────────────────────── */}
       {/*
         Shown ahead of time on purpose. Discovering in week 6 that four
@@ -2133,6 +2170,19 @@ export function MyTeam({ data }: MyTeamProps) {
 
       {/* ── Dynasty outlook: the next three seasons, not this week ────── */}
       {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
+
+      {/* ── Coverage footnote ───────────────────────────────────────── */}
+      {/*
+        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
+        league the standard tile reads "—" and explains why, but this footnote
+        still said "Standard total built from 7 of 16 starters … so it reads low"
+        — a total the page had just declined to show, and a count inflated by
+        every defender standard scoring cannot price. The tile carries the
+        explanation; the footnote stays out of it.
+      */}
+      {coverageFootnote}
+      </MoreDetail>
+      ) : null}
 
       </div>
       <div className="af-mt-main">
@@ -2266,26 +2316,6 @@ export function MyTeam({ data }: MyTeamProps) {
       <MyTeamRecentClips data={data} />
       <MyTeamHighlights data={data} />
 
-      {/* ── Coverage footnote ───────────────────────────────────────── */}
-      {/*
-        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
-        league the standard tile reads "—" and explains why, but this footnote
-        still said "Standard total built from 7 of 16 starters … so it reads low"
-        — a total the page had just declined to show, and a count inflated by
-        every defender standard scoring cannot price. The tile carries the
-        explanation; the footnote stays out of it.
-      */}
-      {afProvider && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
-        <p className="af-mt-footnote">
-          {data.projections.data.unprojected === 0
-            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
-            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
-        </p>
-      ) : (
-        <p className="af-mt-footnote">
-          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
-        </p>
-      )}
       </div>
       </div>
     </div>

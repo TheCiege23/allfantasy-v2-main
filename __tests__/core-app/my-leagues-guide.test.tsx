@@ -197,7 +197,9 @@ describe('<MyLeaguesV4 /> — the guide', () => {
     expect(filters.querySelector('select[aria-label="Filter by platform"]')).not.toBeNull()
     const foot = screen.getByTestId('my-leagues-foot')
     expect(foot.hasAttribute('open')).toBe(false)
-    expect(foot.querySelector('summary')?.textContent).toBe("Past seasons (12) and what we can't see yet")
+    // 2026-11-20: the foot is the shared "More detail" fold; its old summary is the note.
+    expect(foot.querySelector('.af-md-label')?.textContent).toBe('More detail')
+    expect(foot.querySelector('.af-md-note')?.textContent).toBe("Past seasons (12) and what we can't see yet")
     expect(foot.textContent).toContain('Records and standings')
   })
 
