@@ -94,12 +94,31 @@ const toPlayerMap = (players: ConnectedRosterPlayer[]): Record<string, CollegePr
 
 const emptyLists = (): CollegeProLists => ({ starters: [], bench: [], taxi: [], ir: [] })
 
-export async function loadCollegeProRoster(leagueId: string, userId: string, now = new Date()): Promise<CollegeProRosterPayload> {
+export async function loadCollegeProRoster(
+  leagueId: string,
+  userId: string,
+  now = new Date(),
+  opts: { viewedFrom?: 'pro' | 'college' } = {},
+): Promise<CollegeProRosterPayload> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
     select: { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true },
   })
-  if (!league || league.platform !== 'sleeper' || !league.platformLeagueId) return { applies: false }
+  if (!league || !league.platformLeagueId) return { applies: false }
+
+  /*
+   * OPENED FROM THE COLLEGE SIDE. Cream Bowl is the Fantrax half of the Peach Bowl franchise; the
+   * owner asked for the same one page from either league. The pro half owns the lineups, the scoring
+   * setting and the drafts, so the page is built from it, with the college lineup leading.
+   */
+  if (league.platform === 'fantrax' && opts.viewedFrom !== 'college') {
+    if (!collegeProFormatOf(league)) return { applies: false }
+    const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
+    const proHalf = paired?.sides.find((s) => s.role === 'pro' && s.platform === 'sleeper' && s.leagueId)
+    if (!proHalf?.leagueId) return { applies: false }
+    return loadCollegeProRoster(proHalf.leagueId, userId, now, { viewedFrom: 'college' })
+  }
+  if (league.platform !== 'sleeper') return { applies: false }
 
   const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
   const collegeHalf = paired?.sides.find((s) => s.role === 'college') ?? null
@@ -181,7 +200,10 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
         score: noScore(week),
       }
 
-  const { lead, reason } = decideLeadSide({ now, proSport, collegeSport, games })
+  const decided = decideLeadSide({ now, proSport, collegeSport, games })
+  // With no game on either side, the league you opened leads: college first from the college league.
+  const { lead, reason } =
+    decided.reason === 'weekday' && opts.viewedFrom === 'college' ? { lead: 'college' as const, reason: decided.reason } : decided
   const scoring = readCollegeProScoring(league.settings)
   // The same rule the save route asks, so the switch never shows for someone the save would refuse.
   const canEditScoring = await canCommissionerAct(leagueId, userId, 'scoring').catch(() => false)

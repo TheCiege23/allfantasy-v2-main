@@ -2837,7 +2837,10 @@ function LeagueTabRouter({
         A college + pro league (C2C / Devy) shows both lineups on one page. Every other league,
         and any failure to read the two halves, keeps the standard roster view above.
       */
-      if (selectedLeague.platform !== 'sleeper' || !collegeProFormatOf(selectedLeague)) return standardRoster
+      // Sleeper is the pro half; Fantrax is the college half, which builds the same page from its pro league.
+      if ((selectedLeague.platform !== 'sleeper' && selectedLeague.platform !== 'fantrax') || !collegeProFormatOf(selectedLeague)) {
+        return standardRoster
+      }
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <CollegeProRoster leagueId={leagueId} onPlayerClick={onPlayerClick} fallback={standardRoster} />
