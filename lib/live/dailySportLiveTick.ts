@@ -54,7 +54,13 @@ import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
  * NBA, NHL and MLB run by default; an explicit off value issues no query at all.
  */
 
-export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB'] as const
+/*
+ * NCAAF joined 2026-11-21 for the C2C / Devy roster page's live college points. It is polled and
+ * written like the others, but NOT rescored: NCAAF redraft scoring reads the CFBD rows, and the
+ * roster page reads these rows itself (lib/league/collegePro/collegePoints.ts). College football is
+ * on the SECOND Rolling Insights account, which `riFetchRows` already iterates.
+ */
+export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB', 'NCAAF'] as const
 export type DailyLiveSport = (typeof DAILY_LIVE_SPORTS)[number]
 
 /** Persisted per-(sport, Eastern date) poll state lives under this `sports_data_cache` key prefix. */
@@ -74,6 +80,7 @@ export const MAX_GAME_LENGTH_MS: Record<DailyLiveSport, number> = {
   MLB: 5 * 3_600_000, // extra innings and rain delays
   NBA: 3.25 * 3_600_000,
   NHL: 3.5 * 3_600_000, // overtime + shootout
+  NCAAF: 4.5 * 3_600_000, // college games run long: clock rules, overtime periods, weather delays
 }
 
 /** Most seasons one pass will rescore per sport; the 5-minute score-sync still reconciles every one. */
@@ -400,12 +407,16 @@ export async function runDailySportLiveTick(opts: {
   return result
 }
 
+/** Sports whose live rows feed a reader directly and have no redraft rescore here. */
+const WRITE_ONLY_LIVE_SPORTS: ReadonlySet<DailyLiveSport> = new Set(['NCAAF'])
+
 async function rescoreSport(
   sport: DailyLiveSport,
   now: Date,
   shouldStop: () => boolean,
   result: DailyLiveTickResult,
 ): Promise<void> {
+  if (WRITE_ONLY_LIVE_SPORTS.has(sport)) return
   let seasons: Array<{ id: string; status: string }>
   try {
     seasons = await prisma.redraftSeason.findMany({
