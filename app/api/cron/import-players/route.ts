@@ -626,9 +626,24 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     // TOP_CFB_TEAMS per run (~10-15s) and stops between teams once the handler
     // budget is spent. Runs BEFORE intel enrichment so rows seeded this run are
     // already in the pool that enrichment drains.
+    /*
+     * 🛑 THESE DEVY PHASES SHARE ONE 75,000-CALL CFBD MONTH WITH THE STATS AND SCORES IMPORTS, AND ON
+     * 2026-11-10 THEY HAD SPENT IT. College game stats stopped at week 10 for the rest of the month.
+     * Below the reserve they stand down so what is left goes to stats and scores (lib/cfbd-quota.ts).
+     * An unknown quota never blocks them.
+     */
+    const { cfbdBackgroundAllowed } = await import('@/lib/cfbd-quota')
+    const cfbdGate = await cfbdBackgroundAllowed().catch(() => ({ allowed: true, remaining: null, reason: null }))
+    const cfbdReserved = (phase: string) => {
+      deferredPhases.push(phase)
+      return { skipped: cfbdGate.reason ?? 'CFBD quota reserve', cfbdRemaining: cfbdGate.remaining }
+    }
+
     let devyPool: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
     if (budget.exhausted()) {
       deferredPhases.push('devyPool')
+    } else if (!cfbdGate.allowed) {
+      devyPool = cfbdReserved('devyPool')
     } else try {
       const { refreshDevyPoolSlice } = await import('@/lib/devy-pool-refresh')
       devyPool = await refreshDevyPoolSlice(budget)
@@ -651,6 +666,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     let devyStats: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
     if (budget.exhausted()) {
       deferredPhases.push('devyStats')
+    } else if (!cfbdGate.allowed) {
+      devyStats = cfbdReserved('devyStats')
     } else try {
       const { refreshDevyStatsSlice } = await import('@/lib/devy/devyStatsRefresh')
       devyStats = await refreshDevyStatsSlice(budget)
@@ -723,6 +740,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     } else if (budget.exhausted() || budget.remainingMs() < DRAFT_STATUS_MIN_RUNWAY_MS) {
       deferredPhases.push('devyDraftStatus')
       devyDraftStatus = { skipped: 'no runway', remainingMs: budget.remainingMs() }
+    } else if (!cfbdGate.allowed) {
+      devyDraftStatus = cfbdReserved('devyDraftStatus')
     } else try {
       const { classifyDraftStatus } = await import('@/lib/devy-classification')
       devyDraftStatus = await classifyDraftStatus(new Date().getFullYear())
@@ -783,6 +802,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     let devyIntelSources: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
     if (budget.exhausted()) {
       deferredPhases.push('devyIntelSources')
+    } else if (!cfbdGate.allowed) {
+      devyIntelSources = cfbdReserved('devyIntelSources')
     } else try {
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
       devyIntelSources = await refreshDevyIntelSources(budget)
@@ -793,12 +814,14 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyIntelSources = { error: message.slice(0, 200) }
     }
 
-    let devyIntel: Record<string, number> | { error: string } = { enriched: 0, errors: 0 }
+    let devyIntel: Record<string, number> | { error: string } | { skipped: string; cfbdRemaining: number | null } = { enriched: 0, errors: 0 }
     // Guarded OUTSIDE the try on purpose: routing a deferral through the catch would report it as
     // `{ error: ... }`, turning "we ran out of time" into "enrichment failed" — the opposite of
     // what happened, and the kind of misreported state that sends someone debugging a healthy path.
     if (budget.exhausted()) {
       deferredPhases.push('devyIntel')
+    } else if (!cfbdGate.allowed) {
+      devyIntel = cfbdReserved('devyIntel')
     } else try {
       const { enrichDevyIntelMetrics } = await import('@/lib/devy-classification')
       const intel = await enrichDevyIntelMetrics({ limit: 500 })
