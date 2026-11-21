@@ -26,7 +26,7 @@ import {
   __resetGeoIpCache,
 } from "@/lib/geo/geoIpCache"
 import { __resetIpApiShapeWarning } from "@/lib/geo/geoIpParse"
-import { isFullyBlocked } from "@/lib/geo/restrictedStates"
+import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 
 const mockedIpApi = vi.mocked(fetchIpApi)
 
@@ -50,13 +50,15 @@ describe("it places an IP and blocks on the result", () => {
     expect(await resolveGeoByIp(PUBLIC_IP)).toEqual({ country: "US", regionCode: "WA" })
   })
 
-  it("BLOCKS Washington — the end-to-end assertion, not the block list", async () => {
+  // Nov 2026: Washington is paid-block (free play open), so the end-to-end assertion is the paid tier.
+  it("PAID-BLOCKS Washington — the end-to-end assertion, not the block list", async () => {
     mockedIpApi.mockResolvedValue({ country_code: "US", region_code: "WA" })
 
     const geo = await resolveGeoByIp(PUBLIC_IP)
 
     expect(geo?.regionCode).not.toBeNull()
-    expect(isFullyBlocked(geo?.regionCode as string)).toBe(true)
+    expect(isPaidBlocked(geo?.regionCode as string)).toBe(true)
+    expect(isFullyBlocked(geo?.regionCode as string)).toBe(false)
   })
 
   it("REFUSES a full region name rather than passing it to the gate", async () => {

@@ -27,6 +27,10 @@ const DOCUMENT_SET_2026_10_EFFECTIVE = "October 6, 2026"
 
 export const LEGAL_LAST_UPDATED_BY_PAGE = {
   privacy: "October 11, 2026",
+  // ⚠ Nov 2026: Terms 3.2/definitions and the State Notice were edited to move Washington from
+  // "not available" to a Restricted State. The stamps were NOT bumped, on purpose: `terms` is the
+  // Effective Date Terms 18.9's arbitration opt-out window runs from (lib/legal/termsUpdateNotice),
+  // so moving it is the owner's/counsel's call, not a side effect of a geo change.
   terms: "October 11, 2026",
   disclaimer: DOCUMENT_SET_2026_10_EFFECTIVE,
   smsTerms: DOCUMENT_SET_2026_10_EFFECTIVE,
@@ -35,7 +39,7 @@ export const LEGAL_LAST_UPDATED_BY_PAGE = {
   aiTransparency: "March 2026",
   contact: "March 2026",
   mission: "March 2026",
-  noGamblingPolicy: "March 2026",
+  noGamblingPolicy: "November 2026",
 } as const
 
 export type LegalPageKey = keyof typeof LEGAL_LAST_UPDATED_BY_PAGE

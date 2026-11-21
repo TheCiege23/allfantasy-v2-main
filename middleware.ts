@@ -8,7 +8,7 @@ import { getToken } from "next-auth/jwt"
 
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
-import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
+import { hasFullBlockStates, isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { CARD_PAID_LOCK_MESSAGE, CARD_PAID_LOCK_REDIRECT } from "@/lib/geo/cardLockCopy"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
@@ -621,7 +621,11 @@ async function accountGeoLockOf(request: NextRequest): Promise<AccountLock> {
   const token = await getToken({ req: request, secret: authSecret })
   const lock = token?.geoLock
   if (lock !== "full_block" && lock !== "card_paid_block") return null
-  return isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null) ? null : lock
+  if (isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null)) return null
+  // A token minted before Washington moved to paid-block (Nov 2026) may still carry
+  // `full_block`. While no state is full-block it means the card lock — and must be mapped
+  // HERE, because a fully refused request never reaches the jwt callback that would refresh it.
+  return lock === "full_block" && !hasFullBlockStates() ? "card_paid_block" : lock
 }
 
 const ACCOUNT_LOCKED_MESSAGE =
