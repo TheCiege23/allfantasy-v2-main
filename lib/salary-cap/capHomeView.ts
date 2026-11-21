@@ -23,12 +23,17 @@ const r1 = (n: number) => Math.round(n * 10) / 10
 
 /**
  * The cap bar: active contracts, dead money and rollover credit, each as a share of the ceiling.
- * `totalCapHit` already includes dead money, so active = hit − dead. Rollover is credit on top of the
- * ceiling the engine applied, drawn after the two spends.
+ *
+ * ⚠ `totalCapHit` is ACTIVE CONTRACTS ONLY. lib/salary-cap/CapCalculationService writes dead money to its own field
+ * and computes capSpace = cap + rollover − totalCapHit − deadMoneyHit; the legality check adds the two. This comment
+ * used to say the opposite ("already includes dead money, so active = hit − dead"), and Cap home followed it: its
+ * committed figure left dead money out and "Active contracts" subtracted it a second time, disagreeing with the
+ * Cap space screen by exactly the dead money (2026-11-07). Rollover is credit on top of the ceiling, drawn after the
+ * two spends.
  */
 export function capBarSegments(ledger: CapLedgerInput, ceiling: number) {
   const dead = Math.max(0, ledger.deadMoneyHit)
-  const active = Math.max(0, ledger.totalCapHit - dead)
+  const active = Math.max(0, ledger.totalCapHit)
   const rollover = Math.max(0, ledger.rolloverUsed)
   const base = Math.max(1, ceiling + rollover)
   const pct = (n: number) => Math.min(100, (n / base) * 100)
@@ -36,7 +41,7 @@ export function capBarSegments(ledger: CapLedgerInput, ceiling: number) {
     active: r1(active),
     dead: r1(dead),
     rollover: r1(rollover),
-    committed: r1(ledger.totalCapHit),
+    committed: r1(active + dead),
     ceiling: r1(ceiling),
     activePct: pct(active),
     deadPct: pct(dead),
