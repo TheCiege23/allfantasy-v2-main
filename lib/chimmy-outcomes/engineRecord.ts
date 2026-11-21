@@ -30,11 +30,23 @@
  */
 
 import type { LedgerRecordView, TradeLetter } from './ledgerRecord'
+import { tradeLetterConfidence, type TradeLetterConfidence } from '@/lib/decision-os/trade/letterCalibration'
 
 /** Did deals graded this letter score the way the letter said? `even` for C, which promises no direction. */
 export type LetterVerdict = 'held_up' | 'not_held_up' | 'even'
 
-export type TradeLetterRecord = { letter: TradeLetter; n: number; netPerWeek: number; aheadPct: number | null; verdict: LetterVerdict }
+export type TradeLetterRecord = {
+  letter: TradeLetter
+  n: number
+  netPerWeek: number
+  aheadPct: number | null
+  verdict: LetterVerdict
+  /**
+   * How sure a grade of this letter is, from its graded deals (`letterCalibration.ts`) — null until the letter has
+   * enough decided deals, and always null for C. 🛑 It is stated BESIDE the letter; it never moves it.
+   */
+  confidence: TradeLetterConfidence | null
+}
 
 export function letterVerdict(letter: TradeLetter, netPerWeek: number): LetterVerdict {
   if (letter === 'C' || netPerWeek === 0 || !Number.isFinite(netPerWeek)) return 'even'
@@ -47,7 +59,14 @@ export function tradeLetterRecord(view: LedgerRecordView | null | undefined, let
   const l = typeof letter === 'string' ? letter.trim().charAt(0).toUpperCase() : ''
   const row = view?.trades?.find((t) => t.letter === l)
   if (!row) return null
-  return { letter: row.letter, n: row.n, netPerWeek: row.netPerWeek, aheadPct: row.aheadPct ?? null, verdict: letterVerdict(row.letter, row.netPerWeek) }
+  return {
+    letter: row.letter,
+    n: row.n,
+    netPerWeek: row.netPerWeek,
+    aheadPct: row.aheadPct ?? null,
+    verdict: letterVerdict(row.letter, row.netPerWeek),
+    confidence: tradeLetterConfidence(row.letter, view?.tradeConfidence),
+  }
 }
 
 /**
@@ -59,7 +78,10 @@ export function commissionerLetterRecord(
   view: LedgerRecordView | null | undefined,
   letter: string | null | undefined,
 ): (TradeLetterRecord & { scope: 'commissioner' | 'everyone' }) | null {
-  const own = tradeLetterRecord(view ? { ...view, trades: view.commissionerTrades ?? null } : null, letter)
+  const own = tradeLetterRecord(
+    view ? { ...view, trades: view.commissionerTrades ?? null, tradeConfidence: view.commissionerTradeConfidence ?? null } : null,
+    letter,
+  )
   if (own) return { ...own, scope: 'commissioner' }
   const all = tradeLetterRecord(view, letter)
   return all ? { ...all, scope: 'everyone' } : null
@@ -129,7 +151,9 @@ export function renderEngineRecordPromptLine(view: LedgerRecordView | null): str
       const v = letterVerdict(t.letter, t.netPerWeek)
       const ahead = t.aheadPct != null ? `, ahead in ${t.aheadPct}%` : ''
       const verdict = v === 'held_up' ? ' — has held up' : v === 'not_held_up' ? ' — has NOT held up' : ''
-      return `${t.letter} ${signed(t.netPerWeek)} PPR a week (${t.n} deals${ahead})${verdict}`
+      const c = tradeLetterConfidence(t.letter, view?.tradeConfidence)
+      const sure = c ? `; how sure a ${t.letter} is: ${c.level} (about ${c.heldPct}% of its deals held up — ${c.decided} decided, recent ones weighted more, steadied toward even odds)` : ''
+      return `${t.letter} ${signed(t.netPerWeek)} PPR a week (${t.n} deals${ahead})${verdict}${sure}`
     })
     lines.push(`- Trade grades (redraft deals; the graded side's players against the players it gave, from the next week on): ${parts.join('; ')}.`)
   } else {
@@ -138,6 +162,7 @@ export function renderEngineRecordPromptLine(view: LedgerRecordView | null): str
 
   lines.push(
     'When you give a trade grade, a waiver pickup or a bench call, you may say how that kind of call has held up — quote these numbers exactly, and say plainly when a letter has not held up. Never state or imply any other record, hit rate or win percentage for AllFantasy.',
+    'Where a letter above carries "how sure", that is how sure a redraft NFL grade of that letter is: say it beside the grade (a low one means the deal is closer than the letter suggests). It never changes the letter — the grade is the trade engine\'s.',
   )
   return lines.join('\n')
 }

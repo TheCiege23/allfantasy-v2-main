@@ -10,6 +10,9 @@ import type { LoadedTrade, LoadedTradeAsset, TradeRef } from '@/lib/decision-os/
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
+import { letterRecordApplies } from '@/lib/chimmy-outcomes/engineRecord'
+import { tradeLetterConfidence, type TradeLetterCalibration } from '@/lib/decision-os/trade/letterCalibration'
+import { loadTradeLetterCalibration } from '@/lib/decision-os/trade/letterCalibrationStore'
 import {
   MULTI_TEAM_GRADE_WITHHELD,
   describeTradeTeamMoves,
@@ -125,6 +128,11 @@ export type PendingTradeDeps = {
   now: () => number
   /** Told the letters the one trade engine gave, so the chat route can hold the answer to them. */
   onGrade?: (grade: ChimmyTradeGrade) => void
+  /**
+   * How sure each letter is, from AllFantasy's graded redraft deals (`letterCalibration.ts`). Read once per build;
+   * a null or a failed read means the grades are given exactly as before.
+   */
+  letterCalibration: () => Promise<TradeLetterCalibration | null>
 }
 
 const PENDING_SELECT = {
@@ -215,6 +223,7 @@ const defaultDeps: PendingTradeDeps = {
   evaluate: evaluateStoredTrade,
   resolveWorld: (leagueId) => resolveCanonicalWorld(leagueId),
   now: () => Date.now(),
+  letterCalibration: () => loadTradeLetterCalibration(),
 }
 
 /**
@@ -365,7 +374,13 @@ const signed = (n: number, digits = 1) => `${n >= 0 ? '+' : ''}${n.toFixed(digit
 type EvaluatedTrade = Extract<Awaited<ReturnType<typeof evaluateStoredTrade>>, { ok: true }>
 
 /** The one grade, the values and this week's lineup effect for one evaluated offer — the same lines for every source. */
-function gradeLines(r: EvaluatedTrade, from: string, assetsText: string, d: PendingTradeDeps): string[] {
+function gradeLines(
+  r: EvaluatedTrade,
+  from: string,
+  assetsText: string,
+  d: PendingTradeDeps,
+  calibration: TradeLetterCalibration | null,
+): string[] {
   const lines: string[] = []
   const g = r.receipt.grade
   const partner = r.receipt.partnerGrade
@@ -374,6 +389,15 @@ function gradeLines(r: EvaluatedTrade, from: string, assetsText: string, d: Pend
       `  Grade (the one AllFantasy grade, the same the Trade Center and the offer card give it): you ${g.letter} — ${g.label}; ${from} ${partner.graded ? partner.letter : 'not graded'}. ` +
         `League value: you send ${g.giveValue.toLocaleString()}, you receive ${g.getValue.toLocaleString()}.`
     )
+    // How sure the record makes that letter — only where the ledger grades this kind of deal (NFL redraft).
+    const sure = letterRecordApplies({ sport: r.trade.sport, leagueType: g.leagueType?.type }) ? tradeLetterConfidence(g.letter, calibration) : null
+    if (sure) {
+      lines.push(
+        `  How sure that ${sure.letter} is: ${sure.level} — about ${sure.heldPct}% of AllFantasy's ${sure.letter} grades on redraft deals held up (${sure.decided} decided, recent ones weighted more). ` +
+          (sure.level === 'low' ? 'Say the deal is closer than the letter suggests. ' : '') +
+          'State it beside the grade; it never changes the letter.',
+      )
+    }
     d.onGrade?.({
       letters: [g.letter, ...(partner.graded ? [partner.letter] : [])],
       summary: `AllFantasy grades the offer from ${from} (${assetsText}): ${g.letter} for you${partner.graded ? `, ${partner.letter} for ${from}` : ''}.`,
@@ -433,6 +457,9 @@ export async function buildPendingTradeDecisionContext(
    * unchanged, each evaluation gets its own copy, and a miss is retried rather than shared (`sharedWorld.ts`).
    */
   const evaluateDeps = { resolveWorld: oneWorldPerBatch(d.resolveWorld) }
+  // The letter record, read once for the build and only once an offer is actually graded. A failure is "no record".
+  let calibrationRead: Promise<TradeLetterCalibration | null> | null = null
+  const calibration = () => (calibrationRead ??= d.letterCalibration().catch(() => null))
 
   /*
    * One list across the three sources, the soonest to expire first: those are the ones the user has to answer before
@@ -482,7 +509,7 @@ export async function buildPendingTradeDecisionContext(
           lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
           continue
         }
-        lines.push(...gradeLines(r, from, describeAssets(p), d))
+        lines.push(...gradeLines(r, from, describeAssets(p), d, await calibration()))
         lines.push(...counterHint(r, p.id))
       } catch {
         // Never let the evaluator take down the whole grounding block.
@@ -509,7 +536,7 @@ export async function buildPendingTradeDecisionContext(
       }
       const assetsText = describeLoadedTrade(r.trade, r.perspectiveTeamId)
       lines.push(`- ${source} ${pendingOfferId(o.ref)} from ${o.from}: ${assetsText}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
-      lines.push(...gradeLines(r, o.from, assetsText, d))
+      lines.push(...gradeLines(r, o.from, assetsText, d, await calibration()))
       lines.push(...counterHint(r, pendingOfferId(o.ref)))
     } catch {
       lines.push(`- ${source} from ${o.from}.${expires}`)

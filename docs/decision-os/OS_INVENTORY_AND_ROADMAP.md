@@ -202,7 +202,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Import | ~100 | ~93 | ~100 | Chimmy ⚠ → ✅ in this build: a native league was told its sync was incomplete (below) |
 | Waiver | ~100 | ~93 | ~100 | Kernel ⚠ → ✅ in this change: the packet's decision and the weekly run called `loadWaiverWorldFacts` directly (the feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`); they read Waiver OS's user entry now |
 | Player Value | ~93 | ~90 | ~100 | Kernel ⚠ → ✅ in this change: every live league-board read (value answer, Waivers, card, metrics, in-league trade grade, roster grade, daily Guilly) goes through Value OS's `leagueBoard` feed (below). User ⚠ → ✅: soccer is a board sport on the card and Waivers now |
-| Trade | ~86 | ~79 | ~83 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule) in this change: the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. A reclassification, not new capability (below). Engine ⚠ and Cron ⚠ as before |
+| Trade | ~86 | ~79 | ~100 | Kernel ⚠ → **n/a, not ⚠** (the Lineup rule): the graded inbox must grade against a world loaded live — `checkRosters` tests each offered player against `world.rosters`, so a stored world would pass a player already traded away. Engine ⚠ → ✅ in this change (owner's "build Trade OS out to 100%", 2026-11-21): each letter's graded redraft deals set the confidence stated beside it — never the letter. Cron ⚠ → ✅: the pending-offer reminders re-grade native offers on a schedule, the first grade a native offer gets after it is sent (below) |
 | Draft | ~79 | ~66 | ~93 | Feed ❌ (no reader, no writer since 2026-11-17) and Kernel ⚠ on `main`; #3962 gives the feed its reader and makes Cron n/a |
 | Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
@@ -223,6 +223,36 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 - Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
 
 **Built in this change (no migration):**
+- **Trade OS to 100%** (owner's "build out trade OS to 100%", 2026-11-21). Two gaps were left: the grade never
+  learned from how its deals turned out (Engine ⚠), and only Sleeper offers were graded on a schedule (Cron ⚠).
+  - **The trade grade says how sure it is, from its own graded deals** (`lib/decision-os/trade/letterCalibration.ts`).
+    The ledger has graded every trade letter since 2026-11-15 and showed the raw record (average net PPR, share ahead)
+    beside the grade. Each directional letter now carries a CONFIDENCE as well: A and B held up when the graded side
+    out-scored what it gave up, D and F when it was out-scored; C promises no direction and a tie decides nothing.
+    Silent below 20 decided deals, the rate shrunk toward a coin flip (worth 20 deals), decayed with a six-week
+    half-life; High ≥ 70%, Medium ≥ 55%, Low below (the bench check's bands), and a low one says the deal is closer
+    than the letter suggests. The six-hourly rebuild stores it as `ledger.tradeLetters` (and the commissioners' own as
+    `commissionerTradeLetters`), and it is shown in the Trade Center (English and Spanish), the commissioner's trade
+    review, Chimmy's record line and Chimmy's graded inbox.
+    - 🛑 **The letter is never touched** — the grade, the values, every counter-offer and the approve/veto
+      recommendation are the engine's. This is the confidence rule waivers and start/sit already follow, and it is
+      not the "let graded trades move letters" the owner declined (⏸ below).
+    - NFL redraft only, where the ledger's measure fits the grade (`letterRecordApplies`).
+    - ⚠ Expect it to read Medium for a while even when a letter has held up every time: decayed old deals weigh less
+      than the prior's 20, which is the point — one early-season run cannot speak for the whole season.
+  - **Waiting offers are re-graded on a schedule** (`lib/automation/jobs/trades/remindPendingTrades.ts`, on the
+    five-minute `trade-grade-notify` route). A native offer was graded once, when sent; the day-later and
+    six-hours-to-expiry reminders said only "an offer is still waiting". Each reminder now re-grades the offer for
+    the receiver through `evaluateStoredTrade` (the Trade Center's path, no receipt written), says what it grades
+    NOW and whether that moved since it was sent ("graded B when it was sent; on today's values AllFantasy grades it
+    D"), and names a player who left the sending roster instead of grading a deal that can no longer be made.
+    Bounded to 45 s of grading a tick with one league world per league; past it, or on any failure, the reminder
+    reads exactly as before — never a guessed grade. `cron-pending-trade-reminders` reports `regraded` and `moved`.
+  - ⚠ **What Cron ✅ covers, stated so it can be challenged.** Every offer AllFantasy holds is graded on a schedule:
+    Sleeper offers by the five-minute sweep, native offers by these reminders. Redraft proposals are graded when
+    Chimmy reads the inbox and have no reminder (the table holds no rows in production). ESPN, Yahoo, MFL,
+    Fleaflicker and Fantrax pending offers are not held at all — no provider contract in `contracts/` captures a
+    pending-offer shape, and the repo rule forbids probing to find one — so there is nothing of theirs to sweep.
 - **My Team's bench check learns from its own graded calls** (owner's call, 2026-11-21: confidence, never the
   choice). Every "start X over Y" swap is recorded with both projections and graded once the games are played —
   right, wrong, or the same within a point — and until now that grade fed nothing: a 2.5-point edge and a 12-point
@@ -356,7 +386,8 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | ✅ | The hub says what the commissioner decision learned — **done in this change, re-scoped** (below): the learned record goes into the hub's existing bilingual flag rather than a second, English-only card of risk scores | Commissioner User → ✅ | S |
 | ✅ | League-scored projections for every board sport's points leagues (NBA, NHL, MLB, college basketball, soccer) — **owner said yes, done in this change** (below). Category leagues have no points and keep the canonical rows | Projection Chimmy → ✅ (~100) | M |
 | ✅ | Grade more than 3 pending offers — **owner said yes, done in this change** (below): up to 6, time-bounded inside the packet deadline | Trade, user-visible | S |
-| ⏸ | Let graded trades move letters — **declined for now** (owner's "use your recommendation", 2026-11-20): the letter IS the trade decision, and waivers and start/sit use their records to tune confidence, never to change the call. It needs a record validated as predictive first; the record already shows beside every grade | Trade Engine stays ⚠ | M |
+| ✅ | Trade OS to 100% — **done in this change** (above): each letter's graded deals set the confidence stated beside it (never the letter), and native offers are re-graded by their reminders on a schedule | Trade Engine, Cron → ✅ (~100) | M |
+| ⏸ | Let graded trades move letters — **declined for now** (owner's "use your recommendation", 2026-11-20): the letter IS the trade decision, and waivers and start/sit use their records to tune confidence, never to change the call. It needs a record validated as predictive first; the record already shows beside every grade, and since 2026-11-21 so does the confidence it sets | — | M |
 | — | **Migration:** draft advice learns from graded tips | Draft Engine → ✅ (~100) | L |
 
 **THE +10% PUSH, 2026-11-20 — every OS re-marked from code after the builds below.** Same seven axes and weights as

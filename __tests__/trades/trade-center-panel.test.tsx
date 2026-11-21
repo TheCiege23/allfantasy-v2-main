@@ -310,4 +310,23 @@ describe('TradeCenterPanel — how the letter has held up (the learning loop, bu
     expect(nba.queryByTestId('tcp-grade-record')).toBeNull()
     expect(calls.some((c) => c.url === '/api/advice-record')).toBe(false)
   })
+
+  it('Trade OS 2026-11-21: says how sure the letter is, beside the grade, and the grade itself is unchanged', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push({ url: String(url), method: 'GET', body: null })
+      if (String(url) === '/api/advice-record') {
+        return { ok: true, status: 200, json: async () => ({ record: { ...RECORD, tradeConfidence: { B: { heldRate: 0.48, decided: 31 } } } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }))
+    fetchTradesPanel.mockResolvedValue({ ok: true, data: { ...DATA, activeTrades: [withGrade('redraft')] } })
+    const r = renderPanel({ sport: 'NFL' })
+    fireEvent.click((await r.findAllByText('You, Gridiron Goons'))[0]!.closest('button')!)
+    const line = await r.findByTestId('tcp-grade-confidence')
+    expect(line.textContent).toBe(
+      'How sure this B is: Low. About 48% of our B grades on redraft trades have held up (31 decided, recent ones weighted more). Treat this deal as closer than the letter suggests.',
+    )
+    expect(line.getAttribute('data-level')).toBe('low')
+    await r.findByText(/Grade B/)
+  })
 })

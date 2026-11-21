@@ -31,6 +31,12 @@
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import {
+  readTradeLetterCalibration,
+  tradeLetterCalibrationFrom,
+  type TradeLetterCalibration,
+  type TradeLetterLedger,
+} from '@/lib/decision-os/trade/letterCalibration'
 
 /** Within this many points, a start/sit call is "same" — the Receipts card's AutoCoach band. */
 export const LEDGER_SAME_BAND = 1
@@ -170,6 +176,13 @@ export type LedgerSnapshot = {
    * graded NFL call carried both projections.
    */
   benchEdges?: BenchEdgeLedger
+  /**
+   * Each directional letter's graded redraft deals — held up or not, decayed by age — the trade grade's own
+   * confidence (`lib/decision-os/trade/letterCalibration.ts`). Absent on a snapshot written before 2026-11-21.
+   */
+  tradeLetters?: TradeLetterLedger
+  /** The same over only the trades a commissioner was shown in a trade review. */
+  commissionerTradeLetters?: TradeLetterLedger
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -185,6 +198,8 @@ export function foldLedger(input: {
   trades: LedgerSnapshot['trades']
   commissionerTrades?: LedgerSnapshot['trades']
   waiverEngine?: WaiverEngineLedger
+  tradeLetters?: TradeLetterLedger
+  commissionerTradeLetters?: TradeLetterLedger
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -271,6 +286,10 @@ export function foldLedger(input: {
     ...(input.commissionerTrades ? { commissionerTrades: input.commissionerTrades } : {}),
     ...(input.waiverEngine && Object.keys(input.waiverEngine).length > 0 ? { waiverEngine: input.waiverEngine } : {}),
     ...(benchEdges && Object.keys(benchEdges).length > 0 ? { benchEdges } : {}),
+    ...(input.tradeLetters && Object.keys(input.tradeLetters).length > 0 ? { tradeLetters: input.tradeLetters } : {}),
+    ...(input.commissionerTradeLetters && Object.keys(input.commissionerTradeLetters).length > 0
+      ? { commissionerTradeLetters: input.commissionerTradeLetters }
+      : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
@@ -293,6 +312,13 @@ export type LedgerRecordView = {
   trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
   /** The same, over only trades a commissioner was shown in a trade review. Absent or null when none qualify. */
   commissionerTrades?: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
+  /**
+   * How sure each letter is, from its graded deals: the held-up rate shrunk toward a coin flip
+   * (`letterCalibration.ts`). Absent until a letter has enough decided deals; never moves the letter.
+   */
+  tradeConfidence?: TradeLetterCalibration | null
+  /** The same over only the trades a commissioner reviewed. */
+  commissionerTradeConfidence?: TradeLetterCalibration | null
 }
 
 const nat = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
@@ -349,6 +375,8 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
     })
   const letters = lettersOf(ledger.trades)
   const commissionerLetters = lettersOf(ledger.commissionerTrades)
+  const tradeConfidence = tradeLetterCalibrationFrom(ledger.tradeLetters)
+  const commissionerTradeConfidence = tradeLetterCalibrationFrom(ledger.commissionerTradeLetters)
 
   if (!bench && !pickups && letters.length === 0) return null
   return {
@@ -357,6 +385,8 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
     pickups,
     trades: letters.length ? letters : null,
     ...(commissionerLetters.length ? { commissionerTrades: commissionerLetters } : {}),
+    ...(tradeConfidence ? { tradeConfidence } : {}),
+    ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
   }
 }
 
@@ -396,11 +426,16 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
   // A malformed commissioner list drops only itself: the rest of the record is still good.
   const commissionerTrades = okLetters(v.commissionerTrades) ? (v.commissionerTrades as LedgerRecordView['commissionerTrades']) ?? null : null
   if (bench == null && pickups == null && trades == null) return null
+  // A malformed confidence drops only itself, as the commissioner list does.
+  const tradeConfidence = readTradeLetterCalibration(v.tradeConfidence)
+  const commissionerTradeConfidence = readTradeLetterCalibration(v.commissionerTradeConfidence)
   return {
     season: typeof v.season === 'number' ? v.season : 0,
     bench: bench ?? null,
     pickups: pickups ?? null,
     trades: (trades as LedgerRecordView['trades']) ?? null,
     ...(commissionerTrades?.length ? { commissionerTrades } : {}),
+    ...(tradeConfidence ? { tradeConfidence } : {}),
+    ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
   }
 }

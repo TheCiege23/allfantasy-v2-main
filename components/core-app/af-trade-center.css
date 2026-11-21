@@ -2901,6 +2901,9 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tcp-grade { margin: 0; font-size: 13px; color: var(--text2); }
 .af-tcp-grade-record { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .af-tcp-grade-record[data-verdict="not_held_up"] { color: var(--text2); }
+/* How sure the letter is, from its graded deals — said beside the grade, never changing it. */
+.af-tcp-grade-confidence { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.af-tcp-grade-confidence[data-level="low"] { color: var(--text2); }
 .af-tcp-team { padding: 12px; border: 1px solid var(--line); border-radius: var(--af-radius-inner, 12px); background: var(--surface2); }
 .af-tcp-team[data-viewer] { border-color: var(--accent-line); }
 .af-tcp-team header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
