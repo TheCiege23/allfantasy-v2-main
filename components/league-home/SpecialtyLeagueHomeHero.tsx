@@ -17,6 +17,10 @@ export type TournamentHeroContext = {
   roundIndex: number
   phase: string
   roundRules?: { benchSpots: number; faabReset: boolean; faabBudget: number }
+  /** The tournament's hub, when it is not the older `/tournament/<id>` (a shell: lib/tournament/shellHeroContext.ts). */
+  hubHref?: string
+  /** The commissioner's ops page; null when this tournament has none at the older path. */
+  controlHref?: string | null
   theme?: {
     bannerUrl: string | null
     themePack: string
@@ -411,7 +415,7 @@ export function SpecialtyLeagueHomeHero({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-[#ffb8d1]/90">Hub</span>
                     <Link
-                      href={`/tournament/${tournamentContext.tournamentId}`}
+                      href={tournamentContext.hubHref ?? `/tournament/${tournamentContext.tournamentId}`}
                       className="text-[11px] font-semibold text-[#ff9ec0] underline-offset-2 hover:text-[#ffb8d1] hover:underline"
                       data-testid="specialty-hero-tournament-hub"
                     >
@@ -553,10 +557,10 @@ export function SpecialtyLeagueHomeHero({
                   Commish
                 </HeroQuickButton>
               ) : null}
-              {isHeadCommissioner && variant === 'tournament' && tournamentContext ? (
+              {isHeadCommissioner && variant === 'tournament' && tournamentContext && tournamentContext.controlHref !== null ? (
                 <HeroQuickButton
                   icon={Wrench}
-                  href={`/tournament/${tournamentContext.tournamentId}/control`}
+                  href={tournamentContext.controlHref ?? `/tournament/${tournamentContext.tournamentId}/control`}
                 >
                   Ops
                 </HeroQuickButton>
