@@ -31,6 +31,7 @@ import {
 import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './core'
 import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats, readSeasonBlend } from './seasonBlend'
 import { soccerSeasonLines } from './soccerSeasonLines'
+import { pickCollegeFootballSeasonLines } from './collegeBoxSeasonLines'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
@@ -329,14 +330,15 @@ export async function writeAfProjectionSnapshotsForSeason(
   }
 
   const scope = opts.playerIds ? { playerId: { in: opts.playerIds } } : {}
-  const statLines: SeasonLine[] = soccer
+  const loadedStatLines = soccer
     ? await loadSoccerSeasonLines(sourceSeason, opts.playerIds)
     : await prisma.fantasyStatLine.findMany({
-        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER, ...scope },
+        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER, ...(sport === 'NCAAF' ? { week: 0 } : {}), ...scope },
         // Only `playerId` and `stats` are read (see SeasonLine). Selecting them keeps the
         // per-preset points JSON and the rest of each row out of memory for a whole season.
-        select: { playerId: true, stats: true },
+        select: { playerId: true, stats: true, source: true, fetchedAt: true },
       })
+  const statLines: SeasonLine[] = sport === 'NCAAF' ? pickCollegeFootballSeasonLines(loadedStatLines) : loadedStatLines
 
   /*
    * ── THE PER-PLAYER BASIS, WHILE A SEASON IS BEING PLAYED ────────────────────────────────
@@ -353,14 +355,15 @@ export async function writeAfProjectionSnapshotsForSeason(
   const priorSeason = older ? Number(older.season) : null
   const seasonUnderway = statLines.some((l) => gamesPlayedOf(l.stats) >= 1)
   const blend = opts.sourceSeason == null && priorSeason != null && seasonUnderway
-  const priorLines: SeasonLine[] = !blend
+  const loadedPriorLines = !blend
     ? []
     : soccer
       ? await loadSoccerSeasonLines(priorSeason as number, opts.playerIds)
       : await prisma.fantasyStatLine.findMany({
-          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER, ...scope },
-          select: { playerId: true, stats: true },
+          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER, ...(sport === 'NCAAF' ? { week: 0 } : {}), ...scope },
+          select: { playerId: true, stats: true, source: true, fetchedAt: true },
         })
+  const priorLines: SeasonLine[] = sport === 'NCAAF' ? pickCollegeFootballSeasonLines(loadedPriorLines) : loadedPriorLines
   const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))
   const plan: Array<{ line: (typeof statLines)[number]; season: number }> = []
   const planned = new Set<string>()
@@ -692,6 +695,7 @@ export async function writeAfProjectionSnapshotsForSeason(
       basis: outcome.basis,
       scoringFormat,
       sourceSeason: lineSeason,
+      ...(typeof stats.verifiedBoxVersion === 'string' ? { verifiedBoxVersion: stats.verifiedBoxVersion, verifiedGameIds: stats.verifiedGameIds } : {}),
       idpPreset: outcome.idp ? idpPreset : null,
       weeklyWeeksUsed: outcome.weeklyWeeksUsed,
       confidenceScore: outcome.confidence.score,
