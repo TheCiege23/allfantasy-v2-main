@@ -203,7 +203,7 @@ survive.** Same seven axes and weights. Where an audit was stricter than this fi
 | Import | ~82 | ~82 | Kernel ⚠: only the packet reads the feed. Cron ⚠: `fantasy-os-exec-sync` writes nothing unless `FANTASY_OS_EXEC_SYNC_LIVE=true` (code default off; production not read here) |
 | Projection | ~93 | ~93 | Kernel ⚠: every live projection read (`readAfProjections`: the projections route, Chimmy's tool, the draft pool) bypasses the feed. Engine is ✅, not n/a: graded accuracy moves the projected number |
 | Player Value | ~90 | ~90 | Kernel ⚠: the NFL market lane (the card, Chimmy's value tool) reads `playerValueSnapshot` directly; only the non-NFL league board reads through the feed |
-| Waiver | ~93 | ~93 | Kernel ⚠: the AI waiver panel's route (`/api/ai/waivers/recommend`) calls `loadWaiverWorldFacts` directly |
+| Waiver | ~93 | ~93 → **~100, rewired** | Kernel ⚠ → ✅: the AI waiver panel's route (`/api/ai/waivers/recommend`) called `loadWaiverWorldFacts` directly. It reads through Waiver OS now (below) |
 | Lineup | ~72.5 | ~85 → **~100 in this change** | Feed is n/a by this file's rule, not ❌. Cron ⚠ was REAL: the lineup and slate-lock alerts used the weekly-feed optimizer, not My Team's `optimizeLineup` — **fixed in this change** (below) |
 | Trade | ~93 | ~100 | Kernel ⚠ in the audit is the recorded n/a (pending trades are graded on rosters loaded live) |
 | Commissioner | ~78 | ~85 | Kernel ⚠: the hub rebuilds health live; only Chimmy reads the feed. Chimmy ⚠: no commissioner tool — the slice arrives only on a commissioner-classified turn |
@@ -223,6 +223,11 @@ ruleset through it (60 s), then report League OS's outcomes (`emitFeedOutcomes('
 every POST, proposal validation, waiver processing, stat ingest and matchup completion passes nothing and still reads the
 ruleset live, as League OS's own header requires of anything that persists on the result. Tests:
 `__tests__/redraft/runtime-rules-through-league-os.test.ts`, `__tests__/redraft/runtime-routes-league-os-loaders.test.ts`.
+
+**Rewired: Waiver (2 of 6).** The AI waiver panel (`/api/ai/waivers/recommend`) reads its facts through Waiver OS's
+user-level resource entry (`createWaiverOsLoaders().loadWorldFacts`) — the entry Chimmy's waiver answer already reads,
+held five minutes because FAAB and priority move on every processed claim — and reports the feed's outcomes. A miss or a
+store problem derives through the same `loadWaiverWorldFacts`. Test: `__tests__/ai/waiver-recommendation-through-waiver-os.test.ts`.
 
 **Built in this change (no migration):**
 - **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster
