@@ -12,7 +12,7 @@ type Obj = Record<string, any>
 const obj = (value: unknown): Obj => value && typeof value === 'object' && !Array.isArray(value) ? value as Obj : {}
 type OfficialGame = { id: string; home: string; away: string; start: string; season: number }
 type Identity = { id: string; canonicalName: string; rollingInsightsId: string | null }
-// Verified against the official November 14 boxes and the primary NBA player catalog.
+// Verified against official NBA boxes and the primary NBA player catalog.
 // Each alias checks BOTH provider IDs and BOTH names; suffixes are never dropped globally.
 const aliases: Record<string, { official: string; primary: string; riId: string }> = {
   '1629023': { official: 'P.J. Washington Jr.', primary: 'PJ Washington', riId: '1083' },
@@ -21,6 +21,9 @@ const aliases: Record<string, { official: string; primary: string; riId: string 
   '1641842': { official: 'Ronald Holland II', primary: 'Ron Holland II', riId: '1640' },
   '1642449': { official: 'Tolu Smith', primary: 'Tolu Smith III', riId: '1643' },
   '1631095': { official: 'Jabari Smith Jr.', primary: 'Jabari Smith', riId: '1478' },
+  '1629651': { official: 'Nic Claxton', primary: 'Nicolas Claxton', riId: '999' },
+  '1642267': { official: 'Bub Carrington', primary: 'Carlton Carrington', riId: '1661' },
+  '1631119': { official: 'Jaylin Williams', primary: 'Jaylin Williams', riId: '1449' },
 }
 const fail = (code: string): never => { throw Error('OFFICIAL_NBA_' + code) }
 const count = (v: unknown): number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : fail('INVALID_COUNT')
