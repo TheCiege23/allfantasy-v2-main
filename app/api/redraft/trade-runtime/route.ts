@@ -1,5 +1,7 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -154,11 +156,14 @@ export async function GET(req: NextRequest) {
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
   const commissioner = await assertLeagueCommissioner(leagueId, userId, 'view')
 
+  // League OS holds the ruleset 60 s, so one page load's resolvers share it (GET only — see `TradeRuntimeRulesDeps`).
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftTradeRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
-  })
+  }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })
