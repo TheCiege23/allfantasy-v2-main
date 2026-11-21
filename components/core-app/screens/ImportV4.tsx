@@ -38,6 +38,7 @@ import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-a
 import { EspnTeamCodeVerify } from '@/components/core-app/import/EspnTeamCodeVerify'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -3762,6 +3763,16 @@ export function ImportV4({
           sourceId={phase.sourceId}
           leagueName={phase.leagueName}
         />
+      ) : null}
+
+      {/*
+        Someone who just joined a league already here: who else made it over, and the league's invite
+        link to bring the rest (owner's ask, 2026-11-21). The panel names the managers already in it.
+      */}
+      {phase.k === 'done' && phase.leagueId && phase.joinedExisting ? (
+        <section className="af-im-card" data-testid="import-joined-league-mates">
+          <LeagueInvitePanel leagueId={phase.leagueId} leagueName={phase.leagueName} />
+        </section>
       ) : null}
 
       {/* ── Static result frame, design preview only ────────────────── */}

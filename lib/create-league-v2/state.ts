@@ -368,7 +368,8 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorGuillotineTribeCount: 2,
-  survivorCommissionerParticipationMode: 'non_participating_host',
+  // Owner's call, 2026-11-21: the commissioner plays by default; "Host only" is the switch.
+  survivorCommissionerParticipationMode: 'participating_player',
   survivorEntryFeeMode: 'free',
   survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,
   survivorDuesUsd: '',

@@ -18,6 +18,7 @@ import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import { hasIdpRosterSlot } from './idpRosterSlots'
 import { IMPORT_CO_COMMISSIONERS_KEY, importCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
+import { notifyCommissionerOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
@@ -1130,6 +1131,20 @@ export async function persistImportedLeagueFromNormalization(
         await calculateAndSaveRank(userId)
       } catch (err) {
         console.warn('[ImportedLeagueCommitService] calculateAndSaveRank (join) non-fatal:', err)
+      }
+      /*
+       * A league mate who imports a league already here joins that copy — and used to arrive in
+       * silence. Tell the commissioner and the managers already in it, once (`existed` is a repeat
+       * click by someone who had already joined). Never awaited: the join stands whatever these do.
+       */
+      if (!joined.existed) {
+        const joinedLeagueId = joined.league.id
+        void notifyCommissionerOfJoin({ leagueId: joinedLeagueId, joinerUserId: userId }).catch((err) => {
+          console.warn('[ImportedLeagueCommitService] commissioner join alert failed:', err instanceof Error ? err.message : err)
+        })
+        void notifyLeagueMatesOfJoin({ leagueId: joinedLeagueId, joinerUserId: userId }).catch((err) => {
+          console.warn('[ImportedLeagueCommitService] league mates join alert failed:', err instanceof Error ? err.message : err)
+        })
       }
       return joined
     }
