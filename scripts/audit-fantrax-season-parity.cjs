@@ -191,6 +191,31 @@ async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay,pol
       }
       liveFinalGames=await prisma.redraftMatchup.count({where:{seasonId:season.id,status:{in:['final','completed']}}})
     }
+    let handoffScreen=null
+    if(final.cutover && season){
+      const path='/leagues/'+encodeURIComponent(result.leagueId)+'/import-carryover'
+      const request={redirect:'error',headers:{cookie},signal:AbortSignal.timeout(45000)}
+      const page=await publicFetch(stagingOrigin+path,request)
+      const html=await page.text()
+      handoffScreen={pageStatus:page.status,periodShown:html.replace(/<!--.*?-->/g,'').includes('Scoring handoff for period '+final.cutover.period)}
+      if(policy==='reconcile_open_period' && !final.cutover.settled){
+        const url=stagingOrigin+'/api'+path+'/reconcile'
+        const template=await publicFetch(url+'/template',request)
+        const lines=(await template.text()).trim().split(/\r?\n/)
+        const columns=lines[0].split(',')
+        handoffScreen.templateStatus=template.status
+        handoffScreen.playerDays=lines.length-1
+        handoffScreen.statColumns=columns.filter(c=>c.startsWith('stat.')).length
+        handoffScreen.franchises=new Set(lines.slice(1).map(l=>l.split(',')[2])).size
+        const empty=await publicFetch(url,{...request,method:'POST',headers:{cookie,'content-type':'text/csv'},body:lines[0]})
+        handoffScreen.emptyUploadStatus=empty.status
+        handoffScreen.emptyRejected=(await empty.json()).error==='The file contains no player lines.'
+        const after=await prisma.league.findUniqueOrThrow({where:{id:result.leagueId},select:{settings:true}})
+        const {readCutover}=require('../lib/league-import/fantrax/cutoverPolicy.ts')
+        const decision=readCutover(after.settings,season.season)
+        handoffScreen.sourceStillOwns=!!decision && !decision.settled && decision.nativeFrom!==decision.period
+      }
+    }
     let categoryChecks=null
     if(provider.info.scoringSystem?.type==='HEAD_TO_HEAD_ROTI_SINGLE_WIN'){
       const {nativeCategoryScoringContext}=require('../lib/category-scoring/nativeCategoryScoringContext.ts')
@@ -211,7 +236,7 @@ async function tryNativeConversion(leagueId,teamCount,cookie,provider,replay,pol
     return {...selection,created:true,nativeType:native.leagueType,franchises:native.leagueSize,field:native.playoffTeams,
       start:native.playoffStartWeek,rosterCopies:native.settings?.importCarryover?.playerCount,finalizeStatus:finalizeResponse.status,
       complete:final.complete===true,materializedPlayers:final.materializedPlayers,finalizeError:final.error,season:season?.season,currentWeek:season?.currentWeek,
-      policy,cutover:final.cutover,matchedNativeRecords,matchedNativeRanks,matchedNativeScores,liveFinalGames,archivedGames:native.settings?.importCarryover?.history?.matchups,categoryChecks}
+      policy,cutover:final.cutover,handoffScreen,matchedNativeRecords,matchedNativeRanks,matchedNativeScores,liveFinalGames,archivedGames:native.settings?.importCarryover?.history?.matchups,categoryChecks}
   }finally{global.fetch=restore}
 }
 async function runCase(userId,sport,id,index,runId,cookie) {
@@ -371,7 +396,11 @@ async function runCase(userId,sport,id,index,runId,cookie) {
     if(source.info.scoringSystem?.type==='HEAD_TO_HEAD_ROTI_SINGLE_WIN'){
       evidence.immediate=await tryNativeConversion(leagueId,orig.length,cookie,source,replay,'reconcile_open_period')
       evidence.pass=evidence.pass && [evidence.native,evidence.immediate].every(n=>n.complete && n.cutover?.policy===n.policy && n.currentWeek===season.currentWeek &&
-        n.matchedNativeRecords===orig.length && n.matchedNativeRanks===orig.length && n.matchedNativeScores===games && n.liveFinalGames===games)
+        n.matchedNativeRecords===orig.length && n.matchedNativeRanks===orig.length && n.matchedNativeScores===games && n.liveFinalGames===games &&
+        n.handoffScreen?.pageStatus===200 && n.handoffScreen.periodShown)
+      const handoff=evidence.immediate.handoffScreen
+      evidence.pass=evidence.pass && handoff?.templateStatus===200 && handoff.franchises===orig.length &&
+        handoff.playerDays>=sourcePlayers && handoff.statColumns>0 && handoff.emptyUploadStatus===409 && handoff.emptyRejected && handoff.sourceStillOwns
     }
     if(!evidence.native.created && sourcePlayers){
       const ids=[...new Set(Object.values(source.rosters).flatMap(t=>t.rosterItems.map(p=>p.id)))]
@@ -386,7 +415,11 @@ async function runCase(userId,sport,id,index,runId,cookie) {
         if(fan.ok){
           const direct=matchSharedFantraxPlayers(ids.filter(id=>!verified.has(id)).map(i=>fan.data[i]).filter(Boolean),Object.values(players))
           const targets=await prisma.playerIdentityMap.findMany({where:{sport,sleeperId:{in:direct.map(p=>p.player.player_id)}},select:{sleeperId:true,fantraxId:true}})
-          evidence.native.sharedIds={unresolvedWithTwoIds:direct.length,matchingNativeIdentity:targets.length,nativeTargetHasProviderLink:targets.filter(t=>!!t.fantraxId).length}
+          const fixtureLinks=targets.filter(t=>t.sleeperId && t.fantraxId==='qa'+Buffer.from(t.sleeperId).toString('hex'))
+          const bySleeper=new Map(direct.map(p=>[p.player.player_id,p.fantraxId]))
+          const vendorMatches=targets.filter(t=>t.fantraxId && t.fantraxId===bySleeper.get(t.sleeperId))
+          evidence.native.sharedIds={unresolvedWithTwoIds:direct.length,matchingNativeIdentity:targets.length,nativeTargetHasProviderLink:targets.filter(t=>!!t.fantraxId).length,
+            matchingExistingFantraxId:vendorMatches.length,stagingFixturePlaceholders:fixtureLinks.length}
         }
       }
     }
