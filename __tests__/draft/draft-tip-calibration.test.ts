@@ -83,7 +83,7 @@ describe('the decision says it beside its own confidence, and nothing else chang
   it('NFL: the record line follows the engine\'s confidence; a low one says the pick is closer than it looks', () => {
     const out = withDraftTipRecord(decision, { sport: 'NFL', round: 2, calibration }) as { four_answers: Record<string, string>; recommended_actions: unknown }
     expect(out.four_answers.how_confident).toBe(
-      'High confidence. How Draft OS\'s picks in rounds 1–3 have held up: about 50% out-scored the typical player still on the board (44 graded picks), so treat this pick as closer than it looks.',
+      'High confidence. How sure, from the record: Low. Draft OS\'s picks in rounds 1–3 have held up about 50% of the time against the typical player still on the board (44 graded picks), so treat this pick as closer than it looks.',
     )
     expect(out.four_answers.what_to_do).toBe('Draft Pick Me.')
     expect(out.recommended_actions).toBe((decision as { recommended_actions: unknown }).recommended_actions)
@@ -97,7 +97,7 @@ describe('the decision says it beside its own confidence, and nothing else chang
 
   it('a high band reads without the warning', () => {
     const c = draftTipConfidence(10, { late: { heldRate: 0.74, decided: 30 } })!
-    expect(draftTipRecordLine(c)).toBe("How Draft OS's picks in rounds 9+ have held up: about 74% out-scored the typical player still on the board (30 graded picks).")
+    expect(draftTipRecordLine(c)).toBe("How sure, from the record: High. Draft OS's picks in rounds 9+ have held up about 74% of the time against the typical player still on the board (30 graded picks).")
   })
 })
 
