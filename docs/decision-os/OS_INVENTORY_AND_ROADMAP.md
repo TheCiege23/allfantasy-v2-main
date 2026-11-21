@@ -164,6 +164,8 @@ drains, so `DECISION_OS_MAINTENANCE_ENABLED` does nothing there now. Scheduling 
 model calls per league per tool on every refresh. The library under `lib/decision-os/three-brain/` stays, unused;
 `aiAuthorityPolicy` is still read by Chimmy's answer contract. Live Chimmy still takes the first usable model
 answer (`ResponseAggregator.ts`), so the hub's multi-model axis stays ❌ by decision rather than by omission.
+⚠ **Since 2026-11-21 it is ✅ by a narrower decision**: the owner chose a second-model CHECK of decision answers
+(`lib/chimmy/decisionAnswerCheck.ts`) over reviving the synthesis. Three-brain itself stays retired.
 
 **Item 10, 2026-11-19 — the profile engine is fully retired, and "retired" was wrong when this list was written.**
 The re-score called the manager profiles retired, but five live readers still used them: drama detection and
@@ -207,7 +209,7 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
 | Manager Psychology | ~90 | ~63 | ~93 | Feed ❌ → ✅ and Kernel ⚠ → ✅ in this change: manager records read through the `psychology` feed (below). Cron ⚠ stays: ESPN/MFL waivers and Fantrax trades refresh only at import or upload (a provider-quota decision) |
-| Decision OS hub | ~86 | ~79 | ~86 | Operability ⚠ → ✅ in this build: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own |
+| Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below) |
 
 **Stale or false claims this re-score corrected** (each checked in code):
 - "Retired label engine still runs in two crons" — false since 2026-11-19 (item 10 already said so; the gap column did not).
@@ -223,6 +225,21 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 - Manager Highlights calling the 410'd `/league/managers` (§0.47 item 5) — already fixed.
 
 **Built in this change (no migration):**
+- **The hub's multi-model axis: a second model checks Chimmy's decision answers** (owner's "get the hub up to 100%",
+  2026-11-21). The owner retired the three-brain synthesis on 2026-11-19 (3–4 model calls per answer) and, asked how
+  to fill the axis, chose a narrow second-model CHECK instead of bringing it back. On a trade, waiver, start/sit or
+  draft turn on the tool loop (the path that answers most messages), a small fast model — the cheap Anthropic
+  profile, Haiku by default — reads the question, the answer and the facts Chimmy read (what its tools returned plus
+  the packet) and lists every statement the facts CONTRADICT (`lib/chimmy/decisionAnswerCheck.ts`). A contradiction
+  sends the answer back to Chimmy once with the list; the revised answer is what the user sees. It runs BEFORE the
+  deterministic trade-letter check, so that check still holds the final answer.
+  - 🛑 The checker never makes a call: it compares, it does not grade or advise, and a claim the facts do not mention
+    is not a contradiction. The revision is Chimmy's, held to the same facts.
+  - 🛑 Fails open: no key, AI spend off, a 4-second timeout, an unreadable verdict or a failed revision each return
+    the answer exactly as written. One small call per decision answer, none on chat; `CHIMMY_DECISION_CHECK=off`
+    switches it off. Every outcome is recorded as a `decision_check` analytics event (clean / revised / kept /
+    unavailable, with its time and how many contradictions) — the measure of whether it earns its cost.
+  - ⚠ Not on the PECR fallback path, which keeps its own guard; the tool loop answers most messages.
 - **Trade OS to 100%** (owner's "build out trade OS to 100%", 2026-11-21). Two gaps were left: the grade never
   learned from how its deals turned out (Engine ⚠), and only Sleeper offers were graded on a schedule (Cron ⚠).
   - **The trade grade says how sure it is, from its own graded deals** (`lib/decision-os/trade/letterCalibration.ts`).

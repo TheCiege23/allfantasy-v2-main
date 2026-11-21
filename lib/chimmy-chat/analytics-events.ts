@@ -20,6 +20,11 @@ export const CHIMMY_AI_EVENT_NAMES = [
    * was replaced or annotated, and the KPI rollup counts that name as a failure the user saw.
    */
   'guard_observed',
+  /**
+   * The second model's check of a decision answer (`lib/chimmy/decisionAnswerCheck.ts`): action is the outcome —
+   * clean, revised (a contradiction was corrected before the user saw it), kept or unavailable.
+   */
+  'decision_check',
 ] as const
 
 const CHIMMY_AI_SURFACES = [
