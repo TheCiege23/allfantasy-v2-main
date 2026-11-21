@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { loadCollegeProRoster } from '@/lib/league/collegePro/loadCollegeProRoster'
 import { COLLEGE_PRO_SCORING_KEY, collegeProFormatOf } from '@/lib/league/collegePro/format'
 
@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
 
 /**
  * The commissioner's choice: college and pro scored as separate matchups, or as one combined total.
- * Body `{ leagueId, scoring: 'separate' | 'combined' }`. Head commissioner only.
+ * Body `{ leagueId, scoring: 'separate' | 'combined' }`. The head commissioner, or a co-commissioner
+ * granted the scoring scope: the one commissioner rule (lib/league/commissionerAccess.ts).
  */
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -43,11 +44,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "scoring must be 'separate' or 'combined'" }, { status: 400 })
   }
 
-  let league: Awaited<ReturnType<typeof assertCommissioner>>['league']
+  let league: Awaited<ReturnType<typeof assertCommissionerAccess>>['league']
   try {
-    ;({ league } = await assertCommissioner(leagueId, userId))
-  } catch {
-    return NextResponse.json({ error: 'Only the commissioner can change scoring' }, { status: 403 })
+    ;({ league } = await assertCommissionerAccess(leagueId, userId, 'scoring'))
+  } catch (err) {
+    const status = (err as { status?: number }).status === 404 ? 404 : 403
+    return NextResponse.json({ error: status === 404 ? 'League not found' : 'Only the commissioner can change scoring' }, { status })
   }
   if (!collegeProFormatOf(league)) {
     return NextResponse.json({ error: 'This is not a C2C or Devy league' }, { status: 400 })

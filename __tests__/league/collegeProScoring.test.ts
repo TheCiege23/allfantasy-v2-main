@@ -11,8 +11,10 @@ const h = vi.hoisted(() => ({
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => h.session) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { update: h.update } } }))
-vi.mock('@/lib/commissioner/permissions', () => ({
-  assertCommissioner: vi.fn(async (_leagueId: string, userId: string) => {
+vi.mock('@/lib/league/commissionerAccess', () => ({
+  assertCommissionerAccess: vi.fn(async (_leagueId: string, userId: string, need: string) => {
+    // The route must ask for the scoring scope, so a co-commissioner granted scoring can switch it.
+    if (need !== 'scoring') throw Object.assign(new Error('wrong scope'), { status: 500 })
     if (userId !== 'commish' || !h.league) throw Object.assign(new Error('Forbidden'), { status: 403 })
     return { league: h.league }
   }),

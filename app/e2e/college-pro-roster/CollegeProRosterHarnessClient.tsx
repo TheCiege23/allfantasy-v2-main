@@ -121,6 +121,11 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
         scoring,
         combinedTotal: scoring === 'combined' ? Math.round(((PRO.score.total ?? 0) + (COLLEGE.score.total ?? 0)) * 100) / 100 : null,
         canEditScoring: commish,
+        drafts: [
+          { role: 'pro', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },
+          { role: 'pro', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
+          { role: 'college', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null },
+        ],
         fetchedAt: new Date().toISOString(),
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
