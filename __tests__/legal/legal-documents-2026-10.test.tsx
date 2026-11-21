@@ -71,6 +71,8 @@ describe('2026-10 legal documents', () => {
     // Terms re-dated 2026-11-21 (Washington moved to a Restricted State); Privacy did not change.
     expect(terms).toBe('November 21, 2026')
     expect(privacy).toBe('October 11, 2026')
-    expect(new Set([disclaimer, smsTerms, copyright])).toEqual(new Set(['October 6, 2026']))
+    // The State Notice was re-dated with the Terms on 2026-11-21 (same Washington edit).
+    expect(disclaimer).toBe('November 21, 2026')
+    expect(new Set([smsTerms, copyright])).toEqual(new Set(['October 6, 2026']))
   })
 })
