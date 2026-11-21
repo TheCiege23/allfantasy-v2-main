@@ -1,6 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
-import { connectedRosterPlayers } from '@/lib/core-app/connectedRoster'
+import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
 import { buildFantraxLists, sumStarterPoints } from './buildSides'
 import { loadCollegePoints } from './collegePoints'
 import { combinedTotal } from './format'
@@ -53,10 +53,18 @@ export async function loadHeadToHead(args: {
   opponentName: string | null
   myRosterId: string
   opponentRosterId: string | null
+  /** The PRO league's teams: Sleeper rosters, or a Fantrax pro league's teams keyed by Fantrax team id. */
   sleeperTeams: SleeperTeam[]
   season: number
   nflWeek: number | null
   wantEditor: boolean
+  /** The college sport, for reading the opponent's Fantrax roster. Football by default. */
+  collegeSport?: string
+  /**
+   * Points for the opponent's college players. Football uses the CFBD/RI week reader (the default);
+   * basketball passes the daily-sport reader over the pro league's Fantrax period.
+   */
+  scoreCollegePlayers?: (players: ConnectedRosterPlayer[]) => Promise<Record<string, number> | null>
 }): Promise<{ headToHead: HeadToHead; editor: TeamMapEditor | null }> {
   const { teams: fantraxTeams, rows } = await readSnapshot(args.fantraxSnapshotId)
   const saved = readTeamMap((args.proSettings as Record<string, unknown> | null)?.[COLLEGE_PRO_TEAM_MAP_KEY])
@@ -74,20 +82,26 @@ export async function loadHeadToHead(args: {
   if (!args.opponentRosterId) return { headToHead: { ...base, missing: 'No head-to-head opponent this week.' }, editor }
   const oppTeamId = saved[args.opponentRosterId]
   if (!oppTeamId) {
-    return { headToHead: { ...base, missing: 'Match each Sleeper team to its Fantrax team to compare combined scores.' }, editor }
+    return { headToHead: { ...base, missing: 'Match each pro team to its college team to compare combined scores.' }, editor }
   }
   const oppTeam = fantraxTeams.find((t) => t.teamId === oppTeamId)
-  if (!oppTeam || args.nflWeek == null) return { headToHead: { ...base, missing: "Your opponent's college team could not be read." }, editor }
+  if (!oppTeam || (args.nflWeek == null && !args.scoreCollegePlayers)) {
+    return { headToHead: { ...base, missing: "Your opponent's college team could not be read." }, editor }
+  }
 
   const oppRows = rows.filter((r) => String((r as { teamName?: unknown }).teamName ?? '').trim().toLowerCase() === oppTeam.name.trim().toLowerCase())
-  const oppPlayers = oppRows.length ? await connectedRosterPlayers('fantrax', 'NCAAF', oppRows).catch(() => []) : []
+  const oppPlayers = oppRows.length ? await connectedRosterPlayers('fantrax', args.collegeSport ?? 'NCAAF', oppRows).catch(() => []) : []
   const oppLists = buildFantraxLists(oppPlayers.map((p) => ({ id: p.id, slot: p.rosterSlot ?? null, status: p.rosterStatus ?? null })))
-  const oppPoints = await loadCollegePoints({
-    season: args.season,
-    nflWeek: args.nflWeek,
-    players: oppPlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
-  }).catch(() => null)
-  const oppCollege = oppPoints ? sumStarterPoints(oppLists.starters, oppPoints.points) : null
+  const oppPoints = args.scoreCollegePlayers
+    ? await args.scoreCollegePlayers(oppPlayers).catch(() => null)
+    : await loadCollegePoints({
+        season: args.season,
+        nflWeek: args.nflWeek!,
+        players: oppPlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
+      })
+        .then((r) => r.points)
+        .catch(() => null)
+  const oppCollege = oppPoints ? sumStarterPoints(oppLists.starters, oppPoints) : null
 
   return {
     headToHead: { ...base, opponent: { name: args.opponentName, total: combinedTotal(args.opponentProTotal, oppCollege) } },

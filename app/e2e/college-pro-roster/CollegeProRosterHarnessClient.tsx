@@ -112,8 +112,41 @@ const FANTRAX_TEAMS = [
 ].map(([teamId, name]) => ({ teamId: teamId!, name: name! }))
 const SUGGESTED: Record<string, string> = { '8': 'ciege', '5': 'conn', '6': 'uga', '11': 'grind', '12': 'gran', '1': 'jmasc', '2': 'king', '3': 'logan', '10': 'scot', '9': 'tq', '4': 'jws', '7': 'rf' }
 
+/* ?sport=nba: an NBA league on Fantrax paired with a college basketball league on Fantrax (Road To Glory). */
+const NBA_PRO: CollegeProSide = {
+  role: 'pro', sport: 'NBA', platform: 'fantrax', leagueName: 'Road To Glory NBA', teamLabel: 'Golden State Warriors', leagueHref: '/league/harness',
+  starters: [
+    { slot: 'PG', playerId: 'n1' }, { slot: 'SG', playerId: 'n2' }, { slot: 'SF', playerId: 'n3' },
+    { slot: 'PF', playerId: 'n4' }, { slot: 'C', playerId: 'n5' }, { slot: 'UTIL', playerId: 'n6' },
+  ],
+  bench: ['n7', 'n8'], taxi: ['n9'], ir: [],
+  players: Object.fromEntries([
+    p('n1', 'Stephen Curry', 'PG', 'GSW'), p('n2', 'Brandin Podziemski', 'SG', 'GSW'), p('n3', 'Jimmy Butler', 'SF', 'GSW'),
+    p('n4', 'Draymond Green', 'PF', 'GSW'), p('n5', 'Kevon Looney', 'C', 'GSW'), p('n6', 'Jonathan Kuminga', 'SF', 'GSW'),
+    p('n7', 'Buddy Hield', 'SG', 'GSW'), p('n8', 'Moses Moody', 'SG', 'GSW'), p('n9', 'Quinten Post', 'C', 'GSW'),
+  ].map((x) => [x.id, x])),
+  unavailable: null,
+  points: { n1: 98.5, n2: 61.2, n3: 74.0, n4: 55.3, n5: 40.1, n6: 66.8, n7: 38.2 },
+  score: { week: 5, total: 395.9, opponent: { name: 'Boston Celtics', total: 381.4 }, note: 'NBA points use standard scoring, so Fantrax may show slightly different numbers.' },
+}
+const NBA_COLLEGE: CollegeProSide = {
+  role: 'college', sport: 'NCAAB', platform: 'fantrax', leagueName: 'Road To Glory NCAA Basketball', teamLabel: '#51 Butler Bulldogs', leagueHref: '/league/harness-college',
+  starters: [{ slot: 'G', playerId: 'b1' }, { slot: 'G', playerId: 'b2' }, { slot: 'F', playerId: 'b3' }, { slot: 'F', playerId: 'b4' }, { slot: 'C', playerId: 'b5' }],
+  bench: ['b6'], taxi: [], ir: [],
+  players: Object.fromEntries([
+    p('b1', 'Guard One', 'G', 'Butler'), p('b2', 'Guard Two', 'G', 'Butler'), p('b3', 'Forward One', 'F', 'Butler'),
+    p('b4', 'Forward Two', 'F', 'Butler'), p('b5', 'Center One', 'C', 'Butler'), p('b6', 'Bench Wing', 'F', 'Butler'),
+  ].map((x) => [x.id, x])),
+  unavailable: null,
+  points: { b1: 44.0, b2: 31.5, b3: 28.0, b4: 19.5, b5: 36.2 },
+  score: { week: 5, total: 159.2, opponent: null, note: 'College points use standard scoring, so Fantrax may show slightly different numbers.' },
+}
+
 let installed = false
-function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean, showPipeline: boolean, mapped: boolean) {
+function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialScoring: 'separate' | 'combined', commish: boolean, showPipeline: boolean, mapped: boolean, nba: boolean, startUnlinked: boolean) {
+  let linked = !startUnlinked
+  const proSide = nba ? NBA_PRO : PRO
+  const collegeSide = nba ? NBA_COLLEGE : COLLEGE
   let scoring = initialScoring
   let saved: Record<string, string> = mapped ? { ...SUGGESTED } : {}
   if (installed || typeof window === 'undefined') return
@@ -121,6 +154,14 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
   const real = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.includes('/api/league/college-pro-roster/link') && init?.method === 'POST') {
+      linked = true
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+    if (url.includes('/api/league/college-pro-roster') && !linked) {
+      const body = { applies: false, link: { needRole: 'college', candidates: [{ leagueId: 'cbb', name: 'Road To Glory NCAA Basketball', platform: 'fantrax', sport: 'NCAAB', season: 2026 }] } }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
     if (url.includes('/api/league/college-pro-roster') && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as { scoring?: 'separate' | 'combined'; teamMap?: Record<string, string> }
       if (body.teamMap) saved = body.teamMap
@@ -133,9 +174,9 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
         format,
         lead,
         leadReason: lead === 'college' ? 'live' : 'today',
-        sides: lead === 'college' ? [COLLEGE, PRO] : [PRO, COLLEGE],
+        sides: lead === 'college' ? [collegeSide, proSide] : [proSide, collegeSide],
         scoring,
-        combinedTotal: scoring === 'combined' ? Math.round(((PRO.score.total ?? 0) + (COLLEGE.score.total ?? 0)) * 100) / 100 : null,
+        combinedTotal: scoring === 'combined' ? Math.round(((proSide.score.total ?? 0) + (collegeSide.score.total ?? 0)) * 100) / 100 : null,
         canEditScoring: commish,
         proLeagueId: 'harness',
         headToHead:
@@ -143,12 +184,12 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
             ? null
             : saved['5']
               ? { me: 205.36, opponent: { name: 'Connor0488', total: 198.1 }, missing: null }
-              : { me: 205.36, opponent: null, missing: 'Match each Sleeper team to its Fantrax team to compare combined scores.' },
+              : { me: 205.36, opponent: null, missing: 'Match each pro team to its college team to compare combined scores.' },
         teamMap: scoring === 'combined' && commish ? { sleeperTeams: SLEEPER_TEAMS, fantraxTeams: FANTRAX_TEAMS, saved, suggested: SUGGESTED } : null,
         drafts: [
-          { role: 'pro', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },
-          { role: 'pro', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
-          { role: 'college', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null },
+          { role: 'pro', platform: 'sleeper', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },
+          { role: 'pro', platform: 'sleeper', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
+          { role: 'college', platform: 'fantrax', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null },
         ],
         pipeline: showPipeline ? {
           year: 2026,
@@ -171,7 +212,7 @@ export function CollegeProRosterHarnessClient() {
   const lead = params.get('lead') === 'college' ? 'college' : 'pro'
   const format = params.get('format') === 'devy' ? 'devy' : 'c2c'
   const scoring = params.get('scoring') === 'combined' ? 'combined' : 'separate'
-  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0', params.get('mapped') === '1')
+  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0' && params.get('sport') !== 'nba', params.get('mapped') === '1', params.get('sport') === 'nba', params.get('link') === '1')
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">
