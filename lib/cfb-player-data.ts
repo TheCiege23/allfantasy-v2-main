@@ -324,11 +324,21 @@ export interface CFBDraftPick {
   playerName: string
   height: number | null
   weight: number | null
+  /**
+   * The drafted player's CFBD athlete id: the same id `PlayerIdentityMap.cfbdId` holds, so a drafted
+   * player can be found on a college roster without matching names.
+   *
+   * ⚠ STRICT, UNLIKE `collegeId` ABOVE. `collegeId` falls back to the SCHOOL id when the athlete id is
+   * absent, and a school id matched against athlete ids would link the wrong people. Null when CFBD
+   * sends no athlete id.
+   */
+  collegeAthleteId?: string | null
 }
 
 function mapDraftPick(p: any): CFBDraftPick {
   return {
     collegeId: p.collegeAthleteId || p.collegeId || null,
+    collegeAthleteId: p.collegeAthleteId != null && String(p.collegeAthleteId).trim() !== '' ? String(p.collegeAthleteId).trim() : null,
     collegeName: p.name || '',
     collegeTeam: p.collegeTeam || p.college || '',
     collegeConference: p.collegeConference || null,
