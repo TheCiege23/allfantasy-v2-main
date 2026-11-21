@@ -86,7 +86,14 @@ const DEFAULT_MAX_WEEKS = 6
  * all — measured `fetched: 0`". It does: NCAAFB is on the SECOND RI account (`RSC_TOKEN2`), and a
  * probe with only the first token reads as "no college". See the two-account warning in CLAUDE.md.
  */
-const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "SOCCER"] as const
+/*
+ * NCAAF joined 2026-11-21: CFBD stopped answering on 2026-11-10 (monthly quota), and the C2C roster
+ * page needs college lines the same day. Rolling Insights rows (`source: rolling_insights_live`) sit
+ * BESIDE the CFBD rows rather than replacing them: they are keyed on the identity id, not the CFBD
+ * athlete id, so the CFBD-keyed NCAAF readers never see them. This nightly pass reconciles what the
+ * live tick wrote during the games.
+ */
+const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "NCAAF", "SOCCER"] as const
 
 type WeekOutcome = ImportWeekReport | {
   season: number

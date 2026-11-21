@@ -31,6 +31,7 @@
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import type { DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
 import {
   readTradeLetterCalibration,
   tradeLetterCalibrationFrom,
@@ -183,6 +184,11 @@ export type LedgerSnapshot = {
   tradeLetters?: TradeLetterLedger
   /** The same over only the trades a commissioner was shown in a trade review. */
   commissionerTradeLetters?: TradeLetterLedger
+  /**
+   * Draft OS's served pick tips by round band, held up or not against the board they were given on — the draft pick's
+   * own confidence (`lib/decision-os/draft/tipCalibration.ts`). Absent before 2026-11-21 and with none graded.
+   */
+  draftTips?: DraftTipLedger
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -200,6 +206,7 @@ export function foldLedger(input: {
   waiverEngine?: WaiverEngineLedger
   tradeLetters?: TradeLetterLedger
   commissionerTradeLetters?: TradeLetterLedger
+  draftTips?: DraftTipLedger
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -290,6 +297,7 @@ export function foldLedger(input: {
     ...(input.commissionerTradeLetters && Object.keys(input.commissionerTradeLetters).length > 0
       ? { commissionerTradeLetters: input.commissionerTradeLetters }
       : {}),
+    ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
