@@ -14,6 +14,9 @@
 .chopChip>s { color: #8d93ad; }
 .chopChip>span { color: #ff9a8a; }
 .list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+/* Phone chop-zone row: the team name with its tier tag underneath, so the name gets the row's width. */
+.who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.who>.name { flex: none; max-width: 100%; } /* column flex: a flex-basis here would be a HEIGHT */
 .survBig { font-size: 40px; line-height: 1; color: #bff3d0; }
 .survBigDanger { color: #ffd59a; }
 .survBigZone { color: #ffb0a4; }
@@ -83,4 +86,11 @@
 @media (prefers-reduced-motion: reduce) {
   .blade, .slash, .card { transition: none; }
   .stamp, .released, .chopped .target { animation: none; }
+}
+
+/* Phone chop-zone row, wide enough panel (a tablet uses the phone layout too): name and tier tag back on one line. */
+@container (min-width: 420px) {
+  .who { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+  .who>.name { flex: 0 1 auto; }
+  .who>:last-child { flex: none; }
 }
