@@ -193,6 +193,12 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * reporting, not a fantasy data feed, so the DB-first rule does not apply.
    */
   { name: 'platform-infra', why: 'Play Console installs export for admin download counts; not a fantasy data feed', test: /^storage\.googleapis\.com$/i },
+  /*
+   * App Store Connect's Sales Reports API, read only by lib/app-store/appStoreSalesFetch.ts
+   * for the admin Apps page's download counts — the iOS twin of the Play export above. Each
+   * past day is cached durably in sportsDataCache by lib/app-store/appStoreDownloads.ts.
+   */
+  { name: 'platform-infra', why: 'App Store sales reports for admin download counts (api.), and the console link beside them; not a fantasy data feed', test: /^(api\.)?appstoreconnect\.apple\.com$/i },
   { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
