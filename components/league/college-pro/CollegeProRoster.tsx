@@ -153,8 +153,9 @@ function HalfLineup({
       playersLoading={false}
       onPlayerClick={(pid) => onPlayerClick(pid)}
       slotLabel={slotLabel}
-      week={0}
+      week={side.score.week ?? 0}
       season={season}
+      liveScore={side.points[id] ?? null}
     />
   )
   // Taxi is a pro-side spot. Devy leagues always have one; a C2C league only shows it when the
@@ -175,12 +176,16 @@ function HalfLineup({
             {` · set on ${side.platform === 'fantrax' ? 'Fantrax' : 'Sleeper'}`}
           </p>
         </div>
-        {side.role === 'college' && side.leagueHref ? (
-          <Link href={side.leagueHref} className="text-[11px] font-semibold text-cyan-300 hover:underline">
-            Open college league
-          </Link>
-        ) : null}
+        <div className="flex items-center gap-3">
+          <ScoreLine score={side.score} />
+          {side.role === 'college' && side.leagueHref ? (
+            <Link href={side.leagueHref} className="text-[11px] font-semibold text-cyan-300 hover:underline">
+              Open college league
+            </Link>
+          ) : null}
+        </div>
       </div>
+      {side.score.note ? <p className="-mt-2 mb-3 text-[11px] text-muted">{side.score.note}</p> : null}
 
       {side.unavailable ? (
         <p className="mb-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
@@ -228,6 +233,29 @@ function HalfLineup({
         <ListSection label={`IR · ${title}`} ids={side.ir} render={(id) => row(id)} testId={`ir-${side.role}`} />
       ) : null}
     </section>
+  )
+}
+
+const fmt = (n: number | null) => (n == null ? '—' : n.toFixed(2))
+
+/** "Wk 11 · 98.40 vs Connor0488 101.20", or just the total when there is no head-to-head opponent. */
+function ScoreLine({ score }: { score: CollegeProSide['score'] }) {
+  if (score.total == null && !score.opponent) return null
+  const winning = score.opponent && score.total != null && score.opponent.total != null ? score.total >= score.opponent.total : null
+  return (
+    <p className="text-right text-xs tabular-nums text-secondary" data-testid="college-pro-score">
+      {score.week ? <span className="mr-1.5 text-[11px] uppercase tracking-wide text-muted">Wk {score.week}</span> : null}
+      <span className={['font-bold', winning === true ? 'text-emerald-300' : winning === false ? 'text-rose-300' : 'text-primary'].join(' ')}>
+        {fmt(score.total)}
+      </span>
+      {score.opponent ? (
+        <>
+          <span className="mx-1.5 text-muted">vs</span>
+          <span className="text-secondary">{score.opponent.name ?? 'Opponent'}</span>
+          <span className="ml-1.5 font-semibold text-primary">{fmt(score.opponent.total)}</span>
+        </>
+      ) : null}
+    </p>
   )
 }
 
