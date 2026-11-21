@@ -174,7 +174,9 @@ describe("Stripe webhook: the paid-state card check", () => {
     )
   })
 
-  it("locks the WHOLE account for a Washington card — owner's decision, 2026-09-25", async () => {
+  // Was the WHOLE-account lock (owner, 2026-09-25). Since Nov 2026 Washington is paid-block, so a
+  // Washington card takes the card lock exactly as a Nevada card does.
+  it("card-locks (paid only) an account for a Washington card", async () => {
     constructEventMock.mockReturnValue(subscriptionCheckout({ ...NV, postal_code: "98101", state: "WA", city: "Seattle" }))
     const { body } = await post()
 
@@ -182,8 +184,8 @@ describe("Stripe webhook: the paid-state card check", () => {
     expect(db.subUpsert).not.toHaveBeenCalled()
     expect(stripe.refunds.create).toHaveBeenCalled()
     expect(db.appUserUpdateMany).toHaveBeenCalledWith({
-      where: { id: "u1" },
-      data: { stateRestrictionLevel: "full_block", isStateRestricted: true },
+      where: { id: "u1", OR: [{ stateRestrictionLevel: null }, { stateRestrictionLevel: { not: "full_block" } }] },
+      data: { stateRestrictionLevel: "card_paid_block", isStateRestricted: true },
     })
   })
 
