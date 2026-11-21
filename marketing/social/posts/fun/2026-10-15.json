@@ -1,0 +1,87 @@
+{
+  "date": "fun-2026-10-15",
+  "title": "AllFantasy fun posts",
+  "posts": [
+    {
+      "slot": "Fun · poll",
+      "kind": "poll",
+      "accent": "purple",
+      "eyebrow": "Be honest",
+      "title": "Rate your\nfantasy [week.]",
+      "options": [
+        [
+          "🔥",
+          "Undefeated energy"
+        ],
+        [
+          "😐",
+          "Mid. Survived."
+        ],
+        [
+          "💀",
+          "Need a time machine"
+        ],
+        [
+          "🗑️",
+          "Planning next season"
+        ]
+      ],
+      "cta": "VOTE IN THE COMMENTS →",
+      "caption": {
+        "instagram": "Rate your fantasy week. Be honest 👇\n\nA 🔥 Undefeated energy\nB 😐 Mid. Survived.\nC 💀 Need a time machine\nD 🗑️ Planning next season\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #ffl #allfantasy",
+        "tiktok": "Rate your fantasy week. A, B, C or D? Be honest 👇\n\n#fantasyfootball #fantasyfootballtok #allfantasy",
+        "facebook": "Rate your fantasy week. Be honest 👇 A 🔥 Undefeated energy, B 😐 Mid, C 💀 Need a time machine, D 🗑️ Planning next season.",
+        "x": "Rate your fantasy week 👇\n\nA 🔥 Undefeated energy\nB 😐 Mid. Survived.\nC 💀 Need a time machine\nD 🗑️ Planning next season\n\n#FantasyFootball",
+        "youtube": "Rate your fantasy week. Be honest 👇 (Tip: make this a native YouTube poll: Undefeated energy / Mid. Survived. / Need a time machine / Planning next season)"
+      }
+    },
+    {
+      "slot": "Fun · relatable",
+      "kind": "hero",
+      "accent": "cyan",
+      "big": "47",
+      "title": "Times I checked my\nlineup before [kickoff.]",
+      "lead": "Changes made: zero.",
+      "caption": {
+        "instagram": "Times I checked my lineup before kickoff: 47.\nChanges made: 0. 😅\n\nWhat's your number? 👇\n\nOne board for every league you play: allfantasy.ai (link in bio)\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #sundayfunday #allfantasy",
+        "tiktok": "47 checks. 0 changes. What's your number? 👇\n\n#fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+        "facebook": "Times I checked my lineup before kickoff: 47. Changes made: 0. 😅 What's your number? https://allfantasy.ai",
+        "x": "Times I checked my lineup before kickoff: 47\nChanges made: 0\n\nWhat's your number? #FantasyFootball",
+        "youtube": "Times I checked my lineup before kickoff: 47. Changes made: 0 😅 What's your number?"
+      }
+    },
+    {
+      "slot": "Fun · poll",
+      "kind": "poll",
+      "accent": "orange",
+      "eyebrow": "Pick your pain",
+      "title": "Worst feeling\nin [fantasy?]",
+      "options": [
+        [
+          "😩",
+          "Losing by 0.2 points"
+        ],
+        [
+          "🪑",
+          "Your bench outscores your starters"
+        ],
+        [
+          "🦶",
+          "Their kicker wins it"
+        ],
+        [
+          "⏰",
+          "Forgot to set your lineup"
+        ]
+      ],
+      "cta": "VOTE IN THE COMMENTS →",
+      "caption": {
+        "instagram": "Worst feeling in fantasy? Pick your pain 👇\n\nA 😩 Losing by 0.2 points\nB 🪑 Your bench outscores your starters\nC 🦶 Their kicker wins it\nD ⏰ Forgot to set your lineup\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #ffl #allfantasy",
+        "tiktok": "Worst feeling in fantasy? A, B, C or D 👇\n\n#fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+        "facebook": "Worst feeling in fantasy? 👇 A 😩 Losing by 0.2, B 🪑 Bench outscores starters, C 🦶 Their kicker wins it, D ⏰ Forgot to set your lineup.",
+        "x": "Worst feeling in fantasy? 👇\n\nA 😩 Losing by 0.2 points\nB 🪑 Bench outscores your starters\nC 🦶 Their kicker wins it\nD ⏰ Forgot to set your lineup\n\n#FantasyFootball",
+        "youtube": "Worst feeling in fantasy? 👇 (Make it a native YouTube poll: Losing by 0.2 / Bench outscores starters / Their kicker wins it / Forgot to set lineup)"
+      }
+    }
+  ]
+}

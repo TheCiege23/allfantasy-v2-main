@@ -1,0 +1,89 @@
+{
+  "name": "imports-one-board",
+  "accent": "#3BC4FF",
+  "seconds": 15,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "📱",
+      "text": "5 apps open\non [Sunday?]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.6,
+      "out": 9.6,
+      "text": "Bring every\nleague [here]",
+      "size": "h2",
+      "top": 0
+    },
+    {
+      "in": 3.0,
+      "out": 9.6,
+      "text": "✅ [Sleeper]",
+      "size": "h2",
+      "pop": true,
+      "top": 260
+    },
+    {
+      "in": 4.0,
+      "out": 9.6,
+      "text": "✅ [ESPN]",
+      "size": "h2",
+      "pop": true,
+      "top": 410
+    },
+    {
+      "in": 5.0,
+      "out": 9.6,
+      "text": "✅ [Fantrax]",
+      "size": "h2",
+      "pop": true,
+      "top": 560
+    },
+    {
+      "in": 6.0,
+      "out": 9.6,
+      "text": "✅ [MFL]",
+      "size": "h2",
+      "pop": true,
+      "top": 710
+    },
+    {
+      "in": 7.0,
+      "out": 9.6,
+      "text": "✅ [Fleaflicker]",
+      "size": "h2",
+      "pop": true,
+      "top": 860
+    },
+    {
+      "in": 9.8,
+      "out": 12.0,
+      "emoji": "🔒",
+      "text": "Read-only.\n[Free] to import.",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 10.2,
+      "out": 12.0,
+      "text": "We never change your league.",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 12.2,
+    "line": "Every league.\n[One board.]"
+  },
+  "caption": {
+    "instagram": "How many apps do you open on Sunday? 📱📱📱\n\nBring every league into one board on AllFantasy:\n✅ Sleeper (just your username)\n✅ ESPN and Fantrax, including baseball leagues\n✅ MFL and Fleaflicker for your dynasty leagues\n\nRead-only, so we never change your league. Importing is free, link in bio.\n\n#fantasyfootball #sleeperfantasy #espnfantasy #dynastyfootball #fantasyfootballcommunity #allfantasy",
+    "tiktok": "5 apps open on Sunday? 📱 Put every league on one board: Sleeper, ESPN, Fantrax, MFL, Fleaflicker. Free, link in bio. #fantasyfootball #sleeperfantasy #fantasyfootballtok #allfantasy",
+    "youtube": "Every fantasy league on one board: Sleeper, ESPN, Fantrax, MFL and Fleaflicker. Read-only and free to import. #fantasyfootball #shorts",
+    "facebook": "How many apps do you open on Sunday? Bring every league into one board on AllFantasy: Sleeper, ESPN, Fantrax, MFL and Fleaflicker. Read-only, and importing is free. https://allfantasy.ai"
+  }
+}

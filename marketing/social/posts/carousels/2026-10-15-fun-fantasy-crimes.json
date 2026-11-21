@@ -1,0 +1,72 @@
+{
+  "date": "carousel-2026-10-15-fun-fantasy-crimes",
+  "carousel": true,
+  "name": "Rate these fantasy crimes",
+  "slot": "Any time · fun",
+  "caption": {
+    "instagram": "Rate these fantasy crimes 1–10 ⚖️\n\n1 = forgivable. 10 = removed from the league.\n\nDrop your scores in order, like 7-3-10-6-9 👇 and send this to the guilty party.\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #commissioner #ffl #allfantasy",
+    "tiktok": "Rate these fantasy crimes 1–10 ⚖️ Drop your scores 👇 and send it to the guilty party.\n\n#fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+    "facebook": "Rate these fantasy crimes 1 to 10 ⚖️ (1 = forgivable, 10 = removed from the league). Drop your scores 👇 and tag the guilty party. https://allfantasy.ai",
+    "x": "Rate these fantasy crimes 1–10 ⚖️\n\n1. Starting a player on bye\n2. Trading with your brother-in-law at the deadline\n3. Tanking in Week 4\n4. Commish vetoing his rival's trade\n5. Never paying league dues\n\nScores 👇 #FantasyFootball",
+    "youtube": "Rate these fantasy crimes 1–10 ⚖️ 1 = forgivable, 10 = removed from the league. Drop your scores 👇"
+  },
+  "posts": [
+    {
+      "kind": "hero",
+      "big": "⚖️",
+      "eyebrow": "Court is in session",
+      "title": "Rate these\nfantasy [crimes.]",
+      "lead": "1 = forgivable. 10 = removed from the league.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "🛌",
+      "eyebrow": "Crime 1",
+      "title": "Starting a player\non [bye.]",
+      "lead": "Zero points. Full confidence.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "🤝",
+      "eyebrow": "Crime 2",
+      "title": "Trading with your\n[brother-in-law]\nat the deadline.",
+      "titleSize": "sm",
+      "lead": "Totally fair. Totally a coincidence.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "📉",
+      "eyebrow": "Crime 3",
+      "title": "[Tanking]\nin Week 4.",
+      "lead": "It's a “rebuild.” It's October.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "🗳️",
+      "eyebrow": "Crime 4",
+      "title": "Commish [vetoing]\nhis rival's trade.",
+      "lead": "“For the integrity of the league.”",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "💸",
+      "eyebrow": "Crime 5",
+      "title": "Never paying\nleague [dues.]",
+      "lead": "“I'll Venmo you after the season.” It's been three seasons.",
+      "accent": "red"
+    },
+    {
+      "kind": "hero",
+      "big": "👇",
+      "title": "Drop your\n[scores.]",
+      "lead": "Like 7-3-10-6-9. Then send this to the guilty party.",
+      "cta": "ALLFANTASY.AI · LINK IN BIO →",
+      "accent": "red"
+    }
+  ]
+}
