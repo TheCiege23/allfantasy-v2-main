@@ -1170,8 +1170,8 @@ export function LeagueBasicsStep({
             <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">A playing commissioner takes one cast seat. Chimmy runs private votes and idols without revealing them to that commissioner.</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               {([
-                { value: 'non_participating_host', label: 'Host only', hint: 'All cast seats are available for invited managers.' },
                 { value: 'participating_player', label: 'Play as a manager', hint: 'Your team takes one of the cast seats.' },
+                { value: 'non_participating_host', label: 'Host only', hint: 'All cast seats are available for invited managers.' },
               ] as const).map((option) => (
                 <button key={option.value} type="button"
                   aria-pressed={state.survivorCommissionerParticipationMode === option.value}

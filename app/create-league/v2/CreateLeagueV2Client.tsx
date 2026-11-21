@@ -66,8 +66,8 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
     tePremiumPoints: typeof state.tePremiumPoints === 'number' ? state.tePremiumPoints : null,
     survivorTribeCount: leagueType === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)
       ? (getSurvivorTribeOptions(state.teamCount)[0] ?? 2) : state.survivorTribeCount,
-    survivorCommissionerParticipationMode: state.survivorCommissionerParticipationMode === 'participating_player'
-      ? 'participating_player' : 'non_participating_host',
+    survivorCommissionerParticipationMode: state.survivorCommissionerParticipationMode === 'non_participating_host'
+      ? 'non_participating_host' : 'participating_player',
   }
 }
 
