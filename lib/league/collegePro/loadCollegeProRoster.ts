@@ -21,7 +21,7 @@ import {
   type CollegeProRole,
 } from './buildSides'
 import { decideLeadSide, type LeadReason, type LeadSide } from './leadSide'
-import { collegeProFormatOf, collegeSportFor, combinedTotal, readCollegeProScoring, type CollegeProFormat, type CollegeProScoring } from './format'
+import { collegeProFormatOf, collegeSportFor, combinedTotal, normalizeCollegeSport, readCollegeProScoring, type CollegeProFormat, type CollegeProScoring } from './format'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { loadCollegePoints } from './collegePoints'
 
@@ -152,7 +152,7 @@ export async function loadCollegeProRoster(
   const format: CollegeProFormat = typed ?? 'c2c'
 
   const proSport = String(league.sport ?? 'NFL').toUpperCase()
-  const collegeSport = collegeHalf?.sport ? String(collegeHalf.sport).toUpperCase() : collegeSportFor(proSport)
+  const collegeSport = normalizeCollegeSport(collegeHalf?.sport) ?? collegeSportFor(proSport)
   const link = collegeHalf ? null : await findLinkCandidates(leagueId, userId).catch(() => null)
 
   const nflState = await liveNflState().catch(() => null)
@@ -441,7 +441,7 @@ async function loadFantraxProPair(args: {
   const proHalf = paired?.sides.find((s) => s.role === 'pro') ?? null
   const collegeHalf = paired?.sides.find((s) => s.role === 'college') ?? null
   if (!proHalf || !collegeHalf) return { applies: false }
-  const collegeSport = String(collegeHalf.sport ?? collegeSportFor(proSport)).toUpperCase()
+  const collegeSport = normalizeCollegeSport(collegeHalf.sport) ?? collegeSportFor(proSport)
   const format: CollegeProFormat = collegeProFormatOf(league) ?? 'c2c'
 
   const settings = (league.settings ?? {}) as Record<string, unknown>

@@ -49,7 +49,7 @@ export function sleeperDraftCards(
         season: seasonOf(d.season),
         phase,
         status: phase === 'unknown' ? d.status || STATUS.unknown : STATUS[phase],
-        detail: [typeof rounds === 'number' && rounds > 0 ? `${rounds} rounds` : null, d.type || null].filter(Boolean).join(' · ') || null,
+        detail: [typeof rounds === 'number' && rounds > 0 ? `${rounds} ${rounds === 1 ? 'round' : 'rounds'}` : null, d.type || null].filter(Boolean).join(' · ') || null,
         startsAt,
       }
     })

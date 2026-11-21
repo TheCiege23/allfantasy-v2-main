@@ -143,3 +143,13 @@ describe('scores', () => {
     expect(sleeperTeamName(users, 'nobody')).toBeNull()
   })
 })
+
+describe('normalizeCollegeSport', () => {
+  it("reads Fantrax's CFB / CBB as our NCAAF / NCAAB", async () => {
+    const { normalizeCollegeSport } = await import('@/lib/league/collegePro/format')
+    expect(normalizeCollegeSport('CFB')).toBe('NCAAF')
+    expect(normalizeCollegeSport('cbb')).toBe('NCAAB')
+    expect(normalizeCollegeSport('NCAAF')).toBe('NCAAF')
+    expect(normalizeCollegeSport(null)).toBeNull()
+  })
+})
