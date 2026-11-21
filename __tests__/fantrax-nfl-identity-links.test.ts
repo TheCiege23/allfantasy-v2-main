@@ -139,6 +139,66 @@ describe('planNflFantraxIdentityLinks', () => {
     expect(plan.links).toEqual([{ id: 'r1', fantraxId: 'f1' }, { id: 'r2', fantraxId: 'f2' }])
     expect(plan.unmatched).toBe(2)
   })
+
+  /** Staging 2026-11-21: the registry holds "Dru Phillips" for Fantrax's "Phillips, Andru", and 16 more like him. */
+  describe('a short first name in the registry', () => {
+    const refs = [
+      ref('f1', 'Phillips, Andru', 'NYG', 'CB'),
+      ref('f2', 'Skattebo, Cameron', 'NYG', 'RB'),
+      ref('f3', 'Hibner, Matthew', 'BAL', 'TE'),
+    ]
+    const surnames = [
+      row('r1', 'Dru Phillips', 'NYG', 'DB'),
+      row('r2', 'Cam Skattebo', 'NYG', 'RB'),
+      row('r3', 'Matt Hibner', 'BAL', 'TE'),
+      row('r9', 'Jordan Phillips', 'BUF', 'DL'),
+    ]
+
+    it('links the one row with that surname, club and position when the first names are short and long', () => {
+      const plan = planNflFantraxIdentityLinks(refs, [], surnames)
+      expect(plan.links).toEqual([{ id: 'r1', fantraxId: 'f1' }, { id: 'r2', fantraxId: 'f2' }, { id: 'r3', fantraxId: 'f3' }])
+    })
+
+    it('is off without the complete surname rows', () => {
+      expect(planNflFantraxIdentityLinks(refs, surnames).links).toEqual([])
+      expect(planNflFantraxIdentityLinks(refs, []).links).toEqual([])
+    })
+
+    it('refuses a second row with that surname at the club, another club, and an existing link', () => {
+      expect(planNflFantraxIdentityLinks(
+        [ref('f1', 'Phillips, Andru', 'NYG', 'CB')], [],
+        [row('r1', 'Dru Phillips', 'NYG', 'DB'), row('r2', 'Jacob Phillips', 'NYG', 'DB')],
+      ).links).toEqual([])
+      expect(planNflFantraxIdentityLinks(
+        [ref('f1', 'Phillips, Andru', 'DAL', 'CB')], [], [row('r1', 'Dru Phillips', 'NYG', 'DB')],
+      ).links).toEqual([])
+      const linked = planNflFantraxIdentityLinks(
+        [ref('f1', 'Phillips, Andru', 'NYG', 'CB')], [], [row('r1', 'Dru Phillips', 'NYG', 'DB', 'other-id')],
+      )
+      expect(linked.links).toEqual([])
+      expect(linked.conflicts).toBe(1)
+    })
+
+    it('refuses first names that nothing connects, however sure a person would be', () => {
+      const plan = planNflFantraxIdentityLinks(
+        [
+          ref('f1', 'Gardner, Ahmad', 'IND', 'CB'),
+          ref('f2', 'Martin, Jartavius', 'WAS', 'S'),
+          ref('f3', 'Brown, Michael', 'NE', 'S'),
+          ref('f4', 'Lee, Al', 'KC', 'WR'),
+        ],
+        [],
+        [
+          row('r1', 'Sauce Gardner', 'IND', 'DB'),
+          row('r2', 'Quan Martin', 'WAS', 'DB'),
+          row('r3', 'Mike Brown', 'NE', 'DB'),
+          row('r4', 'Alan Lee', 'KC', 'WR'),
+        ],
+      )
+      expect(plan.links).toEqual([])
+      expect(plan.unmatched).toBe(4)
+    })
+  })
 })
 
 describe('the NFL import links the players it received', () => {
@@ -206,6 +266,24 @@ describe('the NFL import links the players it received', () => {
     expect(h.queryRaw.mock.calls[0].slice(1)).toEqual([['marvin mims']])
     expect((h.queryRaw.mock.calls[0][0] as string[]).join('?')).toContain("' (jr|sr|ii|iii|iv|v)$'")
     expect(h.executeRaw.mock.calls[0].slice(1)).toContain(JSON.stringify([{ id: 'r5', fantraxId: 'f5' }]))
+  })
+
+  it('reads every row with the surname of a player no name read found, and links the short name', async () => {
+    h.rosters.mockResolvedValue({ ok: true, data: { team1: { teamName: 'My team', rosterItems: [
+      { id: 'f1', position: 'QB', status: 'ACTIVE' }, { id: 'f8', position: 'CB', status: 'ACTIVE' },
+    ] } } })
+    h.players.mockImplementation(async (sport: string) => ({ ok: true, data: sport === 'NFL' ? {
+      f1: ref('f1', 'Allen, Josh', 'BUF', 'QB'), f8: ref('f8', 'Phillips, Andru', 'NYG', 'CB'),
+    } : {} }))
+    // Second read (the name without punctuation) finds nothing; third read (the surname) finds him.
+    h.queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([row('r8', 'Dru Phillips', 'NYG', 'DB')])
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+    expect(h.queryRaw).toHaveBeenCalledTimes(2)
+    expect(h.queryRaw.mock.calls[1].slice(1)).toEqual([['% phillips']])
+    expect((h.queryRaw.mock.calls[1][0] as string[]).join('?')).toContain('LIKE ANY(')
+    expect(h.executeRaw.mock.calls[0].slice(1)).toContain(
+      JSON.stringify([{ id: 'r1', fantraxId: 'f1' }, { id: 'r8', fantraxId: 'f8' }]),
+    )
   })
 
   it('a failing second read still links the exact matches', async () => {

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizePlayerName } from '@/lib/team-abbrev'
-import { fantraxNflNameKey, looseNflNameKey, planNflFantraxIdentityLinks } from './nflFantraxIdentityPlan'
+import { fantraxNflNameKey, looseNflNameKey, nflNameParts, planNflFantraxIdentityLinks } from './nflFantraxIdentityPlan'
 
 type LinkRow = { id: string; canonicalName: string; currentTeam: string | null; position: string | null; fantraxId: string | null }
 
@@ -20,6 +20,25 @@ async function readRowsByLooseName(looseKeys: string[]): Promise<LinkRow[]> {
       SELECT id, "canonicalName", "currentTeam", position, "fantraxId" FROM "PlayerIdentityMap"
       WHERE sport='NFL' AND regexp_replace(regexp_replace("normalizedName", '[^a-z0-9 ]', '', 'g'), ' (jr|sr|ii|iii|iv|v)$', '')
         = ANY(${looseKeys}::text[])
+    `
+    return Array.isArray(found) ? found : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * EVERY NFL registry row with one of these surnames, for the planner's short-name rule ("Dru" for
+ * "Andru"). The stored name is compared the same way as above; a surname holds only letters, digits
+ * and spaces, so it carries no LIKE wildcard. A failed read finds none, which switches the rule off.
+ */
+async function readRowsBySurname(surnames: string[]): Promise<LinkRow[]> {
+  try {
+    const patterns = surnames.map((surname) => `% ${surname}`)
+    const found = await prisma.$queryRaw<LinkRow[]>`
+      SELECT id, "canonicalName", "currentTeam", position, "fantraxId" FROM "PlayerIdentityMap"
+      WHERE sport='NFL' AND regexp_replace(regexp_replace("normalizedName", '[^a-z0-9 ]', '', 'g'), ' (jr|sr|ii|iii|iv|v)$', '')
+        LIKE ANY(${patterns}::text[])
     `
     return Array.isArray(found) ? found : []
   } catch {
@@ -69,7 +88,16 @@ export async function linkNflFantraxIdentities(refs: FantraxPlayerRef[]) {
     const looseRows = looseKeys.length ? await readRowsByLooseName(looseKeys) : []
     const seen = new Set(rows.map((r) => r.id))
     const candidates = [...rows, ...looseRows.filter((r) => !seen.has(r.id))]
-    const { links, ...coverage } = planNflFantraxIdentityLinks(usable, candidates)
+    /* A third read, only for players no name read found: every row with their surname (see the planner). */
+    const keysFound = new Set(candidates.map((r) => looseNflNameKey(normalizePlayerName(r.canonicalName ?? ''))))
+    const surnames = [...new Set(usable
+      .filter((r) => !linkedIds.has(String(r.fantraxId).trim()) && String(r.name ?? '').includes(','))
+      .map((r) => looseNflNameKey(fantraxNflNameKey(r.name)))
+      .filter((key) => key && !keysFound.has(key))
+      .map((key) => nflNameParts(key).surname)
+      .filter(Boolean))]
+    const surnameRows = surnames.length ? await readRowsBySurname(surnames) : []
+    const { links, ...coverage } = planNflFantraxIdentityLinks(usable, candidates, surnameRows)
     if (links.length === 0) return { ...coverage, proposed: 0, updated: 0 }
     const updated = await prisma.$executeRaw`
       WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(links)}::jsonb) AS l(id text, "fantraxId" text))
