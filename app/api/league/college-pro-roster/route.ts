@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { loadCollegeProRoster } from '@/lib/league/collegePro/loadCollegeProRoster'
 import { COLLEGE_PRO_SCORING_KEY, collegeProFormatOf } from '@/lib/league/collegePro/format'
+import { COLLEGE_PRO_TEAM_MAP_KEY } from '@/lib/league/collegePro/headToHead'
+import { readTeamMap } from '@/lib/league/collegePro/teamMatch'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,20 +29,33 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * The commissioner's choice: college and pro scored as separate matchups, or as one combined total.
- * Body `{ leagueId, scoring: 'separate' | 'combined' }`. The head commissioner, or a co-commissioner
- * granted the scoring scope: the one commissioner rule (lib/league/commissionerAccess.ts).
+ * The commissioner's scoring choices, saved on the PRO league:
+ *   `{ leagueId, scoring: 'separate' | 'combined' }`: separate matchups or one combined total.
+ *   `{ leagueId, teamMap: { [sleeperRosterId]: fantraxTeamId } }`: which college team is whose, for
+ *   combined head to head. Replaces the saved map; one Fantrax team per Sleeper team.
+ * The head commissioner, or a co-commissioner granted the scoring scope: the one commissioner rule
+ * (lib/league/commissionerAccess.ts).
  */
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = (await req.json().catch(() => null)) as { leagueId?: unknown; scoring?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { leagueId?: unknown; scoring?: unknown; teamMap?: unknown } | null
   const leagueId = typeof body?.leagueId === 'string' ? body.leagueId.trim() : ''
   const scoring = body?.scoring
+  const teamMapInput = body?.teamMap
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
-  if (scoring !== 'separate' && scoring !== 'combined') {
+  const savingMap = teamMapInput !== undefined
+  if (savingMap) {
+    if (!teamMapInput || typeof teamMapInput !== 'object' || Array.isArray(teamMapInput)) {
+      return NextResponse.json({ error: 'teamMap must be an object of Sleeper roster id to Fantrax team id' }, { status: 400 })
+    }
+    const values = Object.values(teamMapInput as Record<string, unknown>).filter((v) => typeof v === 'string' && v.trim())
+    if (new Set(values).size !== values.length) {
+      return NextResponse.json({ error: 'Each Fantrax team can belong to only one Sleeper team' }, { status: 400 })
+    }
+  } else if (scoring !== 'separate' && scoring !== 'combined') {
     return NextResponse.json({ error: "scoring must be 'separate' or 'combined'" }, { status: 400 })
   }
 
@@ -60,9 +75,10 @@ export async function POST(req: NextRequest) {
     league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
       ? (league.settings as Record<string, unknown>)
       : {}
+  const patch = savingMap ? { [COLLEGE_PRO_TEAM_MAP_KEY]: readTeamMap(teamMapInput) } : { [COLLEGE_PRO_SCORING_KEY]: scoring }
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: { ...current, [COLLEGE_PRO_SCORING_KEY]: scoring } as Prisma.InputJsonValue },
+    data: { settings: { ...current, ...patch } as Prisma.InputJsonValue },
   })
-  return NextResponse.json({ ok: true, scoring })
+  return NextResponse.json({ ok: true, ...patch })
 }

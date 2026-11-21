@@ -24,7 +24,7 @@ describe('sleeperDraftCards', () => {
 describe('fantraxDraftCard', () => {
   it("reports Cream Bowl's real board: completed with 156 of 192 slots used", () => {
     const card = fantraxDraftCard({ draftState: 'completed', slots: 192, picks: new Array(156).fill({}) }, 2026)
-    expect(card).toEqual({ role: 'college', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null })
+    expect(card).toEqual({ role: 'college', platform: 'fantrax', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null })
   })
 
   it('a board with no picks yet is upcoming, one mid-draft is live', () => {

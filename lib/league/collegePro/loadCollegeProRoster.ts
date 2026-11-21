@@ -5,6 +5,9 @@ import { liveLeagueDrafts, liveLeagueMatchups, liveLeagueRosters, liveLeagueUser
 import { readStoredFantraxDraft } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './drafts'
 import { buildPipeline, parseStoredDraftPicks, type CollegeProPipeline } from './pipeline'
+import { loadHeadToHead, type HeadToHead, type TeamMapEditor } from './headToHead'
+import { currentFantraxPeriod, loadDailyPoints } from './dailyPoints'
+import { findLinkCandidates, type LinkCandidate } from './linkHalves'
 import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import {
@@ -65,10 +68,15 @@ export type CollegeProScore = {
 
 const noScore = (week: number | null, note: string | null = null): CollegeProScore => ({ week, total: null, opponent: null, note })
 
+/** An unlinked C2C / Devy league: which half it needs, and the viewer's leagues that could be it. */
+export type CollegeProLink = { needRole: 'pro' | 'college'; candidates: LinkCandidate[] }
+
 export type CollegeProRosterPayload =
-  | { applies: false }
+  | { applies: false; link?: CollegeProLink }
   | {
       applies: true
+      /** Set when this league has no other half linked yet. */
+      link?: CollegeProLink | null
       format: CollegeProFormat
       lead: LeadSide
       leadReason: LeadReason
@@ -84,6 +92,12 @@ export type CollegeProRosterPayload =
       drafts: CollegeProDraft[]
       /** Drafted college players moving up, and the rookie draft's pool. Null until draft results are on file. */
       pipeline: CollegeProPipeline | null
+      /** The pro league: where the scoring setting and the team map are saved, whichever league the page was opened from. */
+      proLeagueId: string
+      /** Combined scoring only: your NFL + college total against your opponent's. */
+      headToHead: HeadToHead | null
+      /** For someone allowed to change scoring, with combined on: the Sleeper-to-Fantrax team map to confirm. */
+      teamMap: TeamMapEditor | null
       fetchedAt: string
     }
 
@@ -94,12 +108,41 @@ const toPlayerMap = (players: ConnectedRosterPlayer[]): Record<string, CollegePr
 
 const emptyLists = (): CollegeProLists => ({ starters: [], bench: [], taxi: [], ir: [] })
 
-export async function loadCollegeProRoster(leagueId: string, userId: string, now = new Date()): Promise<CollegeProRosterPayload> {
+export async function loadCollegeProRoster(
+  leagueId: string,
+  userId: string,
+  now = new Date(),
+  opts: { viewedFrom?: 'pro' | 'college' } = {},
+): Promise<CollegeProRosterPayload> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
     select: { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true },
   })
-  if (!league || league.platform !== 'sleeper' || !league.platformLeagueId) return { applies: false }
+  if (!league || !league.platformLeagueId) return { applies: false }
+  const unlinked = async (): Promise<CollegeProRosterPayload> => {
+    const link = await findLinkCandidates(leagueId, userId).catch(() => null)
+    return link ? { applies: false, link } : { applies: false }
+  }
+
+  if (league.platform === 'fantrax') {
+    if (!collegeProFormatOf(league)) return { applies: false }
+    const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
+    if (!paired || paired.sides.length < 2) return unlinked()
+    /*
+     * OPENED FROM THE COLLEGE SIDE. Cream Bowl is the Fantrax half of the Peach Bowl franchise; the
+     * owner asked for the same one page from either league. The pro half owns the lineups, the scoring
+     * setting and the drafts, so the page is built from it, with the college lineup leading.
+     */
+    if (paired.viewingRole === 'college') {
+      if (opts.viewedFrom === 'college') return { applies: false }
+      const proHalf = paired.sides.find((s) => s.role === 'pro' && s.leagueId)
+      if (!proHalf?.leagueId) return unlinked()
+      return loadCollegeProRoster(proHalf.leagueId, userId, now, { viewedFrom: 'college' })
+    }
+    // This Fantrax league IS the pro half (an NBA league on Fantrax).
+    return loadFantraxProPair({ league, userId, now, paired, viewedFrom: opts.viewedFrom ?? 'pro' })
+  }
+  if (league.platform !== 'sleeper') return { applies: false }
 
   const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
   const collegeHalf = paired?.sides.find((s) => s.role === 'college') ?? null
@@ -110,14 +153,19 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
 
   const proSport = String(league.sport ?? 'NFL').toUpperCase()
   const collegeSport = collegeHalf?.sport ? String(collegeHalf.sport).toUpperCase() : collegeSportFor(proSport)
+  const link = collegeHalf ? null : await findLinkCandidates(leagueId, userId).catch(() => null)
 
   const nflState = await liveNflState().catch(() => null)
   const week = nflState?.display_week ?? nflState?.week ?? null
   const season = Number(nflState?.season) || now.getFullYear()
 
   const collegePlayers = collegeHalf?.players ?? []
+  let proCtx: SleeperProContext | null = null
   const [pro, games, collegePoints, drafts, pipeline] = await Promise.all([
-    loadSleeperProSide(league, userId, week),
+    loadSleeperProSide(league, userId, week).then((r) => {
+      proCtx = r.ctx
+      return r.side
+    }),
     loadTodaysGames([proSport, collegeSport], now),
     collegeHalf && week
       ? loadCollegePoints({
@@ -181,10 +229,32 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
         score: noScore(week),
       }
 
-  const { lead, reason } = decideLeadSide({ now, proSport, collegeSport, games })
+  const decided = decideLeadSide({ now, proSport, collegeSport, games })
+  // With no game on either side, the league you opened leads: college first from the college league.
+  const { lead, reason } =
+    decided.reason === 'weekday' && opts.viewedFrom === 'college' ? { lead: 'college' as const, reason: decided.reason } : decided
   const scoring = readCollegeProScoring(league.settings)
   // The same rule the save route asks, so the switch never shows for someone the save would refuse.
   const canEditScoring = await canCommissionerAct(leagueId, userId, 'scoring').catch(() => false)
+  const myCombined = scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null
+  const ctx = proCtx as SleeperProContext | null
+  const h2h =
+    scoring === 'combined' && ctx && collegeHalf?.platform === 'fantrax'
+      ? await loadHeadToHead({
+          proSettings: league.settings,
+          fantraxSnapshotId: collegeHalf.memberLeagueId,
+          myCollegeTeamName: collegeHalf.teamLabel,
+          myCombined,
+          opponentProTotal: ctx.opponentProTotal,
+          opponentName: pro.score.opponent?.name ?? null,
+          myRosterId: ctx.myRosterId,
+          opponentRosterId: ctx.opponentRosterId,
+          sleeperTeams: ctx.teams,
+          season,
+          nflWeek: week,
+          wantEditor: canEditScoring,
+        }).catch(() => null)
+      : null
   return {
     applies: true,
     format,
@@ -192,10 +262,14 @@ export async function loadCollegeProRoster(leagueId: string, userId: string, now
     leadReason: reason,
     sides: lead === 'college' ? [college, pro] : [pro, college],
     scoring,
-    combinedTotal: scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null,
+    combinedTotal: myCombined,
     canEditScoring,
     drafts,
     pipeline,
+    proLeagueId: league.id,
+    link,
+    headToHead: h2h?.headToHead ?? null,
+    teamMap: h2h?.editor ?? null,
     fetchedAt: now.toISOString(),
   }
 }
@@ -204,7 +278,7 @@ async function loadSleeperProSide(
   league: { id: string; name: string | null; platformLeagueId: string | null; sport: string | null },
   userId: string,
   week: number | null,
-): Promise<CollegeProSide> {
+): Promise<{ side: CollegeProSide; ctx: SleeperProContext | null }> {
   const base = {
     role: 'pro' as const,
     sport: String(league.sport ?? 'NFL').toUpperCase(),
@@ -216,12 +290,12 @@ async function loadSleeperProSide(
   const sid = league.platformLeagueId ?? ''
   const profile = await prisma.userProfile.findUnique({ where: { userId }, select: { sleeperUserId: true } }).catch(() => null)
   if (!profile?.sleeperUserId) {
-    return { ...base, ...emptyLists(), players: {}, unavailable: 'Connect your Sleeper account to see your pro lineup.', points: {}, score: noScore(week) }
+    return { side: { ...base, ...emptyLists(), players: {}, unavailable: 'Connect your Sleeper account to see your pro lineup.', points: {}, score: noScore(week) }, ctx: null }
   }
   const [context, rosters] = await Promise.all([getLeagueContext(sid), liveLeagueRosters(sid)])
-  if (!rosters) return { ...base, ...emptyLists(), players: {}, unavailable: 'Sleeper did not answer. Try again in a minute.', points: {}, score: noScore(week) }
+  if (!rosters) return { side: { ...base, ...emptyLists(), players: {}, unavailable: 'Sleeper did not answer. Try again in a minute.', points: {}, score: noScore(week) }, ctx: null }
   const mine = rosters.find((r) => r.owner_id === profile.sleeperUserId || (r.co_owners ?? []).includes(profile.sleeperUserId!))
-  if (!mine) return { ...base, ...emptyLists(), players: {}, unavailable: 'Your Sleeper account does not own a team in this league.', points: {}, score: noScore(week) }
+  if (!mine) return { side: { ...base, ...emptyLists(), players: {}, unavailable: 'Your Sleeper account does not own a team in this league.', points: {}, score: noScore(week) }, ctx: null }
 
   const lists = buildSleeperLists({
     positions: context?.roster.positions ?? [],
@@ -255,7 +329,27 @@ async function loadSleeperProSide(
       : null,
     note: matchups ? null : 'Live points are unavailable right now.',
   }
-  return { ...base, ...lists, players: toPlayerMap(players), unavailable: null, points, score }
+  return {
+    side: { ...base, ...lists, players: toPlayerMap(players), unavailable: null, points, score },
+    ctx: {
+      myRosterId: String(mine.roster_id),
+      opponentRosterId: opponent ? String(opponent.roster_id) : null,
+      opponentProTotal: typeof opponent?.points === 'number' ? opponent.points : null,
+      teams: rosters.map((r) => ({
+        rosterId: String(r.roster_id),
+        teamName: sleeperTeamName(users ?? [], r.owner_id),
+        ownerName: (users ?? []).find((u) => u.user_id === r.owner_id)?.display_name ?? null,
+      })),
+    },
+  }
+}
+
+/** What the combined head-to-head needs from the Sleeper half, kept out of the page payload. */
+export type SleeperProContext = {
+  myRosterId: string
+  opponentRosterId: string | null
+  opponentProTotal: number | null
+  teams: Array<{ rosterId: string; teamName: string | null; ownerName: string | null }>
 }
 
 /** Both halves' drafts. A half we cannot read contributes nothing, rather than a made-up status. */
@@ -319,4 +413,179 @@ async function loadTodaysGames(sports: string[], now: Date) {
       take: 500,
     })
     .catch(() => [])
+}
+
+/*
+ * ── A pro half hosted on Fantrax (basketball) ─────────────────────────────────────────────────────
+ *
+ * "Road To Glory NBA" + "Road To Glory NCAA Basketball" (2026-11-21) are both Fantrax leagues. The
+ * pro half has no Sleeper roster, matchups or week, so everything comes from Fantrax snapshots and
+ * the Rolling Insights box lines:
+ *   - lineups: each half's Fantrax slots and status (MINORS is the pro half's taxi, per F-04);
+ *   - the period: the pro league's stored Fantrax scoring periods;
+ *   - points: both halves scored from RI box lines over that period (dailyPoints.ts);
+ *   - the opponent: the pro snapshot's stored matchups, scored the same way as you.
+ * Combined head-to-head uses the same commissioner team map, keyed here by the pro league's Fantrax
+ * team ids, and the opponent's college starters scored over the same period.
+ */
+async function loadFantraxProPair(args: {
+  league: { id: string; name: string | null; sport: string | null; settings: unknown; leagueType: string | null; leagueVariant: string | null }
+  userId: string
+  now: Date
+  paired: Awaited<ReturnType<typeof resolvePairedHalf>>
+  viewedFrom: 'pro' | 'college'
+}): Promise<CollegeProRosterPayload> {
+  const { league, userId, now, paired, viewedFrom } = args
+  const proSport = String(league.sport ?? '').toUpperCase()
+  if (proSport !== 'NBA') return { applies: false }
+  const proHalf = paired?.sides.find((s) => s.role === 'pro') ?? null
+  const collegeHalf = paired?.sides.find((s) => s.role === 'college') ?? null
+  if (!proHalf || !collegeHalf) return { applies: false }
+  const collegeSport = String(collegeHalf.sport ?? collegeSportFor(proSport)).toUpperCase()
+  const format: CollegeProFormat = collegeProFormatOf(league) ?? 'c2c'
+
+  const settings = (league.settings ?? {}) as Record<string, unknown>
+  const period = currentFantraxPeriod(settings.fantrax_scoring_periods, now)
+  const proPlayers = proHalf.players ?? []
+  const collegePlayers = collegeHalf.players ?? []
+  const toPointsInput = (ps: typeof proPlayers) =>
+    ps.map((p) => ({ id: p.id, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position }))
+
+  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap] = await Promise.all([
+    period ? loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(proPlayers) }).catch(() => null) : Promise.resolve(null),
+    period && collegeSport === 'NCAAB'
+      ? loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(collegePlayers) }).catch(() => null)
+      : Promise.resolve(null),
+    loadTodaysGames([proSport, collegeSport], now),
+    prisma.fantraxLeague
+      .findUnique({ where: { id: proHalf.memberLeagueId }, select: { transactions: true, season: true, matchups: true, roster: true, standings: true } })
+      .catch(() => null),
+    prisma.fantraxLeague.findUnique({ where: { id: collegeHalf.memberLeagueId }, select: { transactions: true, season: true } }).catch(() => null),
+  ])
+
+  const listsOf = (ps: typeof proPlayers, minorsAsTaxi: boolean) =>
+    buildFantraxLists(ps.map((p) => ({ id: p.id, slot: p.rosterSlot ?? null, status: p.rosterStatus ?? null })), { minorsAsTaxi })
+  const proLists = listsOf(proPlayers, true)
+  const collegeLists = listsOf(collegePlayers, false)
+
+  // The opponent this period, from the pro snapshot's own schedule, scored exactly as you are.
+  const lower = (v: unknown) => String(v ?? '').trim().toLowerCase()
+  const myTeam = lower(proHalf.teamLabel)
+  const matchups = Array.isArray(proSnap?.matchups)
+    ? (proSnap!.matchups as Array<{ week?: unknown; homeTeam?: unknown; awayTeam?: unknown; homeTeamId?: unknown; awayTeamId?: unknown }>)
+    : []
+  const matchup = period ? matchups.find((m) => Number(m.week) === period.number && (lower(m.homeTeam) === myTeam || lower(m.awayTeam) === myTeam)) : undefined
+  const oppName = matchup ? String((lower(matchup.homeTeam) === myTeam ? matchup.awayTeam : matchup.homeTeam) ?? '') || null : null
+  let oppTotal: number | null = null
+  if (oppName && period) {
+    const oppRows = (Array.isArray(proSnap?.roster) ? (proSnap!.roster as unknown[]) : []).filter(
+      (r) => lower((r as { teamName?: unknown }).teamName) === lower(oppName),
+    )
+    const oppPlayers = oppRows.length ? await connectedRosterPlayers('fantrax', 'NBA', oppRows).catch(() => []) : []
+    const oppPoints = await loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(oppPlayers) }).catch(() => null)
+    oppTotal = oppPoints ? sumStarterPoints(listsOf(oppPlayers, true).starters, oppPoints.points) : null
+  }
+
+  const statsNote = (p: { statsOnFile: boolean } | null, label: string) =>
+    !p
+      ? null
+      : !p.statsOnFile
+        ? `${label} stats for this period haven't come in yet.`
+        : `${label} points use standard scoring, so Fantrax may show slightly different numbers.`
+
+  const pro: CollegeProSide = {
+    role: 'pro',
+    sport: proSport,
+    platform: 'fantrax',
+    leagueName: proHalf.name,
+    teamLabel: proHalf.teamLabel,
+    leagueHref: proHalf.leagueId ? `/league/${proHalf.leagueId}` : null,
+    ...proLists,
+    players: toPlayerMap(proPlayers),
+    unavailable: proHalf.unavailableReason ?? (proPlayers.length ? null : 'Your NBA roster could not be read from Fantrax.'),
+    points: proPoints?.points ?? {},
+    score: {
+      week: period?.number ?? null,
+      total: proPoints ? sumStarterPoints(proLists.starters, proPoints.points) : null,
+      opponent: oppName ? { name: oppName, total: oppTotal } : null,
+      note: statsNote(proPoints, 'NBA'),
+    },
+  }
+  const college: CollegeProSide = {
+    role: 'college',
+    sport: collegeSport,
+    platform: collegeHalf.platform,
+    leagueName: collegeHalf.name,
+    teamLabel: collegeHalf.teamLabel,
+    leagueHref: collegeHalf.leagueId ? `/league/${collegeHalf.leagueId}` : null,
+    ...collegeLists,
+    players: toPlayerMap(collegePlayers),
+    unavailable: collegeHalf.unavailableReason ?? (collegePlayers.length ? null : 'Your college roster could not be read from Fantrax.'),
+    points: collegePointsDaily?.points ?? {},
+    score: {
+      week: period?.number ?? null,
+      total: collegePointsDaily ? sumStarterPoints(collegeLists.starters, collegePointsDaily.points) : null,
+      opponent: null,
+      note: statsNote(collegePointsDaily, 'College'),
+    },
+  }
+
+  const decided = decideLeadSide({ now, proSport, collegeSport, games })
+  const { lead, reason } =
+    decided.reason === 'weekday' && viewedFrom === 'college' ? { lead: 'college' as const, reason: decided.reason } : decided
+  const scoring = readCollegeProScoring(league.settings)
+  const canEditScoring = await canCommissionerAct(league.id, userId, 'scoring').catch(() => false)
+  const myCombined = scoring === 'combined' ? combinedTotal(pro.score.total, college.score.total) : null
+
+  // Combined head to head: the pro league's own teams, keyed by Fantrax team id.
+  const proTeams = (Array.isArray(proSnap?.standings) ? (proSnap!.standings as Array<{ team?: unknown; fantraxTeamId?: unknown }>) : [])
+    .filter((t) => typeof t.fantraxTeamId === 'string' && typeof t.team === 'string')
+    .map((t) => ({ rosterId: t.fantraxTeamId as string, teamName: t.team as string, ownerName: null }))
+  const idOf = (name: unknown) => proTeams.find((t) => lower(t.teamName) === lower(name))?.rosterId ?? null
+  const myProId = idOf(proHalf.teamLabel)
+  const oppProId = matchup
+    ? String((lower(matchup.homeTeam) === myTeam ? matchup.awayTeamId : matchup.homeTeamId) ?? '') || idOf(oppName)
+    : null
+  const h2h =
+    scoring === 'combined' && myProId && period && collegeSport === 'NCAAB'
+      ? await loadHeadToHead({
+          proSettings: league.settings,
+          fantraxSnapshotId: collegeHalf.memberLeagueId,
+          myCollegeTeamName: collegeHalf.teamLabel,
+          myCombined,
+          opponentProTotal: oppTotal,
+          opponentName: oppName,
+          myRosterId: myProId,
+          opponentRosterId: oppProId,
+          sleeperTeams: proTeams,
+          season: proSnap?.season ?? now.getFullYear(),
+          nflWeek: null,
+          wantEditor: canEditScoring,
+          collegeSport: 'NCAAB',
+          scoreCollegePlayers: (players) =>
+            loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(players) }).then((r) => r.points),
+        }).catch(() => null)
+      : null
+
+  const drafts = [
+    fantraxDraftCard(proSnap ? readStoredFantraxDraft(proSnap.transactions) : null, proSnap?.season ?? null, 'pro'),
+    fantraxDraftCard(collegeSnap ? readStoredFantraxDraft(collegeSnap.transactions) : null, collegeSnap?.season ?? null, 'college'),
+  ].filter((d): d is CollegeProDraft => d != null)
+
+  return {
+    applies: true,
+    format,
+    lead,
+    leadReason: reason,
+    sides: lead === 'college' ? [college, pro] : [pro, college],
+    scoring,
+    combinedTotal: myCombined,
+    canEditScoring,
+    drafts,
+    pipeline: null,
+    proLeagueId: league.id,
+    headToHead: h2h?.headToHead ?? (scoring === 'combined' ? { me: myCombined, opponent: null, missing: "This week's matchup could not be read." } : null),
+    teamMap: h2h?.editor ?? null,
+    fetchedAt: now.toISOString(),
+  }
 }
