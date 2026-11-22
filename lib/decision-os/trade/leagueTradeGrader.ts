@@ -45,7 +45,8 @@ import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
 import { projectedPicksNote } from '@/lib/trade-value/pickSlotProjection'
 import { isPirateLeague } from '@/lib/trade-intel/pirateSteal'
-import { loadTradeMarketOverlay } from '@/lib/trade-value-console/tradeMarketOverlay'
+import { loadTradeMarketOverlay, sleeperIdOfLine } from '@/lib/trade-value-console/tradeMarketOverlay'
+import { bookKey } from '@/lib/trade-market/formatMarkets'
 import { lineupProfileFromSettings } from '@/lib/league/lineupProfile'
 
 /**
@@ -207,6 +208,8 @@ export async function gradePricedSides(args: {
   /** The measured lineup move per line, and the sentence for an unusual lineup that got none. Passed alongside `tradeMarket`. */
   lineup?: LeagueGradeInput['lineup']
   lineupNote?: string | null
+  /** The learned pick market's move per pick line (`TRADE_LEARNED_PICKS=on`). Absent: picks priced as before. */
+  learnedPicks?: LeagueGradeInput['learnedPicks']
   mark?: (name: string) => void
 }): Promise<{ leagueGrade: LeagueGrade; grade: TradeGradeView; needFactors: NeedFactors | null }> {
   const { chart } = args
@@ -219,11 +222,15 @@ export async function gradePricedSides(args: {
         position: isNonPlayerLine(l) ? null : l.position,
         base: gradeBaseOf(l, priced[i]),
         injuryStatus: l.injuryStatus,
+        sleeperId: isNonPlayerLine(l) ? null : sleeperIdOfLine(l),
+        isPick: l.pricedSource === 'pick',
       }))
     const needArgs = {
       leagueId: args.need.leagueId,
       sport: args.need.sport,
       starters: args.need.starters,
+      // The book the learned tables were measured in — the grade's own chart.
+      book: bookKey(marketBookFor(chart)),
       give: toNeed(args.giveLines, args.givePriced),
       get: toNeed(args.getLines, args.getPriced),
     }
@@ -245,6 +252,7 @@ export async function gradePricedSides(args: {
     tradeMarket: args.tradeMarket ?? null,
     lineup: args.lineup ?? null,
     lineupNote: args.lineupNote ?? null,
+    learnedPicks: args.learnedPicks ?? null,
   })
 
   const rosterFitGrade = needFactors && !needFactors.gap
@@ -259,6 +267,7 @@ export async function gradePricedSides(args: {
         tradeMarket: args.tradeMarket ?? null,
         lineup: args.lineup ?? null,
         lineupNote: args.lineupNote ?? null,
+        learnedPicks: args.learnedPicks ?? null,
       })
     : null
 
@@ -578,6 +587,7 @@ export async function createLeagueTradeGrader(args: {
             getLines: td.lines,
             givePriced,
             getPriced,
+            teams: chart.leagueSize ?? null,
           }).catch(() => null)
         : null
       const { grade } = await gradePricedSides({
@@ -589,6 +599,7 @@ export async function createLeagueTradeGrader(args: {
         tradeMarket: marketOverlay?.tradeMarket ?? null,
         lineup: marketOverlay?.lineup ?? null,
         lineupNote: marketOverlay?.lineupNote ?? null,
+        learnedPicks: marketOverlay?.learnedPicks ?? null,
         basisNotes: [...(gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : []), ...(floorNote ? [floorNote] : []), ...(pickNote ? [pickNote] : [])],
         need: needRoster
           ? { leagueId: args.leagueId, userId: args.userId ?? '', sport, starters: leagueRow.starters, playerData: needRoster.playerData }

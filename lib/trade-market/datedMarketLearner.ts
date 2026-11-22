@@ -48,6 +48,20 @@ export function recencyWeight(tradeDate: Date | null, now: Date): number {
   return Math.pow(0.5, Math.max(0, ageDays) / DATED_HALF_LIFE_DAYS)
 }
 
+/**
+ * A STRUCTURAL weight halves every two years, not every 90 days. A player's price moves week to week, so his market
+ * wants recent trades; what a pick class, a contender's posture or a team's need is worth is far steadier, and a 90-day
+ * half-life would throw away every season but the current one (the pick, posture and need learners use this).
+ */
+export const STRUCTURAL_HALF_LIFE_DAYS = 730
+
+export function structuralWeight(tradeDate: Date | null, now: Date): number {
+  if (!tradeDate) return 0
+  const ageDays = (now.getTime() - tradeDate.getTime()) / DAY_MS
+  if (!Number.isFinite(ageDays) || ageDays < -1) return 0
+  return Math.pow(0.5, Math.max(0, ageDays) / STRUCTURAL_HALF_LIFE_DAYS)
+}
+
 /** The newest capture day (UTC midnight, ms) on or before the trade, within the gap; null when there is none. `days` ascending. */
 export function captureDayFor(days: readonly number[], tradeDate: Date | null): number | null {
   if (!tradeDate) return null

@@ -32,7 +32,8 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
-import { buildTradeContextSnapshot } from '@/lib/trade-market/tradeContextSnapshot'
+import { buildTradeContextSnapshot, withInjuryStatus } from '@/lib/trade-market/tradeContextSnapshot'
+import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import { isCompletedTrade } from '@/lib/league-import/transactionFinality'
 import type { NormalizedImportResult, NormalizedTransaction } from '@/lib/league-import/types'
@@ -194,18 +195,57 @@ export const TRADE_CONTEXT_SNAPSHOT_ENV = 'TRADE_CONTEXT_SNAPSHOT'
  * ⚠ BEST EFFORT. A snapshot is an accelerator for learning, never a reason a sync fails: every error is swallowed and
  * counted as not saved. The trade rows were already written above.
  */
+/** A player's injury designation, null for "no report", undefined when it cannot be told. */
+export type InjuryLookup = (player: { position: string | null; team: string | null; name?: string | null; id: string }) => string | null | undefined
+
+/** Injury reports newer than this are read at capture; older ones are not news. */
+const INJURY_CAPTURE_FRESH_MS = 72 * 60 * 60 * 1000
+
+/**
+ * The NFL injury designations as of now, matched to a roster player by name, VERIFIED by team and position
+ * (`createInjuryRowMatcher` — a name two players share is refused, never guessed). The newest claim wins.
+ */
+export async function loadInjuryLookup(now: Date): Promise<InjuryLookup> {
+  const rows = await prisma.sportsInjury.findMany({
+    where: { sport: 'NFL', expiresAt: { gt: now }, fetchedAt: { gt: new Date(now.getTime() - INJURY_CAPTURE_FRESH_MS) } },
+    orderBy: { fetchedAt: 'desc' },
+    take: 5000,
+    select: { playerName: true, team: true, position: true, status: true, date: true, fetchedAt: true },
+  })
+  const match = createInjuryRowMatcher(rows, 'NFL')
+  return (p) => {
+    const name = p.name
+    if (!name) return undefined
+    const hit = match({ name, team: p.team, position: p.position })
+    if (hit == null) return null
+    if ('ambiguous' in hit) return undefined
+    return hit.rows[0]?.status ?? null
+  }
+}
+
 export async function attachTradeContextSnapshots(
   input: { platformLeagueId: string; normalized: NormalizedImportResult; trades: NormalizedTransaction[] },
-  deps: { db?: Pick<typeof prisma, 'leagueTrade'>; now?: Date; env?: NodeJS.ProcessEnv } = {},
+  deps: {
+    db?: Pick<typeof prisma, 'leagueTrade'>
+    now?: Date
+    env?: NodeJS.ProcessEnv
+    /** Injury designations for NFL rosters; defaults to the fresh `SportsInjury` rows (`loadInjuryLookup`). */
+    injuries?: (now: Date) => Promise<InjuryLookup | null>
+  } = {},
 ): Promise<number> {
   const env = deps.env ?? process.env
   if (String(env[TRADE_CONTEXT_SNAPSHOT_ENV] ?? '').trim().toLowerCase() === 'off') return 0
   const db = deps.db ?? prisma
   const now = deps.now ?? new Date()
+  const isNfl = String(input.normalized.league?.sport ?? '').toUpperCase() === 'NFL'
+  // One injury read per sync, best-effort: without it a snapshot is saved exactly as before, unmarked.
+  const injuries = isNfl && input.trades.length > 0 ? await (deps.injuries ?? loadInjuryLookup)(now).catch(() => null) : null
   let saved = 0
   for (const trade of input.trades) {
-    const snapshot = buildTradeContextSnapshot(input.normalized, trade, now)
-    if (!snapshot) continue
+    const built = buildTradeContextSnapshot(input.normalized, trade, now)
+    if (!built) continue
+    const names = input.normalized.player_map ?? {}
+    const snapshot = injuries ? withInjuryStatus(built, (p) => injuries({ ...p, name: names[p.id]?.name ?? null })) : built
     try {
       const r = await db.leagueTrade.updateMany({
         where: {

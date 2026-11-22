@@ -7,11 +7,16 @@ import {
   stampAllTradeFormats,
   writeLineupFactorTable,
   writePickMarketTable,
+  writePostureMarketTable,
+  writeNeedMarketTable,
   type BookResult,
+  type NeedBookResult,
   type PickBookResult,
+  type PostureBookResult,
   type LineupFactorTable,
   type StampAllResult,
 } from './formatMarkets'
+import { backfillTradeFaab } from './tradeFaabBackfill'
 
 /**
  * The SCHEDULED writer for the AllFantasy trade market (rides `/api/cron/recompute-allfantasy-adp`).
@@ -52,7 +57,26 @@ export type ScheduledMarketRecalcResult = {
   pickMarkets: Array<PickBookResult & { sinceSeason: number }>
   /** False when the pick table could not be stored this run. */
   pickMarketsWritten: boolean
+  /** What contenders and rebuilders pay over middle teams, from the widest window (`postureMarketLearner.ts`, shadow). */
+  postureMarkets: Array<PostureBookResult & { sinceSeason: number }>
+  postureMarketsWritten: boolean
+  /** What teams short of (or deep at) a position pay for it over normal-depth teams, widest window (`needMarketLearner.ts`, shadow). */
+  needMarkets: Array<NeedBookResult & { sinceSeason: number }>
+  needMarketsWritten: boolean
+  /** FAAB filled onto older Sleeper trades this run, before the markets read them (`tradeFaabBackfill.ts`). Null: the pass failed. */
+  faabBackfill: { off?: true; rowsFilled: number } | null
+  /**
+   * Where the pick, posture and need markets came from: the STRUCTURAL pass (every season from 2020, older dynasty
+   * trades priced on the historical series), or — when that pass failed — the market's widest window.
+   */
+  structural: { sinceSeason: number; ok: boolean; history: Array<{ book: string; scale: { scale: number | null; players: number; note: string } | null; tradesPriced: number }> }
 }
+
+/**
+ * The first season the structural pass reads: when the historical value series begins (2020-04-01). Older trades have
+ * no chart of their own day anywhere, and are left unpriced rather than priced on a later one.
+ */
+export const STRUCTURAL_SINCE_SEASON = 2020
 
 export function marketWindows(now = new Date()): number[] {
   // NFL seasons start in September; before that, "this season" has no trades yet.
@@ -68,6 +92,9 @@ export async function runScheduledMarketRecalc(
     writeLineup?: typeof writeLineupFactorTable
     stampAll?: typeof stampAllTradeFormats
     writePicks?: typeof writePickMarketTable
+    writePosture?: typeof writePostureMarketTable
+    writeNeed?: typeof writeNeedMarketTable
+    faabBackfill?: typeof backfillTradeFaab
   } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
@@ -80,6 +107,11 @@ export async function runScheduledMarketRecalc(
   let tradesStamped = 0
   const datedShadow: ScheduledMarketRecalcResult['datedShadow'] = []
   let pickMarkets: ScheduledMarketRecalcResult['pickMarkets'] = []
+  let postureMarkets: ScheduledMarketRecalcResult['postureMarkets'] = []
+  let needMarkets: ScheduledMarketRecalcResult['needMarkets'] = []
+
+  // First and best-effort: FAAB for older trades, so this run's markets already price it. A failure costs nothing else.
+  const faabBackfill = await (opts.faabBackfill ?? backfillTradeFaab)(prisma).catch(() => null)
 
   const windows = marketWindows(opts.now)
   const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
@@ -93,7 +125,11 @@ export async function runScheduledMarketRecalc(
     tradesUsed = Math.max(tradesUsed, r.tradesUsed)
     tradesStamped += r.tradesStamped ?? 0
     // Picks keep the WIDEST window: recency weights already favour fresh trades, and a pick class needs every trade it can get.
-    if (sinceSeason === windows[windows.length - 1]) pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+    if (sinceSeason === windows[windows.length - 1]) {
+      pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+      postureMarkets = (r.postureMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+      needMarkets = (r.needMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+    }
     // The freshest window measures every book (nothing is skipped yet), so its comparison is the complete one.
     if (sinceSeason === windows[0]) {
       for (const b of r.books) if (b.dated) datedShadow.push({ concept: b.concept, sinceSeason, learner: b.learner ?? 'current', ...b.dated })
@@ -123,6 +159,8 @@ export async function runScheduledMarketRecalc(
     if (published(r.lineup) > published(lineupTable)) lineupTable = r.lineup
     tradesStamped += r.tradesStamped ?? 0
     pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason: widest }))
+    postureMarkets = (r.postureMarkets ?? []).map((m) => ({ ...m, sinceSeason: widest }))
+    needMarkets = (r.needMarkets ?? []).map((m) => ({ ...m, sinceSeason: widest }))
   }
 
   let lineup: ScheduledMarketRecalcResult['lineup'] = null
@@ -134,10 +172,33 @@ export async function runScheduledMarketRecalc(
       measured: lineupTable.factors.length,
     }
   }
+  /*
+   * THE STRUCTURAL PASS. Pick, posture and need values are steady across seasons (two-year half-life), so they read
+   * every season the historical series covers, not only the market's three. One more gather; every book skipped, so no
+   * market is rewritten. A failure keeps the widest window's numbers and says so.
+   */
+  const structuralRead = await recalc(prisma, {
+    sinceSeason: STRUCTURAL_SINCE_SEASON, dryRun: false, requireCentred: true, skipBooks: new Set(MARKET_BOOKS.map(bookKey)),
+    writeLineupFactors: false, stampTrades: false, now: opts.now,
+  }).catch(() => null)
+  if (structuralRead) {
+    pickMarkets = (structuralRead.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason: STRUCTURAL_SINCE_SEASON }))
+    postureMarkets = (structuralRead.postureMarkets ?? []).map((m) => ({ ...m, sinceSeason: STRUCTURAL_SINCE_SEASON }))
+    needMarkets = (structuralRead.needMarkets ?? []).map((m) => ({ ...m, sinceSeason: STRUCTURAL_SINCE_SEASON }))
+  }
+  const structural = { sinceSeason: STRUCTURAL_SINCE_SEASON, ok: structuralRead != null, history: structuralRead?.history ?? [] }
+
   const now = opts.now ?? new Date()
   const pickMarketsWritten = pickMarkets.length
     ? await (opts.writePicks ?? writePickMarketTable)(prisma, pickMarkets, now).then(() => true, () => false)
     : false
+  const postureMarketsWritten = postureMarkets.length
+    ? await (opts.writePosture ?? writePostureMarketTable)(prisma, postureMarkets, now).then(() => true, () => false)
+    : false
+  const needMarketsWritten = needMarkets.length
+    ? await (opts.writeNeed ?? writeNeedMarketTable)(prisma, needMarkets, now).then(() => true, () => false)
+    : false
+
   // Last and best-effort: labelling old trades must never cost the markets this run already wrote.
   const formatBackfill = await (opts.stampAll ?? stampAllTradeFormats)(prisma).catch(() => null)
 
@@ -153,5 +214,11 @@ export async function runScheduledMarketRecalc(
     datedShadow,
     pickMarkets,
     pickMarketsWritten,
+    postureMarkets,
+    postureMarketsWritten,
+    needMarkets,
+    needMarketsWritten,
+    faabBackfill,
+    structural,
   }
 }
