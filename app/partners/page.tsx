@@ -53,6 +53,15 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
   const showTradeMarket = await import('@/lib/prisma')
     .then(({ prisma }) => tradeMarketPanelReleased(prisma as never))
     .catch(() => false)
+  /*
+   * The real learned market when it has published numbers (`lib/partner-portal/realTradeMarket.ts`); the sample only
+   * when it has none. Read only when the panel is released, so a hidden panel costs nothing.
+   */
+  const realTradeMarket = showTradeMarket
+    ? await Promise.all([import('@/lib/prisma'), import('@/lib/trade-market/learnedMarketReport'), import('@/lib/partner-portal/realTradeMarket')])
+        .then(async ([{ prisma }, { loadLearnedMarketReport }, { realTradeMarketRows }]) => realTradeMarketRows(await loadLearnedMarketReport(prisma as never)))
+        .catch(() => null)
+    : null
 
   return (
     <main className="min-h-screen bg-[#050814] text-white">
@@ -135,9 +144,13 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             <Card
               id="trade-market"
               title="What your managers actually pay in trades"
-              subtitle="Measured from completed trades in your leagues, against the standard value chart. Trade grades use a number only once enough trades stand behind it."
+              subtitle={
+                realTradeMarket
+                  ? 'Live, not sample data: measured daily from completed trades in AllFantasy-connected leagues, against the standard value chart. On your own leagues it is measured from your trades. Trade grades use a number only once enough trades stand behind it.'
+                  : 'Measured from completed trades in your leagues, against the standard value chart. Trade grades use a number only once enough trades stand behind it.'
+              }
             >
-              <TradeMarketBars rows={DEMO_TRADE_MARKET} />
+              <TradeMarketBars rows={realTradeMarket ?? DEMO_TRADE_MARKET} />
             </Card>
           ) : null}
 

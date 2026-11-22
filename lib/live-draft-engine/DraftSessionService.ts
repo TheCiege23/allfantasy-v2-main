@@ -1397,7 +1397,11 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     }
 
     await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
-    const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
+    // A Devy / C2C league's pro draft opens its college draft (lib/draft-defaults/startupCollegeDraft.ts);
+    // the season waits for the college draft, so the league's lifecycle does not move yet.
+    const { openStartupCollegeDraftInTransaction } = await import('@/lib/draft-defaults/startupCollegeDraft')
+    const collegeDraftId = await openStartupCollegeDraftInTransaction(tx as never, leagueId, session as never)
+    const lifecycle = collegeDraftId ? null : await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
     return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
   })
 

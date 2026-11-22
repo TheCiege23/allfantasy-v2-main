@@ -476,6 +476,8 @@ export async function PATCH(
     if (sv.devyConfig !== undefined) sessionVariantPatch.devyConfig = sv.devyConfig
     if (sv.c2cConfig !== undefined) sessionVariantPatch.c2cConfig = sv.c2cConfig
     if (sv.auctionBudgetPerTeam !== undefined) sessionVariantPatch.auctionBudgetPerTeam = sv.auctionBudgetPerTeam
+    // Devy / C2C: two startup drafts or one merged draft (lib/draft-defaults/startupCollegeDraft.ts).
+    if (sv.startupDraftMode === 'separate' || sv.startupDraftMode === 'merged') sessionVariantPatch.startupDraftMode = sv.startupDraftMode
   }
 
   let orderModePatch: { draftOrderMode?: string; lotteryConfig?: Record<string, unknown> } | null = null

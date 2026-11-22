@@ -76,9 +76,29 @@ export function publicTrackRecord(view: LedgerRecordView | null | undefined): Pu
       tone: verdict === 'held_up' ? 'held' : verdict === 'not_held_up' ? 'not_held' : 'even',
     })
   }
+  // Every other sport and league type, graded on its own measure (2026-11-22) — the misses included, same rules.
+  for (const [key, b] of Object.entries(view?.tradeOutcomes ?? {})) {
+    const where = b.kind === 'value' ? 'dynasty-style leagues' : `${b.sport} leagues`
+    for (const t of b.letters) {
+      if (!(t.n >= MIN_TRADES_PER_LETTER)) continue
+      const verdict = letterVerdict(t.letter, t.net)
+      lines.push({
+        key: `trade-${key}-${t.letter}`,
+        title: `Trades graded ${t.letter} in ${where}`,
+        headline: b.kind === 'value'
+          ? `${abs1(t.net)} points ${t.net >= 0 ? 'more' : 'less'} of the deal's value a month on`
+          : `${abs1(t.net)} points a week ${t.net >= 0 ? 'more' : 'less'} than they gave up`,
+        detail:
+          `Across ${t.n.toLocaleString('en-US')} graded trades${t.aheadPct != null ? `, the graded side came out ahead in ${t.aheadPct}%` : ''}. ` +
+          (b.kind === 'value' ? 'Measured on the dynasty market, in the league’s own QB format. ' : 'Measured under each league’s own scoring. ') +
+          (verdict === 'held_up' ? 'This letter has held up.' : verdict === 'not_held_up' ? 'This letter has not held up so far.' : 'A C promises no direction either way.'),
+        tone: verdict === 'held_up' ? 'held' : verdict === 'not_held_up' ? 'not_held' : 'even',
+      })
+    }
+  }
   return {
     season: view?.season ?? null,
     lines,
-    measured: 'Measured in standard PPR points on NFL games, players only (draft picks and budget score nothing). Trade letters are graded on redraft deals only. If your league scores differently, or is a dynasty league, these numbers are not about your league.',
+    measured: 'Start/sit, pickups and NFL redraft trade letters are measured in standard PPR points on NFL games, players only (draft picks and budget score nothing). Other sports and formats are graded under each league’s own scoring, and dynasty-style leagues on the dynasty market a month or more after the trade; dynasty trades that moved draft picks are not graded yet.',
   }
 }

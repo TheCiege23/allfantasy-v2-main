@@ -84,6 +84,26 @@ function leagueSettingsOf(leagueId: string | null | undefined): Promise<unknown>
     .catch(() => null)
 }
 
+/**
+ * AF weekly projections for one half, keyed by that half's roster ids and scored under that half's
+ * own league (`loadLeaguePlayerMetrics` reads the league's sport, season and scoring). Undefined —
+ * not an empty map — when there is nothing to show, so the PROJ column keeps its "—" rather than a
+ * row of zeros. `week: null` lets the metrics infer the week from the league's own sport calendar.
+ */
+async function weeklyProjectionsFor(
+  leagueId: string,
+  week: number | null,
+  rosterIds: string[],
+  now: Date,
+): Promise<Record<string, number> | undefined> {
+  const ids = [...new Set(rosterIds.filter(Boolean))]
+  if (!ids.length) return undefined
+  const metrics = await loadLeaguePlayerMetrics({ leagueId, week, rosterIds: ids, limit: ids.length, includeTradeValues: false, now }).catch(() => null)
+  if (!metrics || metrics.unit !== 'fantasy points') return undefined
+  const out = Object.fromEntries(metrics.rows.flatMap((p) => (p.rosterPlayerId && p.weekly != null ? [[p.rosterPlayerId, p.weekly]] : [])))
+  return Object.keys(out).length ? out : undefined
+}
+
 /** ["wins", "ejections", "buzzer-beaters"] → "wins, ejections and buzzer-beaters". */
 function listInWords(items: string[]): string {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
@@ -207,6 +227,13 @@ export async function loadCollegeProRoster(
       : Promise.resolve(null),
   ])
 
+  // The PROJ column: each half's AF weekly projection, scored by that half's own league.
+  const [proProjections, collegeProjections] = await Promise.all([
+    weeklyProjectionsFor(league.id, week, Object.keys(pro.players ?? {}), now),
+    collegeHalf?.leagueId ? weeklyProjectionsFor(collegeHalf.leagueId, null, collegePlayers.map((p) => p.id), now) : Promise.resolve(undefined),
+  ])
+  if (proProjections) pro.weeklyProjections = proProjections
+
   const college: CollegeProSide = collegeHalf
     ? (() => {
         const players = collegeHalf.players ?? []
@@ -236,6 +263,7 @@ export async function loadCollegeProRoster(
           ...shown,
           players: toPlayerMap(players),
           points,
+          weeklyProjections: collegeProjections,
           score: { week, total: sumStarterPoints(shown.starters, points), opponent: null, note },
           unavailable:
             collegeHalf.unavailableReason ??
@@ -525,7 +553,7 @@ async function loadFantraxProPair(args: {
   const rosterIds = [...new Set(proPlayers.map((p) => p.id).filter(Boolean))]
   // Each half is scored under its OWN Fantrax league's rules: the NBA league's here, the college league's below.
   const collegeSettings = await leagueSettingsOf(collegeHalf.leagueId)
-  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap, proMetrics] = await Promise.all([
+  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap, proMetrics, collegeProjections] = await Promise.all([
     period
       ? loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(proPlayers), settings: league.settings }).catch(() => null)
       : Promise.resolve(null),
@@ -540,6 +568,8 @@ async function loadFantraxProPair(args: {
     format === 'c2c' && period && rosterIds.length
       ? loadLeaguePlayerMetrics({ leagueId: league.id, week: period.number, rosterIds, limit: rosterIds.length, includeTradeValues: false, now }).catch(() => null)
       : Promise.resolve(null),
+    // The college half's projections, scored by the college league (its week inferred from its own sport).
+    collegeHalf.leagueId ? weeklyProjectionsFor(collegeHalf.leagueId, null, collegePlayers.map((p) => p.id), now) : Promise.resolve(undefined),
   ])
 
   const listsOf = (ps: typeof proPlayers, minorsAsTaxi: boolean) =>
@@ -608,6 +638,7 @@ async function loadFantraxProPair(args: {
     players: toPlayerMap(collegePlayers),
     unavailable: collegeHalf.unavailableReason ?? (collegePlayers.length ? null : 'Your college roster could not be read from Fantrax.'),
     points: collegePointsDaily?.points ?? {},
+    weeklyProjections: collegeProjections,
     score: {
       week: period?.number ?? null,
       total: collegePointsDaily ? sumStarterPoints(collegeLists.starters, collegePointsDaily.points) : null,
