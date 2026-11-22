@@ -19,6 +19,15 @@ describe('Fantrax NBA player board identities', () => {
     ])
   })
 
+  it('consolidates an old synthetic club key after a trade', () => {
+    const lebron = { ...victor, playerName: 'LeBron James', availabilityId: '1362', position: 'PF', team: 'PHI' }
+    const oldId = 'NBA:lebron-james:LOS ANGELES LAKERS'
+    const oldProfile = { id: oldId, name: 'LeBron James', team: 'LAL', position: 'SF' }
+    expect(mergeNbaCampusPlayers([lebron], [oldProfile])).toEqual([
+      expect.objectContaining({ id: '1362', team: 'PHI', alternateIds: [oldId] }),
+    ])
+  })
+
   it('leaves distinct or ambiguous same-name profiles alone', () => {
     const profile = { id: 'retired', name: 'Victor Wembanyama', position: 'F', team: 'SEA' }
     expect(mergeNbaCampusPlayers([victor], [profile])).toContain(profile)

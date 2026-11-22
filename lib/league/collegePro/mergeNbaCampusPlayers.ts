@@ -19,6 +19,7 @@ export function mergeNbaCampusPlayers(
 ): NbaCampusPlayer[] {
   const byAlias = new Map<string, NbaCampusPlayer | null>()
   const byNameAndClub = new Map<string, NbaCampusPlayer | null>()
+  const byName = new Map<string, NbaCampusPlayer | null>()
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]))
   const players: NbaCampusPlayer[] = board.map((row) => {
     const id = row.availabilityId ?? row.rosterPlayerId ?? row.playerId
@@ -38,14 +39,20 @@ export function mergeNbaCampusPlayers(
     }
     const key = nameAndClub(row.playerName, row.team)
     if (key) byNameAndClub.set(key, byNameAndClub.has(key) ? null : player)
+    const name = canonicalName(row.playerName)
+    if (name) byName.set(name, byName.has(name) ? null : player)
     return player
   })
 
   for (const profile of profiles) {
     // The global directory re-exports players under several provider IDs. An exact alias
-    // wins. Only suppress other copies when the canonical name and NBA club match uniquely.
+    // wins, then a unique name and club. Older synthetic name/club keys may still carry
+    // a previous club after a trade. Only group those when AF has one exact-name match.
+    const name = canonicalName(profile.name)
+    const syntheticPrefix = 'NBA:' + name.replaceAll(' ', '-') + ':'
+    const synthetic = name !== '' && profile.id.startsWith(syntheticPrefix)
     const key = nameAndClub(profile.name, profile.team)
-    const match = byAlias.get(profile.id) ?? (key ? byNameAndClub.get(key) : null)
+    const match = byAlias.get(profile.id) ?? (key ? byNameAndClub.get(key) : null) ?? (synthetic ? byName.get(name) : null)
     if (!match) players.push(profile)
     else if (profile.id !== match.id) match.alternateIds?.push(profile.id)
   }
