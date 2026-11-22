@@ -639,6 +639,16 @@ const HOSTED_NFL_PANEL_TO_RULE: Readonly<Record<string, string>> = {
 function hostedNflPanelRules(s: Record<string, unknown>): Record<string, unknown> | null {
   const config = s.nfl_scoring_config
   const rules = config && typeof config === 'object' && !Array.isArray(config) ? (config as Record<string, unknown>).rules : null
+  return projectionRulesFromNflPanelRules(rules)
+}
+
+/**
+ * The scoring panel's rules (`passing_yards`, `reception`, ...) in the vocabulary projections are
+ * scored in (`pass_yd`, `rec`, ...), or null when they carry no rule a projection can use. Also what
+ * league creation writes into `scoringSettings.rules`, so a new league stores a rulebook where every
+ * reader looks (lib/league-creation/LeagueBootstrapOrchestrator.ts).
+ */
+export function projectionRulesFromNflPanelRules(rules: unknown): Record<string, number> | null {
   if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null
   const out: Record<string, number> = {}
   for (const [key, raw] of Object.entries(rules as Record<string, unknown>)) {
