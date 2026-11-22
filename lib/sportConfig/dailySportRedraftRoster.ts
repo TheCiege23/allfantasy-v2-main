@@ -27,7 +27,7 @@
 export const DAILY_REDRAFT_SPORTS = ['NBA', 'NHL', 'MLB'] as const
 export type DailyRedraftSport = (typeof DAILY_REDRAFT_SPORTS)[number]
 
-export interface DailyRedraftStarterSlot {
+interface DailyRedraftStarterSlot {
   /** Slot key as stored in `<sport>_roster_config.slots` and `starter_slots`. */
   key: string
   count: number

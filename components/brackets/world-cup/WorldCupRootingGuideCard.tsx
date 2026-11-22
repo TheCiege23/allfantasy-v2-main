@@ -31,7 +31,7 @@ export default function WorldCupRootingGuideCard(
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
-              Daily AI
+              Daily Chimmy
             </p>
             <h3 className="text-base font-black text-white sm:text-lg">
               {guide.title}
@@ -118,7 +118,7 @@ export default function WorldCupRootingGuideCard(
       ) : null}
 
       <p className="mt-3 text-[11px] text-white/40">
-        Deterministic — uses only your picks and public match data. No AI call.
+        Deterministic — uses only your picks and public match data. No Chimmy call.
       </p>
     </section>
   )

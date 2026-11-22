@@ -4,17 +4,7 @@
  */
 import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
 import { buildFullScoringConfig as buildFullNbaScoringConfig } from '@/lib/nba-scoring/NbaScoringPresets'
-import { NFL_ROSTER_TEMPLATES } from '@/lib/nfl-roster/NflRosterTemplates'
-import { NBA_ROSTER_TEMPLATES } from '@/lib/nba-roster/NbaRosterTemplates'
-import {
-  ROSTER_LABELS,
-  SCORING_LABELS,
-  type LabelSport,
-  type RosterLabel,
-  type RosterLabelId,
-  type ScoringLabel,
-  type ScoringLabelId,
-} from './catalog'
+import { ROSTER_LABELS, type LabelSport, type RosterLabel, type ScoringLabel, type ScoringLabelId } from './catalog'
 
 /** Design value key → the live preset stat key(s) that score it. Every listed key must agree. */
 export const NFL_DESIGN_TO_LIVE_KEYS: Readonly<Record<string, readonly string[]>> = {
@@ -47,12 +37,6 @@ export const NBA_DESIGN_TO_LIVE_KEYS: Readonly<Record<string, readonly string[]>
   td: ['triple_double'],
 }
 
-/** Live keys the handoff deliberately leaves to "the AF standard tables" (K, DST, IDP). */
-export function isOutsideLabelScope(sport: LabelSport, liveKey: string): boolean {
-  if (sport !== 'NFL') return false
-  return /^(pat_|fg_|dst_|idp_)/.test(liveKey)
-}
-
 /** The full live rule map behind a scoring label, or null when no preset backs it. */
 export function liveRulesForScoringLabel(label: ScoringLabel): Record<string, number> | null {
   const b = label.backing
@@ -67,32 +51,21 @@ export function liveRulesForScoringLabel(label: ScoringLabel): Record<string, nu
   return null
 }
 
-/** Live value for one design row, or null if its live keys disagree with each other. */
-export function liveValueFor(label: ScoringLabel, designKey: string): number | null {
-  const rules = liveRulesForScoringLabel(label)
-  if (!rules) return null
-  const sport: LabelSport = label.sports.includes('NBA') && !label.sports.includes('NFL') ? 'NBA' : 'NFL'
-  const keys = (sport === 'NBA' ? NBA_DESIGN_TO_LIVE_KEYS : NFL_DESIGN_TO_LIVE_KEYS)[designKey]
-  if (!keys) return null
-  const values = new Set(keys.map((k) => rules[k] ?? 0))
-  return values.size === 1 ? [...values][0]! : null
-}
-
 /** Roster-template slot key → design position code. */
 const LIVE_SLOT_TO_DESIGN: Readonly<Record<string, string>> = { DEF: 'DST', SUPERFLEX: 'SFLEX', IDP_FLEX: 'IDP' }
 const RESERVE = new Set(['BN', 'IR', 'IL', 'IL_PLUS', 'TAXI', 'DEVY'])
 
-export type RosterShape = { starters: Record<string, number>; bench: number; injured: number }
+type RosterShape = { starters: Record<string, number>; bench: number; injured: number }
 
 /** A roster label's design counts as a comparable shape. */
-export function rosterLabelShape(label: RosterLabel): RosterShape {
+function rosterLabelShape(label: RosterLabel): RosterShape {
   const starters: Record<string, number> = {}
   for (const p of label.starters) starters[p] = (starters[p] ?? 0) + 1
   return { starters, bench: label.bench, injured: label.injured }
 }
 
 /** A live slot map (NflRosterTemplate.slots, league roster config) as a comparable shape. */
-export function rosterShapeFromSlots(slots: Record<string, number>): RosterShape {
+function rosterShapeFromSlots(slots: Record<string, number>): RosterShape {
   const starters: Record<string, number> = {}
   let bench = 0
   let injured = 0
@@ -107,13 +80,6 @@ export function rosterShapeFromSlots(slots: Record<string, number>): RosterShape
     }
   }
   return { starters, bench, injured }
-}
-
-export function liveSlotsForRosterLabel(label: RosterLabel): Record<string, number> | null {
-  const b = label.backing
-  if (!b) return null
-  const list = b.kind === 'nfl' ? NFL_ROSTER_TEMPLATES : NBA_ROSTER_TEMPLATES
-  return list.find((t) => t.key === b.templateKey)?.slots ?? null
 }
 
 function sameStarters(a: Record<string, number>, b: Record<string, number>): boolean {
@@ -209,10 +175,3 @@ export function scoringLabelIdForNba(input: {
   return input.presetKey === 'af_default' ? 'pts' : null
 }
 
-export function backedScoringLabels(): ScoringLabel[] {
-  return SCORING_LABELS.filter((s) => s.backing !== null)
-}
-
-export function rosterLabelIds(): RosterLabelId[] {
-  return ROSTER_LABELS.map((r) => r.id)
-}

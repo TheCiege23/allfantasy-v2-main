@@ -7,7 +7,7 @@
  * anyone sees — it has nowhere to be read.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { normalizePicks } from '@/lib/core-app/finderLeaguePicks'
 import { setFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { buildRateLimit429, consumeRateLimit } from '@/lib/rate-limit'
@@ -15,7 +15,7 @@ import { buildRateLimit429, consumeRateLimit } from '@/lib/rate-limit'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
 
   const rl = consumeRateLimit({ scope: 'players', action: 'league_picks', sleeperUsername: auth.userId, maxRequests: 20, windowMs: 60_000 })

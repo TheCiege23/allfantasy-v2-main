@@ -11,9 +11,9 @@ export type HealthDetail =
   | { key: 'draftDone' | 'draftNone' | 'councilNone' | 'councilRead' | 'councilOpen' | 'autoRunning' | 'autoNeedsYou' | 'exileOpen' | 'exileReady' | 'exileUnlinked' }
   | { key: 'draftPicks' | 'seats'; n: number; of: number }
   | { key: 'claimed' | 'setupIssues' | 'channels'; n: number }
-export type HealthTorch = { id: 'draft' | 'castaways' | 'council' | 'automation' | 'exile' | 'chat'; state: TorchState; detail: HealthDetail }
+type HealthTorch = { id: 'draft' | 'castaways' | 'council' | 'automation' | 'exile' | 'chat'; state: TorchState; detail: HealthDetail }
 
-export type IslandTodoItem = { id: string; tone: 'action' | 'heads_up'; title: string; body: string; href: string; cta: string }
+type IslandTodoItem = { id: string; tone: 'action' | 'heads_up'; title: string; body: string; href: string; cta: string }
 
 /** The slice of the dashboard this reads; every field may be missing on an older server. */
 export type IslandControlFacts = {

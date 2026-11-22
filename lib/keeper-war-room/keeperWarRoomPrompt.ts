@@ -18,7 +18,7 @@ import type { KeeperLineupResult } from './keeperLineupEngine'
 import type { KeeperTradeAnalysis } from './keeperTradeEngine'
 import type { KeeperTradeFinderResult } from './keeperTradeFinderEngine'
 
-export interface KeeperWarRoomPromptInputs {
+interface KeeperWarRoomPromptInputs {
   context: KeeperWarRoomContext
   recommendations?: KeeperRecommendationResult | null
   cutList?: KeeperCutListResult | null

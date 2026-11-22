@@ -36,7 +36,7 @@ export function newQuestionTelemetry(): ChimmyQuestionTelemetry {
 
 export { questionEntry } from './questionEntry'
 
-export type ChimmyQuestionOutcome =
+type ChimmyQuestionOutcome =
   | 'answered'
   | 'needs_context'
   | 'partial_answer'

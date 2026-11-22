@@ -10,7 +10,7 @@ const TABS = [
   { id: 'scoring', label: 'Scoring' },
   { id: 'roster', label: 'Roster' },
   { id: 'commissioner', label: 'Commissioner' },
-  { id: 'ai', label: 'AI & automation' },
+  { id: 'ai', label: 'Chimmy & automation' },
 ] as const
 
 type Tab = (typeof TABS)[number]['id']
@@ -243,7 +243,7 @@ export function TournamentLeagueSettingsModalLegacy({
             )}
             {tab === 'ai' && (
               <p className="text-sm text-white/70">
-                AI recap and announcements run from the Operations console.
+                Chimmy recap and announcements run from the Operations console.
               </p>
             )}
           </div>

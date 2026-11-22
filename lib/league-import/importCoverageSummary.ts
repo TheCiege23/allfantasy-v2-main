@@ -79,7 +79,7 @@ const USER_FACING_KEYS: readonly ImportCoverageKey[] = [
  * letting someone open it and find nothing — per the product decision that an unusable
  * tab is worse than an absent one.
  */
-export interface ImportCapabilityFlags {
+interface ImportCapabilityFlags {
   rosters: boolean
   scoring: boolean
   matchups: boolean

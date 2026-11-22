@@ -14,7 +14,7 @@ export function TradeValueChart({grade,generic=false}:{grade:TradeGradeView;gene
   const {copy}=useTradeVisualCopy()
 
   if (!grade.graded) return null
-  return <ComparisonBars title={copy(generic ? 'Market value each team receives' : 'Trade value balance')} unit={generic ? `General market value · ${grade.basis} · no roster projection` : `League value · ${grade.basis} · roster fit is evaluated separately`} rows={generic ? [{label:'Team A receives',value:grade.getMarket},{label:'Team B receives',value:grade.giveMarket}] : [{label:'You send',value:grade.giveValue},{label:'You receive',value:grade.getValue}]} />
+  return <ComparisonBars title={copy(generic ? 'Market value each team receives' : 'Trade value balance')} unit={generic ? `General market value · ${grade.basis} · no roster projection` : `League value · ${grade.basis} · roster fit is evaluated separately`} rows={generic ? [{label:'Team A receives',value:grade.getValue},{label:'Team B receives',value:grade.giveValue}] : [{label:'You send',value:grade.giveValue},{label:'You receive',value:grade.getValue}]} />
 }
 export function LineupImpactChart({impact,retrospective=false}:{impact:LineupImpactSummary|null;retrospective?:boolean}) {
   const {copy}=useTradeVisualCopy()

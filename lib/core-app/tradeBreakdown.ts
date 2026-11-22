@@ -34,7 +34,7 @@ export type BreakdownAsset = {
   rank: number
 }
 
-export type TradeBreakdownArgs = {
+type TradeBreakdownArgs = {
   /** What `receiverLabel` received. */
   received: readonly BreakdownAsset[]
   /** What `receiverLabel` gave up. */

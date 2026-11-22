@@ -1,3 +1,11 @@
+import {
+  readStartupCollegeDraft,
+  STARTUP_COLLEGE_DRAFT_LABEL,
+  STARTUP_COLLEGE_DRAFT_SETTINGS_KEY,
+  STARTUP_PRO_DRAFT_LABEL,
+  switchStartupDraftMode,
+  type StartupDraftMode,
+} from '@/lib/draft-defaults/startupCollegeDraft'
 import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 /**
  * Unified Draft Variant Settings Hub.
@@ -59,6 +67,11 @@ export interface SessionVariantSettings {
   auctionBudgetPerTeam?: number | null
   auctionMinBid?: number | null
   auctionMinIncrement?: number | null
+  /**
+   * Devy / C2C startup: two drafts (pro, then college) or one merged draft. Null for any other league,
+   * and after the startup draft has begun (lib/draft-defaults/startupCollegeDraft.ts).
+   */
+  startupDraftMode?: StartupDraftMode | null
 }
 
 /** Full draft variant settings: config + UI + session variant (when session exists). */
@@ -114,6 +127,7 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
         devyConfig: true,
         c2cConfig: true,
         auctionBudgetPerTeam: true,
+        draftModeLabel: true,
         thirdRoundReversal: true,
         onClockTradeTimerBehavior: true,
         inDraftPlayerTradesEnabled: true,
@@ -160,6 +174,7 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
       auctionBudgetPerTeam: session.draftType === 'auction' ? (session.auctionBudgetPerTeam ?? DEFAULT_AUCTION_BUDGET) : null,
       auctionMinBid: session.draftType === 'auction' ? DEFAULT_AUCTION_MIN_BID : null,
       auctionMinIncrement: session.draftType === 'auction' ? DEFAULT_AUCTION_MIN_INCREMENT : null,
+      startupDraftMode: startupDraftModeFor(league?.settings, session),
     }
   }
 
@@ -264,6 +279,62 @@ export async function updateDraftConfigForLeague(
   })
 }
 
+/** The startup draft mode the commissioner may still change, or null when there is none to change. */
+function startupDraftModeFor(settings: unknown, session: { status: string; draftModeLabel?: string | null }): StartupDraftMode | null {
+  const state = readStartupCollegeDraft(settings)
+  if (!state || session.status !== 'pre_draft') return null
+  const label = String(session.draftModeLabel ?? '').toLowerCase()
+  // The college draft itself, once open, is not the startup draft being configured.
+  if (label === STARTUP_COLLEGE_DRAFT_LABEL) return null
+  if (state.mode === 'separate' && label !== STARTUP_PRO_DRAFT_LABEL) return null
+  return state.mode
+}
+
+/**
+ * Switch a Devy / C2C startup between two drafts and one merged draft. Only while the startup draft is
+ * pre_draft with no pick on its board.
+ */
+async function applyStartupDraftMode(leagueId: string, sessionId: string, to: StartupDraftMode): Promise<void> {
+  const [league, session, picks] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    prisma.draftSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, rounds: true, devyConfig: true, c2cConfig: true, draftModeLabel: true },
+    }),
+    prisma.draftPick.count({ where: { sessionId } }),
+  ])
+  if (!league || !session || picks > 0) return
+  const state = readStartupCollegeDraft(league.settings)
+  if (!state || startupDraftModeFor(league.settings, session) == null) return
+  const next = switchStartupDraftMode(
+    state,
+    {
+      rounds: session.rounds,
+      devyConfig: (session.devyConfig as Record<string, unknown> | null) ?? null,
+      c2cConfig: (session.c2cConfig as Record<string, unknown> | null) ?? null,
+    },
+    to,
+  )
+  if (!next) return
+  const settings = league.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {}
+  await prisma.$transaction([
+    prisma.draftSession.update({
+      where: { id: sessionId },
+      data: {
+        rounds: next.rounds,
+        draftModeLabel: next.draftModeLabel,
+        devyConfig: (next.devyConfig ?? undefined) as never,
+        c2cConfig: (next.c2cConfig ?? undefined) as never,
+        version: { increment: 1 },
+      },
+    }),
+    prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...settings, [STARTUP_COLLEGE_DRAFT_SETTINGS_KEY]: next.state } as never },
+    }),
+  ])
+}
+
 /**
  * Update session variant (keeper, devy, c2c, auction). Only when session exists and status is pre_draft.
  */
@@ -294,8 +365,15 @@ export async function updateSessionVariant(
       : { maxKeepers: 0 }
   }
   if (patch.devyConfig !== undefined) {
+    const devyRounds = patch.devyConfig?.enabled ? sanitizeRoundList(patch.devyConfig.devyRounds, session.rounds) : []
+    // A Devy draft with NO round list takes any player in any round; an EMPTY list makes every round
+    // pro-only. The settings screen reads the first as the second, so saving any draft setting used to
+    // turn a merged Devy draft pro-only. An empty list keeps the stored shape.
+    const storedHasList = Array.isArray((session.devyConfig as { devyRounds?: unknown } | null)?.devyRounds)
     updatePayload.devyConfig = patch.devyConfig && patch.devyConfig.enabled
-      ? { enabled: true, devyRounds: sanitizeRoundList(patch.devyConfig.devyRounds, session.rounds) }
+      ? devyRounds.length === 0 && !storedHasList
+        ? { ...((session.devyConfig as Record<string, unknown> | null) ?? {}), enabled: true }
+        : { enabled: true, devyRounds }
       : { enabled: false, devyRounds: [] }
   }
   if (patch.c2cConfig !== undefined) {
@@ -311,6 +389,10 @@ export async function updateSessionVariant(
     where: { id: session.id },
     data: updatePayload as any,
   })
+  // Last, so it rewrites the rounds and round lists from what the edits above left.
+  if (patch.startupDraftMode === 'separate' || patch.startupDraftMode === 'merged') {
+    await applyStartupDraftMode(leagueId, session.id, patch.startupDraftMode)
+  }
 }
 
 /**

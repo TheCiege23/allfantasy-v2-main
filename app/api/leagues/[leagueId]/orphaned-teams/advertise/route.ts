@@ -2,10 +2,10 @@
  * POST: commissioner — mark orphan rosters as advertised + Find a League listings + optional league chat line.
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

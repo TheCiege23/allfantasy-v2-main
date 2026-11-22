@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { MatchupShareCard } from './MatchupShareCard'
 import type { MatchupSharePayload } from '@/lib/matchup-sharing/types'
 
-export interface MatchupSharePageContentProps {
+interface MatchupSharePageContentProps {
   payload: MatchupSharePayload
+  /** Where "Try AllFantasy" goes: the sharer's referral landing, or /signup (lib/referral/referralShareLink.ts). */
+  ctaHref?: string
 }
 
-export function MatchupSharePageContent({ payload }: MatchupSharePageContentProps) {
+export function MatchupSharePageContent({ payload, ctaHref = '/signup' }: MatchupSharePageContentProps) {
   return (
     <main className="min-h-screen bg-[#0f0f14] px-4 py-12">
       <div className="mx-auto max-w-xl space-y-6">
@@ -18,7 +20,7 @@ export function MatchupSharePageContent({ payload }: MatchupSharePageContentProp
         </p>
         <div className="flex justify-center">
           <Link
-            href="/app"
+            href={ctaHref}
             className="inline-block rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500"
           >
             Try AllFantasy

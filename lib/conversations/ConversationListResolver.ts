@@ -4,9 +4,9 @@
 
 import type { PlatformChatThread } from "@/types/platform-shared"
 
-export type ConversationType = "dm" | "group"
+type ConversationType = "dm" | "group"
 
-export function filterThreadsByType(
+function filterThreadsByType(
   threads: PlatformChatThread[],
   type: ConversationType
 ): PlatformChatThread[] {
@@ -47,7 +47,7 @@ export function getConversationDisplayTitle(thread: PlatformChatThread): string 
     return otherDisplayName || (otherUsername ? `@${otherUsername}` : "Direct message")
   }
   if (thread.threadType === "ai") {
-    return title || "Chimmy AI"
+    return title || "Chimmy"
   }
   return "Group chat"
 }

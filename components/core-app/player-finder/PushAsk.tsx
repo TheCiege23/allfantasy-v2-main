@@ -158,4 +158,3 @@ export function PushAsk({
   )
 }
 
-export default PushAsk

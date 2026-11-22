@@ -19,12 +19,6 @@ export type CacheTTL = {
   managerReputation: number
 }
 
-const DEFAULT_TTL: CacheTTL = {
-  leagueIntel: 15 * 60 * 1000,
-  fantasyCalcValues: 6 * 60 * 60 * 1000,
-  managerReputation: 24 * 60 * 60 * 1000,
-}
-
 const memoryCache = new Map<string, CacheEntry<unknown>>()
 
 export function getCacheKey(type: 'intel' | 'assets' | 'reputation' | 'fantasycalc', id: string): CacheKey {

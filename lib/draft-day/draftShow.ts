@@ -50,14 +50,14 @@ export type DraftShow = {
 
 export type SlotRow = { slot: number; rosterId: string; displayName?: string | null }
 
-export type LotteryShowSource = {
+type LotteryShowSource = {
   slotOrder: SlotRow[]
   lotteryDraws: Array<{ pickSlot: number; rosterId: string }>
   oddsSnapshot: Array<{ rosterId: string; oddsPercent: number }>
 }
 
 /** A saved order is showable when it is a full 1..n with every slot filled. */
-export function isCompleteOrder(order: readonly SlotRow[], teamCount: number): boolean {
+function isCompleteOrder(order: readonly SlotRow[], teamCount: number): boolean {
   if (order.length !== teamCount || teamCount < 2) return false
   const slots = new Set(order.map((o) => o.slot))
   const rosters = new Set(order.map((o) => o.rosterId).filter(Boolean))
@@ -70,7 +70,7 @@ const sameOrder = (a: readonly SlotRow[], b: readonly SlotRow[]) => {
   return b.every((x) => byA.get(x.slot) === x.rosterId)
 }
 
-export type BuildShowResult = { ok: true; show: DraftShow } | { ok: false; reason: 'order_incomplete' | 'no_lottery' | 'lottery_stale' }
+type BuildShowResult = { ok: true; show: DraftShow } | { ok: false; reason: 'order_incomplete' | 'no_lottery' | 'lottery_stale' }
 
 export function buildShow(args: {
   sessionId: string
@@ -123,7 +123,7 @@ export function isShowCurrent(show: DraftShow, session: { id: string; slotOrder:
   return show.sessionId === session.id && sameOrder(show.entries, session.slotOrder)
 }
 
-export type ShowProgress = {
+type ShowProgress = {
   /** Before the first card: ms left in the countdown. */
   introLeftMs: number
   /** Cards face-up, in reveal order (last pick first). */

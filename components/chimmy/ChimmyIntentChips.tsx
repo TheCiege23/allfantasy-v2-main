@@ -6,7 +6,7 @@ import { getChimmyIntentChips } from '@/lib/chimmy-chat/intent-chips'
 import type { ChimmyAIAnalyticsIngressEvent } from '@/lib/chimmy-chat/analytics-events'
 import type { ChimmyAssistantMode } from '@/lib/chimmy-chat/assistant-mode'
 
-export type ChimmyIntentChipsProps = {
+type ChimmyIntentChipsProps = {
   enabled: boolean
   hasUserMessage: boolean
   leagueId?: string | null

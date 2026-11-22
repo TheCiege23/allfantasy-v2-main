@@ -13,12 +13,12 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export const PortfolioModeEnum = z.enum([
+const PortfolioModeEnum = z.enum([
   'full_overview', 'weekly_priorities', 'exposure_audit', 'dynasty_long_term',
   'devy_pipeline', 'c2c_balance', 'risk_management', 'commissioner_load',
 ])
 
-export interface PortfolioTeam {
+interface PortfolioTeam {
   leagueId: string
   leagueName: string
   sport: string
@@ -50,9 +50,9 @@ export const PortfolioInputSchema = z.object({
   })),
   riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).default('moderate'),
 })
-export type PortfolioInput = z.infer<typeof PortfolioInputSchema>
+type PortfolioInput = z.infer<typeof PortfolioInputSchema>
 
-export interface PortfolioResult {
+interface PortfolioResult {
   portfolioMode: string
   portfolioHealthScore: number
   urgencyScore: number

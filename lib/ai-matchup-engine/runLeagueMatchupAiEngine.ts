@@ -257,7 +257,7 @@ export async function runLeagueMatchupAiEngine(params: {
   return {
     summary:
       'AI providers are not fully available. Use projections and live scoring in the matchup card as your primary guide.',
-    edge: { side: 'even', confidencePct: 40, headline: 'Insufficient AI signal — lean on your board and league settings.' },
+    edge: { side: 'even', confidencePct: 40, headline: 'Insufficient Chimmy signal — lean on your board and league settings.' },
     keyPlayers: [],
     upsetProbability: 0.35,
     xFactors: [],
@@ -265,8 +265,8 @@ export async function runLeagueMatchupAiEngine(params: {
       ifNeedFloor: 'If you need floor, favor high-floor roles with stable snap/minutes.',
       ifNeedUpside: 'If you need upside, favor volatile ceilings when chasing a deficit.',
     },
-    winProbabilityNotes: 'Reconnect when AI providers are configured (OpenAI / DeepSeek / xAI).',
-    dataNotes: 'No deterministic AI bundle produced.',
+    winProbabilityNotes: 'Reconnect when Chimmy providers are configured (OpenAI / DeepSeek / xAI).',
+    dataNotes: 'No deterministic Chimmy bundle produced.',
     providers: {
       openai: oa.ok ? 'error' : 'skipped',
       deepseek: dsRes.status,

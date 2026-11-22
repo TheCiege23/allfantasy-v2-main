@@ -20,20 +20,20 @@ import {
 import type { TrajectoryAdapter, TrajectoryPoint } from '../types'
 
 /** Numeric fields on the league-history ledger that form a real series. */
-export type LeagueEngagementMetricField =
+type LeagueEngagementMetricField =
   | 'leagueEngagementScore'
   | 'tradeActivityRate'
   | 'waiverActivityRate'
   | 'draftActivityRate'
 
-export const LEAGUE_ENGAGEMENT_METRIC_IDS: Record<LeagueEngagementMetricField, string> = {
+const LEAGUE_ENGAGEMENT_METRIC_IDS: Record<LeagueEngagementMetricField, string> = {
   leagueEngagementScore: 'league.engagementScore',
   tradeActivityRate: 'league.tradeActivityRate',
   waiverActivityRate: 'league.waiverActivityRate',
   draftActivityRate: 'league.draftActivityRate',
 }
 
-export interface LeagueEngagementTrajectoryParams {
+interface LeagueEngagementTrajectoryParams {
   leagueId: string
   /** How many recent snapshots to pull (default 12). */
   take?: number

@@ -8,6 +8,8 @@ import { defineMessages } from '@/lib/i18n/messages'
  */
 export const corePartsMessages = defineMessages({
   en: {
+    /** 2026-11-14: Your week's one-league card says one projection; the second source is in the tooltip. */
+    lineupPlainLabel: 'Projected',
     commissionerBadge: "You're the commissioner",
     clipsAroundLeagues: 'Around your leagues',
     clipsMyTeam: 'My Team clips',
@@ -29,6 +31,7 @@ export const corePartsMessages = defineMessages({
       `Each team’s lineup as currently set, projected for week ${week} under this league’s scoring. AF is AllFantasy’s own projection engine; ${provider} is ${provider}’s own projection. A forecast of the coming week — ${caveat}`,
   },
   es: {
+    lineupPlainLabel: 'Proyección',
     commissionerBadge: 'Eres comisionado',
     clipsAroundLeagues: 'Clips de tus ligas',
     clipsMyTeam: 'Clips de mi equipo',

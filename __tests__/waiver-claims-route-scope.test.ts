@@ -57,6 +57,8 @@ vi.mock("@/lib/roster-legality/rosterTransactionGates", () => ({
 vi.mock("@/lib/waiver-wire/commissioner-claim-override", () => ({
   mergeCommissionerOverrides: vi.fn((metadata) => metadata ?? {}),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 function req(url: string) {
   return { nextUrl: new URL(url) } as any

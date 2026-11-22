@@ -5,7 +5,7 @@
 
 import type { DashboardSectionCardType } from "./DashboardCardResolver"
 
-export interface DashboardSectionSpec {
+interface DashboardSectionSpec {
   id: DashboardSectionCardType
   order: number
   visible: boolean

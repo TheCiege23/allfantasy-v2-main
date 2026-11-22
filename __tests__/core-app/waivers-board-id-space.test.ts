@@ -27,6 +27,13 @@ function matches(p: Player, where: Where): boolean {
   )
 }
 
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const rows = await prisma.fantasyProjection.findMany({})
+    return new Map(rows.map((r) => [r.playerId, { ...r, componentStats: (r.stats as { stats: unknown }).stats }]))
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   leagueTeam: { findMany: async () => [{

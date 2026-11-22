@@ -388,6 +388,13 @@ export default function LoginContent() {
           <button
             type="button"
             onClick={() => {
+              // The shared-password admin login is retired in production (see
+              // app/api/auth/login/route.ts); admins sign in as themselves on /admin-login.
+              // The password dialog survives only for dev and the CI e2e server.
+              if (process.env.NODE_ENV === "production") {
+                window.location.href = "/admin-login"
+                return
+              }
               setAdminError(null)
               setAdminRemaining(null)
               setAdminModalOpen(true)

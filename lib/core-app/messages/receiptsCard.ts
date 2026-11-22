@@ -1,11 +1,15 @@
 import { defineMessages } from '@/lib/i18n/messages'
 import type { StartCallReceipt, TradeReceipt } from '@/lib/core-app/decisionReceipts'
+import { ADD_WINDOW_WEEKS, STARTABLE_PPR_PER_WEEK } from '@/lib/chimmy-outcomes/ledgerRecord'
 
 /**
  * The home Receipts card (components/core-app/screens/ReceiptsCard.tsx). Every string is the one the
  * card printed before the move, byte for byte, in both languages — this is a relocation, not a
  * rewrite. (Notes that were line-wrapped JSX text are the same rendered words with single spaces.)
  */
+
+/** "+4.1" / "−3.0" / "0.0" — a signed number to one decimal. */
+const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}`
 
 const OUTCOME_TEXT: Record<TradeReceipt['outcome'], string> = {
   ahead: 'you’re ahead',
@@ -69,6 +73,21 @@ export const receiptsCardMessages = defineMessages({
     addCallsUnknown: (n: number) =>
       `${n} add call${n === 1 ? '' : 's'} couldn’t be checked yet — your league’s transactions haven’t synced past that week.`,
     afSwapTips: 'AF swap tips',
+    // AllFantasy's own record (lib/chimmy-outcomes/ledgerRecord.ts), graded every few hours.
+    afRecord: 'AllFantasy’s record',
+    benchRecord: 'My Team’s bench check —',
+    recordYou: 'you:',
+    recordEveryone: 'everyone:',
+    everyoneStartSit: (ratePct: number | null, decided: number, gainPerCall: number | null) =>
+      ratePct != null
+        ? `${ratePct}% right over ${decided} call${decided === 1 ? '' : 's'}${gainPerCall != null ? `, ${signed(gainPerCall)} pts per call` : ''}`
+        : `${decided} call${decided === 1 ? '' : 's'} so far`,
+    pickupRecord: 'Waiver panel’s #1 pickup —',
+    pickupLine: (startable: number, graded: number, ratePct: number | null) =>
+      `${startable} of ${graded} averaged ${STARTABLE_PPR_PER_WEEK}+ PPR over ${ADD_WINDOW_WEEKS} weeks${ratePct != null ? ` (${ratePct}%)` : ''}`,
+    pickupDrop: (beat: number, of: number) => `, ${beat} of ${of} beat the suggested drop`,
+    tradeRecord: 'Trade grades, against what the players scored since (redraft, PPR per week):',
+    tradeLetter: (letter: string, netPerWeek: number, n: number) => `${letter} ${signed(netPerWeek)} (${n} deals)`,
     sleeperOnly: 'Receipts cover your Sleeper leagues for now.',
     // The "AllFantasy saved me" share card (components/core-app/screens/AfSavedShare.tsx).
     savedShare: 'Share',
@@ -130,6 +149,20 @@ export const receiptsCardMessages = defineMessages({
     addCallsUnknown: (n) =>
       `${n === 1 ? '1 consejo de incorporación aún no se pudo revisar' : `${n} consejos de incorporación aún no se pudieron revisar`}: las transacciones de tu liga no se han sincronizado más allá de esa semana.`,
     afSwapTips: 'Consejos de cambio de AF',
+    afRecord: 'Historial de AllFantasy',
+    benchRecord: 'Revisión de banca de Mi equipo —',
+    recordYou: 'tú:',
+    recordEveryone: 'todos:',
+    everyoneStartSit: (ratePct, decided, gainPerCall) =>
+      ratePct != null
+        ? `${ratePct}% de aciertos en ${decided} ${decided === 1 ? 'consejo' : 'consejos'}${gainPerCall != null ? `, ${signed(gainPerCall)} pts por consejo` : ''}`
+        : `${decided} ${decided === 1 ? 'consejo' : 'consejos'} hasta ahora`,
+    pickupRecord: 'Incorporación n.º 1 del panel de agentes libres —',
+    pickupLine: (startable, graded, ratePct) =>
+      `${startable} de ${graded} promediaron ${STARTABLE_PPR_PER_WEEK}+ pts PPR en ${ADD_WINDOW_WEEKS} semanas${ratePct != null ? ` (${ratePct}%)` : ''}`,
+    pickupDrop: (beat, of) => `, ${beat} de ${of} superaron al descarte sugerido`,
+    tradeRecord: 'Notas de intercambio, frente a lo que anotaron los jugadores desde entonces (redraft, PPR por semana):',
+    tradeLetter: (letter, netPerWeek, n) => `${letter} ${signed(netPerWeek)} (${n} ${n === 1 ? 'intercambio' : 'intercambios'})`,
     sleeperOnly: 'Por ahora, estos resultados cubren tus ligas de Sleeper.',
     savedShare: 'Compartir',
     savedHeadline: (margin) => `AllFantasy me salvó +${margin} pts`,

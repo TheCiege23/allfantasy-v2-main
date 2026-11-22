@@ -34,7 +34,7 @@
  */
 
 /** Sports with no committed prospect / minor-league player pool. */
-export const SPORTS_WITHOUT_PROSPECT_POOL = ['NHL', 'MLB'] as const
+const SPORTS_WITHOUT_PROSPECT_POOL = ['NHL', 'MLB'] as const
 
 /** Roster slots whose only purpose is stashing prospects. */
 export const PROSPECT_STASH_SLOT_KEYS = ['TAXI', 'PROSPECT', 'RIGHTS', 'MINORS'] as const

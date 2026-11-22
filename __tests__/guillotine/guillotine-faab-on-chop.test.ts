@@ -74,6 +74,8 @@ describe('redistributeChoppedFaab', () => {
     const before = total()
     const r = await redistributeChoppedFaab({ choppedRosterIds: ['chopped'], survivorRosterIds: ['s1', 's2', 's3'] })
     expect(r).toMatchObject({ pool: 60, perTeam: 20, survivors: 3 })
+    // What each chopped team gave, so an undone chop returns exactly that (lib/guillotine/chopUndo.ts).
+    expect(r?.taken).toEqual(new Map([['chopped', 60]]))
     expect(rows.get('chopped')!.faabRemaining).toBe(0)
     expect([rows.get('s1')!.faabRemaining, rows.get('s2')!.faabRemaining, rows.get('s3')!.faabRemaining]).toEqual([30, 50, 20])
     expect(total()).toBe(before) // no money made or lost

@@ -1,4 +1,4 @@
-export type KeeperDraftStrategy = {
+type KeeperDraftStrategy = {
   round1Target: { position: string; reasoning: string }
   round2Target: { position: string; reasoning: string }
   earlyRounds: string

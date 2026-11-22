@@ -18,7 +18,7 @@ import {
 } from '@/lib/commissioner-os/i18n/toolsCopy'
 import { severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface AutomationCatalogCardProps {
+interface AutomationCatalogCardProps {
   automation: AutomationCatalogEntry
   enabled: boolean
   onToggle: (checked: boolean) => void

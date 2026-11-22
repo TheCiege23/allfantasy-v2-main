@@ -66,12 +66,6 @@ export const EMOJI_LIST: string[] = Array.from(
   new Set(EMOJI_CATEGORIES.flatMap((category) => EMOJI_BY_CATEGORY[category]))
 )
 
-export function insertEmojiAtPosition(text: string, emoji: string, position: number): string {
-  const before = text.slice(0, position)
-  const after = text.slice(position)
-  return before + emoji + after
-}
-
 export function appendEmoji(text: string, emoji: string): string {
   return text + emoji
 }

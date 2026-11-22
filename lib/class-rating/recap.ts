@@ -23,14 +23,14 @@ import { CLASS_SPORT } from '@/lib/class-rating/store'
  */
 
 export const RECAP_STATE_KEY = 'class-rating:v1:recap'
-export const RECAP_BATCH = 40
+const RECAP_BATCH = 40
 const RETENTION_DAYS = 60
 
-export type RecapItem = { userId: string; title: string; body: string }
+type RecapItem = { userId: string; title: string; body: string }
 type RecapQueue = { period: number; pending: RecapItem[]; sent: number; failed: number }
-export type RecapState = { lastPeriod: number | null; queue: RecapQueue | null }
+type RecapState = { lastPeriod: number | null; queue: RecapQueue | null }
 
-export type RecapRow = {
+type RecapRow = {
   userId: string
   delta: number
   w: number
@@ -88,9 +88,9 @@ async function writeState(state: RecapState, now: Date): Promise<void> {
   })
 }
 
-export type RecapCounts = { queued: number; baseline: number; sent: number; failed: number; remaining: number; errors: string[] }
+type RecapCounts = { queued: number; baseline: number; sent: number; failed: number; remaining: number; errors: string[] }
 
-export function emptyRecapCounts(): RecapCounts {
+function emptyRecapCounts(): RecapCounts {
   return { queued: 0, baseline: 0, sent: 0, failed: 0, remaining: 0, errors: [] }
 }
 

@@ -94,6 +94,20 @@ describe('hasExistingLineup — shared guard', () => {
 describe('finalizeRosterAssignments — generic (no league-type branch)', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('does not repopulate a cleared roster when the same draft is finalized again', async () => {
+    mocks.draftSessionFindFirst.mockResolvedValue({ id: 'DS1', status: 'completed', picks: [
+      { rosterId: 'R1', playerName: 'X', position: 'QB', playerId: 'px', team: 'BUF', pickMetadata: null },
+    ] })
+    mocks.getLeagueDraftTemplatePayload.mockResolvedValueOnce({ template: { slots: [{ slotName: 'QB', starterCount: 1, allowedPositions: ['QB'] }] } })
+    mocks.rosterFindFirst.mockResolvedValue({ id: 'R1', playerData: { players: [], starters: [], lineup_sections: { starters: [], bench: [] }, lineup_draft_session_id: 'DS1' } })
+    mocks.rosterUpdate.mockResolvedValue({})
+    const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')
+    await finalizeRosterAssignments('L1')
+    const updated = mocks.rosterUpdate.mock.calls[0]?.[0] as { data: { playerData: { players: string[]; starters: string[] } } }
+    expect(updated.data.playerData.players).toEqual([])
+    expect(updated.data.playerData.starters).toEqual([])
+  })
+
   it('returns empty summary when session is not found', async () => {
     mocks.draftSessionFindFirst.mockResolvedValue(null)
     const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')

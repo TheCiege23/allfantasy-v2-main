@@ -29,7 +29,7 @@ import { normalizeSurvivorFoundationSettings, type SurvivorFoundationSettings } 
 
 type Db = Prisma.TransactionClient | PrismaClient
 
-export interface TribeScoreRow {
+interface TribeScoreRow {
   tribeId: string | null
   finalScore: number
   countedTowardTribeTotal?: boolean | null
@@ -49,7 +49,7 @@ export function tribeTotals(scores: readonly TribeScoreRow[]): Map<string, numbe
  * Per-tribe tie-break values (the best starter score at the commissioner's key position). Higher
  * wins a tie; a tribe missing from the map ranks below every tribe in it.
  */
-export type TribeTieBreak = ReadonlyMap<string, number>
+type TribeTieBreak = ReadonlyMap<string, number>
 
 const tieValue = (tieBreak: TribeTieBreak | null | undefined, tribeId: string) => tieBreak?.get(tribeId) ?? -Infinity
 
@@ -72,7 +72,7 @@ export function hasTribeTotalTie(totals: ReadonlyMap<string, number>, tribeIds?:
   return false
 }
 
-export interface PickImmuneTribesInput {
+interface PickImmuneTribesInput {
   totals: ReadonlyMap<string, number>
   /** Every active tribe. The pick never leaves fewer than one of them to attend. */
   tribeIds: readonly string[]
@@ -119,7 +119,7 @@ export function pickImmuneTribeIds(input: PickImmuneTribesInput): string[] {
   return immune.slice(0, limit)
 }
 
-export interface PickAttendingTribeInput {
+interface PickAttendingTribeInput {
   totals: ReadonlyMap<string, number>
   tribeIds: readonly string[]
   immuneTribeIds: readonly string[]
@@ -143,7 +143,7 @@ export function pickAttendingTribeId(input: PickAttendingTribeInput): string | n
   return [...candidates].sort((a, b) => a.localeCompare(b))[0]!
 }
 
-export interface WeekImmunityResolution {
+interface WeekImmunityResolution {
   immuneTribeIds: string[]
   attendingTribeId: string | null
   rewardTribeIds: string[]
@@ -152,7 +152,7 @@ export interface WeekImmunityResolution {
   tieBreak: Map<string, number> | null
 }
 
-export interface ResolveWeekImmunityOptions {
+interface ResolveWeekImmunityOptions {
   settings?: SurvivorFoundationSettings
   /** Score rows for the week. Loaded (finalized, active managers only) when omitted. */
   scores?: readonly TribeScoreRow[]
@@ -197,7 +197,7 @@ export async function loadWeekTieBreak(
 }
 
 /** Challenge-won tribe immunity for the week. Empty when the audit cannot be read. */
-export async function loadRewardImmuneTribeIds(leagueId: string, week: number): Promise<string[]> {
+async function loadRewardImmuneTribeIds(leagueId: string, week: number): Promise<string[]> {
   try {
     const state = await getWeeklyEffectState(leagueId, week)
     return [...state.immuneTribeIds].sort()

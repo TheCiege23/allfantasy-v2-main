@@ -11,7 +11,7 @@ import { getCreationPayload } from '@/lib/league-defaults-orchestrator'
 import { getSportFeatureFlags } from '@/lib/sport-defaults/SportFeatureFlagsService'
 import { getTeamMetadataForSportDbAware } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 
-export interface SportPresetWithTeamContext {
+interface SportPresetWithTeamContext {
   // From creation payload
   [key: string]: unknown
   // Feature flags

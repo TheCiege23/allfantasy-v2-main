@@ -1,0 +1,90 @@
+/*
+ * The /core/live guide (LiveGuideHead.tsx, and the plain section heads in LiveScores.tsx). Builds on the
+ * home guide's `af-hg-*` headline (components/core-app/home/af-home-guide.css) so Home, Week and Live
+ * read as one product. Token layer only — the light-mode clamp rewrites bare colours. No text below 11px
+ * (__tests__/core-app/type-floor.test.ts).
+ */
+.af-lg-head { margin-bottom: 16px; }
+/* A chip with nowhere to go ("0 matchups behind") is a fact — no hover, no pointer. The rest link. */
+.af-lg-chip { cursor: default; }
+.af-lg-chip:hover { border-color: var(--line2); }
+a.af-hg-chip { color: inherit; text-decoration: none; }
+
+.af-lg-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--bad);
+  vertical-align: 1px;
+  animation: af-lg-pulse 1.6s ease-in-out infinite;
+}
+@keyframes af-lg-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.af-live[data-low-data='true'] .af-lg-dot { animation: none; }
+@media (prefers-reduced-motion: reduce) { .af-lg-dot { animation: none; } }
+
+/* A section's own heading: what it is in words, then one line on what it holds. */
+.af-lg-sec-head { margin: 0 0 10px; }
+.af-lg-sec-head h2 { margin: 0; color: var(--text); font-size: 17px; font-weight: 800; }
+.af-lg-sec-head p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+
+/* "Why it matters" — one line per section, the same treatment as the home and week guides. */
+.af-lg-teach {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-lg-teach b { color: var(--accent); }
+
+.af-lg-next-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-lg-next-link:hover { text-decoration: underline; }
+
+.af-lg-plays-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-lg-lowdata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .af-lg-next-link,
+  .af-lg-plays-more { min-height: 44px; }
+}
+
+/* "Matchups to watch" — the glance's heading in words; the counts are the headline's chips. */
+.af-lg-glance-head { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.af-lg-glance-head b { color: var(--text); font-size: 17px; font-weight: 800; letter-spacing: 0; text-transform: none; }
+.af-lg-glance-head span { color: var(--muted); font-size: 12.5px; font-weight: 500; letter-spacing: 0; text-transform: none; }

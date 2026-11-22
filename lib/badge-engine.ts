@@ -53,16 +53,16 @@ const BADGE_DEFINITIONS: Record<string, Omit<Badge, 'id'>> = {
   },
   ai_chat_starter: {
     badgeType: 'ai_chat_starter',
-    badgeName: 'AI Advisor',
-    description: 'Had your first AI chat conversation',
+    badgeName: 'Chimmy Advisor',
+    description: 'Had your first Chimmy chat conversation',
     tier: 'bronze',
     xpReward: 15,
     icon: '💬',
   },
   ai_chat_50: {
     badgeType: 'ai_chat_50',
-    badgeName: 'AI Whisperer',
-    description: 'Sent 50 messages to the AI assistant',
+    badgeName: 'Chimmy Whisperer',
+    description: 'Sent 50 messages to Chimmy assistant',
     tier: 'silver',
     xpReward: 150,
     icon: '🧠',
@@ -86,7 +86,7 @@ const BADGE_DEFINITIONS: Record<string, Omit<Badge, 'id'>> = {
   waiver_wire: {
     badgeType: 'waiver_wire',
     badgeName: 'Waiver Wire Hunter',
-    description: 'Used AI waiver wire analysis',
+    description: 'Used Chimmy waiver wire analysis',
     tier: 'bronze',
     xpReward: 25,
     icon: '🎯',
@@ -102,7 +102,7 @@ const BADGE_DEFINITIONS: Record<string, Omit<Badge, 'id'>> = {
   accurate_prediction: {
     badgeType: 'accurate_prediction',
     badgeName: 'Crystal Ball',
-    description: 'AI prediction matched the actual outcome',
+    description: 'Chimmy prediction matched the actual outcome',
     tier: 'gold',
     xpReward: 300,
     icon: '🔮',
@@ -126,7 +126,7 @@ const BADGE_DEFINITIONS: Record<string, Omit<Badge, 'id'>> = {
   guardian_follower: {
     badgeType: 'guardian_follower',
     badgeName: 'Guardian Follower',
-    description: 'Followed 5 AI Decision Guardian recommendations',
+    description: 'Followed 5 Chimmy Decision Guardian recommendations',
     tier: 'silver',
     xpReward: 100,
     icon: '🛡️',

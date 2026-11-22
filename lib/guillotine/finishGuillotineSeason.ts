@@ -19,6 +19,8 @@
  * leaves `completed`, so a failure part-way (the archive is deliberately non-fatal elsewhere too)
  * is retried rather than lost. Every write here is an upsert or a guarded update.
  */
+import { nativeLeagueStatusForLifecycle } from '@/lib/league/nativeLeagueStatus'
+import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 import { prisma } from '@/lib/prisma'
 import { determineFinalChampion } from './endgameEngine'
 import { enterRedraftOffseason } from '@/lib/redraft/offseason/RedraftOffseasonService'
@@ -198,6 +200,16 @@ export async function finishGuillotineSeason(input: {
       where: { id: season.leagueId, lifecycleState: { in: [...LIFECYCLE_STATES_BEFORE_COMPLETION] } },
       data: { lifecycleState: 'completed' },
     })
+    // A league that plays on AllFantasy carries the matching status (lib/league/nativeLeagueStatus.ts).
+    // This write has no league row in hand, so the native-only rule is in the `where`; an imported
+    // guillotine league's status stays its provider's. Idempotent: a re-run writes the same value.
+    const completedStatus = nativeLeagueStatusForLifecycle('completed')
+    if (completedStatus) {
+      await tx.league.updateMany({
+        where: { id: season.leagueId, lifecycleState: 'completed', platform: { in: [...NATIVE_PLATFORM_VALUES], mode: 'insensitive' } },
+        data: { status: completedStatus },
+      })
+    }
   })
 
   try {

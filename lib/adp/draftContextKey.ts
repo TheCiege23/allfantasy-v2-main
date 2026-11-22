@@ -56,6 +56,8 @@ export interface DraftContextLeague {
 export interface DraftContextSession {
   draftType: string | null
   teamCount: number | null
+  /** `'rookies_only'` / `'rookie'` mark a rookie draft, which gets its own board (see `buildDraftContext`). */
+  playerPool?: string | null
 }
 
 export interface BuildDraftContextInput {
@@ -63,6 +65,46 @@ export interface BuildDraftContextInput {
   session?: DraftContextSession | null
   /** Explicit season override (CLI / historical reads). Falls back to `league.season`. */
   season?: string | null
+  /**
+   * When the caller knows the QB format from somewhere other than league settings (a mock draft's own options).
+   * Absent: read from `league.settings` (`rosterFormatFromSettings`).
+   */
+  superflex?: boolean | null
+  /** A rookie draft known by other evidence (an imported draft too short to be a startup). */
+  rookieDraft?: boolean | null
+}
+
+const SUPERFLEX_RE = /super[_\s-]?flex|sflex|2qb|two[_\s-]?qb/i
+const FOOTBALL = new Set(['NFL', 'NCAAF'])
+
+/**
+ * SUPERFLEX OR 1QB, FROM THE LEAGUE'S OWN SETTINGS (2026-11-22: AF ADP split the two boards).
+ *
+ * 🛑 THE SPLIT IS THE POINT. A quarterback goes rounds earlier in a superflex draft; pooling both formats put
+ * every QB's AF ADP somewhere between the two, right for neither. Read from every shape league settings carry:
+ * the sport config toggle (native), a Sleeper-style `roster_positions` list (a `SUPER_FLEX` slot, or two plain
+ * `QB` starters — FantasyCalc treats both as `numQbs: 2`, see `trade-value/superflexResolution.ts`), and the
+ * imported `roster_format_type` label. Nothing found = standard: the assumption that cannot move a QB up.
+ */
+export function rosterFormatFromSettings(settings: unknown): 'superflex' | 'standard' {
+  if (!settings || typeof settings !== 'object') return 'standard'
+  const s = settings as Record<string, unknown>
+  const sc = (s.sportConfig && typeof s.sportConfig === 'object' ? s.sportConfig : {}) as Record<string, unknown>
+  if (sc.enableSuperflex === true) return 'superflex'
+  if (typeof s.roster_format_type === 'string' && SUPERFLEX_RE.test(s.roster_format_type)) return 'superflex'
+  const positions = Array.isArray(s.roster_positions) ? s.roster_positions : Array.isArray(s.rosterPositions) ? s.rosterPositions : null
+  if (positions) {
+    const slots = positions.map((p) => String(p ?? '').trim().toUpperCase())
+    if (slots.includes('SUPER_FLEX') || slots.includes('SUPERFLEX') || slots.includes('OP')) return 'superflex'
+    if (slots.filter((p) => p === 'QB').length >= 2) return 'superflex'
+  }
+  return 'standard'
+}
+
+/** A session whose player pool is rookies only is a rookie draft. */
+export function isRookiePool(playerPool: string | null | undefined): boolean {
+  const p = String(playerPool ?? '').trim().toLowerCase()
+  return p === 'rookies_only' || p === 'rookie' || p === 'rookies'
 }
 
 /** Default when neither a session nor league settings name one. */
@@ -108,13 +150,29 @@ export function buildDraftContext(input: BuildDraftContextInput): DraftContext {
       ? String(input.season).trim()
       : String(league.season)
 
-  return {
-    sport: String(league.sport).toUpperCase(),
-    leagueType,
+  const sport = String(league.sport).toUpperCase()
+  /*
+   * 🛑 A ROOKIE DRAFT IS NOT A STARTUP, so it gets its own board. In a rookie draft the best rookie goes 1.01; pooled
+   * into the dynasty startup board, every rookie looked like a first-round startup pick.
+   */
+  const rookie = input.rookieDraft === true || isRookiePool(session?.playerPool)
+
+  const context: DraftContext = {
+    sport,
+    leagueType: rookie ? `${leagueType}:rookie` : leagueType,
     draftType,
     scoringFormat: String(league.scoring ?? DEFAULT_SCORING_FORMAT).toLowerCase(),
     rosterFormat: 'standard',
     teamCount,
     season,
   }
+  /*
+   * Superflex is a football question; every other sport's board stays 'standard'. An explicit answer from the
+   * caller wins over settings (a mock draft has no league settings to read).
+   */
+  if (FOOTBALL.has(sport)) {
+    const superflex = input.superflex != null ? input.superflex : rosterFormatFromSettings(league.settings) === 'superflex'
+    if (superflex) context.rosterFormat = 'superflex'
+  }
+  return context
 }

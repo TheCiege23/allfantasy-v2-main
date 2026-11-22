@@ -3,13 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
-import {
-  appendAICommissionerActionLog,
-  ensureAICommissionerConfig,
-  runAICommissionerCycle,
-  toConfigView,
-} from './AICommissionerService'
+import { appendAICommissionerActionLog, ensureAICommissionerConfig, runAICommissionerCycle } from './AICommissionerService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 type SpecialtyModeKey =
   | 'guillotine'
@@ -170,6 +167,8 @@ export async function getUnifiedCommissionerAssessment(input: {
           bestBallMode: true,
           isDynasty: true,
           leagueType: true,
+          leagueVariant: true,
+          settings: true,
           integritySettings: {
             select: {
               collusionMonitoringEnabled: true,
@@ -226,8 +225,10 @@ export async function getUnifiedCommissionerAssessment(input: {
   if (!league) throw new Error('League not found')
 
   const entitlementResolver = new EntitlementResolver()
+  // The owner's plan — or, for a system-owned league, its PROVEN commissioner's (see the helper).
+  const commissionerAccount = (await leagueCommissionerAccountId(input.leagueId, league.userId)) ?? league.userId
   const commissionerEntitlement = await entitlementResolver.resolveForUser(
-    league.userId,
+    commissionerAccount,
     'commissioner_automation'
   )
   const afCommissionerSub = commissionerEntitlement.hasAccess
@@ -262,7 +263,7 @@ export async function getUnifiedCommissionerAssessment(input: {
     },
     {
       key: 'commissioner_alerts',
-      label: 'AI commissioner alerts enabled',
+      label: 'Chimmy commissioner alerts enabled',
       status: league.leagueAiCommissionerAlerts ? 'ok' : 'warn',
       detail: league.leagueAiCommissionerAlerts
         ? 'League alerts are enabled.'
@@ -338,8 +339,8 @@ export async function getUnifiedCommissionerAssessment(input: {
   const proposedActions: UnifiedActionProposal[] = [
     {
       key: 'enable_ai_alerts',
-      title: 'Enable league AI alerts',
-      summary: 'Turn on AI commissioner alerting for this league.',
+      title: 'Enable league Chimmy alerts',
+      summary: 'Turn on Chimmy commissioner alerting for this league.',
       requiresSubscription: false,
       requiresConfirmation: true,
     },
@@ -371,7 +372,7 @@ export async function getUnifiedCommissionerAssessment(input: {
     },
     {
       key: 'promote_commissioner_notifications',
-      title: 'Enable AI notification fanout',
+      title: 'Enable Chimmy notification fanout',
       summary: 'Promote notification mode to both in-app and chat.',
       requiresSubscription: true,
       requiresConfirmation: true,
@@ -515,7 +516,8 @@ export async function getUnifiedCommissionerAssessment(input: {
       },
       {
         key: 'best_ball',
-        enabled: Boolean(league.bestBallMode),
+        // Classic Best Ball or best ball Guilly: both are scored by the optimizer (lib/bestball/bestBallLeagueState.ts).
+        enabled: bestBallLineupSetsItself(league),
         note: 'Prioritize scoring integrity and optimizer transparency.',
       },
       {
@@ -585,8 +587,9 @@ export async function applyUnifiedCommissionerAction(input: {
   if (!league) throw new Error('League not found')
 
   const entitlementResolver = new EntitlementResolver()
+  const commissionerAccount = (await leagueCommissionerAccountId(input.leagueId, league.userId)) ?? league.userId
   const commissionerEntitlement = await entitlementResolver.resolveForUser(
-    league.userId,
+    commissionerAccount,
     'commissioner_automation'
   )
 
@@ -607,7 +610,7 @@ export async function applyUnifiedCommissionerAction(input: {
       where: { id: input.leagueId },
       data: { leagueAiCommissionerAlerts: true },
     })
-    message = 'League AI commissioner alerts enabled.'
+    message = 'League Chimmy commissioner alerts enabled.'
   } else if (input.actionKey === 'enable_collusion_monitoring') {
     await prisma.leagueIntegritySettings.upsert({
       where: { leagueId: input.leagueId },
@@ -647,7 +650,7 @@ export async function applyUnifiedCommissionerAction(input: {
       where: { leagueId: input.leagueId },
       data: { commissionerNotificationMode: 'both' },
     })
-    message = 'AI commissioner notifications promoted to both chat and in-app.'
+    message = 'Chimmy commissioner notifications promoted to both chat and in-app.'
   } else if (input.actionKey === 'run_commissioner_cycle') {
     const sport = typeof input.payload?.sport === 'string' ? String(input.payload.sport) : null
     const seasonRaw = Number(input.payload?.season)
@@ -658,7 +661,7 @@ export async function applyUnifiedCommissionerAction(input: {
       season,
       source: 'unified_commissioner_api',
     })
-    message = `AI Commissioner cycle completed (${result.createdAlerts.length} new alerts).`
+    message = `Chimmy Commissioner cycle completed (${result.createdAlerts.length} new alerts).`
     meta = {
       createdAlerts: result.createdAlerts.length,
       touchedAlerts: result.touchedAlerts,
@@ -688,7 +691,8 @@ export async function applyUnifiedCommissionerAction(input: {
     .catch(() => null)
 
   await createPlatformNotification({
-    userId: league.userId,
+    // Not the system account that owns a joined-by-pick league: nobody reads it.
+    userId: commissionerAccount,
     productType: 'app',
     type: 'commissioner_action_applied',
     title: 'Commissioner action applied',

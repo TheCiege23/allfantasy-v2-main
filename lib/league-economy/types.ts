@@ -32,8 +32,6 @@ export const ITEM_TYPES = [
   'cosmetic_banner',
 ] as const
 
-export type ItemType = (typeof ITEM_TYPES)[number]
-
 export interface MarketplaceItemView {
   itemId: string
   itemType: string

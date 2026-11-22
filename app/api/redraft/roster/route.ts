@@ -43,7 +43,7 @@ import {
   type RiCrosswalkDb,
 } from '@/lib/player-identity/rollingInsightsCrosswalk'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
-import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 
 export const dynamic = 'force-dynamic'
 
@@ -664,7 +664,7 @@ export async function PATCH(req: NextRequest) {
   // applying moves, so a player whose game has kicked off cannot be moved.
   const leagueForLock = await prisma.league.findUnique({
     where: { id: roster.leagueId },
-    select: { settings: true, platform: true, survivorMode: true, lockAllMoves: true, guillotineMode: true, leagueType: true, leagueVariant: true },
+    select: { settings: true, platform: true, survivorMode: true, lockAllMoves: true, guillotineMode: true, leagueType: true, leagueVariant: true, bestBallMode: true },
   })
   // 🛑 The commissioner's move lock. The lineup screen's save (persistRosterLineupWithEngine) refuses every
   // lineup and IR move under it; this PATCH has no UI caller and did not, so it was the way around the lock.
@@ -691,9 +691,9 @@ export async function PATCH(req: NextRequest) {
   const currentPlayers = leagueForLock?.survivorMode && roster.season.sport === 'NBA'
     ? await applyNbaSurvivorPickLineupLocks({ leagueId: roster.leagueId, redraftRosterId: roster.id, week, settings: leagueForLock.settings, players: hydratedPlayers })
     : hydratedPlayers
-  // A best ball Guilly league sets its own lineup (lib/guillotine/guillotineBestBall.ts): a move between two
+  // A Best Ball league or a best ball Guilly league sets its own lineup (guillotineBestBall.ts `lineupSetsItself`): a move between two
   // active slots (starter or bench) would save and change nothing. On or off IR / taxi still saves.
-  if (leagueForLock && isBestBallGuillotine(leagueForLock)) {
+  if (lineupSetsItself(leagueForLock)) {
     const slotOf = new Map(currentPlayers.map((p) => [p.playerId, p.slotType]))
     const shuffle = body.moves.find(
       (m) => slotOf.has(m.playerId) && isBestBallCandidateSlot(slotOf.get(m.playerId)) && isBestBallCandidateSlot(m.toSlot),

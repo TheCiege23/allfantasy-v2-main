@@ -65,4 +65,3 @@ export interface UserRecommendations {
   _profile?: Partial<UserRecommendationProfile>
 }
 
-export type { RecommendedLeagueWithExplanation }

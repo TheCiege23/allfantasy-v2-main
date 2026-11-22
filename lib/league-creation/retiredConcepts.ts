@@ -23,11 +23,16 @@ export const RETIRED_CONCEPT_REASON_CODES = {
   tournament: 'TOURNAMENT_CREATION_DISABLED',
 } as const
 
-export type RetiredConceptReasonCode =
+type RetiredConceptReasonCode =
   (typeof RETIRED_CONCEPT_REASON_CODES)[keyof typeof RETIRED_CONCEPT_REASON_CODES]
 
 /** Format ids that may no longer be created. */
-const RETIRED_FORMAT_IDS = new Set<string>(['tournament'])
+/**
+ * Empty since 2026-11-22: the owner brought Tournament Mode back ("yes, bring tournaments back").
+ * It had been retired from creation on 2026-07-23. The policy module, its reason codes and every
+ * guard that calls it stay in place, so retiring a concept again is a one-line change here.
+ */
+const RETIRED_FORMAT_IDS = new Set<string>([])
 
 /** User-safe copy. Says what happened and what still works — no dead ends. */
 const RETIRED_CONCEPT_MESSAGES: Record<string, string> = {
@@ -50,7 +55,7 @@ export class RetiredConceptError extends Error {
   }
 }
 
-export interface RetiredConceptRejection {
+interface RetiredConceptRejection {
   /** Stable code for programmatic handling. */
   code: RetiredConceptReasonCode
   /** User-safe explanation. */

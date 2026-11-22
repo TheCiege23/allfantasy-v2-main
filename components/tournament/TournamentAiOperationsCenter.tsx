@@ -68,8 +68,8 @@ export function TournamentAiOperationsCenter({
   return (
     <div className="space-y-6">
       <WarRoomPanel
-        title="AI operations center"
-        subtitle="Tournament-grade automation — persisted in hub settings; job runners honor flags when enabled server-side."
+        title="Chimmy operations center"
+        subtitle="Turn on the automations you want running across the tournament. Changes save to the tournament settings."
       >
         {showCommissionerLock ? (
           <div className="mb-4">

@@ -10,7 +10,7 @@
  * NEVER falls back to `email.split('@')[0]` — that leaks PII into headers,
  * greetings, and chat surfaces.
  */
-export type ResolveDisplayNameInput = {
+type ResolveDisplayNameInput = {
   displayName?: string | null
   username?: string | null
   sessionName?: string | null

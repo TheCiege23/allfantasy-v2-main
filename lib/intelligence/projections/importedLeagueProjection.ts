@@ -29,7 +29,7 @@ type Row = {
   occurredAt: Date | null
 }
 
-export type LeagueTally = {
+type LeagueTally = {
   leagueId: string
   firstEventAt: Date | null
   lastActivityAt: Date | null
@@ -109,7 +109,7 @@ export function tallyLeaguesFromImportedActivity(rows: readonly Row[]): LeagueTa
   return [...byLeague.values()]
 }
 
-export type ProjectLeagueResult = {
+type ProjectLeagueResult = {
   leaguesConsidered: number
   leaguesSkippedNative: number
   leaguesWritten: number

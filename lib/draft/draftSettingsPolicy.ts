@@ -226,6 +226,36 @@ export function computeDraftRoundsFromSlots(
   }
 }
 
+/**
+ * How many players a STARTUP draft can hand a team without leaving it over its active roster limit:
+ * the spots a drafted player is actually placed in. Starters + bench, plus devy spots (devy rounds
+ * place there). Never IR. Never taxi.
+ *
+ * 🛑 WHY TAXI IS OUT HERE THOUGH `computeDraftRoundsFromSlots` COUNTS IT FOR DYNASTY. Finalization puts
+ * every drafted non-starter on the BENCH (lib/redraft/finalizeDraftToRedraftSeason.ts), and the
+ * waiver/trade limit (lib/league/rosterLimit.ts) counts only active players against starters + bench.
+ * So each taxi round of a startup draft became one bench player over the limit. With the form's NFL
+ * dynasty defaults (10 starters, 14 bench, 3 IR, 5 taxi, 28 startup rounds) every team finished the
+ * draft 4 over a 24-player limit, and EVERY trade was refused — a 1-for-1 swap still leaves 28 > 24.
+ * Found by the dynasty season simulation, 2026-11-07. Taxi is filled by the rookie draft, with rookies.
+ *
+ * A row named TAXI / DEVY / IR is read as ONE spot type at its LARGEST count, never the sum: a TAXI row
+ * stored as `{ reserveCount: 5, taxiCount: 5 }` is five taxi spots, not ten.
+ */
+export function computeStartupDraftCapacity(slots: ReadonlyArray<RosterSlotCounts>): number {
+  let spots = 0
+  for (const s of slots) {
+    const name = String(s.slotName ?? '').trim()
+    if (IR_SLOT_RE.test(name) || TAXI_SLOT_RE.test(name)) continue
+    if (DEVY_SLOT_RE.test(name)) {
+      spots += Math.max(nz(s.devyCount), nz(s.starterCount), nz(s.benchCount), nz(s.reserveCount), nz(s.taxiCount))
+      continue
+    }
+    spots += nz(s.starterCount) + nz(s.benchCount) + nz(s.devyCount)
+  }
+  return spots
+}
+
 // ---------------------------------------------------------------------------
 // Multi-randomize
 // ---------------------------------------------------------------------------

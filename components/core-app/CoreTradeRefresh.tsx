@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 
 /** Cheap change detection; expensive Home reads run only when the trade feed changes. */
 export default function CoreTradeRefresh() {
@@ -20,13 +21,18 @@ export default function CoreTradeRefresh() {
         if (!response.ok) return
         const next = (await response.json()).version
         if (typeof next !== 'string' || controller.signal.aborted) return
+        // The first answer describes the page just rendered: a baseline, not a change. Treating it as
+        // one rebuilt Home on every open (measured on prod 2026-11-19: ~20s after load, every time).
+        if (version === null) { version = next; return }
         if (version !== next) {
           version = next
-          startRefresh(() => router.refresh())
+          // Guarded: after a deploy a background refresh is a full page reload (lib/core-app/deployGuard).
+          void refreshInBackground(() => startRefresh(() => router.refresh()))
         }
       } catch { /* Existing shell refresh remains the fallback. */ }
       finally { checking = false }
     }
+    void primeDeployBaseline()
     const timer = window.setInterval(check, 5000)
     document.addEventListener('visibilitychange', check)
     return () => { controller.abort(); window.clearInterval(timer); document.removeEventListener('visibilitychange', check) }

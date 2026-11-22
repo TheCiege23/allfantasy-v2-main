@@ -88,6 +88,6 @@ export async function POST(req: Request) {
     ok: true,
     advisoryOnly,
     recommendations,
-    note: advisoryOnly ? "Tournament is locked. AI is advisory-only and cannot modify picks." : undefined,
+    note: advisoryOnly ? "Tournament is locked. Chimmy is advisory-only and cannot modify picks." : undefined,
   })
 }

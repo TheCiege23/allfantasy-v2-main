@@ -1,3 +1,4 @@
+import { PRO_LEAGUE_TEAMS } from '@/lib/league/teamCountLimits'
 import type { LeagueSport } from '@prisma/client'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { GUILLOTINE_MAX_TEAMS, GUILLOTINE_MIN_TEAMS } from './teamCountLimits'
@@ -70,7 +71,7 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     regularSeasonWeeks: 18,
     defaultTeamCount: 17,     // 18 weeks - 1 = 17 teams
     minTeams: GUILLOTINE_MIN_TEAMS,
-    maxTeams: GUILLOTINE_MAX_TEAMS,
+    maxTeams: Math.min(GUILLOTINE_MAX_TEAMS, PRO_LEAGUE_TEAMS.NFL!),
     scoringWindowStartDay: 4, // Thursday (TNF)
     scoringWindowEndDay: 1,   // Monday (MNF)
     dailyGames: false,
@@ -90,7 +91,7 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     regularSeasonWeeks: 24,   // ~82 games over 24 scoring weeks
     defaultTeamCount: 23,     // 24 - 1 = 23 teams (large league!)
     minTeams: GUILLOTINE_MIN_TEAMS,
-    maxTeams: GUILLOTINE_MAX_TEAMS,
+    maxTeams: Math.min(GUILLOTINE_MAX_TEAMS, PRO_LEAGUE_TEAMS.NBA!),
     // NBA periods are 7 Eastern days from the Tuesday opener (lib/season-week/dailySportSeasonStarts.ts),
     // so a week runs Tuesday–Monday. The native chop (lib/guillotine/nativeGuillotineWeek.ts) fires once
     // the week is sealed (12h after the last tip) AND the 24h correction window has passed: Tuesday
@@ -114,7 +115,7 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     regularSeasonWeeks: 26,   // ~162 games over 26 scoring weeks
     defaultTeamCount: 25,     // 26 - 1 = 25 teams
     minTeams: GUILLOTINE_MIN_TEAMS,
-    maxTeams: GUILLOTINE_MAX_TEAMS,
+    maxTeams: Math.min(GUILLOTINE_MAX_TEAMS, PRO_LEAGUE_TEAMS.MLB!),
     // MLB periods are 7 Eastern days from the opener (lib/season-week/dailySportSeasonStarts.ts), and the
     // 2026 and 2027 openers are both Wednesdays, so a week runs Wednesday–Tuesday — the same correction
     // the NBA entry carries, one day later. These labels said "Monday 11am", before the week had ended.
@@ -139,7 +140,7 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     regularSeasonWeeks: 24,   // ~82 games over 24 weeks
     defaultTeamCount: 23,     // 24 - 1 = 23 teams
     minTeams: GUILLOTINE_MIN_TEAMS,
-    maxTeams: GUILLOTINE_MAX_TEAMS,
+    maxTeams: Math.min(GUILLOTINE_MAX_TEAMS, PRO_LEAGUE_TEAMS.NHL!),
     // NHL periods are 7 Eastern days from the Tuesday opener (2026-09-29), so a week runs Tuesday–Monday,
     // exactly like NBA, and the chop lands the same way. These labels said "Monday noon", a day before
     // the week even ended, and a Tuesday waiver run fell before the chop it was meant to follow.

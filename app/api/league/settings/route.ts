@@ -1,3 +1,4 @@
+import { readCommissionerStanding } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -9,6 +10,7 @@ import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return jsonError(gate.status === 404 ? 'League not found' : 'Forbidden', gate.status)
 
-  const [league, userRole, commissionerEntitlement, scoringConfig] = await Promise.all([
+  const [league, userRole, commissionerEntitlement, scoringConfig, standing] = await Promise.all([
     prisma.league.findFirst({
       where: { id: leagueId },
       include: {
@@ -44,6 +46,9 @@ export async function GET(req: NextRequest) {
     // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts).
     hasAfCommissionerPlan(session?.user ?? { id: userId }).then((hasAccess) => ({ hasAccess })),
     getLeagueScoringConfig(leagueId),
+    // The areas this viewer may change (lib/league/commissionerAccess.ts) — every area for the head commissioner,
+    // the granted ones for a co-commissioner, none for anyone else.
+    readCommissionerStanding(leagueId, userId),
   ])
 
   if (!league) return jsonError('League not found', 404)
@@ -66,6 +71,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     userRole,
+    commissionerScopes: standing.scopes,
     /** League creator (`League.userId`) — used for remove-from-AF and head-only tools. */
     leagueOwnerUserId: league.userId,
     viewerHasTeam,
@@ -96,6 +102,8 @@ export async function GET(req: NextRequest) {
       survivorMode: league.survivorMode ?? null,
       guillotineMode: league.guillotineMode ?? null,
       bestBallMode: league.bestBallMode ?? null,
+      // Classic Best Ball or best ball Guilly — the AutoCoach card reads this, not the column alone.
+      lineupSetsItself: bestBallLineupSetsItself(league),
       autoCoachEnabled: league.autoCoachEnabled ?? true,
       rosterSize: league.rosterSize,
       totalRosterSlots,

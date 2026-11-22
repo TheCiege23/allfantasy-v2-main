@@ -7,11 +7,16 @@ import { DraftChatPanel, type DraftChatPanelProps } from '@/components/app/draft
 
 interface DraftChatDockProps extends DraftChatPanelProps {
   unreadCount?: number
+  /**
+   * False in the live room (2026-11-19): the chat always sits under its own Chat tab there, so a
+   * "CHAT ^" bar that collapses it only cost a line and could leave the tab empty.
+   */
+  collapsible?: boolean
 }
 
 const CHAT_EXPANDED_KEY = 'af:draft-chat-expanded'
 
-export function DraftChatDock({ unreadCount = 0, ...chatProps }: DraftChatDockProps) {
+export function DraftChatDock({ unreadCount = 0, collapsible = true, ...chatProps }: DraftChatDockProps) {
   const [expanded, setExpanded] = useState(true)
   const [mounted, setMounted] = useState(false)
 
@@ -42,6 +47,14 @@ export function DraftChatDock({ unreadCount = 0, ...chatProps }: DraftChatDockPr
 
   if (!mounted) {
     return null
+  }
+
+  if (!collapsible) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col bg-slate-950/50" data-testid="draft-chat-dock">
+        <DraftChatPanel {...chatProps} />
+      </div>
+    )
   }
 
   return (

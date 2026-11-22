@@ -31,11 +31,11 @@ import { groupProviderTrades, renderProviderTrade, type ProviderTrade, type Prov
 const WATERMARK_KEY = 'provider-trade-notify:v1:watermark'
 const SENT_PREFIX = 'provider-trade-notify:sent:v1:'
 const OVERLAP_MS = 15 * 60 * 1000
-export const FRESH_TRADE_MS = 48 * 60 * 60 * 1000
+const FRESH_TRADE_MS = 48 * 60 * 60 * 1000
 const SENT_CLAIM_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_ROWS = 500
 
-export type ProviderTradeNotifyResult = {
+type ProviderTradeNotifyResult = {
   bootstrapped: boolean
   rows: number
   trades: number

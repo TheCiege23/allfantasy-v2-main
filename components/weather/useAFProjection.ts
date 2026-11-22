@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import {
   parseAfProjectionResponse,
   toAFProjectionDisplay,
@@ -106,9 +107,10 @@ export function useAFProjection(params: UseAFProjectionParams) {
       const raw = await res.json()
       if (!res.ok) {
         const errMsg =
-          raw && typeof raw === 'object' && typeof (raw as { error?: unknown }).error === 'string'
+          readPlanRefusal(res.status, raw)?.message ??
+          (raw && typeof raw === 'object' && typeof (raw as { error?: unknown }).error === 'string'
             ? (raw as { error: string }).error
-            : 'AF projection unavailable'
+            : 'AF projection unavailable')
         throw new Error(errMsg)
       }
       const parsed = parseAfProjectionResponse(raw)

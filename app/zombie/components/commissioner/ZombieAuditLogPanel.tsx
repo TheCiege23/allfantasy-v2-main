@@ -141,7 +141,7 @@ export function ZombieAuditLogPanel({ leagueId, canEdit }: { leagueId: string; c
               className={clsx(
                 'rounded-lg px-3 py-1.5 text-[11px] font-semibold capitalize transition',
                 visibilityFilter === v
-                  ? 'bg-[var(--zombie-crimson)]/20 text-[var(--zombie-crimson)]'
+                  ? 'bg-zombie-crimson/20 text-[var(--zombie-crimson)]'
                   : 'text-[var(--zombie-text-dim)] hover:bg-white/[0.04]',
               )}
             >

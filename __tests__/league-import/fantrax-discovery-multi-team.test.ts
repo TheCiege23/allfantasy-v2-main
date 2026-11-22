@@ -14,7 +14,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: { deletedLeagueTombstone: { findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) } },
 }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser, requireAgeConfirmedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/league-sync-core', () => ({ getDecryptedAuth: vi.fn(async () => ({ apiKey: 'secret-id' })) }))
 vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({ getFantraxLeagues: h.getFantraxLeagues }))
 

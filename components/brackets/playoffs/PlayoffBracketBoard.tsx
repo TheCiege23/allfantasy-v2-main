@@ -280,6 +280,8 @@ export default function PlayoffBracketBoard({
                       {showLockDiagnostics ? (
                         <div
                           data-testid={`playoff-series-lock-diagnostics-${item.id}`}
+                          /* Diagnostic for the lock tests, not copy: in the DOM, never on screen. */
+                          hidden
                           className="mb-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-500"
                         >
                           lockRule={String(lockRule ?? "series_start")}; allowTestLatePicks={String(lockDiagnostics?.allowTestLatePicks ?? false)}; viewerCanLatePick={String(lockDiagnostics?.viewerCanLatePick ?? latePicksEnabled)}; reason={lockedReason ?? "unlocked"}
@@ -323,12 +325,18 @@ export default function PlayoffBracketBoard({
                             Final: {finalGame.homeTeam} {finalGame.homeScore ?? "-"}, {finalGame.awayTeam} {finalGame.awayScore ?? "-"}
                           </p>
                         ) : null}
-                        <p data-testid={`playoff-series-next-${item.id}`}>
-                          Next: {nextGameLabel} — {item.broadcastNetwork || "TBD"}
-                        </p>
-                        <p data-testid={`playoff-series-venue-${item.id}`}>
-                          {item.venue ? `At ${item.venue}` : "Venue TBD"}
-                        </p>
+                        {/* A finished series has no next game: "Next: TBD — TBD · Venue TBD" under "Celtics won 4-1"
+                            read as if it were still to be played. */}
+                        {item.status !== "final" ? (
+                          <>
+                            <p data-testid={`playoff-series-next-${item.id}`}>
+                              Next: {nextGameLabel} — {item.broadcastNetwork || "TBD"}
+                            </p>
+                            <p data-testid={`playoff-series-venue-${item.id}`}>
+                              {item.venue ? `At ${item.venue}` : "Venue TBD"}
+                            </p>
+                          </>
+                        ) : null}
                       </div>
                       {showPickResults ? (
                         <div

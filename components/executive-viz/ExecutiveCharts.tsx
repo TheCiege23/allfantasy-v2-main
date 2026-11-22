@@ -35,7 +35,7 @@ const EXECUTIVE_STATUS_STROKE: Record<ExecutiveHealthStatus, string> = {
   unavailable: 'text-muted',
 }
 
-export type ExecutiveBarItem = {
+type ExecutiveBarItem = {
   key: string
   label: string
   value: number

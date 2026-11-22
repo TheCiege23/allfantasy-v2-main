@@ -1,5 +1,6 @@
 // lib/legacy-import.ts
 import { computeAndSaveRank } from '@/lib/ranking/computeAndSaveRank';
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { prisma } from './prisma';
 import {
   getUserLeagues,
@@ -81,9 +82,6 @@ function detectLeagueFormats(league: SleeperLeague): { isSF: boolean; isTEP: boo
     pos === 'SUPER_FLEX' || pos === 'SF' || pos === 'OP'
   );
   
-  // Detect TEP: Check if TE has bonus reception points
-  // TEP means TE receptions are worth more than WR/RB receptions
-  const recValue = scoringSettings.rec ?? 0;
   const tePremValue = scoringSettings.bonus_rec_te ?? scoringSettings.rec_te ?? 0;
   
   const isTEP = tePremValue > 0;
@@ -569,6 +567,10 @@ async function importLeague(
   );
 
   if (userRoster) {
+    if (league.status === 'complete' && (specialtyFormat === 'guillotine' || Number(league.settings?.type) === 3)) {
+      const linked = await prisma.appUser.findUnique({ where: { legacyUserId: userId }, select: { id: true } }).catch(() => null);
+      if (linked) await importSleeperSurvival({ userId: linked.id, platformLeagueId: leagueId, season }, league, rosters, sleeperUserId);
+    }
     const isChampion = championRosterId !== null && championRosterId === userRoster.rosterId;
     
     // Compute finalStanding: champion = 1, else fallback to rank
@@ -647,19 +649,3 @@ export async function syncLegacyLeagueFromSleeper(
   await importLeague(legacyUserId, sleeperUserId, league, season)
 }
 
-// Legacy function for backward compatibility
-export async function runLegacyImport(
-  jobId: string,
-  userId: string,
-  sleeperUserId: string,
-  options: { concurrency?: number; seasonBackoffMinMs?: number; seasonBackoffMaxMs?: number } = {}
-) {
-  let done = false;
-  while (!done) {
-    const result = await runLegacyImportStep(jobId, userId, sleeperUserId);
-    done = result.done;
-    if (!done) {
-      await jitterSleep(options.seasonBackoffMinMs ?? 100, options.seasonBackoffMaxMs ?? 200);
-    }
-  }
-}

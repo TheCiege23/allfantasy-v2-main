@@ -15,9 +15,9 @@ import { WATCH_OUT_STATES, type WatchCouncilRow } from './watchModel'
 
 export type FanCouncilRow = WatchCouncilRow & { id: string }
 export type FanCastawayRow = { id: string; userId: string; displayName: string; tribeId: string | null; playerState: string }
-export type FanPredictionRow = { councilId: string; fanUserId: string; pickedUserId: string }
+type FanPredictionRow = { councilId: string; fanUserId: string; pickedUserId: string }
 export type FanChoice = { key: string; name: string }
-export type FanLeaderRow = { fanUserId: string; correct: number; calls: number }
+type FanLeaderRow = { fanUserId: string; correct: number; calls: number }
 
 /** The council fans can call now, or null when votes are not open. */
 export function openFanCouncil(councils: readonly FanCouncilRow[], now: Date): FanCouncilRow | null {

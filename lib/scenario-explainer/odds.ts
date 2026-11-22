@@ -18,7 +18,7 @@ export type PickRuleKind = 'lottery' | 'reverse_standings' | 'lowest_points'
 /** One team's final line in one simulated season, best first (rank 1 = best). */
 export type RunRow = { rosterId: string; rank: number; wins: number; losses: number; ties: number; pointsFor: number }
 
-export type FirstPickOdds = {
+type FirstPickOdds = {
   /** Chance at the #1 pick, 0–100. For a lottery, averaged over the lottery's own odds in each run. */
   firstPickPct: number
   /** Chance of finishing with the worst line outside the playoffs (the lottery's top seed, if any). */
@@ -82,9 +82,9 @@ export function firstPickOdds(
 
 // ── Guillotine ──────────────────────────────────────────────────────────────
 
-export type ChopTeam = { rosterId: string; mu: number; sigma: number }
+type ChopTeam = { rosterId: string; mu: number; sigma: number }
 
-export type ChopOdds = {
+type ChopOdds = {
   /** Chance of NOT being chopped this week. */
   surviveWeekPct: number
   /** Chance of surviving every remaining chop. */
@@ -93,7 +93,7 @@ export type ChopOdds = {
   expectedChopsSurvived: number
 }
 
-export type ChopSimResult = {
+type ChopSimResult = {
   chopWeeks: number
   odds: Map<string, ChopOdds>
   /**

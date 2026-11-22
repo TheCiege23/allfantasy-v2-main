@@ -10,7 +10,7 @@ const cache = new Map<string, { svg: string; etag: string }>()
 const ALLOWED_PARAMS = new Set(['tribe', 'sport', 'kit', 'p', 's', 'name', 'v'])
 const MAX_RAW_NAME = 128
 
-export type TribeEmblemResult =
+type TribeEmblemResult =
   | { ok: true; status: 200 | 304; svg: string; headers: Record<string, string> }
   | { ok: false; status: 400 | 404; error: string }
 

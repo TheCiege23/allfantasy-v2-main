@@ -15,14 +15,8 @@
  * by any live route.
  */
 
-import type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload } from '@/lib/matchup-center/types'
-import type { LineupActionItem } from '@/lib/lineup-actions/types'
+import type { MatchupCenterPayload } from '@/lib/matchup-center/types'
 import type { RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
-import type { ManagerBehaviorProfile, PlayerExposure as KnowledgeGraphPlayerExposure } from '@/lib/shared-services/knowledge-graph/types'
-
-export type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload, LineupActionItem }
-/** Re-exported under an unambiguous name — never conflate with this module's own UserPlayerExposure (private, per-user, unrelated persistence/privacy model). See README §"Private user exposure vs Knowledge Graph exposure". */
-export type { KnowledgeGraphPlayerExposure }
 
 /**
  * Richer, provider-neutral matchup state than MatchupCenterPayload's own
@@ -46,7 +40,7 @@ export type GameDayMatchupState =
   | 'stale'
   | 'unavailable'
 
-export interface SourceAttribution {
+interface SourceAttribution {
   source: string
   fetchedAt: string
   providerTimestamp: string | null
@@ -125,16 +119,7 @@ export interface UserPlayerExposure {
   gameWindow: GameWindowId | null
 }
 
-export type GameWindowId = string
-
-export interface GameWindow {
-  id: GameWindowId
-  sport: string
-  label: string
-  startTime: string | null
-  endTime: string | null
-  gameCount: number
-}
+type GameWindowId = string
 
 export type LineupAttentionReasonCode =
   | 'starter_ruled_out'
@@ -172,49 +157,3 @@ export interface LineupAttentionItem {
   providerDeepLink: string | null
 }
 
-export interface ManagerTendencyContext {
-  status: 'ok' | 'gated' | 'unavailable'
-  reason: string | null
-  profile: ManagerBehaviorProfile | null
-}
-
-export interface GameDayDivergenceItem {
-  category:
-    | 'missing_league'
-    | 'missing_roster'
-    | 'missing_player'
-    | 'starter_mismatch'
-    | 'score_mismatch'
-    | 'projection_mismatch'
-    | 'status_mismatch'
-    | 'game_state_mismatch'
-    | 'freshness_mismatch'
-    | 'alert_severity_mismatch'
-  leagueId: string
-  playerId: string | null
-  primaryValue: string | null
-  legacyValue: string | null
-  notes: string[]
-}
-
-export interface GameDaySnapshot {
-  snapshotId: string
-  userId: string
-  generatedAt: string
-  includedLeagueIds: string[]
-  leagues: LeagueGameDayContext[]
-  exposures: UserPlayerExposure[]
-  attentionItems: LineupAttentionItem[]
-  gameWindows: GameWindow[]
-  managerTendency: ManagerTendencyContext
-  dataQuality: {
-    leagueCount: number
-    unavailableLeagueCount: number
-    staleMatchupCount: number
-  }
-  freshnessSummary: {
-    oldestFetchedAt: string | null
-    newestFetchedAt: string | null
-  }
-  divergence: GameDayDivergenceItem[]
-}

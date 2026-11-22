@@ -6,7 +6,7 @@
  * Honest-instrumentation design: the canonical evaluation
  * (`runTradeEvaluateDecision`) requires league scope, BOTH roster identities and a
  * persisted deterministic snapshot (wrap-fidelity). The non-proposal surfaces
- * (Trade Value Console, dynasty analyzer, keeper analyzer, draft-pick builder) do
+ * (Trade Value Console, keeper analyzer, draft-pick builder) do
  * not have all of those inputs today. Rather than fake an evaluation, each surface
  * emits a STRUCTURED shadow event that:
  *   1. names exactly which canonical inputs are missing (the convergence roadmap —
@@ -28,10 +28,12 @@ import { shouldRunShadow } from '@/lib/decision-os/core/shadow'
  * Until they did, the Phase 3 flip gate could report "ready" while excluding
  * the HIGHEST-TRAFFIC trade surface in the product — the Nocturne dashboard's
  * "Trade Analyzer" tile routes into /af-legacy, not the console.
+ *
+ * 2026-11-12: `dynasty` left it — /dynasty-trade-analyzer and its API were retired into
+ * /trade-evaluator, which grades through the one engine.
  */
 export type TradeSurface =
   | 'console'
-  | 'dynasty'
   | 'keeper'
   | 'draftpick'
   | 'legacy'
@@ -43,7 +45,6 @@ export type TradeSurface =
 
 const SURFACE_FLAGS: Record<TradeSurface, string> = {
   console: 'DECISION_OS_TRADE_SHADOW_CONSOLE',
-  dynasty: 'DECISION_OS_TRADE_SHADOW_DYNASTY',
   keeper: 'DECISION_OS_TRADE_SHADOW_KEEPER',
   draftpick: 'DECISION_OS_TRADE_SHADOW_DRAFTPICK',
   legacy: 'DECISION_OS_TRADE_SHADOW_LEGACY',

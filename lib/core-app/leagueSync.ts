@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -163,7 +164,7 @@ export async function getLeagueSync(
   const roster = member
     ? null
     : await prisma.roster
-        .findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+        .findFirst({ where: managedRosterWhere(leagueId, userId), select: { id: true } })
         .catch(() => null)
 
   if (!member && !roster) {

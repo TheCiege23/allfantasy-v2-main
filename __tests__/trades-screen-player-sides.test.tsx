@@ -70,7 +70,9 @@ describe('trades screen — directional player sides', () => {
     const t = record()
     t.players[0] = { ...t.players[0], picks: ['2027 round 2'], grade: 'A', gradeBasis: 'Market', gradeNote: 'Market value edge 41%' }
     const { container } = render(<Trades data={{ ...data([t]), canonicalHistory: true }} />)
-    expect(screen.getByText(/2027 round 2/)).toBeTruthy()
+    // Its own chip, as a pick reads everywhere else (2026-11-14) — not ", 2027 round 2" before its value.
+    expect(screen.getByTestId('trade-pick-asset').textContent).toContain('2027 2nd')
+    expect(container.textContent).not.toContain('2027 round 2')
     expect(screen.getByText('A')).toBeTruthy()
     expect(screen.getByText(/Market · Market value edge 41%/)).toBeTruthy()
     expect(container.textContent).not.toContain('n/a')

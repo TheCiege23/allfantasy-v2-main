@@ -92,25 +92,19 @@ describe('bracket format on a League Settings page', () => {
 })
 
 describe('playoff stages on a League Settings page', () => {
-  it('has no Save button of its own; the page bar saves the stages', async () => {
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      if (init?.method !== 'PUT') return json(stagesView)
-      const body = JSON.parse(String(init.body))
-      if (body.preview) return json({ adjustment: null })
-      return json({ config: { ...stagesView.config, includedStages: body.includedStages } })
-    })
+  // 🛑 Postseason stages never changed the playoffs, so they are "coming soon" (2026-11-15): nothing to toggle or save.
+  it('shows the stages as coming soon: no toggle, no save bar, nothing sent', async () => {
+    fetchMock.mockImplementation(() => json(stagesView))
     render(
       <SettingsSaveScope>
         <PlayoffSettingsEditor leagueId="L" />
       </SettingsSaveScope>,
     )
-    fireEvent.click(await screen.findByText('Third-place game'))
-    expect(screen.queryByText('Save playoff settings')).toBeNull()
-
-    fireEvent.click(screen.getByTestId('lsh-save-changes'))
-    await waitFor(() => expect(screen.getByTestId('lsh-savebar').textContent).toContain('Saved'))
-    const saves = fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT' && !JSON.parse(String(init.body)).preview)
-    expect(saves).toHaveLength(1)
-    expect(JSON.parse(saves[0]![1].body)).toEqual({ includedStages: ['third_place'] })
+    const stage = (await screen.findByText('Third-place game')).closest('button')!
+    expect(stage.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(stage)
+    expect(screen.getByTestId('playoff-stages-coming-soon')).toBeTruthy()
+    expect(screen.queryByTestId('lsh-save-changes')).toBeNull()
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT' && !JSON.parse(String(init.body)).preview)).toBe(false)
   })
 })

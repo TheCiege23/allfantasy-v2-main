@@ -5,7 +5,7 @@
 
 import { groupLeaguesBySport, type LeagueForGrouping, type SportGroup } from "./DashboardSportGroupingService"
 
-export interface LeagueSummaryCounts {
+interface LeagueSummaryCounts {
   totalLeagues: number
   totalBracketPools: number
   totalBracketEntries: number

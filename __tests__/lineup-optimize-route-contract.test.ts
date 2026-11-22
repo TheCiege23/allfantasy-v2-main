@@ -11,6 +11,11 @@ vi.mock('next-auth', () => ({
 vi.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
+// These tests exercise the route for a user who HAS the plan; the gate itself is covered in
+// __tests__/monetization/gate-free-paid-features.test.ts.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: vi.fn(async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null })),
+}))
 
 vi.mock('@/lib/league-access', () => ({
   assertLeagueMember: assertLeagueMemberMock,

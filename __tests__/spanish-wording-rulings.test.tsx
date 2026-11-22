@@ -73,7 +73,6 @@ import type { CommissionerLeagueProfile } from '@/lib/commissioner-os/profile/ty
 import type { ManagerPresence, PresenceManager } from '@/lib/core-app/managerPresence'
 import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getLandingCopy } from '@/lib/i18n/landing-copy'
-import { getNocturneCopy } from '@/components/landing/nocturne/copy.i18n'
 import { LANDING_COPY as JOURNEY_COPY } from '@/components/landing/journey/copy'
 import { DRAFT_TOPICS } from '@/lib/core-app/help-topics/draft'
 import { OUTLOOK_TOPICS } from '@/lib/core-app/help-topics/outlook'
@@ -834,7 +833,6 @@ describe('no Spanish value says «waiver» (the owner: "fix all")', () => {
       'lib/i18n/landing-copy.ts',
       'lib/core-app/help-topics/home.ts',
       'lib/core-app/teamWorkspaceCopy.ts',
-      'components/landing/nocturne/copy.i18n.ts',
       'components/core-app/screens/DraftPhase4.tsx',
     ])
       expect(rel, must).toContain(must)
@@ -855,7 +853,6 @@ describe('no Spanish value says «waiver» (the owner: "fix all")', () => {
       ['translations.es', es],
       ['landing (prices)', getLandingCopy('es', prices)],
       ['landing (no prices)', getLandingCopy('es', null)],
-      ['nocturne', getNocturneCopy('es')],
       ['journey', JOURNEY_COPY.es],
       ...Object.entries({ HOME_TOPICS, CAREER_TOPICS, DRAFT_TOPICS, OUTLOOK_TOPICS, RANKINGS_TOPICS, TRADES_TOPICS, WAIVERS_TOPICS }).map(
         ([name, topics]): [string, unknown] => [name, Object.fromEntries(Object.entries(topics).map(([k, t]) => [k, (t as { es: unknown }).es]))],
@@ -913,8 +910,6 @@ describe('no Spanish value says «waiver» (the owner: "fix all")', () => {
     expect(teamWorkspaceCopy('Waiver deadlines', 'es')).toBe('Plazos de reclamos')
     expect(teamWorkspaceCopy('Waiver deadlines', 'en')).toBe('Waiver deadlines')
 
-    expect(JSON.stringify(getNocturneCopy('es'))).toContain('Reclamos hoy')
-    expect(JSON.stringify(getNocturneCopy('en'))).toContain('Waiver today')
     expect(JOURNEY_COPY.es.journey.waiverWednesday.eyebrow).toBe('Miércoles de reclamos')
     expect(JOURNEY_COPY.en.journey.waiverWednesday.eyebrow).toBe('Waiver Wednesday')
   })

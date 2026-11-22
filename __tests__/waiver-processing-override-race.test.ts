@@ -8,6 +8,12 @@ vi.mock('@/lib/waiver-wire/season-phase-gate', () => ({
 
 const h = vi.hoisted(() => ({ claimUpdate: vi.fn(), tx: vi.fn(), result: vi.fn(), locked: vi.fn(), hook: vi.fn(), runUpdate: vi.fn() }))
 const metadata = { commissionerOverrides: { bypassInsufficientFaab: true } }
+// The engine takes its per-league run lock through this module; its Postgres path calls
+// `prisma.$transaction`, which these tests count, so it is stubbed to always acquire.
+vi.mock('@/lib/automation/locks', () => ({
+  acquireAutomationLock: async () => ({ ok: true, backend: 'postgres' }),
+  releaseAutomationLock: async () => {},
+}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: async () => ({ id: 'L', rosterSize: 20, sport: 'NFL' }) },
   waiverClaim: { findMany: async () => [{ id: 'C', leagueId: 'L', rosterId: 'R', addPlayerId: 'new', dropPlayerId: null, faabBid: 0, priorityOrder: 1, status: 'pending', metadata, roster: { id: 'R', platformUserId: '', playerData: [], faabRemaining: 10, waiverPriority: 1 } }], update: h.claimUpdate },

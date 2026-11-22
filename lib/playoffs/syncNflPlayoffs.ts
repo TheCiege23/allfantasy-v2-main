@@ -18,8 +18,8 @@ import { assignNflSlots, orientToSlot, parseNflPlayoffScoreboard, type NflPlayof
  */
 
 const dayKey = (date: Date) => date.toISOString().slice(0, 10).replace(/-/g, "")
-export const nflPlayoffsCacheKey = (season: number) => `BRACKET:nfl:automatic:${season}`
-export type NflPlayoffsSnapshot = { games: NflPlayoffGame[]; checkedDates: Record<string, string>; cursor: number; syncedAt: string }
+const nflPlayoffsCacheKey = (season: number) => `BRACKET:nfl:automatic:${season}`
+type NflPlayoffsSnapshot = { games: NflPlayoffGame[]; checkedDates: Record<string, string>; cursor: number; syncedAt: string }
 
 /**
  * The postseason window, in the calendar year AFTER the season starts:
@@ -27,7 +27,7 @@ export type NflPlayoffsSnapshot = { games: NflPlayoffGame[]; checkedDates: Recor
  * second Sunday of February. Generous at both ends; a day with no games costs
  * one empty request.
  */
-export function nflPostseasonDays(season: number): string[] {
+function nflPostseasonDays(season: number): string[] {
   const days: string[] = []
   for (let d = new Date(Date.UTC(season + 1, 0, 6)); d <= new Date(Date.UTC(season + 1, 1, 20)); d.setUTCDate(d.getUTCDate() + 1)) {
     days.push(dayKey(d))
@@ -36,7 +36,7 @@ export function nflPostseasonDays(season: number): string[] {
 }
 
 /** True from New Year's Day to a week after the latest possible Super Bowl. Outside it, no provider call. */
-export function nflPostseasonWindowOpen(season: number, now = new Date()): boolean {
+function nflPostseasonWindowOpen(season: number, now = new Date()): boolean {
   return now.getTime() >= Date.UTC(season + 1, 0, 1) && now.getTime() <= Date.UTC(season + 1, 1, 27)
 }
 

@@ -267,7 +267,7 @@ Format your response as JSON with this exact structure:
   } catch (err: any) {
     console.error('[AI Coach] Error:', err?.message || err)
     return NextResponse.json(
-      { error: 'AI Coach failed' },
+      { error: 'Chimmy Coach failed' },
       { status: 500 },
     )
   }

@@ -34,4 +34,3 @@ export function PhoneFold({ title, children, defaultOpen = false }: { title: str
   )
 }
 
-export default PhoneFold

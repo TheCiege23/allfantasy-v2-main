@@ -5,7 +5,7 @@
  * fleaflickerId — confirmed by reading prisma/schema.prisma directly — and, since
  * 2026-08-31, `fantraxId`. The migration this note called out of scope has been
  * applied, and the column is written weekly by
- * `lib/devy/ingestFantraxPlayerIdentities.ts`.
+ * `lib/player-identity/ingestNcaafFantraxIdentities.ts` (CFB) and its pro/NFL siblings.
  *
  * There is still **NO yahooId column** — a real, pre-existing gap first documented in
  * the Phase 1 Identity Service, and still true. Yahoo resolution falls straight to

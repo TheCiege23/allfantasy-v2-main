@@ -179,7 +179,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="app_generated">App-generated names</SelectItem>
-                <SelectItem value="ai_themed">AI-themed names</SelectItem>
+                <SelectItem value="ai_themed">Chimmy-themed names</SelectItem>
                 <SelectItem value="commissioner_custom">I will name each league (one per line below)</SelectItem>
               </SelectContent>
             </Select>
@@ -534,6 +534,27 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 <option value="when_remaining">When X houseguests remain</option>
                 <option value="fixed_week">Fixed week number</option>
               </select>
+              {/* The number the mode needs; without it the game falls back (lib/big-brother/bigBrotherSetupRules.ts). */}
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                inputMode="numeric"
+                value={v.bigBrotherJuryValue ?? ''}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  onChange({ bigBrotherJuryValue: e.target.value === '' || !Number.isFinite(n) || n < 1 ? null : Math.floor(n) })
+                }}
+                placeholder={
+                  (v.bigBrotherJuryMode ?? 'after_eliminations') === 'fixed_week'
+                    ? 'Week the jury starts (required)'
+                    : (v.bigBrotherJuryMode ?? 'after_eliminations') === 'when_remaining'
+                      ? 'Houseguests left (default 9)'
+                      : 'Evictions before the jury (default 7)'
+                }
+                aria-label="Jury start number"
+                className="border-white/20 bg-[#030a20] text-white"
+              />
             </div>
           </div>
 
@@ -548,7 +569,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               >
                 <option value="deterministic_score">Fantasy score (highest weekly score wins)</option>
                 <option value="hybrid">Hybrid (score + challenge factor)</option>
-                <option value="ai_theme">AI-themed challenges</option>
+                <option value="ai_theme">Chimmy-themed challenges</option>
               </select>
             </div>
             <div className="space-y-1.5">

@@ -14,8 +14,8 @@ const FUND_ITEMS = [
   },
   {
     icon: Brain,
-    title: 'AI & Data Costs',
-    desc: 'Powering trade evaluations, player rankings, and the AI tools you rely on.',
+    title: 'Chimmy & Data Costs',
+    desc: 'Powering trade evaluations, player rankings, and Chimmy tools you rely on.',
     color: '#a855f7',
   },
   {

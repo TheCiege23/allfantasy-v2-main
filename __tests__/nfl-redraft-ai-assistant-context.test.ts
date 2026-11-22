@@ -51,6 +51,8 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 const root = resolve(__dirname, '..')
 function read(rel: string): string {
@@ -164,8 +166,8 @@ describe('Orphan AI pick is the only AI surface that writes — and it routes th
   const route = read('app/api/leagues/[leagueId]/draft/ai-pick/route.ts')
   const svc = read('lib/orphan-ai-manager/OrphanAIManagerService.ts')
 
-  it('orphan AI route is gated on assertCommissioner', () => {
-    expect(route).toMatch(/await assertCommissioner\(leagueId, userId\)/)
+  it('orphan AI route is gated on the shared commissioner rule (league setup)', () => {
+    expect(route).toMatch(/await assertCommissionerAccess\(leagueId, userId, 'league'\)/)
   })
 
   it('orphan AI route delegates to executeDraftPickForOrphan', () => {
@@ -273,7 +275,7 @@ describe('Commit J / L / M / N / O / P / Q / R / S / T locks still hold after Co
 
   it('Commit S — DraftTeamPanel still computes teamNeeds and byeClusters', () => {
     const dtp = read('components/app/draft-room/DraftTeamPanel.tsx')
-    expect(dtp).toMatch(/computeTeamNeeds\(\{ picks: myPicks, starterSlots \}\)/)
+    expect(dtp).toMatch(/computeStarterNeedsForDisplay\(\{ picks: myPicks, starterSlots \}\)/)
     expect(dtp).toMatch(/detectByeWeekClusters\(myPicks\)/)
   })
 

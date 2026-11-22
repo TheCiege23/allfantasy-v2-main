@@ -54,7 +54,6 @@ import { demoManagerIntelligenceClient } from '@/lib/commissioner-ui/managers/de
 import { stubManagerIntelligenceClient } from '@/lib/commissioner-ui/managers/decision-os-client/stub'
 import type { CommissionerRecommendationContract, CommissionerRecommendationStatus } from '@/lib/commissioner-ui/contracts'
 import type { LeagueHealthDetail, LeagueHealthEvidencePoint, LeagueHealthRisk } from '@/lib/commissioner-ui/league-health/decision-os-client'
-import type { ManagerDnaProfile } from '@/lib/commissioner-ui/managers/decision-os-client/types'
 import { cardsCopy, cosLoaderText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 const source = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
@@ -215,9 +214,10 @@ describe('the live sentences are the loaders’ own, verbatim', () => {
       "?? 'Unknown'",
     ])
       expect(lh).toContain(t)
+    // The directory is every manager's Competitive Edge record (2026-11-16); its own sentences are errors.
     const mgr = source('lib', 'commissioner-ui', 'managers', 'decision-os-client', 'live.ts')
-    expect(mgr).toContain("'Major inactivity detected — may benefit from a personal check-in'")
-    expect(mgr).toContain("'Engagement declining over recent periods — may benefit from a personal check-in'")
+    expect(mgr).toContain("'No active league could be resolved for this session.'")
+    expect(mgr).toContain("'Manager records could not be read right now.'")
     expect(source('lib', 'commissioner-managers', 'managerNames.ts')).toContain("UNKNOWN_MANAGER_NAME = 'Unknown manager'")
   })
 
@@ -422,34 +422,24 @@ describe('League Health in Spanish', () => {
 })
 
 describe('Manager Intelligence in Spanish', () => {
-  it('the demo directory, the stub, and the live shape', async () => {
+  // Demo only: the stub's placeholder name ("Test Manager One") is written INTO its record's sentences,
+  // and a name is never translated — it would read as English left over.
+  it('the demo directory: every record line, the summaries and the screen\u2019s own words', async () => {
     lang.language = 'es'
     const demo = (await demoManagerIntelligenceClient.getManagerDirectory()).data!
-    const stub = (await stubManagerIntelligenceClient.getManagerDirectory()).data!
-    const live: ManagerDnaProfile[] = [
-      { id: 'l1', managerName: 'Unknown manager', engagementReliability: 'unreliable', riskFlag: 'Major inactivity detected — may benefit from a personal check-in' },
-      { id: 'l2', managerName: 'Rook', engagementReliability: 'inconsistent', engagementTrend: 'declining', riskFlag: 'Engagement declining over recent periods — may benefit from a personal check-in' },
-      { id: 'l3', managerName: 'Bishop', engagementReliability: 'reliable', engagementTrend: 'steady' },
-    ]
-    const { container } = render(<ManagerIntelligenceView managers={[...demo, ...stub.map((m) => ({ ...m, managerName: 'Knight' })), ...live]} dataMode="live" />)
+    const { container } = render(<ManagerIntelligenceView managers={demo} dataMode="live" />)
     for (const s of [
-      'Antigüedad: 3 temporadas',
-      'Antigüedad: 1 temporada',
-      'En alza',
-      'En descenso',
-      'Estable',
-      'Fiabilidad: 96',
-      'Fiabilidad: Muchas ausencias',
-      'Fiabilidad: Algunas ausencias',
-      'Fiabilidad: Constante',
-      'El que más intercambia esta temporada: 7 intercambios completados',
-      'Su participación baja desde hace 2 semanas: podría venirle bien un contacto personal',
-      'El mánager activo sin interrupción desde hace más tiempo: 4.ª temporada',
-      'Se unió hace poco como cocomisionado',
-      'Mánager desconocido',
-      'Inactividad importante detectada: podría venirle bien un contacto personal',
-      'Su participación baja en los últimos periodos: podría venirle bien un contacto personal',
+      'Lo que ha hecho cada mánager',
+      'Historial completo',
+      'Intercambios',
+      'Reclamos esta temporada',
+      'Drafts anteriores',
       'Priya Natarajan',
+      '4 intercambios',
+      'reclamos ganados esta temporada',
+      '$41 de FAAB',
+      'Priya Natarajan adquirió un WR en 3 de sus 4 intercambios y cedió uno en 1.',
+      'A Priya Natarajan le quedan $41 de FAAB.',
     ])
       expect(container.textContent, s).toContain(s)
     expectNoEnglish(container)
@@ -458,13 +448,14 @@ describe('Manager Intelligence in Spanish', () => {
   it('the empty directory', () => {
     lang.language = 'es'
     const { container } = render(<ManagerIntelligenceView managers={[]} dataMode="live" />)
-    expect(screen.getByText('Aún no hay historial de mánagers.')).toBeTruthy()
+    expect(screen.getByText('Todavía no hay mánagers en esta liga.')).toBeTruthy()
     expectNoEnglish(container)
   })
 
-  it('a real manager name is never run through a sentence translator', () => {
+  it('a real manager name is never run through a sentence translator', async () => {
     lang.language = 'es'
-    render(<ManagerIntelligenceView managers={[{ id: 'x', managerName: 'Act', tenureSeasons: 1 }]} dataMode="live" />)
+    const [first] = (await stubManagerIntelligenceClient.getManagerDirectory()).data!
+    render(<ManagerIntelligenceView managers={[{ ...first!, managerName: 'Act' }]} dataMode="live" />)
     expect(screen.getByText('Act')).toBeTruthy()
   })
 })
@@ -646,7 +637,7 @@ describe('English mode is unchanged', () => {
     cleanup()
 
     const m = render(<ManagerIntelligenceView managers={(await demoManagerIntelligenceClient.getManagerDirectory()).data!} dataMode="live" />)
-    for (const s of ['Tenure: 3 seasons', 'Tenure: 1 season', 'Rising', 'Reliability: 96', 'Most active trader this season — 7 completed trades'])
+    for (const s of ['4 trades', 'waiver claims won this season', '$41 FAAB left', 'Full record', 'Priya Natarajan took on a WR in 3 of their 4 trades and sent one away in 1.'])
       expect(m.container.textContent, s).toContain(s)
     cleanup()
 

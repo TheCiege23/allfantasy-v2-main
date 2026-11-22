@@ -35,21 +35,21 @@ export function buildTeamDefensePlayerId(teamAbbr: string): string {
   return `nfl:def:${normalizeNflTeam(teamAbbr)}`
 }
 
-export type TeamDefenseBoxScoreEntry = {
+type TeamDefenseBoxScoreEntry = {
   /** Team abbreviation (any common variant; normalized, e.g. JAC→JAX). */
   teamAbbr: string
   /** Raw provider defensive payload (canonical or aliased keys). */
   stats: Record<string, unknown>
 }
 
-export type TeamDefGameLogEntry = { week: number } & Record<string, number>
+type TeamDefGameLogEntry = { week: number } & Record<string, number>
 
 /**
  * Merge one week's normalized DST stats into an existing cached game-log payload,
  * replacing any existing entry for that week (idempotent + stat-correction safe).
  * Pure so the merge contract is unit-tested without a database.
  */
-export function mergeWeekIntoTeamDefenseGameLog(
+function mergeWeekIntoTeamDefenseGameLog(
   existingPayload: unknown,
   week: number,
   normalizedStats: Record<string, number>,

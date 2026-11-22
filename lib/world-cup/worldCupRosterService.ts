@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type WorldCupRosterPlayer = {
+type WorldCupRosterPlayer = {
   id: string
   providerPlayerId: string
   name: string
@@ -19,7 +19,7 @@ export type WorldCupRosterPlayer = {
   lastSyncedAt: string | null
 }
 
-export type WorldCupPlayerAvailability = {
+type WorldCupPlayerAvailability = {
   playerName: string
   providerPlayerId: string
   status: string
@@ -28,7 +28,7 @@ export type WorldCupPlayerAvailability = {
   reportDate: string
 }
 
-export type WorldCupRosterReport = {
+type WorldCupRosterReport = {
   teamId: string
   teamName: string
   players: WorldCupRosterPlayer[]
@@ -42,7 +42,6 @@ export type WorldCupRosterReport = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const INJURY_STATUSES = new Set(["injured", "doubtful", "questionable", "out"])
 const SUSPENSION_STATUSES = new Set(["suspended", "ban", "red card suspension", "accumulated yellows"])
 
 function isSuspension(status: string): boolean {

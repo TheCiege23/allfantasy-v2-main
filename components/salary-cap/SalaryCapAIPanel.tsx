@@ -88,11 +88,11 @@ export function SalaryCapAIPanel({
       <section className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-cyan-200">
           <Sparkles className="h-5 w-5" />
-          AI Salary Cap Tools
+          Chimmy Salary Cap Tools
         </h2>
 
         <p className="mb-4 text-sm text-white/80">
-          AI helps with strategy and advice only. Cap numbers, legality, and eligibility are always
+          Chimmy helps with strategy and advice only. Cap numbers, legality, and eligibility are always
           computed by the league engine.
         </p>
 
@@ -119,7 +119,7 @@ export function SalaryCapAIPanel({
               onClick={() => setType(t)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
                 type === t
-                  ? 'bg-cyan-500/80 text-white'
+                  ? 'bg-cyan-700 text-white'
                   : 'border border-white/20 bg-white/5 text-white/80 hover:bg-white/10'
               }`}
             >
@@ -128,12 +128,12 @@ export function SalaryCapAIPanel({
           ))}
         </div>
 
-        <FeatureGate featureId="salary_cap_ai" featureNameOverride="Salary Cap AI" className="mt-2">
+        <FeatureGate featureId="salary_cap_ai" featureNameOverride="Salary Cap Chimmy" className="mt-2">
           <button
             type="button"
             onClick={runAI}
             disabled={loading}
-            className="rounded-lg bg-cyan-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <>
@@ -141,7 +141,7 @@ export function SalaryCapAIPanel({
                 Generating…
               </>
             ) : (
-              <>Get AI advice: {TYPE_LABELS[type]}</>
+              <>Get Chimmy advice: {TYPE_LABELS[type]}</>
             )}
           </button>
         </FeatureGate>
@@ -156,7 +156,7 @@ export function SalaryCapAIPanel({
         {result && (
           <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-300">
-              AI explanation ({result.type.replace(/_/g, ' ')})
+              Chimmy explanation ({result.type.replace(/_/g, ' ')})
             </p>
             <p className="whitespace-pre-wrap text-sm text-white/90">{result.explanation}</p>
           </div>
@@ -167,7 +167,7 @@ export function SalaryCapAIPanel({
         href={`/league/${leagueId}?tab=Intelligence`}
         className="inline-block text-sm text-cyan-400 hover:underline"
       >
-        More AI tools (Intelligence tab) →
+        More Chimmy tools (Intelligence tab) →
       </a>
     </div>
   )

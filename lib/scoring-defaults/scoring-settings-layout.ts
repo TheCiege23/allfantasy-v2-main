@@ -17,13 +17,13 @@ export type ScoringLayoutRow = {
   helper?: string
 }
 
-export type ScoringLayoutTab = {
+type ScoringLayoutTab = {
   id: string
   label: string
   rows: ScoringLayoutRow[]
 }
 
-export type ScoringLayoutSpec = {
+type ScoringLayoutSpec = {
   primaryTabs: ScoringLayoutTab[]
   moreTabs?: ScoringLayoutTab[]
 }

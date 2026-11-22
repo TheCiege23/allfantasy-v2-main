@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// A plan holder: these tests are about what the paid route does once the plan gate lets the caller in.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null }),
+}))
+
 const getServerSessionMock = vi.fn()
 const assertLeagueMemberMock = vi.fn()
 const runDraftAIAssistMock = vi.fn()

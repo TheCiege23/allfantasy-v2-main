@@ -123,7 +123,7 @@ async function paidToolPost(
           sourceType: 'big_brother_ai_refund',
           sourceId: refundLedgerId,
           idempotencyKey: `refund:big_brother_ai:${refundLedgerId}`,
-          description: 'Auto refund after failed Big Brother AI context build.',
+          description: 'Auto refund after failed Big Brother Chimmy context build.',
           metadata: { leagueId, type },
         })
         .catch(() => null)
@@ -157,13 +157,13 @@ async function paidToolPost(
           sourceType: 'big_brother_ai_refund',
           sourceId: refundLedgerId,
           idempotencyKey: `refund:big_brother_ai_fail:${refundLedgerId}`,
-          description: 'Auto refund after Big Brother AI generation failure.',
+          description: 'Auto refund after Big Brother Chimmy generation failure.',
           metadata: { leagueId, type },
         })
         .catch(() => null)
     }
     return NextResponse.json(
-      { error: 'AI generation failed', message: e instanceof Error ? e.message : 'Unknown error' },
+      { error: 'Chimmy generation failed', message: e instanceof Error ? e.message : 'Unknown error' },
       { status: 500 }
     )
   }

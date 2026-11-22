@@ -1,3 +1,4 @@
+import { leagueRosterForecasts } from '@/lib/af-projections/leagueRosterForecasts'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -283,6 +284,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // NFL: the week's projection, opponent, kickoff, opponent rank against the position, headshot and
+    // crest, from stored rows (lib/redraft/nflRosterOutlook.ts). No-op for other sports and id spaces.
+    if (String(leagueSport).toUpperCase() === 'NFL' && unifiedRoster.length > 0) {
+      try {
+        const { loadNflRosterOutlook } = await import('@/lib/redraft/nflRosterOutlook')
+        const { applyNflRosterOutlook } = await import('@/lib/redraft/nflRosterOutlookModel')
+        const outlook = await loadNflRosterOutlook(prisma, {
+          league: { id: leagueId, sport: leagueSport, season: league.season ?? null, platform: league.platform ?? null, settings: league.settings },
+          players: unifiedRoster.map((r) => ({ id: r.id, team: r.team ?? null, position: r.position ?? null })),
+        })
+        unifiedRoster = applyNflRosterOutlook(unifiedRoster, outlook)
+      } catch (e) {
+        console.warn('[league/roster] nfl outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
+    const selectedDay = searchParams?.get('day')
+    unifiedRoster = await leagueRosterForecasts(unifiedRoster, { ...league, id: leagueId, sport: leagueSport,
+      season: league.season ?? null }, unifiedRoster.map(p => p.id), { day: isDayKey(selectedDay) ? selectedDay : null })
+
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
     // roster tab renders no section at all; a load failure also degrades to null
@@ -357,6 +378,16 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // Survivor's canonical roster already contains provider-backed player metadata. Preserve it
+    // when optional normalized enrichment is unavailable or has no row for a native player.
+    const nativePlayerFallback = leagueVariant === 'survivor_guillotine' && roster.redraftRosterId
+      ? Object.fromEntries((await prisma.redraftRosterPlayer.findMany({
+          where: { rosterId: roster.redraftRosterId, droppedAt: null, roster: { leagueId } },
+          select: { playerId: true, playerName: true, position: true, team: true },
+        })).map(player => [player.playerId, { id: player.playerId, name: player.playerName,
+          position: player.position, team: player.team ?? '' }]))
+      : undefined
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
@@ -368,6 +399,7 @@ export async function GET(req: NextRequest) {
       campus,
       roster: roster.playerData,
       unifiedRoster,
+      nativePlayerFallback,
       faabRemaining: roster.faabRemaining,
       waiverPriority: roster.waiverPriority ?? null,
       sport: leagueSport,

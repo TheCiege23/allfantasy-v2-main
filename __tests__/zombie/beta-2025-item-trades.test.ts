@@ -52,5 +52,27 @@ describe('2025 native item trades', () => {
     expect(h.tx.redraftMatchup.update).toHaveBeenCalled() // pre-trade bonus receipt is preserved
   })
   it('holds item trades during weekly settlement', async () => { h.tx.zombieWeeklyResolution.findUnique.mockResolvedValueOnce({ status: 'resolving' }); await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).rejects.toThrow('held') })
+  describe("the commissioner's lock on item trades after games", () => {
+    const lockOn = () => h.tx.zombieLeague.findUnique.mockResolvedValue({ id: 'z', leagueId: 'L', sport: 'NFL', status: 'active', currentWeek: 4, season: 2026, commissionerUiPrefs: { lockSerumWeaponTradesAfterGames: true } })
+    it('refuses once both teams have kicked off, at proposal and again at execution', async () => {
+      lockOn(); h.closed = true
+      await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).rejects.toThrow('locked Serum and Weapon trades')
+      await expect(settleBetaTradeItems(h.tx, { leagueId: 'L', rosterIds: ['RR-A', 'RR-B'], assets, tradeId: 'trade' })).rejects.toThrow('locked')
+      expect(h.tx.zombieTeamItem.updateMany).not.toHaveBeenCalled()
+    })
+    it('allows the trade before the games, and whenever the lock is off', async () => {
+      lockOn(); h.closed = false
+      await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).resolves.toMatchObject({ z: { id: 'z' } })
+      h.tx.zombieLeague.findUnique.mockResolvedValue({ id: 'z', leagueId: 'L', sport: 'NFL', status: 'active', currentWeek: 4, season: 2026, commissionerUiPrefs: {} })
+      h.closed = true
+      await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).resolves.toMatchObject({ z: { id: 'z' } })
+    })
+    it('a starter with no known game time keeps the lock closed', async () => {
+      lockOn()
+      const svc = await import('@/lib/zombie/beta2025ItemService')
+      vi.mocked(svc.lastStarterDeadline).mockRejectedValueOnce(new Error('A starter game time is unavailable.'))
+      await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).rejects.toThrow('locked')
+    })
+  })
   it('an arbitrary inventory id cannot steal another team item', async () => { h.items[0].teamStatusId = 'elsewhere'; await expect(validateBetaTradeItems(h.tx, 'L', ['RR-A', 'RR-B'], assets)).rejects.toThrow('owned') })
 })

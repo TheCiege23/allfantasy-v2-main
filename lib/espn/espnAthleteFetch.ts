@@ -32,7 +32,7 @@
 import {
   ESPN_POSITION_LABELS,
   ESPN_TEAM_ABBREVIATIONS,
-} from '@/lib/league-import/espn/EspnLeagueFetchService'
+} from '@/lib/league-import/espn/espnLookups'
 import { espnDefenseTeamAbbreviation } from '@/lib/league-import/espn/espnTeamDefenseIds'
 
 /** db-first-exception: provider adapter, sole importer is the ingestion module. */
@@ -129,7 +129,7 @@ function nested(row: Record<string, unknown>, key: string, inner: string): unkno
  * already uses - restating that mapping is how two parts of one codebase come to
  * disagree about what position 16 is.
  */
-export function readEspnPosition(row: Record<string, unknown>): string | null {
+function readEspnPosition(row: Record<string, unknown>): string | null {
   const direct = firstString(
     nested(row, 'position', 'abbreviation'),
     nested(row, 'position', 'displayName'),
@@ -142,7 +142,7 @@ export function readEspnPosition(row: Record<string, unknown>): string | null {
 }
 
 /** The athlete's pro team abbreviation, same tolerance, same shared table. */
-export function readEspnTeam(row: Record<string, unknown>): string | null {
+function readEspnTeam(row: Record<string, unknown>): string | null {
   const direct = firstString(
     nested(row, 'team', 'abbreviation'),
     row.proTeamAbbrev,

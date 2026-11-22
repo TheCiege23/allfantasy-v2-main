@@ -8,7 +8,19 @@
  * adapter is wired. Callers can inject a concrete uploader in tests.
  */
 
+import { lookup } from 'node:dns/promises'
 import { prisma } from '@/lib/prisma'
+import { assertSafeWebhookUrl, type DnsResolver } from '@/lib/domain/webhooks'
+
+/*
+ * 🛑 AN IMPORTED avatarUrl IS WRITTEN BY WHOEVER RUNS THE SOURCE LEAGUE, NOT BY US.
+ * Fetching it server-side unguarded let a league owner point us at cloud metadata or an
+ * internal Railway host. Every fetch now goes through the same guard outbound webhooks
+ * use (https only, no credentials, every resolved address public) and never follows a
+ * redirect — a redirect is how a public URL hands the request on to a private one.
+ */
+const resolveAll: DnsResolver = async (hostname) =>
+  (await lookup(hostname, { all: true })).map((entry) => entry.address)
 
 export type AvatarUploader = (args: {
   leagueId: string
@@ -24,9 +36,14 @@ const noopUpload: AvatarUploader = async () => null
 const MAX_BYTES = 2 * 1024 * 1024
 const ALLOWED_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
-async function fetchAvatar(url: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+async function fetchAvatar(
+  url: string,
+  resolve: DnsResolver = resolveAll,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
   try {
-    const res = await fetch(url)
+    const safe = await assertSafeWebhookUrl(url, resolve)
+    if (!safe.ok) return null
+    const res = await fetch(url, { redirect: 'manual' })
     if (!res.ok) return null
     const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
     if (!ALLOWED_CONTENT_TYPES.has(contentType)) return null
@@ -51,7 +68,11 @@ export interface MirrorAvatarsResult {
 export async function mirrorImportAvatars(
   leagueId: string,
   uploadImpl: AvatarUploader = noopUpload,
+  resolve: DnsResolver = resolveAll,
 ): Promise<MirrorAvatarsResult> {
+  // Nothing would be stored, so fetching is pure outbound traffic to URLs a stranger chose.
+  if (uploadImpl === noopUpload) return { mirrored: 0, skipped: 0, failed: 0 }
+
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId, avatarUrl: { not: null } },
     select: { id: true, avatarUrl: true },
@@ -66,7 +87,7 @@ export async function mirrorImportAvatars(
       skipped++
       continue
     }
-    const fetched = await fetchAvatar(src)
+    const fetched = await fetchAvatar(src, resolve)
     if (!fetched) {
       failed++
       continue

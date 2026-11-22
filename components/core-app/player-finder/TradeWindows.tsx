@@ -103,4 +103,3 @@ export function TradeWindows({
   )
 }
 
-export default TradeWindows

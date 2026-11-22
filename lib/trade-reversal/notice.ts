@@ -30,7 +30,7 @@
 
 import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import { ingest, tradeEvent } from '@/lib/notification-engine'
-import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { isMultiTeamTrade } from '@/lib/redraft/tradeParticipants'
 
@@ -51,7 +51,7 @@ export const TRADE_REVERSED_PARTY_MESSAGE =
 function isNotifiableUserId(id: string | null | undefined): id is string {
   const value = String(id ?? '').trim()
   if (!value) return false
-  return !value.startsWith('roster:') && !isOrphanPlatformUserId(value) && !isAiManagerPlatformUserId(value)
+  return !value.startsWith('roster:') && !isSeatPlaceholderUserId(value)
 }
 
 type NativeReversedTrade = {

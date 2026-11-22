@@ -13,7 +13,6 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { refreshStaleLeagueProfiles } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
@@ -50,16 +49,16 @@ export const maxDuration = 300
 const TAIL_PHASE_RESERVE_MS = 60_000
 
 /**
- * Least runway the psych profile rotation needs before it may START on the `?intel=1` tick.
+ * Least runway the Sleeper trade-fact rotation needs before it may START on the `?intel=1` tick, and so the
+ * runway the ESPN college basketball pass must leave above it.
  *
- * ⚠ NOT MEASURED — a guard sized from the shape of the work. The rotation's prelude (trade
- * backfill, then ONE batched Sleeper trade ingest for every picked league) is bounded by count,
- * not time, and its budget is checked only BETWEEN leagues. What must not happen is entering that
- * prelude with seconds left and carrying the request into the 270s response deadline. 90s leaves
- * the prelude and a league room beneath it. Tune it from the heartbeat row's `durationMs`, which
- * is the first place this phase's cost has ever been recorded.
+ * ⚠ NOT MEASURED — a guard sized from the shape of the work. The rotation (trade-history backfill, then ONE
+ * batched Sleeper trade ingest for the picked leagues) is bounded by count, not time. What must not happen is
+ * entering it with seconds left and carrying the request into the 270s response deadline. Until 2026-11-19
+ * this was PSYCH_MIN_RUNWAY_MS and guarded the personality-profile rotation, whose prelude this rotation is
+ * (re-score build item 10).
  */
-const PSYCH_MIN_RUNWAY_MS = 90_000
+const TRADE_FACT_MIN_RUNWAY_MS = 90_000
 
 /**
  * The ESPN college basketball pass on the `?intel=1` tick: at most this long, and not at all with
@@ -137,9 +136,9 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
    * the connection at 300s and answers 502 itself, so neither maxDuration nor a client
    * timeout buys more room.
    *
-   * `sports-data-importer` stops politely at IMPORT_BUDGET_MS (240s) — and then three more
-   * phases run ON TOP of that: identity repair/backfill, devy enrichment, and psych profile
-   * refresh. Each is capped by COUNT, not by time, so the handler routinely overshoots the
+   * `sports-data-importer` stops politely at IMPORT_BUDGET_MS (240s) — and then more
+   * phases run ON TOP of that: identity repair/backfill and devy enrichment (and, until 2026-11-19, psych
+   * profile refresh). Each is capped by COUNT, not by time, so the handler routinely overshoots the
    * ceiling even though its biggest phase behaved. A budget bolted onto the sport loop would
    * have changed nothing; the budget has to span the whole handler.
    *
@@ -202,8 +201,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       ).catch(error => console.error('[cron/import-players] MLB Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
       // NBA/NHL: the same weekly, batched, additive link for Fantrax basketball and hockey leagues.
       // Each sport keeps its own cadence marker, so after the first week these are one cache read each.
-      const { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities } = await import('@/lib/player-identity/ingestProFantraxIdentities')
-      for (const [sport, ingest] of [['NBA', ingestNbaFantraxIdentities], ['NHL', ingestNhlFantraxIdentities]] as const) {
+      const { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities, ingestSoccerFantraxIdentities } = await import('@/lib/player-identity/ingestProFantraxIdentities')
+      for (const [sport, ingest] of [['NBA', ingestNbaFantraxIdentities], ['NHL', ingestNhlFantraxIdentities], ['SOCCER', ingestSoccerFantraxIdentities]] as const) {
         await withSyncJobRun(
           { jobName: `${sport.toLowerCase()}-fantrax-identities`, sport, provider: 'fantrax', trigger: 'cron' },
           () => ingest(),
@@ -259,10 +258,20 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         '@/lib/devy/devyHeadshotRefresh',
       )
 
+      /*
+       * The CFBD quota reserve, asked once for this tick. The main run's devy phases already
+       * stand down below the reserve; this dedicated tick runs three more CFBD background jobs
+       * (intel feeds, team directory, roster pool) and asked nothing, so a quiet week's worth of
+       * them could still eat the calls kept for the stats and scores imports.
+       */
+      const { cfbdBackgroundAllowed } = await import('@/lib/cfbd-quota')
+      const cfbdGate = await cfbdBackgroundAllowed().catch(() => ({ allowed: true, remaining: null, reason: null }))
+      const cfbdReserved = () => ({ skipped: cfbdGate.reason ?? 'CFBD quota reserve', cfbdRemaining: cfbdGate.remaining })
+
       const outcome = await withSyncJobRun(
         { jobName: 'cron-devy-intel-sources', jobScope: 'NCAAF', trigger: 'cron' },
         async () => {
-          const devyIntelSources = await refreshDevyIntelSources(budget)
+          const devyIntelSources = cfbdGate.allowed ? await refreshDevyIntelSources(budget) : cfbdReserved()
           /*
            * Headshots run AFTER the intel feeds and on the leftover budget, on
            * purpose. The intel feeds fill the columns draftProjectionScore
@@ -311,7 +320,9 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           const { ingestCollegeTeamsIfDue } = await import('@/lib/sport-teams/ingestCollegeTeams')
           const COLLEGE_TEAMS_MIN_MS = 30_000
           const collegeTeams =
-            budget.remainingMs() < COLLEGE_TEAMS_MIN_MS
+            !cfbdGate.allowed
+              ? cfbdReserved()
+              : budget.remainingMs() < COLLEGE_TEAMS_MIN_MS
               ? { skipped: 'deferred: run budget too low to start' }
               : await ingestCollegeTeamsIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
                   (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
@@ -327,9 +338,28 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           const { refreshCollegeRosterPoolIfDue } = await import('@/lib/ncaaf/cfbdRosterPool')
           const COLLEGE_ROSTER_POOL_MIN_MS = 30_000
           const collegeRosterPool =
-            budget.remainingMs() < COLLEGE_ROSTER_POOL_MIN_MS
+            !cfbdGate.allowed
+              ? cfbdReserved()
+              : budget.remainingMs() < COLLEGE_ROSTER_POOL_MIN_MS
               ? { skipped: 'deferred: run budget too low to start' }
               : await refreshCollegeRosterPoolIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
+                  (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
+                )
+
+          /*
+           * The NBA draft, linked to our college basketball players by ESPN id (contracts/cbbd B-01),
+           * for the C2C / Devy "Moving up" section. About 25 calls a draft against the shared CFBD
+           * quota, refreshed through the late-June window and then never again for that year, so on
+           * almost every tick this is one stored-row read.
+           */
+          const { refreshCbbdDraftPicks } = await import('@/lib/devy/cbbdDraftPicksStore')
+          const NBA_DRAFT_PICKS_MIN_MS = 30_000
+          const nbaDraftPicks =
+            !cfbdGate.allowed
+              ? cfbdReserved()
+              : budget.remainingMs() < NBA_DRAFT_PICKS_MIN_MS
+              ? { skipped: 'deferred: run budget too low to start' }
+              : await refreshCbbdDraftPicks({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
                   (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
                 )
 
@@ -337,16 +367,16 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           // SportsPlayer is what the player cards and search actually read —
           // the devy pool is 1,718 of 73,883 NCAAF rows.
           const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
-          return { devyIntelSources, devyAdp, collegeTeams, collegeRosterPool, devyHeadshots, collegeHeadshots }
+          return { devyIntelSources, devyAdp, collegeTeams, collegeRosterPool, nbaDraftPicks, devyHeadshots, collegeHeadshots }
         },
       )
 
       /*
        * ESPN college basketball rosters -> identities + headshots (lib/espn/ncaabEspnIngest.ts).
        *
-       * ⚠ BOUNDED SO IT CANNOT STARVE THE PSYCH ROTATION BELOW. That rotation needs
-       * PSYCH_MIN_RUNWAY_MS and is the reason this tick exists, so this phase takes at most
-       * ESPN_NCAAB_MAX_MS and only what is left above that floor. Roughly 40 schools a tick, four
+       * ⚠ BOUNDED SO IT CANNOT STARVE THE TRADE-FACT ROTATION BELOW. That rotation needs
+       * TRADE_FACT_MIN_RUNWAY_MS, so this phase takes at most ESPN_NCAAB_MAX_MS and only what is
+       * left above that floor. Roughly 40 schools a tick, four
        * ticks a day: every one of 362 is revisited about every two days.
        *
        * ITS OWN HEARTBEAT, so "out of season", "no runway" and "ESPN blocked us" each leave a row
@@ -359,7 +389,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
             '@/lib/espn/ncaabEspnIngest'
           )
           if (!isNcaabRosterSeason()) return { skipped: 'out of season' as const }
-          const allowanceMs = Math.min(ESPN_NCAAB_MAX_MS, budget.remainingMs() - PSYCH_MIN_RUNWAY_MS)
+          const allowanceMs = Math.min(ESPN_NCAAB_MAX_MS, budget.remainingMs() - TRADE_FACT_MIN_RUNWAY_MS)
           if (allowanceMs < ESPN_NCAAB_MIN_MS) return { skipped: 'no runway' as const, remainingMs: budget.remainingMs() }
           const deadlineAt = Date.now() + allowanceMs
           const teamMap = await syncEspnNcaabTeamMapIfDue()
@@ -387,61 +417,62 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       }))
 
       /*
-       * 🛑 THE PSYCH PROFILE ROTATION RUNS ON THIS TICK, NOT IN THE MAIN RUN — BY MEASUREMENT.
+       * NEW SLEEPER TRADES -> `dw_transaction_facts` (lib/league-import/sleeper/sleeperTradeFactRotation.ts).
        *
-       * It was the last maintenance phase of the main run, which fills its 240s budget on nearly
-       * every fire. The eight main-run fires after the tail reserve reached the worker
-       * (2026-09-12..13), read from the slow-tier dispatcher's echoed response bodies and from
-       * `manager_psych_profiles.updatedAt`:
-       *
-       *     2 of 8   stopped at the 270s response deadline   -> the phase was never reached
-       *     3 of 8   finished, psych NOT deferred, ZERO profile writes in the following 20 min
-       *     3 of 8   profile writes in the window            -> an UPPER bound: `fantasy-os-exec-sync`
-       *                                                         refreshes profiles and fires into
-       *                                                         the same minutes
-       *
-       * The zero-write fires are conclusive, not suggestive: the rotation has no staleness floor
-       * (it always picks up to 24 of ~245 candidates) and the engine rewrites every manager it
-       * reaches, so a fire that profiled one league moves `updatedAt`. Meanwhile 89 candidate
-       * leagues were more than 3 days stale and 23 more than 7.
-       *
-       * ⚠ ADMITTED, THEN STARVED — the likeliest mechanism, read from the code. The phase gate
-       * passes with seconds to spare, the unbounded enrichment prelude spends them, and the first
-       * between-league check stops at zero leagues. Nothing reported it, because the phase's result
-       * was persisted nowhere: the dispatcher echoes 1500 chars of the body, and `psychProfiles`
-       * sat past the cut.
-       *
-       * This tick finishes its own work in 10-23s over the same window, so the rotation gets most
-       * of a budget instead of a remainder — the move this mode was created for.
-       *
-       * ITS OWN HEARTBEAT, WITH THE RUNWAY DECISION INSIDE IT, so a fire that declines still writes
-       * a row. "Declined for runway" and "never fired" must not read alike.
+       * The psych profile rotation ran here until 2026-11-19, when the manager-profile engine was retired
+       * (re-score build item 10): its personality scores were labels about people, and every reader is gone.
+       * Its `cron-psych-profile-rotation` heartbeat stops with it. 🛑 But its PRELUDE was the only scheduled
+       * writer of Sleeper trades after import, so that part stays, on its own heartbeat and its own stateless
+       * order. Why it sits on this tick and not the main run is unchanged: the main run fills its 240s budget.
        */
-      const psychProfiles = await withSyncJobRun(
-        { jobName: 'cron-psych-profile-rotation', trigger: 'cron' },
+      const sleeperTradeFacts = await withSyncJobRun(
+        { jobName: 'cron-sleeper-trade-facts', provider: 'sleeper', trigger: 'cron' },
         async () => {
           const remainingMs = budget.remainingMs()
-          if (remainingMs < PSYCH_MIN_RUNWAY_MS) return { skipped: 'no runway' as const, remainingMs }
-          return refreshStaleLeagueProfiles({ maxLeagues: 24, budget })
+          if (remainingMs < TRADE_FACT_MIN_RUNWAY_MS) return { skipped: 'no runway' as const, remainingMs }
+          const { rotateSleeperTradeFacts } = await import('@/lib/league-import/sleeper/sleeperTradeFactRotation')
+          return rotateSleeperTradeFacts()
         },
         (r) =>
           'skipped' in r
             ? // A warning, so a tick that keeps declining reads as partial rather than healthy.
-              { warnings: [`no runway: ${r.remainingMs}ms left, needs ${PSYCH_MIN_RUNWAY_MS}ms`] }
+              { warnings: [`no runway: ${r.remainingMs}ms left, needs ${TRADE_FACT_MIN_RUNWAY_MS}ms`] }
             : {
-                rowsWritten: r.managersProfiled,
+                rowsWritten: (r.historyFactsWritten ?? 0) + (r.ingest?.factsWritten ?? 0),
+                warnings: r.errors,
                 metadata: {
-                  leaguesProfiled: r.leaguesProfiled,
-                  stoppedEarly: r.stoppedEarly,
-                  deferred: r.deferred,
-                  // Draft facts whose league is gone. A rising count is orphan warehouse rows
-                  // accumulating; 3 of them held 3 of 24 slots every fire until 2026-09-20.
-                  orphanCandidates: r.orphanCandidates,
-                  leagueIds: r.leagueIds,
+                  sleeperLeagues: r.sleeperLeagues,
+                  picked: r.picked,
+                  slot: r.slot,
+                  historyFactsWritten: r.historyFactsWritten,
+                  ingestFactsWritten: r.ingest?.factsWritten ?? null,
+                  rateLimited: r.ingest?.rateLimited ?? null,
                 },
               },
       ).catch((err: unknown) => ({
-        error: err instanceof Error ? err.message.slice(0, 160) : 'profile refresh failed',
+        error: err instanceof Error ? err.message.slice(0, 160) : 'sleeper trade facts failed',
+      }))
+
+      /*
+       * ESPN / MFL WAIVER CLAIMS -> `dw_transaction_facts`, THIS SEASON ONLY, once a day per league
+       * (lib/league-import/providerWaiverRefresh.ts; owner's "daily current-season refresh", 2026-11-21). The manager
+       * record counted these from the import-time backfill alone. On spare runway after the Sleeper trades, its own
+       * heartbeat, each league started only while the run budget allows one more fetch.
+       */
+      const providerWaivers = await withSyncJobRun(
+        { jobName: 'cron-provider-waiver-refresh', trigger: 'cron' },
+        async () => {
+          const { refreshProviderWaivers, defaultRefreshDeps } = await import('@/lib/league-import/providerWaiverRefresh')
+          return refreshProviderWaivers(defaultRefreshDeps(budget))
+        },
+        (r) => ({
+          rowsRead: r.claimsRead,
+          rowsWritten: r.factsWritten,
+          warnings: [...r.errors, ...(r.deferred ? [`${r.deferred} league(s) deferred: run budget`] : [])],
+          metadata: { off: r.off ?? false, leagues: r.leagues, picked: r.picked, refreshed: r.refreshed, lapDays: r.lapDays, slot: r.slot },
+        }),
+      ).catch((err: unknown) => ({
+        error: err instanceof Error ? err.message.slice(0, 160) : 'provider waiver refresh failed',
       }))
 
       // Run this weekly identity bridge only on spare runway, after the existing intel work.
@@ -462,7 +493,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         mode: 'intel',
         ...outcome,
         espnNcaab,
-        psychProfiles,
+        sleeperTradeFacts,
+        providerWaivers,
         // After the existing keys: the dispatcher echoes only the first 1500 chars of the body.
         ncaabDevyPool,
         ncaabFantraxIdentities,
@@ -620,6 +652,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           leftForReview: repaired.leftForReview,
           newlyMapped: filled.written,
           coverage: filled.coverageAfter,
+          // ESPN ids filled from the same Sleeper directory (lib/player-match/sleeperEspnIdFill.ts).
+          espnIds: filled.espnIds ?? null,
         }
       } catch (identityError) {
         const message = identityError instanceof Error ? identityError.message : String(identityError)
@@ -646,9 +680,24 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     // TOP_CFB_TEAMS per run (~10-15s) and stops between teams once the handler
     // budget is spent. Runs BEFORE intel enrichment so rows seeded this run are
     // already in the pool that enrichment drains.
+    /*
+     * 🛑 THESE DEVY PHASES SHARE ONE 75,000-CALL CFBD MONTH WITH THE STATS AND SCORES IMPORTS, AND ON
+     * 2026-11-10 THEY HAD SPENT IT. College game stats stopped at week 10 for the rest of the month.
+     * Below the reserve they stand down so what is left goes to stats and scores (lib/cfbd-quota.ts).
+     * An unknown quota never blocks them.
+     */
+    const { cfbdBackgroundAllowed } = await import('@/lib/cfbd-quota')
+    const cfbdGate = await cfbdBackgroundAllowed().catch(() => ({ allowed: true, remaining: null, reason: null }))
+    const cfbdReserved = (phase: string) => {
+      deferredPhases.push(phase)
+      return { skipped: cfbdGate.reason ?? 'CFBD quota reserve', cfbdRemaining: cfbdGate.remaining }
+    }
+
     let devyPool: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
     if (budget.exhausted()) {
       deferredPhases.push('devyPool')
+    } else if (!cfbdGate.allowed) {
+      devyPool = cfbdReserved('devyPool')
     } else try {
       const { refreshDevyPoolSlice } = await import('@/lib/devy-pool-refresh')
       devyPool = await refreshDevyPoolSlice(budget)
@@ -671,6 +720,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     let devyStats: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
     if (budget.exhausted()) {
       deferredPhases.push('devyStats')
+    } else if (!cfbdGate.allowed) {
+      devyStats = cfbdReserved('devyStats')
     } else try {
       const { refreshDevyStatsSlice } = await import('@/lib/devy/devyStatsRefresh')
       devyStats = await refreshDevyStatsSlice(budget)
@@ -743,6 +794,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     } else if (budget.exhausted() || budget.remainingMs() < DRAFT_STATUS_MIN_RUNWAY_MS) {
       deferredPhases.push('devyDraftStatus')
       devyDraftStatus = { skipped: 'no runway', remainingMs: budget.remainingMs() }
+    } else if (!cfbdGate.allowed) {
+      devyDraftStatus = cfbdReserved('devyDraftStatus')
     } else try {
       const { classifyDraftStatus } = await import('@/lib/devy-classification')
       devyDraftStatus = await classifyDraftStatus(new Date().getFullYear())
@@ -803,6 +856,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     let devyIntelSources: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
     if (budget.exhausted()) {
       deferredPhases.push('devyIntelSources')
+    } else if (!cfbdGate.allowed) {
+      devyIntelSources = cfbdReserved('devyIntelSources')
     } else try {
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
       devyIntelSources = await refreshDevyIntelSources(budget)
@@ -813,12 +868,14 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyIntelSources = { error: message.slice(0, 200) }
     }
 
-    let devyIntel: Record<string, number> | { error: string } = { enriched: 0, errors: 0 }
+    let devyIntel: Record<string, number> | { error: string } | { skipped: string; cfbdRemaining: number | null } = { enriched: 0, errors: 0 }
     // Guarded OUTSIDE the try on purpose: routing a deferral through the catch would report it as
     // `{ error: ... }`, turning "we ran out of time" into "enrichment failed" — the opposite of
     // what happened, and the kind of misreported state that sends someone debugging a healthy path.
     if (budget.exhausted()) {
       deferredPhases.push('devyIntel')
+    } else if (!cfbdGate.allowed) {
+      devyIntel = cfbdReserved('devyIntel')
     } else try {
       const { enrichDevyIntelMetrics } = await import('@/lib/devy-classification')
       const intel = await enrichDevyIntelMetrics({ limit: 500 })
@@ -830,18 +887,26 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyIntel = { error: message.slice(0, 200) }
     }
 
-    // Psychological profiles ride along here because this cron actually runs.
-    //
-    // The semantically correct trigger is after a league sync, and that stays
-    // wired in fantasy-os-exec-sync. But that cron is gated behind
-    // FANTASY_OS_EXEC_SYNC_LIVE, which is unset, and league_sync_state holds 0
-    // rows — the collector has never executed in production. A trigger attached
-    // to something that never fires looks wired up in code and leaves the table
-    // empty in prod, which is how manager_psych_profiles sat at 0 rows to begin
-    // with.
-    //
-    // Bounded to a few of the stalest leagues per run and fully swallowed:
-    // profiling is enrichment and must never fail the player import it rides on.
+    /*
+     * NFL draft picks keyed by COLLEGE athlete id: the link the C2C / Devy pipeline needs to move a
+     * drafted college player to the NFL roster and to size the shortened rookie draft
+     * (lib/devy/cfbdDraftPicksStore.ts). One CFBD call per draft year at most daily, behind the
+     * same quota reserve as the other devy phases.
+     */
+    let cfbdDraftPicks: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
+    if (budget.exhausted()) {
+      deferredPhases.push('cfbdDraftPicks')
+    } else if (!cfbdGate.allowed) {
+      cfbdDraftPicks = cfbdReserved('cfbdDraftPicks')
+    } else try {
+      const { refreshCfbdDraftPicks } = await import('@/lib/devy/cfbdDraftPicksStore')
+      cfbdDraftPicks = await refreshCfbdDraftPicks()
+    } catch (picksError) {
+      const message = picksError instanceof Error ? picksError.message : String(picksError)
+      console.error('[cron/import-players] CFBD draft picks failed:', message)
+      cfbdDraftPicks = { error: message.slice(0, 200) }
+    }
+
     /*
      * ── Sleeper player rows ───────────────────────────────────────────────
      *
@@ -979,16 +1044,6 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
     }
 
     /*
-     * The psych profile rotation USED to be the last phase here. It moved to the `?intel=1` tick
-     * — see the block inside `if (intelOnly)` for why.
-     *
-     * ⚠ 24 LEAGUES PER FIRE IS UNCHANGED, AND SO IS ITS REASON. At a fixed 3 it drained 3-13
-     * leagues/day against 287 (measured 2026-09-08, a ~36-day cycle). 24 rather than unbounded
-     * because `ingestSleeperTradeFacts` defaults to a 25-league take; staying under it keeps the
-     * enrichment set aligned with the profiling set if the explicit pass-through is ever lost.
-     */
-
-    /*
      * 🛑 WHICH PHASES WERE DROPPED, RECORDED WHERE SOMEONE CAN READ IT LATER.
      *
      * The row above is written as soon as the IMPORT finishes — deliberately, so a run killed at
@@ -1042,6 +1097,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       devyDraftStatus,
       devyIntelSources,
       devyIntel,
+      cfbdDraftPicks,
       sleeperRows,
       sleeperNbaRows,
       sleeperNbaIdentities,

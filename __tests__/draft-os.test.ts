@@ -1,95 +1,160 @@
 /**
- * Draft OS contract.
+ * Draft OS contract (2026-11-20: the feed has a reader).
  *
- * ⚠ THIS DOMAIN DECLARES ONE SOURCE, AND THE TWO IT OMITS ARE THE POINT.
- *
- * `resolveNflRedraftDraftRuntime` (deleted 2026-09-06) loaded three things. Only one is cacheable,
- * and the reasoning still governs this domain's shape, so it is kept rather than deleted with it:
- *
- *   RULES   `resolveCanonicalLeagueRules(leagueId)` — one league row plus six config reads in
- *           parallel, keyed on nothing but the league, changing a few times a season. Cacheable,
- *           and the expensive one: seven queries per resolve, which during a live draft is every
- *           poll and every pick.
- *   STATE   `buildSessionSnapshot` — changes on EVERY PICK. Other domains survive on a short TTL
- *           because their facts decay in minutes; a draft decays in seconds. No TTL is both
- *           useful and safe.
- *   POOL    `getResolvedDraftPoolForLeague(leagueId, { excludeDraftedNames })` — parameterised by
- *           the live set of drafted names. Its key LOOKS like a league id, but its result is a
- *           function of draft state, so caching on that key serves players taken seconds ago.
- *
- * Declaring sources for those two would look like better coverage and would manufacture exactly
- * the failure this codebase keeps finding — a confident answer resting on a fact that is no
- * longer true.
- *
- * 🛑 THERE IS NO DRAFT RUNTIME RESOLVER ANY MORE. `resolveNflRedraftDraftRuntime` had zero
- * invocations and was DELETED on 2026-09-06. This suite is now the ONLY importer of
- * `createDraftOsLoaders`, so the seam it pins is exercised by nothing but this file.
- *
- * ⚠ AND THE OLD WORDING HERE — "nothing imports `@/lib/draft-runtime`" — WAS TOO BROAD EVEN THEN.
- * That directory still holds `canonicalDraftRuntime.ts`, which IS imported: by
- * `lib/redraft-season-simulation/` and by `__tests__/g34-draft-runtime.test.ts`. The precise claim
- * is about the RESOLVER, never the directory. Stated so nobody reads the existence of Draft OS as
- * evidence the draft path is live, and so nobody deletes `lib/draft-runtime/` on the strength of a
- * sentence that was measuring something narrower than it said.
+ * The draft engine's rules — slots, IDP, superflex / 2QB, scoring — are read through Draft OS's 60-second cache
+ * (`readDraftRosterRules`) instead of being re-assembled on every poll. ONE derivation (`deriveDraftRosterRules`),
+ * cached; and when the cache cannot answer, the same derivation runs live, so a cache problem is never a draft
+ * problem. The domain still declares no source for the draft STATE or the POOL, which change on every pick.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { createDraftOsLoaders, draftOsSources, draftRulesSource } from '@/lib/decision-os/draft-os'
-import { OS_SCOPE_LEVELS } from '@/lib/decision-os/domain-os'
-
-function spyStore() {
-  const kindsRead: string[] = []
-  return {
-    kindsRead,
-    store: {
-      read: vi.fn(async (a: { kind: string }) => {
-        kindsRead.push(a.kind)
-        throw new Error('relation "domain_os_facts" does not exist')
+const isIdpLeague = vi.fn(async () => false)
+const getRosterTemplate = vi.fn(async () => ({
+  slots: [
+    { slotName: 'QB', starterCount: 1 },
+    { slotName: 'RB', starterCount: 2 },
+    { slotName: 'WR', starterCount: 2 },
+    { slotName: 'SUPER_FLEX', starterCount: 1 },
+    { slotName: 'BN', starterCount: 0 },
+  ],
+}))
+const leagueFindUnique = vi.fn(async () => ({ sport: 'NFL', settings: { scoring_settings: { rec: 1 } }, starters: ['QB', 'RB', 'RB', 'WR', 'WR', 'SUPER_FLEX'] }))
+vi.mock('@/lib/idp', () => ({ isIdpLeague }))
+vi.mock('@/lib/multi-sport/RosterTemplateService', () => ({ getRosterTemplate }))
+// An in-memory `domain_os_facts`, so the reader the ENGINE uses can be shown to go through the cache.
+const factRows = new Map<string, Record<string, unknown>>()
+const factKey = (w: { domain_kind_level_scopeKey: Record<string, string> }) => Object.values(w.domain_kind_level_scopeKey).join('/')
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    league: { findUnique: leagueFindUnique },
+    domainOsFacts: {
+      findUnique: vi.fn(async (a: { where: { domain_kind_level_scopeKey: Record<string, string> } }) => factRows.get(factKey(a.where)) ?? null),
+      upsert: vi.fn(async (a: { where: { domain_kind_level_scopeKey: Record<string, string> }; create: Record<string, unknown> }) => {
+        factRows.set(factKey(a.where), { ...a.create, capturedAt: new Date() })
+        return a.create
       }),
-      write: vi.fn(async () => { throw new Error('relation "domain_os_facts" does not exist') }),
+    },
+  },
+}))
+
+const { createDraftOsLoaders, draftOsSources, draftRosterRulesSource } = await import('@/lib/decision-os/draft-os')
+const { deriveDraftRosterRules, readDraftRosterRules, resolveDraftRosterShape, resolveLeagueScoringFlags } = await import(
+  '@/lib/shared-services/draft/DraftContextAssembler'
+)
+const { OS_SCOPE_LEVELS } = await import('@/lib/decision-os/domain-os')
+
+const LEAGUE = { sport: 'NFL', settings: { scoring_settings: { rec: 1 } }, starters: ['QB', 'RB', 'RB', 'WR', 'WR', 'SUPER_FLEX'] }
+
+function memoryStore() {
+  const rows = new Map<string, { facts: unknown; capturedAt: Date }>()
+  const key = (a: { domain: string; kind: string; level: string; scopeKey: string }) => `${a.domain}/${a.kind}/${a.level}/${a.scopeKey}`
+  return {
+    rows,
+    store: {
+      read: vi.fn(async (a: { domain: string; kind: string; level: string; scopeKey: string; ttlMs: number }) => {
+        const row = rows.get(key(a))
+        if (!row || Date.now() - row.capturedAt.getTime() > a.ttlMs) return null
+        return { facts: row.facts, level: a.level, confidence: null, sampleSize: null, capturedAt: row.capturedAt, ageMs: 0 }
+      }),
+      write: vi.fn(async (a: { domain: string; kind: string; level: string; scopeKey: string; facts: unknown }) => {
+        rows.set(key(a), { facts: a.facts, capturedAt: new Date() })
+        return true
+      }),
     },
   }
 }
 
-describe('Draft OS', () => {
-  it('declares exactly ONE source, and it is the rules', () => {
-    // The guard against quietly gaining a state or pool source. Adding one needs a reason why a
-    // stale draft board is safe, not just a TTL — so make the count itself a decision.
+beforeEach(() => {
+  factRows.clear()
+  isIdpLeague.mockClear()
+  getRosterTemplate.mockClear()
+  leagueFindUnique.mockClear()
+})
+
+describe('Draft OS: the draft engine’s rules, cached for a minute', () => {
+  it('declares exactly ONE source — the rules — and none for the board or the pool', () => {
     expect(draftOsSources).toHaveLength(1)
-    expect(draftOsSources[0]!.kind).toBe('rules')
+    expect(draftOsSources[0]!.kind).toBe('rosterRules')
+    const loaders = createDraftOsLoaders({ store: memoryStore().store as never })
+    expect(Object.keys(loaders).sort()).toEqual(['drainOutcomes', 'loadRosterRules'])
   })
 
-  it('scopes rules to the league and gives them a long life', () => {
-    expect(draftRulesSource.level).toBe('league')
-    expect(OS_SCOPE_LEVELS).toContain(draftRulesSource.level)
-    // Same 6h as Waiver OS's league entry on purpose: the same class of fact should have the same
-    // lifetime across domains, or two domains' evidence cannot be compared.
-    expect(draftRulesSource.ttlMs).toBe(6 * 60 * 60 * 1000)
-    expect(draftRulesSource.scopeKey({ leagueId: 'lg1' })).toBe('lg1')
+  it('is league-scoped and lives 60 seconds, not six hours', () => {
+    expect(draftRosterRulesSource.level).toBe('league')
+    expect(OS_SCOPE_LEVELS).toContain(draftRosterRulesSource.level)
+    expect(draftRosterRulesSource.ttlMs).toBe(60 * 1000)
+    expect(draftRosterRulesSource.scopeKey({ leagueId: 'lg1' })).toBe('lg1')
+    expect(draftRosterRulesSource.sport({ leagueId: 'lg1', sport: 'nba' })).toBe('NBA')
   })
 
-  it('exposes only a rules loader — no state, no pool', () => {
-    const l = createDraftOsLoaders({ store: spyStore().store as never })
-    expect(typeof l.loadRules).toBe('function')
-    expect(typeof l.drainOutcomes).toBe('function')
-    // If either of these ever appears, the omission above has been undone silently.
-    expect(l).not.toHaveProperty('loadState')
-    expect(l).not.toHaveProperty('loadPool')
+  it('derives what the engine read inline: template slots, IDP, superflex and scoring', async () => {
+    const rules = await deriveDraftRosterRules('lg1', LEAGUE)
+    // The same flags the engine computed inline, from the same helper — one derivation, not a second.
+    expect(rules).toEqual({
+      rosterSlots: ['QB', 'RB', 'RB', 'WR', 'WR', 'SUPER_FLEX'],
+      idp: false,
+      ...resolveLeagueScoringFlags(LEAGUE.settings, LEAGUE.starters),
+    })
+    expect(rules).toMatchObject({ isSF: true, is2QB: false })
+    expect(getRosterTemplate).toHaveBeenCalledWith('NFL', 'standard', 'lg1')
   })
 
-  it('reads through the rules source', async () => {
-    const { store, kindsRead } = spyStore()
-    const l = createDraftOsLoaders({ store: store as never })
-    await l.loadRules('lg1').catch(() => null)
-    expect(kindsRead).toEqual(['rules'])
+  it('an IDP league still gets the IDP template (Phase 32 holds inside the derivation)', async () => {
+    isIdpLeague.mockResolvedValueOnce(true)
+    expect((await deriveDraftRosterRules('lg1', LEAGUE))?.idp).toBe(true)
+    expect(getRosterTemplate).toHaveBeenCalledWith('NFL', 'IDP', 'lg1')
   })
 
-  it('degrades to live derivation when the store is dead, and never throws', async () => {
-    const { store } = spyStore()
-    const l = createDraftOsLoaders({ store: store as never })
-    // Same property as the other three domains: `domain_os_facts` has never been migrated, so in
-    // production every read throws 42P01 and the feed must fall through rather than fail.
-    await expect(l.loadRules('lg1')).resolves.toBeDefined()
-    expect(store.read).toHaveBeenCalled()
+  it('a second read inside the minute is served from the cache — no IDP lookup, no template read', async () => {
+    const { store } = memoryStore()
+    const loaders = createDraftOsLoaders({ store: store as never })
+    const first = await loaders.loadRosterRules({ leagueId: 'lg1', sport: 'NFL' })
+    expect(loaders.drainOutcomes()).toMatchObject({ rosterRules: { servedFrom: 'live' } })
+    const callsAfterFirst = getRosterTemplate.mock.calls.length
+    const second = await loaders.loadRosterRules({ leagueId: 'lg1', sport: 'NFL' })
+    expect(loaders.drainOutcomes()).toMatchObject({ rosterRules: { servedFrom: 'store' } })
+    expect(second).toEqual(first)
+    expect(getRosterTemplate.mock.calls.length).toBe(callsAfterFirst)
+  })
+
+  it('a dead store degrades to the live derivation and never throws', async () => {
+    const dead = {
+      read: vi.fn(async () => {
+        throw new Error('relation "domain_os_facts" does not exist')
+      }),
+      write: vi.fn(async () => {
+        throw new Error('relation "domain_os_facts" does not exist')
+      }),
+    }
+    const loaders = createDraftOsLoaders({ store: dead as never })
+    await expect(loaders.loadRosterRules({ leagueId: 'lg1' })).resolves.toMatchObject({ isSF: true })
+  })
+
+  it('the reader the engine uses returns the same rules as the live derivation', async () => {
+    const live = await deriveDraftRosterRules('lg1', LEAGUE)
+    await expect(readDraftRosterRules('lg1', LEAGUE)).resolves.toEqual(live)
+  })
+
+  it('the engine’s reader goes through the cache: a league polled twice in a minute reads its template once', async () => {
+    const a = await readDraftRosterRules('lg-poll', LEAGUE)
+    const b = await readDraftRosterRules('lg-poll', LEAGUE)
+    expect(b).toEqual(a)
+    expect(getRosterTemplate).toHaveBeenCalledTimes(1)
+    expect(isIdpLeague).toHaveBeenCalledTimes(1)
+  })
+
+  it('🛑 when the cache cannot answer, the reader derives live from the league it was handed', async () => {
+    // The cache's own derive reads the league itself; make that read find nothing.
+    leagueFindUnique.mockResolvedValueOnce(null as never)
+    const rules = await readDraftRosterRules('lg1', LEAGUE)
+    expect(rules.rosterSlots).toEqual(['QB', 'RB', 'RB', 'WR', 'WR', 'SUPER_FLEX'])
+  })
+
+  it('the queue reorder reads the same rules', async () => {
+    await expect(resolveDraftRosterShape('lg1', LEAGUE)).resolves.toEqual({
+      rosterSlots: ['QB', 'RB', 'RB', 'WR', 'WR', 'SUPER_FLEX'],
+      isSF: true,
+      is2QB: false,
+    })
   })
 })

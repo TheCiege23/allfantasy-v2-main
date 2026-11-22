@@ -45,7 +45,7 @@ describe("notification preference resolver", () => {
     }
     const fingerprintChanged = getNotificationPreferencesFingerprint(changed)
     expect(fingerprintChanged).not.toBe(fingerprintA)
-    expect(getNotificationPreferencesFingerprint({ ...defaults, pushDevices: { desktop: true } })).not.toBe(fingerprintA)
+    expect(getNotificationPreferencesFingerprint({ ...defaults, pushDevices: { desktop: false } })).not.toBe(fingerprintA)
   })
 })
 

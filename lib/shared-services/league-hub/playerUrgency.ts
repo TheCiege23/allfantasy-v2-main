@@ -17,7 +17,7 @@ import type {
   InjuryStatus,
 } from './crossLeaguePlayerPortfolio'
 
-export type UrgencyLevel = 'critical' | 'high' | 'medium' | 'low' | 'none'
+type UrgencyLevel = 'critical' | 'high' | 'medium' | 'low' | 'none'
 
 const LEVEL_RANK: Record<UrgencyLevel, number> = { critical: 4, high: 3, medium: 2, low: 1, none: 0 }
 
@@ -43,7 +43,7 @@ function injurySeverity(status: InjuryStatus | undefined): InjurySeverity {
   }
 }
 
-export interface AppearanceUrgency {
+interface AppearanceUrgency {
   canonicalLeagueId: string
   leagueName: string
   level: UrgencyLevel

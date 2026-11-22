@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const db = vi.hoisted(() => ({ league: { findUnique: vi.fn() }, survivorTribe: { findMany: vi.fn() } }))
+const db = vi.hoisted(() => ({ league: { findUnique: vi.fn() }, survivorTribe: { findMany: vi.fn() }, survivorGuillotineLeague: { findUnique: vi.fn() } }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
@@ -55,5 +55,52 @@ describe('attachSurvivorTribeBadges', () => {
   it('is a no-op before any tribe exists', async () => {
     db.survivorTribe.findMany.mockResolvedValue([])
     expect(await attachSurvivorTribeBadges('lg', slotOrder)).toBe(slotOrder)
+  })
+})
+
+/*
+ * Survivor Guilly forms its starting tribes in period 0; random and manager-choice formation can
+ * finish before the draft. Its engine stores ids only, so the board uses the league page's own
+ * tribe identity (`sgTribeArt`): Vela, Koa, … with their buff colours and symbols.
+ */
+describe('Survivor Guilly tribes', () => {
+  const sgLeague = () => {
+    db.league.findUnique.mockReset()
+    db.league.findUnique.mockResolvedValueOnce({ survivorMode: false, leagueVariant: 'survivor_guillotine' })
+  }
+
+  it('stamps each seat with its formed tribe, named and coloured as the league page shows it', async () => {
+    sgLeague()
+    db.survivorGuillotineLeague.findUnique.mockResolvedValue({
+      tribes: [{ rosterId: 'r1', tribeId: 'tribe-0' }, { rosterId: 'r2', tribeId: 'tribe-1', captain: true }, { rosterId: 'r3', tribeId: 'tribe-0' }],
+    })
+    const out = await attachSurvivorTribeBadges('lg', slotOrder)
+    expect(out.map(e => e.tribe?.name)).toEqual(['Vela', 'Koa', 'Vela'])
+    expect(out[0].tribe).toEqual({
+      id: 'tribe-0', name: 'Vela', colorHex: '#7b6cf0',
+      markUrl: '/specialty/survguil/tribes/sym-star.svg', crestUrl: '/specialty/survguil/tribes/buff-purple.svg',
+    })
+    expect(out[1].tribe?.colorHex).toBe('#3bb3b8')
+    // Never the classic Survivor tables.
+    expect(db.survivorTribe.findMany).not.toHaveBeenCalled()
+  })
+
+  it('no tribes formed yet, or malformed rows: the board is untouched', async () => {
+    sgLeague()
+    db.survivorGuillotineLeague.findUnique.mockResolvedValue({ tribes: [] })
+    expect(await attachSurvivorTribeBadges('lg', slotOrder)).toBe(slotOrder)
+    sgLeague()
+    db.survivorGuillotineLeague.findUnique.mockResolvedValue({ tribes: [{ rosterId: 'r1' }, 'junk', null] })
+    expect(await attachSurvivorTribeBadges('lg', slotOrder)).toBe(slotOrder)
+    sgLeague()
+    db.survivorGuillotineLeague.findUnique.mockResolvedValue(null)
+    expect(await attachSurvivorTribeBadges('lg', slotOrder)).toBe(slotOrder)
+  })
+
+  it('a seat not in any tribe keeps no badge', async () => {
+    sgLeague()
+    db.survivorGuillotineLeague.findUnique.mockResolvedValue({ tribes: [{ rosterId: 'r2', tribeId: 'tribe-2' }] })
+    const out = await attachSurvivorTribeBadges('lg', slotOrder)
+    expect(out.map(e => e.tribe?.name ?? null)).toEqual([null, 'Nalu', null])
   })
 })

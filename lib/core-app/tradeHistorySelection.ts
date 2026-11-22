@@ -1,4 +1,4 @@
-export type MirroredTradeRow = {
+type MirroredTradeRow = {
   transactionId: string
   history: { sleeperUsername: string }
 }

@@ -17,14 +17,14 @@ import 'server-only'
  * decides how it may be used — the brief's "do not call OCR output deterministic truth".
  */
 
-export type ScreenshotField = {
+type ScreenshotField = {
   label: string
   value: string
   /** Low when the extraction hedged about this line. */
   confidence: 'high' | 'low'
 }
 
-export type ScreenshotEvidence = {
+type ScreenshotEvidence = {
   /** The raw model text, unmodified. Kept for provenance, never for prompting. */
   raw: string
   fields: ScreenshotField[]

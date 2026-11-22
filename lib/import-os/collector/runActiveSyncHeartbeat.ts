@@ -2,7 +2,7 @@ import { runActiveSyncLane } from './activeSyncLane'
 import { refreshRedraftRosterPlayersAfterSync } from './refreshRedraftRosterPlayersAfterSync'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
-export const ACTIVE_SYNC_JOB = 'cron-fantasy-os-active-sync'
+const ACTIVE_SYNC_JOB = 'cron-fantasy-os-active-sync'
 
 /** Called by `/api/cron/fantasy-os-active-sync`, which `scripts/cron-fast-tier-loop.mjs` fires every five minutes. */
 export async function runActiveSyncHeartbeat(limitPerProvider = 50) {

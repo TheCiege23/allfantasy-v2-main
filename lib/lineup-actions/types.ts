@@ -3,7 +3,7 @@ import type { LeagueSport } from '@prisma/client'
 /** How the dashboard should phrase the primary number (label must match). */
 export type LineupActionDisplayMode = 'unresolved_slots' | 'leagues' | 'lineups'
 
-export type LineupActionUrgency = 'urgent' | 'soon' | 'normal' | 'low'
+type LineupActionUrgency = 'urgent' | 'soon' | 'normal' | 'low'
 
 export type LineupActionReasonType =
   | 'empty_starter'
@@ -20,7 +20,7 @@ export type LineupActionReasonType =
   | 'war_room'
   | 'weather_risk'
 
-export type LineupActionSourceModule =
+type LineupActionSourceModule =
   | 'lineup_scan'
   | 'StartSit'
   | 'Waiver'

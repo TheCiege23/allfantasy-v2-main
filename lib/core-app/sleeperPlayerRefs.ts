@@ -28,12 +28,16 @@ export type SleeperPlayer = {
 
 type Row = { externalId: string; sleeperId: string | null; source: string; fetchedAt: Date; name?: string; position?: string | null; team?: string | null; imageUrl?: string | null }
 
-export async function resolveSleeperPlayers(sleeperIds: readonly string[]): Promise<Map<string, SleeperPlayer>> {
+/**
+ * `sport` (2026-11-11): Sleeper numbers its players per sport, so an NBA league's ids resolve only
+ * against NBA catalog rows. Defaults to NFL, which every caller before the trending list's sport tabs meant.
+ */
+export async function resolveSleeperPlayers(sleeperIds: readonly string[], sport: string = 'NFL'): Promise<Map<string, SleeperPlayer>> {
   const out = new Map<string, SleeperPlayer>()
   const ids = [...new Set(sleeperIds.filter(Boolean))]
   if (ids.length === 0) return out
   const own = (await prisma.sportsPlayer.findMany({
-    where: { sport: 'NFL', sleeperId: { in: ids } },
+    where: { sport, sleeperId: { in: ids } },
     select: { externalId: true, sleeperId: true, source: true, fetchedAt: true, name: true, position: true, team: true, imageUrl: true },
   })) as Row[]
   // Prefer the vendor's own row (the one search results link to), then the newest.
@@ -43,8 +47,8 @@ export async function resolveSleeperPlayers(sleeperIds: readonly string[]): Prom
   if (chosen.size === 0) return out
 
   const sharing = await prisma.sportsPlayer.findMany({
-    // externalid-audited: unscoped ON PURPOSE — it must see every row the `NFL:<externalId>` resolver can reach
-    where: { sport: 'NFL', externalId: { in: [...new Set([...chosen.values()].map((r) => r.externalId))] }, sleeperId: { not: null } },
+    // externalid-audited: unscoped ON PURPOSE — it must see every row the `<SPORT>:<externalId>` resolver can reach
+    where: { sport, externalId: { in: [...new Set([...chosen.values()].map((r) => r.externalId))] }, sleeperId: { not: null } },
     select: { externalId: true, sleeperId: true },
   })
   const claimants = new Map<string, Set<string>>()
@@ -62,9 +66,9 @@ export async function resolveSleeperPlayers(sleeperIds: readonly string[]): Prom
       name: r.name ?? sid,
       position: r.position ?? null,
       // Some catalog rows carry the full club name ("Philadelphia Eagles"); rows show the code.
-      team: r.team ? (normalizeTeamAbbrev(r.team) ?? r.team) : null,
+      team: r.team ? (sport === 'NFL' ? (normalizeTeamAbbrev(r.team) ?? r.team) : r.team) : null,
       imageUrl: asHeadshotUrl(image),
-      ref: who && who.size === 1 && who.has(sid) ? playerRef('NFL', r.externalId, r.source) : null,
+      ref: who && who.size === 1 && who.has(sid) ? playerRef(sport, r.externalId, r.source) : null,
     })
   }
   return out

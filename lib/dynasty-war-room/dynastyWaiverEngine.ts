@@ -13,7 +13,7 @@ import { evaluateDynastyTeamNeeds } from './dynastyRosterNeedsEngine'
 import { isNhlProspectWireRow } from '@/lib/waiver-wire/prospectFreeAgentDisplay'
 import type { DynastyPlayerFact, DynastyWarRoomContext } from './types'
 
-export interface DynastyWaiverAdd {
+interface DynastyWaiverAdd {
   playerId: string
   playerName: string
   position: string
@@ -24,7 +24,7 @@ export interface DynastyWaiverAdd {
   reason: string
 }
 
-export interface DynastyWaiverDrop {
+interface DynastyWaiverDrop {
   playerId: string
   playerName: string
   position: string

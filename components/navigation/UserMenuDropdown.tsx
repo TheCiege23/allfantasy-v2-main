@@ -8,7 +8,7 @@ import { IdentityImageRenderer } from "@/components/identity/IdentityImageRender
 import { useSettingsProfile } from "@/hooks/useSettingsProfile"
 import { USER_MENU_ITEMS } from "@/lib/navigation"
 
-export interface UserMenuDropdownProps {
+interface UserMenuDropdownProps {
   userLabel?: string | null
   /** Optional class for the trigger button. */
   className?: string

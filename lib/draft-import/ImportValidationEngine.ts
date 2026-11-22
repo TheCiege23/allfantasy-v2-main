@@ -2,6 +2,7 @@
  * Validate mapped import preview (and optional raw payload). Deterministic, rules-based.
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import type { DraftImportPreview } from './DraftImportPreview'
 import type { ImportErrorReport } from './types'
 import { createEmptyReport, addError, addWarning } from './ImportErrorReport'
@@ -21,8 +22,8 @@ export function validatePreview(
   const rounds = preview.metadata?.rounds ?? Math.max(1, ...picks.map((pick) => pick.round), 15)
   const maxOverall = teamCount * rounds
 
-  if (teamCount < 1 || teamCount > 50) {
-    addError(report, 'INVALID_TEAM_COUNT', `teamCount must be 1–50, got ${teamCount}`, 'slotOrder')
+  if (teamCount < 1 || teamCount > MAX_NATIVE_TEAMS) {
+    addError(report, 'INVALID_TEAM_COUNT', `teamCount must be 1–${MAX_NATIVE_TEAMS}, got ${teamCount}`, 'slotOrder')
   }
   if (rounds < 1 || rounds > 60) {
     addError(report, 'INVALID_ROUNDS', `rounds must be 1–60, got ${rounds}`, 'metadata.rounds')

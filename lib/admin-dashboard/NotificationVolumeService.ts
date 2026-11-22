@@ -21,12 +21,12 @@ import { prisma } from '@/lib/prisma'
  * Read-only; every query is bounded by `days` (1-30).
  */
 
-export type ChannelDay = { day: string; push: number; email: number; sms: number; inApp: number; heldPush: number }
-export type CategoryRow = { category: string; push: number; email: number; sms: number; users: number }
-export type TypeRow = { type: string; channel: string; sent: number; users: number }
-export type PerUserStats = { channel: string; userDays: number; avg: number; p50: number; p90: number; max: number; over20: number }
-export type TopUser = { userId: string; email: string | null; push: number; email_: number; sms: number; total: number }
-export type OptOuts = {
+type ChannelDay = { day: string; push: number; email: number; sms: number; inApp: number; heldPush: number }
+type CategoryRow = { category: string; push: number; email: number; sms: number; users: number }
+type TypeRow = { type: string; channel: string; sent: number; users: number }
+type PerUserStats = { channel: string; userDays: number; avg: number; p50: number; p90: number; max: number; over20: number }
+type TopUser = { userId: string; email: string | null; push: number; email_: number; sms: number; total: number }
+type OptOuts = {
   masterSwitchOff: number
   liveLevels: Record<string, number>
   emailUnsubscribedTotal: number

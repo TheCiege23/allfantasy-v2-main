@@ -13,7 +13,7 @@ function tx(t: Translate, key: string, fallback: string): string {
   return value && value !== key ? value : fallback
 }
 
-export type CopyOutcome = 'copied' | 'failed'
+type CopyOutcome = 'copied' | 'failed'
 
 /**
  * Copy the invite link. `navigator.clipboard` is missing on plain-http origins and can reject on
@@ -42,10 +42,10 @@ export async function copyInviteText(text: string, field?: HTMLInputElement | nu
   return 'failed'
 }
 
-export type ShareOutcome = 'shared' | 'cancelled' | 'failed'
+type ShareOutcome = 'shared' | 'cancelled' | 'failed'
 
 /** The phone's own share sheet (Messages, Mail, Discord, Instagram…). Cancelling is not an error. */
-export async function shareInviteNatively(data: { title: string; text: string; url: string }): Promise<ShareOutcome> {
+async function shareInviteNatively(data: { title: string; text: string; url: string }): Promise<ShareOutcome> {
   try {
     await navigator.share(data)
     return 'shared'

@@ -1,8 +1,8 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getLeagueRole } from "@/lib/league/permissions"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
 import { logAction } from "@/server/services/auditService"
 import { Prisma } from '@prisma/client'
@@ -28,10 +28,8 @@ export async function PATCH(
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { leagueId, claimId } = params
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== "commissioner" && role !== "co_commissioner") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refused) return refused
 
   const parsed = overrideSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid claim override' }, { status: 400 })

@@ -28,7 +28,7 @@ import { computeRookieOrder, type RookieOrderConfig } from '@/lib/rookie-order/r
 
 export type RookieDraftOrderMode = 'worst_to_first' | 'reverse_max_pf'
 
-export interface RookieDraftSlot {
+interface RookieDraftSlot {
   slot: number
   teamId: string
   teamName: string
@@ -41,7 +41,7 @@ export interface RookieDraftSlot {
   playoffFinish: string | null // 'Champion', 'Runner-Up', 'Seed 3', etc.
 }
 
-export interface RookieDraftOrderResult {
+interface RookieDraftOrderResult {
   mode: RookieDraftOrderMode
   season: number // The season this draft order is FOR (next season)
   basedOnSeason: number // The season data is FROM
@@ -83,8 +83,16 @@ export async function computeRookieDraftOrder(
   const nextSeason = currentSeason + 1
   const settings = (league.settings as Record<string, unknown>) ?? {}
 
-  // Get active (non-orphan) teams
-  const activeTeams = league.teams.filter(t => !t.isOrphan)
+  /*
+   * 🛑 EVERY TEAM, INCLUDING ONE NOBODY HAS CLAIMED. This used to drop orphan teams, but an unclaimed
+   * team still holds a slot in the rookie draft and its picks are still made. With one orphan in the
+   * league the engine's order (which seats every team) never matched the shortened list, so the order
+   * fell back to the old sort over the claimed teams alone: the Draft tab previewed a league of 4 as
+   * one team labelled "Champion" (seen re-walking a dynasty league, 2026-11-19), and
+   * `resolveRookieDraftSlotOrderForLeague` got an order that could not seat every roster and applied
+   * nothing. Dynasty leagues are where orphan teams are most common.
+   */
+  const activeTeams = league.teams
   if (activeTeams.length === 0) {
     return emptyResult(mode, nextSeason, 'No active teams')
   }
@@ -266,7 +274,7 @@ type OrderTeamRow = {
 }
 
 /** The legacy modes as engine settings: they differ only in how the non-playoff teams are ordered. */
-export const LEGACY_MODE_ENGINE_CONFIG: Record<RookieDraftOrderMode, RookieOrderConfig> = {
+const LEGACY_MODE_ENGINE_CONFIG: Record<RookieDraftOrderMode, RookieOrderConfig> = {
   worst_to_first: { nonPlayoff: 'reverse_record', playoff: 'finish_then_seed', withinRound: 'worse_seed' },
   reverse_max_pf: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' },
 }

@@ -5,7 +5,7 @@
  */
 
 /** Escape key closes the notification panel when open. */
-export const NOTIFICATION_DRAWER_CLOSE_KEY = "Escape"
+const NOTIFICATION_DRAWER_CLOSE_KEY = "Escape"
 
 export function isNotificationDrawerCloseKey(key: string): boolean {
   return key === NOTIFICATION_DRAWER_CLOSE_KEY

@@ -137,7 +137,8 @@ describe('🛑 the /core page wires it through the gate', () => {
     expect(paywallRead).toContain("activeKey === 'draft-hq'")
     expect(page).toContain("const draftEdgeAccess = activeKey === 'draft-hq' ? (corePaywall?.competitive_edge ?? null) : null")
     expect(page).toMatch(/await loadDraftEdgeForScreen\(\{\s*leagueId: draftHq \? selectedLeagueId : null,\s*access: draftEdgeAccess,/)
-    expect(page).toContain('<DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />')
+    // Multi-line since the 2026-11-13 guide (DraftHq also takes the live board and its cursor).
+    expect(page).toMatch(/<DraftHq\s+data=\{draftHq\}\s+edge=\{draftEdge\}\s+edgeAccess=\{draftEdgeAccess\}/)
     // Never the ungated loader straight from the page.
     expect(page).not.toMatch(/\bloadDraftEdge\(/)
   })

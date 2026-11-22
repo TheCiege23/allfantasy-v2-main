@@ -32,8 +32,7 @@ function normalizeConfidence(
  * Pulls evidence from deterministicEvidence or structured; does not invent.
  */
 export function buildToolOutputSections(input: BuildSectionsInput): ToolOutput {
-  const { primaryAnswer, structured, envelope, toolKey, deterministicEvidence = [] } = input
-  const det = envelope.deterministicPayload ?? {}
+  const { primaryAnswer, structured, envelope, deterministicEvidence = [] } = input
   const st = structured ?? {}
 
   const verdict =

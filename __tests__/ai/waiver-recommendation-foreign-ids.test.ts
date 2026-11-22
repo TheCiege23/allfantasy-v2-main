@@ -159,7 +159,7 @@ describe('POST /api/ai/waivers/recommend — the panel contract, from the engine
     h.facts = { ...FACTS, settings: { waiverType: 'faab', normalizedWaiverType: 'faab', faabBudget: 100 }, faabRemaining: 80 }
     const faab = await (await call()).json()
     expect(faab.recommendations[0].suggestedFaabBid).toBe(12)
-    expect(faab.leagueContext).toEqual({ leagueId: 'L1', waiverType: 'faab', faabBudget: 100, faabRemaining: 80 })
+    expect(faab.leagueContext).toEqual({ leagueId: 'L1', sport: 'NFL', waiverType: 'faab', faabBudget: 100, faabRemaining: 80 })
   })
 
   it('no roster for you in this league: an honest empty answer, and the engine never runs', async () => {

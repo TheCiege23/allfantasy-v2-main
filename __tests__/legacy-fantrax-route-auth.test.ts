@@ -87,7 +87,7 @@ const { prismaMock, store, requireVerifiedUserMock, parseFantraxFilesMock } = vi
 })
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock }))
 vi.mock('@/lib/fantrax-parser', () => ({ parseFantraxFiles: parseFantraxFilesMock }))
 
 import { POST, GET } from '@/server/api-route-modules/legacy/fantrax/route'

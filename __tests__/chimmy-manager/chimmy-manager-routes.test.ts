@@ -22,15 +22,17 @@ vi.mock('@/lib/orphan-ai-manager/orphanRosterResolver', () => ({ getOrphanRoster
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn({})),
-    league: { findUnique: vi.fn(async () => ({ name: 'Blah League' })) },
+    league: { findUnique: vi.fn(async () => ({ name: 'Blah League' })), findFirst: vi.fn(async () => ({ userId: 'owner' })) },
     roster: {
       findFirst: vi.fn(async () => ({ id: 'r1', platformUserId: 'orphan-r1', settings: {} })),
       update: vi.fn(async (args: Record<string, unknown>) => { h.updates.push(args); return {} }),
     },
-    leagueTeam: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    // The seat being reassigned is an orphan, not a commissioner's (managers/route.ts seatNeed).
+    leagueTeam: { updateMany: vi.fn(async () => ({ count: 1 })), findFirst: vi.fn(async () => null) },
     findLeagueListing: { updateMany: vi.fn(async () => ({ count: 1 })) },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessAllowAll())
 
 import { PATCH as assignManager } from '@/app/api/commissioner/leagues/[leagueId]/managers/route'
 import { POST as orphanAssignAi } from '@/app/api/leagues/[leagueId]/orphaned-teams/assign-ai/route'

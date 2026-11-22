@@ -1,9 +1,10 @@
+import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertLeagueMember } from '@/lib/league/league-access'
+import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
 import { ensurePostDraftFinalized } from '@/lib/post-draft'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { scheduleDivisionsForRosters } from '@/lib/league/divisions/leagueDivisions'
@@ -87,7 +88,13 @@ export async function POST(req: NextRequest) {
   const leagueId = body.leagueId?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueMember(leagueId, userId)
+  /*
+   * 🛑 ANY MEMBER COULD CREATE A SEASON (2026-11-15). This only checked membership, and nothing refused a second season
+   * for the same year — the newest season is the league's current one, so any manager could replace the live
+   * season, its rosters and its schedule with a fresh empty one. Creating a season is now the commissioner's, and a
+   * year that already has a season is refused.
+   */
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const league = await prisma.league.findFirst({
@@ -117,6 +124,10 @@ export async function POST(req: NextRequest) {
     if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
   }
   const medianGame = body.medianGame ?? league.medianGame ?? false
+  const existingSeason = await prisma.redraftSeason.findFirst({ where: { leagueId, season: seasonYear }, select: { id: true } })
+  if (existingSeason) {
+    return NextResponse.json({ error: `This league already has a ${seasonYear} season.`, code: 'SEASON_EXISTS', seasonId: existingSeason.id }, { status: 409 })
+  }
 
   const redraft = await prisma.$transaction(async (tx) => {
     const rs = await tx.redraftSeason.create({
@@ -168,6 +179,7 @@ export async function POST(req: NextRequest) {
       medianGame,
       divisionByRoster: divisions?.byRoster ?? null,
       divisionRivalsTwice: divisions?.rivalsTwice === true,
+      gamesPerWeek: readGamesPerWeek(league.settings),
     })
     for (const s of slots) {
       if (s.type === 'median') continue

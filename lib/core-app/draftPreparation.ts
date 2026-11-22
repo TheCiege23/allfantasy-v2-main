@@ -1,3 +1,4 @@
+import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { draftReferences } from '@/lib/draft-archive/references';
@@ -238,7 +239,7 @@ export async function getDraftPreparationData(
         })
       : Promise.all([
           prisma.draftQueue.findUnique({
-            where: { sessionId_userId: { sessionId: session.id, userId } },
+            where: { sessionId_userId: { sessionId: session.id, userId: await draftQueueKeyForSession(session.id, userId) } },
             select: { order: true },
           }),
           prisma.liveDraftAutopickPreference.findUnique({

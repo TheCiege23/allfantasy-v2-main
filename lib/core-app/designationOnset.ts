@@ -31,14 +31,14 @@ export type InjuryRowLike = {
   expiresAt?: Date | null
 }
 
-export type DesignationOnset = {
+type DesignationOnset = {
   status: string | null
   description: string | null
   /** The earliest report of the current designation; null when no row of it carries a date. */
   reportedAt: Date | null
 }
 
-export const SAME_EPISODE_HOURS = 7 * 24
+const SAME_EPISODE_HOURS = 7 * 24
 
 /** The designation reduced to comparable words — "Out", "OUT" and "Out." are one. */
 export function designationKey(status: string | null | undefined): string {

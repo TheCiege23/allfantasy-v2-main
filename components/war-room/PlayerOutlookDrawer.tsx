@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-export type PlayerOutlookDrawerProps = {
+type PlayerOutlookDrawerProps = {
   open: boolean
   onClose: () => void
   leagueId: string
@@ -31,7 +31,7 @@ export function PlayerOutlookDrawer({ open, onClose, leagueId, sport }: PlayerOu
         </div>
         <p className="mt-2 text-[11px] text-white/55">
           <code className="text-cyan-200/80">POST /api/war-room/outlook</code> persists rows to{' '}
-          <code className="text-white/50">player_outlooks</code> and feeds Waiver AI / Chimmy.
+          <code className="text-white/50">player_outlooks</code> and feeds Waiver Chimmy.
         </p>
         <p className="mt-2 text-[11px] text-white/40">
           {leagueId.slice(0, 8)}… · {sport}

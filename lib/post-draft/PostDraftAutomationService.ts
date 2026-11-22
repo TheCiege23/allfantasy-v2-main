@@ -5,7 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
-import type { DraftSessionSnapshot, SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import type {
   PostDraftSummary,
   PickLogEntry,

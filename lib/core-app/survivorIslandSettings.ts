@@ -34,11 +34,11 @@ export function sceneArt(choice: SurvivorIslandScenePreference): string {
  * a single field with no cross-field side effect (tribe count resets slots, Exile on/off changes the
  * elimination outcome, the swap needs a week); everything else stays on the full settings page.
  */
-export const INLINE_RULE_KEYS = ['voteDay', 'voteTime', 'selfVotesAllowed', 'idolCount', 'exileReturnTokens', 'mergeWeek'] as const
+const INLINE_RULE_KEYS = ['voteDay', 'voteTime', 'selfVotesAllowed', 'idolCount', 'exileReturnTokens', 'mergeWeek'] as const
 export type InlineRuleKey = (typeof INLINE_RULE_KEYS)[number]
 export type InlineRuleEdits = Partial<Pick<SurvivorSettingsForm, InlineRuleKey>>
 
-export type InlineRuleField = { key: InlineRuleKey; locked: boolean }
+type InlineRuleField = { key: InlineRuleKey; locked: boolean }
 
 /**
  * The fields to draw, each with the settings screen's own lock (isSettingLocked: after the draft

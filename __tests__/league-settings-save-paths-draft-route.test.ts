@@ -28,7 +28,10 @@ vi.mock('@/lib/tournament/seasonDraftMutationGate', () => ({ isSeasonTournamentD
 vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: vi.fn() }))
 vi.mock('@/lib/live-draft-engine/RosterFitValidation', () => ({ validateDraftRoundsFitRoster: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/draft-defaults/DraftVariantSettingsHub', () => ({ getDraftVariantSettings: m.getVariant, updateDraftVariantSettings: m.updateVariant }))
-vi.mock('@/lib/draft-types/draftTypeRegistry', () => ({ isDraftTypeAllowedOnSettingsTab: vi.fn().mockReturnValue(true) }))
+vi.mock('@/lib/draft-types/draftTypeRegistry', async (orig) => ({
+  ...(await orig<typeof import('@/lib/draft-types/draftTypeRegistry')>()),
+  isDraftTypeAllowedOnSettingsTab: vi.fn().mockReturnValue(true),
+}))
 vi.mock('@/lib/leagues/leagueTeamLifecycle', () => ({ CURRENT_TEAMS: {} }))
 vi.mock('@/lib/league-settings-validation', () => ({ validateLeagueSettings: vi.fn().mockReturnValue({ valid: true, errors: [] }) }))
 vi.mock('@/lib/draft-lottery/lotteryConfigStorage', () => ({
@@ -40,7 +43,7 @@ vi.mock('@/lib/commissioner-ai-draft-manager', () => ({ buildApiResponse: vi.fn(
 vi.mock('@/lib/orphan-ai-manager/OrphanAIManagerService', () => ({ getRecentAuditEntries: vi.fn() }))
 vi.mock('@/lib/provider-config', () => ({ getProviderStatus: vi.fn() }))
 vi.mock('@/lib/draft-notifications', () => ({ notifyOrphanAiManagerAssigned: vi.fn(), notifyDraftTimeSet: m.notifyDraftTimeSet }))
-vi.mock('@/lib/sport-scope', () => ({ supportsIdpLeagueSport: vi.fn() }))
+vi.mock('@/lib/sport-scope', async (orig) => ({ ...(await orig<typeof import('@/lib/sport-scope')>()), supportsIdpLeagueSport: vi.fn() }))
 vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({ triggerDraftPoolPrewarmBackground: vi.fn() }))
 vi.mock('@/lib/draft-room/currentDraftSession', () => ({ CURRENT_DRAFT_SESSION_ORDER: [] }))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({
@@ -52,6 +55,8 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
 vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn() }))
 vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyLeagueDraftTimeToTournament: m.copyBack }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PATCH } from '@/app/api/leagues/[leagueId]/draft/settings/route'
 
@@ -80,6 +85,17 @@ beforeEach(() => {
 })
 
 describe('PATCH draft/settings: one save, every copy', () => {
+  // 🛑 Draft type lived in two stores (2026-11-15): the Draft tab now writes the LeagueSettings copy too, which is
+  // what a rebuilt draft session reads (sessionDraftTypeFromLeagueSettings).
+  it('the draft type goes to the LeagueSettings row as well as the config', async () => {
+    expect((await patch({ draft_type: 'auction' })).status).toBe(200)
+    expect(m.prisma.leagueSettings.upsert.mock.calls[0][0].update).toMatchObject({ draftType: 'auction' })
+    expect(m.updateVariant).toHaveBeenCalledWith('L', expect.objectContaining({ config: expect.objectContaining({ draft_type: 'auction' }) }))
+  })
+  it('snake with a 3rd-round reversal is stored as 3rd_reversal', async () => {
+    expect((await patch({ draft_type: 'snake', third_round_reversal: true })).status).toBe(200)
+    expect(m.prisma.leagueSettings.upsert.mock.calls[0][0].update).toMatchObject({ draftType: '3rd_reversal' })
+  })
   it('🛑 rounds go to the LeagueSettings row AND to the config (settings.draft_rounds + DraftSession)', async () => {
     const res = await patch({ rounds: 13 })
     expect(res.status).toBe(200)

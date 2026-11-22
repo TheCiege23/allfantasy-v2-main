@@ -119,16 +119,19 @@ describe('division setup validation', () => {
   const ids = (n: number) => Array.from({ length: n }, (_, i) => `team-${i + 1}`)
   const assign = (n: number, pattern: number[]) => Object.fromEntries(ids(n).map((id, i) => [id, pattern[i]]))
 
-  it('allows 2–4 divisions only when every division can hold two teams', () => {
+  it('allows 2–32 divisions only when every division can hold two teams', () => {
     expect(divisionCountAllowed(4, 2)).toBe(true)
     expect(divisionCountAllowed(4, 3)).toBe(false)
     expect(divisionCountAllowed(5, 2)).toBe(true)
     expect(divisionCountAllowed(7, 4)).toBe(false)
     expect(divisionCountAllowed(8, 4)).toBe(true)
     expect(divisionCountAllowed(20, 4)).toBe(true)
-    expect(divisionCountAllowed(16, 8)).toBe(false)
+    expect(divisionCountAllowed(16, 8)).toBe(true)
+    expect(divisionCountAllowed(15, 8)).toBe(false)
+    expect(divisionCountAllowed(160, 16)).toBe(true)
+    expect(divisionCountAllowed(250, 33)).toBe(false)
     expect(validateDivisionSetup({ count: 3, names: ['A', 'B', 'C'], teamAssignments: {} }, ids(4))).toMatchObject({ ok: false, code: 'TOO_FEW_TEAMS' })
-    expect(validateDivisionSetup({ count: 8, names: [], teamAssignments: {} }, ids(16))).toMatchObject({ ok: false, code: 'COUNT_NOT_ALLOWED' })
+    expect(validateDivisionSetup({ count: 33, names: [], teamAssignments: {} }, ids(160))).toMatchObject({ ok: false, code: 'COUNT_NOT_ALLOWED' })
     expect(validateDivisionSetup({ count: 0, names: [], teamAssignments: {} }, ids(4))).toEqual({ ok: true })
   })
 

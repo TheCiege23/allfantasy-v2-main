@@ -33,7 +33,7 @@ import {
 
 const TOP_PRIORITY_CAP = 5
 
-export interface DailyBriefOverview {
+interface DailyBriefOverview {
   leaguesMonitored: number
   leaguesNeedingAttention: number
   healthyLeagueCount: number
@@ -43,13 +43,13 @@ export interface DailyBriefOverview {
 /** Same shape as the recent-change entry the retired `commissionerCommandCenter.ts` produced — a real trend this
  * module consumes as-is, never re-derives. `'flat'` is excluded from the caller's `leagueTrends` input
  * being surfaced as a highlight ("meaningful activity" means the trend actually moved). */
-export interface DailyBriefLeagueHighlight {
+interface DailyBriefLeagueHighlight {
   leagueId: string
   direction: 'increasing' | 'decreasing'
   eventCountDelta: number
 }
 
-export interface DailyBriefPositiveHighlight {
+interface DailyBriefPositiveHighlight {
   leagueId: string
   title: string
   detail: string

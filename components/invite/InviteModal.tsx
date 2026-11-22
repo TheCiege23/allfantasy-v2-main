@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 import { InviteShareSheet } from './InviteShareSheet'
 import type { InviteShareChannel, InviteType } from '@/lib/invite-engine/types'
 
-export interface InviteModalProps {
+interface InviteModalProps {
   isOpen: boolean
   onClose: () => void
   inviteType: InviteType

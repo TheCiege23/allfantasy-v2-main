@@ -105,12 +105,13 @@ describe('a phone that never chose a layout gets the list', () => {
     expect(container.querySelector('.af-stb-cardwrap')).toBeNull()
   })
 
-  it('honours a phone that chose the table before', async () => {
+  // 2026-11-14: there is no Table/Cards switch any more, so a choice it once stored no longer applies.
+  it('gives a phone the list even if the old switch once stored "table"', async () => {
     phone(true)
     window.localStorage.setItem('af-standings-layout', 'table')
     const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
     await act(async () => {})
-    expect(container.querySelector('.af-stb-cardwrap')).toBeNull()
+    expect(container.querySelector('.af-stb-cardwrap')).not.toBeNull()
   })
 
   it('honours a layout the URL names', async () => {

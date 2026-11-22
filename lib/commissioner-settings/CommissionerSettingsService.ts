@@ -8,8 +8,6 @@ import { clientLeagueSettings } from "@/lib/league/clientLeagueSettings"
 import type { LeagueSettingsPatch, LeagueConfigurationView } from "./types"
 import { invalidateLeagueDraftCaches } from "@/lib/league/invalidateLeagueDraftCaches"
 import { getPlatformEvents, EVENT } from "@/lib/events"
-import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
-import type { LeagueSport } from "@prisma/client"
 import {
   normalizeTradeReviewChoice,
   publishTradeReviewChange,

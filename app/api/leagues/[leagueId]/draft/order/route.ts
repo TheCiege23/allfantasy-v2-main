@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET: Current draft order (slotOrder from session).
@@ -8,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
+import { SLEEPER_MIRRORED_DRAFT_CODE, SLEEPER_MIRRORED_DRAFT_ERROR, recordCommissionerDraftAction } from '@/lib/draft-room/commissionerDraftActions'
 import { prisma } from '@/lib/prisma'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -55,7 +56,7 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
@@ -69,9 +70,13 @@ export async function PATCH(
   const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, teamCount: true },
+    select: { id: true, status: true, teamCount: true, sleeperDraftId: true },
   })
   if (!draftSession) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
+  // Sleeper rewrites a mirrored draft's order on every sync; an order set here would be undone.
+  if (draftSession.sleeperDraftId) {
+    return NextResponse.json({ error: SLEEPER_MIRRORED_DRAFT_ERROR, code: SLEEPER_MIRRORED_DRAFT_CODE }, { status: 409 })
+  }
   if (draftSession.status !== 'pre_draft') {
     return NextResponse.json({ error: 'Draft order can only be set when status is pre_draft' }, { status: 400 })
   }
@@ -91,5 +96,6 @@ export async function PATCH(
     },
   })
 
+  await recordCommissionerDraftAction(leagueId, userId, 'order', { source: 'draft/order' })
   return NextResponse.json({ ok: true, slotOrder: normalized })
 }

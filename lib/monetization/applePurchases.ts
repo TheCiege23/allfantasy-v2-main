@@ -99,6 +99,38 @@ export async function applyApplePurchase(
   return { sku: item.sku, purchaseType: "subscription" }
 }
 
+/**
+ * DID_FAIL_TO_RENEW: Apple could not charge the renewal and is retrying (2026-11-17; it fell through to
+ * "do nothing" before).
+ *   - With a billing grace period (subtype GRACE_PERIOD), Apple keeps service on until
+ *     `gracePeriodExpiresDate`, and so do we: `past_due` + `gracePeriodEnd` resolves to "grace".
+ *     Before, access ended at the old period end while Apple was still giving the member time.
+ *   - Without one, service stops at the period end: `past_due` with no grace resolves to "past_due"
+ *     until then and "expired" after — and the account can say the payment failed, not just "expired".
+ * A later DID_RECOVER / DID_RENEW goes through applyApplePurchase, which sets "active" and clears the
+ * grace date. An old notification cannot touch a newer renewal (the latest-transaction check).
+ */
+export async function markAppleBillingRetry(
+  transaction: JWSTransactionDecodedPayload,
+  gracePeriodEnd: Date | null
+): Promise<void> {
+  const originalTransactionId = transaction.originalTransactionId?.trim()
+  if (!originalTransactionId) throw new ApplePurchaseError("Missing Apple original transaction ID")
+  const row = await prisma.userSubscription.findUnique({
+    where: { appleOriginalTransactionId: originalTransactionId },
+  })
+  if (!row) return
+  if (transaction.appAccountToken && transaction.appAccountToken.toLowerCase() !== row.userId.toLowerCase()) {
+    throw new ApplePurchaseError("Apple transaction account mismatch", 403)
+  }
+  if (row.appleLatestTransactionId !== transaction.transactionId) return
+  await prisma.userSubscription.update({
+    where: { id: row.id },
+    data: { status: "past_due", gracePeriodEnd: gracePeriodEnd && gracePeriodEnd > new Date() ? gracePeriodEnd : null },
+  })
+  await syncUserProfileFromSubscriptions(row.userId)
+}
+
 export async function expireAppleSubscription(
   transaction: JWSTransactionDecodedPayload,
   status: "expired" | "past_due"

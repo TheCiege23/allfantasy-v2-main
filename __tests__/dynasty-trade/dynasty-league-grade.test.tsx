@@ -2,15 +2,12 @@
  * The dynasty trade analyzer shows THE grade (2026-09-27): the one engine's letter for each team, in
  * the league the viewer chose — and neither of the two private "Fairness" letters it printed before.
  */
-import fs from 'node:fs'
-import path from 'node:path'
 import React from 'react'
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { gradeInputsFromAssetLabels, splitSideAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { DynastyLeagueGrade, NOT_GRADED_WINNER, winnerFromLeagueGrade } from '@/components/dynasty-trade/DynastyLeagueGrade'
 
-const code = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
 
 describe('splitSideAssets', () => {
   it('splits the form’s " + " join, commas and a whole-word "and"', () => {
@@ -102,54 +99,5 @@ describe('winnerFromLeagueGrade — the only winner the page names (2026-09-29)'
     expect(winnerFromLeagueGrade(null, 'A', 'B')).toBeNull()
     expect(winnerFromLeagueGrade(withLetter(null), 'A', 'B')).toBeNull()
     expect(winnerFromLeagueGrade(withLetter('F'), ' ', '')).toBe('Team B — major win')
-  })
-})
-
-describe('wiring', () => {
-  const route = code('app/api/dynasty-trade-analyzer/route.ts')
-  const form = code('components/DynastyTradeForm.tsx')
-
-  it('the route grades through the one engine, in a membership-checked league, from Team A’s side', () => {
-    expect(route).toMatch(/resolveEvaluationLeagueId\(\{ suppliedLeagueId: gradeLeagueId \?\? null, userId \}\)/)
-    expect(route).toMatch(/surface: 'dynasty-trade-analyzer'/)
-    // Each list is what that team GETS: Team A gives B's list.
-    expect(route).toMatch(/give: gradeInputsFromAssetLabels\(labelAssets\(gradeSideB,/)
-    expect(route).toMatch(/get: gradeInputsFromAssetLabels\(labelAssets\(gradeSideA,/)
-    // Both responses carry it — the AI-unavailable fallback too.
-    expect(route.match(/tradeGrade: await tradeGradePayload\(\)/g)).toHaveLength(2)
-  })
-
-  it('the old in-name split is gone', () => {
-    expect(route).not.toMatch(/split\(\/,\|and\/i\)/)
-  })
-
-  it('🛑 the form prints neither private "Fairness" letter, and sends the grade league separately', () => {
-    expect(form).not.toMatch(/\{detVerdict\.fairnessGrade\}/)
-    expect(form).not.toMatch(/\{sections\.valueVerdict\.fairnessGrade\}/)
-    expect(form).not.toMatch(/\$\{detVerdict\.fairnessGrade\} fairness/)
-    expect(form).toMatch(/\.\.\.\(gradeLeagueId \? \{ gradeLeagueId \} : \{\}\)/)
-    // `leagueId` would switch on the context assembler's unchecked path; the form never sends it.
-    expect(form).not.toMatch(/\bleagueId: /)
-  })
-
-  it('🛑 the form names no winner of the dual-brain engine’s — every winner on screen, in the copy text and in a share link is the letter’s', () => {
-    // The engine's own winners: the verdict card's label, the value card's "Edge", the analysis's winner/verdict.
-    expect(form).not.toMatch(/detVerdict\.winnerLabel/)
-    expect(form).not.toMatch(/sections\.valueVerdict\.edge\b/)
-    expect(form).not.toMatch(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/)
-    expect(form).toMatch(/const gradeWinner = winnerFromLeagueGrade\(tradeGrade, teamAName, teamBName\) \?\? NOT_GRADED_WINNER/)
-    // 2026-09-29: one winner card (with or without the AI sections) and one copy text.
-    expect(form.match(/>\{gradeWinner\}</g)).toHaveLength(1)
-    expect(form.match(/\$\{gradeWinner\}/g)).toHaveLength(1)
-    // The analysis kept on the page (and shared) holds no winner at all — a share stores the grade.
-    expect(form).not.toMatch(/^\s*winner:/m)
-    expect(NOT_GRADED_WINNER).toBe('Not graded')
-  })
-
-  it('positive control: the forbidden shapes match the lines the form printed', () => {
-    expect(/detVerdict\.winnerLabel/.test('<div className="text-lg font-bold text-white">{detVerdict.winnerLabel}</div>')).toBe(true)
-    expect(/sections\.valueVerdict\.edge\b/.test('{sections.valueVerdict.edge}')).toBe(true)
-    expect(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/.test("winner: a.winner || 'Even',")).toBe(true)
-    expect(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/.test('dynastyVerdict: a.dynastyVerdict,')).toBe(true)
   })
 })

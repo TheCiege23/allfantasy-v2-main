@@ -48,6 +48,12 @@ vi.mock('@/lib/prisma', () => {
   return { prisma, default: prisma }
 })
 
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => ({
+    season: 2026, week, sport: 'NFL', unit: 'fantasy points', rows: rosterIds.flatMap(rosterPlayerId =>
+      state.receptions[rosterPlayerId] != null ? [{ rosterPlayerId, weekly: state.receptions[rosterPlayerId] }] : []),
+  }),
+}))
 const STARTERS = ['qb1', 'wrStart']
 const BENCH = ['wrBench']
 

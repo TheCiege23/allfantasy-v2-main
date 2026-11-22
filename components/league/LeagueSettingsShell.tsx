@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Settings, ShieldCheck, Sparkles } from 'lucide-react'
 import { AppModal } from '@/components/ui/AppModal'
 
-export type SettingsTabId = 'league' | 'commissioner' | 'format'
+type SettingsTabId = 'league' | 'commissioner' | 'format'
 
 interface LeagueSettingsShellProps {
   open: boolean
@@ -16,12 +16,6 @@ interface LeagueSettingsShellProps {
   leagueTabContent: React.ReactNode
   commissionerTabContent: React.ReactNode
   hasAfCommissionerSub: boolean
-}
-
-const TAB_META: Record<SettingsTabId, { label: string; icon: typeof Settings; description: string }> = {
-  league: { label: 'League', icon: Settings, description: 'Basic league info and rules' },
-  commissioner: { label: 'Commissioner', icon: ShieldCheck, description: 'Commissioner tools and controls' },
-  format: { label: '', icon: Sparkles, description: 'Format-specific settings' },
 }
 
 /**

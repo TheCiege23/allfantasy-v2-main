@@ -24,22 +24,22 @@ export type SpecialtyLeagueId =
   | 'keeper'
 
 /** Canonical variant string stored in League.leagueVariant (lowercase). */
-export type LeagueVariant = string
+type LeagueVariant = string
 
 // --- Config ---
 
 /** Sport-aware default values (e.g. elimination end week by sport). */
-export type SportAwareDefaults<TSettings = Record<string, unknown>> = Partial<
+type SportAwareDefaults<TSettings = Record<string, unknown>> = Partial<
   Record<LeagueSport, Partial<TSettings>>
 >
 
 /** Loader: (leagueId) => config or null. Config shape is league-specific. */
-export type SpecialtyConfigLoader<TConfig = unknown> = (
+type SpecialtyConfigLoader<TConfig = unknown> = (
   leagueId: string
 ) => Promise<TConfig | null>
 
 /** Upsert config after league create. Input is partial; defaults from sport/registry. */
-export type SpecialtyConfigUpsert<TInput = Record<string, unknown>> = (
+type SpecialtyConfigUpsert<TInput = Record<string, unknown>> = (
   leagueId: string,
   input: Partial<TInput>
 ) => Promise<unknown | null>
@@ -47,11 +47,11 @@ export type SpecialtyConfigUpsert<TInput = Record<string, unknown>> = (
 // --- Detection ---
 
 /** (leagueId) => is this league of this specialty type? */
-export type SpecialtyLeagueDetector = (leagueId: string) => Promise<boolean>
+type SpecialtyLeagueDetector = (leagueId: string) => Promise<boolean>
 
 // --- Assets & theming ---
 
-export interface SpecialtyLeagueAssets {
+interface SpecialtyLeagueAssets {
   /** League avatar / branding image URL (e.g. /guillotine/Guillotine.png). */
   leagueImage: string
   /** First league-entry splash video URL (optional). */
@@ -61,38 +61,38 @@ export interface SpecialtyLeagueAssets {
 }
 
 /** Resolver: (env/overrides) => assets. Allows env-based overrides. */
-export type SpecialtyAssetsResolver = () => SpecialtyLeagueAssets
+type SpecialtyAssetsResolver = () => SpecialtyLeagueAssets
 
 // --- UI extension points ---
 
 /** Component path (e.g. @/components/guillotine/GuillotineFirstEntryModal) or lazy import. */
-export type FirstEntryModalComponent = string | (() => Promise<{ default: unknown }>)
+type FirstEntryModalComponent = string | (() => Promise<{ default: unknown }>)
 
 /** Component path for specialty league home (Overview replacement). */
-export type SpecialtyHomeComponent = string | (() => Promise<{ default: unknown }>)
+type SpecialtyHomeComponent = string | (() => Promise<{ default: unknown }>)
 
 /** Optional: custom standings tab component path. */
-export type StandingsVariantComponent = string | null
+type StandingsVariantComponent = string | null
 
 // --- API routes ---
 
 /** API path for summary (e.g. /api/leagues/[leagueId]/guillotine/summary). Used for 404 guard and docs. */
-export type SummaryRoutePath = string
+type SummaryRoutePath = string
 
 /** API path for AI (e.g. /api/leagues/[leagueId]/guillotine/ai). */
-export type AIRoutePath = string | null
+type AIRoutePath = string | null
 
 // --- Automation engine ---
 
 /** Run weekly (or period) evaluation (e.g. elimination, danger, roster release). Signature is league-specific. */
-export type SpecialtyAutomationRunner = (args: {
+type SpecialtyAutomationRunner = (args: {
   leagueId: string
   weekOrPeriod: number
   sport: LeagueSport
 }) => Promise<{ ok: boolean; error?: string }>
 
 /** Optional: event log append. Event types are league-specific. */
-export type SpecialtyEventLogAppend = (
+type SpecialtyEventLogAppend = (
   leagueId: string,
   eventType: string,
   metadata?: Record<string, unknown>
@@ -101,17 +101,17 @@ export type SpecialtyEventLogAppend = (
 // --- Guards ---
 
 /** Guard: can this roster perform lineup/waiver/trade? (e.g. chopped rosters cannot). */
-export type SpecialtyRosterGuard = (
+type SpecialtyRosterGuard = (
   leagueId: string,
   rosterId: string
 ) => Promise<boolean>
 
 /** Optional: list of roster IDs that are "out" (chopped, eliminated, etc.) for bulk checks. */
-export type SpecialtyGetExcludedRosterIds = (leagueId: string) => Promise<string[]>
+type SpecialtyGetExcludedRosterIds = (leagueId: string) => Promise<string[]>
 
 // --- AI extension point ---
 
-export interface SpecialtyAIExtension {
+interface SpecialtyAIExtension {
   /** Entitlement feature id for gating (e.g. guillotine_ai). */
   entitlementFeatureId: string
   /** Build deterministic context for prompts (no LLM here). */
@@ -130,7 +130,7 @@ export interface SpecialtyAIExtension {
 // --- Commissioner controls ---
 
 /** Commissioner-only actions (e.g. override chop, manual eliminate). Keys are action ids. */
-export type SpecialtyCommissionerActions = Record<
+type SpecialtyCommissionerActions = Record<
   string,
   (args: { leagueId: string; payload?: unknown }) => Promise<{ ok: boolean; error?: string }>
 >
@@ -138,7 +138,7 @@ export type SpecialtyCommissionerActions = Record<
 // --- Reusable capability flags (PROMPT 350) ---
 
 /** Optional: which reusable modules this specialty implements. Used for docs and QA harness. */
-export interface SpecialtyLeagueCapabilities {
+interface SpecialtyLeagueCapabilities {
   tribeOrchestration?: boolean
   hiddenPowerSystem?: boolean
   privateVoting?: boolean
@@ -172,7 +172,7 @@ export interface SpecialtyLeagueCapabilities {
 // --- QA harness ---
 
 /** QA harness: run standard checks for a specialty league (creation, config, guards, automation, AI). */
-export type SpecialtyQAHarness = (args: {
+type SpecialtyQAHarness = (args: {
   leagueId: string
   specId: SpecialtyLeagueId
   options?: { week?: number; skipAutomation?: boolean }

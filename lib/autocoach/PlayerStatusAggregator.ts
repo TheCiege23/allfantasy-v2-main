@@ -21,7 +21,7 @@ import { selectRowForExternalRef } from '@/lib/player-match/authoritativePlayerR
  */
 type StatusHit = NormalizedStatusHit & { rowSource?: string | null }
 
-export type AggregatedPlayerStatus = {
+type AggregatedPlayerStatus = {
   externalId: string
   playerName: string
   sport: string

@@ -43,7 +43,11 @@ function syncLineupSections(
   }
   if (op.addPlayerId) {
     const bench = Array.isArray(next.bench) ? (next.bench as LineupSectionRow[]) : []
-    next.bench = [...bench, op.addPlayerId]
+    // 🛑 A ROW, NOT A BARE ID. Every other section entry is `{ id, … }`, and the lineup writers
+    // (`buildPlayerDataFromSections`) read rows as objects: a bare string here crashed the next rookie
+    // draft's finalization after any waiver add, so the rookies never reached the roster and year 2
+    // never started (dynasty simulation, 2026-11-08).
+    next.bench = [...bench, { id: op.addPlayerId }]
   }
   return { ...playerData, lineup_sections: next }
 }

@@ -10,7 +10,9 @@ export function nflDraftSeasonLine(
   season: number,
   score: ((stats: Record<string, number>, position?: string | null) => number) | null,
 ) {
-  if (!row || ![String(season), String(season - 1)].includes(String(row.season)) || !(Number(row.gamesPlayed) > 0)) return null
+  // EXACTLY the pool's season. Accepting "this season or last" per row is what put Justin
+  // Fields' 2025 rushing beside Josh Allen's 2026 in one column (see pickPoolStatSeason).
+  if (!row || String(row.season) !== String(season) || !(Number(row.gamesPlayed) > 0)) return null
   const box = detail ?? row.stats
   if (!box || typeof box !== 'object' || Array.isArray(box)) return null
   const stats = normalizeNflWeeklyStats(box)

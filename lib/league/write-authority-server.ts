@@ -19,7 +19,7 @@ import {
  * Kept as a narrow single-column read so mutation routes can add it without inflating an
  * existing `select` (several of them deliberately select the minimum).
  */
-export async function getLeaguePlatform(leagueId: string): Promise<string | null> {
+async function getLeaguePlatform(leagueId: string): Promise<string | null> {
   const row = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { platform: true },

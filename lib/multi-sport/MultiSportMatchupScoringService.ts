@@ -115,7 +115,7 @@ export async function computeRosterScoreForWeek(
       weekOrRound: input.weekOrRound,
       playerId: { in: idsToScore },
     },
-    select: { playerId: true, normalizedStatMap: true, fantasyPoints: true },
+    select: { playerId: true, gameId: true, providerGameId: true, normalizedStatMap: true, fantasyPoints: true },
   })
 
   if (stats.length === 0) {
@@ -126,29 +126,87 @@ export async function computeRosterScoreForWeek(
     )
   }
 
+  /*
+   * 🛑 ONE NUMBER PER PLAYER, AND THE TOTAL IS THE SUM OF THOSE NUMBERS.
+   *
+   * This kept the LAST row per player in `byPlayerId` while adding EVERY row to `totalPoints`, so a
+   * player with two rows in a week was worth one game to the best ball selector (which seats on
+   * `byPlayerId`) and two games to the total. Now a player's distinct game rows are SUMMED — the same
+   * rule the weekly sync uses (`playerWeeklyScoreService` accumulates every row in the week) — and a
+   * row ingested twice counts once (see `statRowDedupeKey`). `totalPoints` is derived from
+   * `byPlayerId`, so the two cannot disagree again.
+   */
   const byPlayerId: Record<string, number> = {}
-  let totalPoints = 0
+  const seenRows = new Set<string>()
   for (const row of stats) {
+    const dedupeKey = statRowDedupeKey(row)
+    if (dedupeKey) {
+      if (seenRows.has(dedupeKey)) continue
+      seenRows.add(dedupeKey)
+    }
     const raw = row.normalizedStatMap as Record<string, number> | null
     // Always prefer league-rule recalculation so overrides/custom templates are respected.
     const points =
       raw && Object.keys(raw).length > 0
         ? computeFantasyPoints(raw as PlayerStatsRecord, rules as ScoringRuleDto[])
         : (row.fantasyPoints ?? 0)
-    byPlayerId[row.playerId] = Math.round(points * 100) / 100
-    totalPoints += byPlayerId[row.playerId]
+    byPlayerId[row.playerId] = (byPlayerId[row.playerId] ?? 0) + points
+  }
+  let totalPoints = 0
+  for (const id of Object.keys(byPlayerId)) {
+    byPlayerId[id] = Math.round(byPlayerId[id] * 100) / 100
+    totalPoints += byPlayerId[id]
   }
 
-  const found = new Set(stats.map((s) => s.playerId))
+  const usedPlayerIds = Object.keys(byPlayerId)
+  const found = new Set(usedPlayerIds)
   const missingPlayerIds = idsToScore.filter((id) => !found.has(id))
   return {
     status: missingPlayerIds.length > 0 ? 'PARTIAL' : 'AVAILABLE',
     unavailableReason: null,
     totalPoints: Math.round(totalPoints * 100) / 100,
     byPlayerId,
-    usedPlayerIds: stats.map((s) => s.playerId),
+    usedPlayerIds,
     missingPlayerIds,
   }
+}
+
+/** Key order must not make two identical stat maps look different. */
+function canonicalStatMap(value: unknown): string {
+  if (!value || typeof value !== 'object') return JSON.stringify(value ?? null)
+  const obj = value as Record<string, unknown>
+  return JSON.stringify(Object.keys(obj).sort().map((k) => [k, obj[k]]))
+}
+
+/**
+ * When two `player_game_stats` rows for one player are the SAME stat line, or null when the row
+ * carries no game identity (it is then always counted).
+ *
+ * Two rows are one line when they share the provider's game (`providerGameId`, else the stored
+ * `gameId` — the table's own `@@unique([playerId, sportType, gameId])` key) AND carry an identical
+ * stat map: one game ingested twice under two internal ids. Rows of the same provider game with
+ * DIFFERENT stats are kept and summed — an MLB two-way player's `<game>:batting` and
+ * `<game>:pitching` rows share `providerGameId` and are two real lines of one game.
+ *
+ * ⚠ It cannot catch a duplicate that shares no game identity: `scripts/ingest-nflverse-stats.ts`
+ * falls back to a synthetic `NFL-<season>-W<week>` gameId when its CSV has no game column, and a
+ * later run with the real id writes a second row with no `providerGameId` on either.
+ */
+export function statRowDedupeKey(row: {
+  playerId: string
+  gameId?: string | null
+  providerGameId?: string | null
+  normalizedStatMap?: unknown
+  fantasyPoints?: number | null
+}): string | null {
+  const game = row.providerGameId || row.gameId
+  if (!game) return null
+  const raw = row.normalizedStatMap
+  const content =
+    raw && typeof raw === 'object' && Object.keys(raw as object).length > 0
+      ? canonicalStatMap(raw)
+      : `fp:${row.fantasyPoints ?? 0}`
+  return `${row.playerId}\u0001${game}\u0001${content}`
 }
 
 /**

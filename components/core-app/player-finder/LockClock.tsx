@@ -37,4 +37,3 @@ export function LockClock({ kickoffIso, nowIso, big = false }: { kickoffIso: str
   )
 }
 
-export default LockClock

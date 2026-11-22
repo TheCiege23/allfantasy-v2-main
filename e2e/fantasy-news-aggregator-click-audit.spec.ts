@@ -81,7 +81,7 @@ test.describe("@news fantasy news aggregator click audit", () => {
       await cardPopup.close()
     }
 
-    await expect(playerLink).toHaveAttribute("href", /\/af-rankings\?q=Josh%20Allen/)
+    await expect(playerLink).toHaveAttribute("href", "/player/josh-allen?sport=NFL")
 
     await shareButton.click()
     await expect
@@ -94,7 +94,7 @@ test.describe("@news fantasy news aggregator click audit", () => {
     await refreshButton.click()
     await expect(page.getByTestId("fantasy-news-refresh-count")).toContainText("Refresh count: 1")
 
-    const playerNav = page.waitForURL(/\/af-legacy\?tab=players&q=Josh%20Allen/, { timeout: 2_500 }).catch(() => null)
+    const playerNav = page.waitForURL(/\/player\/josh-allen|\/login/, { timeout: 2_500 }).catch(() => null)
     await playerLink.click()
     const navigated = await playerNav
     if (navigated) {

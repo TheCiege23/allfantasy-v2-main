@@ -1,7 +1,7 @@
 /** Temporary rehearsal infrastructure; disabled unless every isolation guard agrees. */
 export const PIRATE_STAGING_PROJECT = '80e84d3b-778a-4fe6-be53-6c16068e8aa2'
 export const PIRATE_STAGING_ENVIRONMENT = '686eb5e0-af93-4370-806a-af544049ea93'
-export const PIRATE_REHEARSAL_MAX_UNTIL = Date.parse('2026-11-07T12:00:00Z')
+const PIRATE_REHEARSAL_MAX_UNTIL = Date.parse('2026-11-07T12:00:00Z')
 
 export function pirateRehearsalEnabled(env: Record<string, string | undefined>, now = Date.now()): boolean {
   try {

@@ -12,6 +12,9 @@ import { getOrCreateLedger } from '@/lib/salary-cap/CapCalculationService'
 import { getFutureCapProjection } from '@/lib/salary-cap/FutureCapProjectionService'
 import { prisma } from '@/lib/prisma'
 
+import { importedCapContractsNote } from '@/lib/salary-cap/importedContractsNote'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 export const dynamic = 'force-dynamic'
 
 export async function GET(
@@ -72,8 +75,10 @@ export async function GET(
           select: { seed: true, order: true },
         })
       : null,
-    prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, season: true, leagueSize: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, sport: true, season: true, leagueSize: true, platform: true } }),
   ])
+  // League-wide, not this manager's: an import with contracts entered for other teams is not "none on file".
+  const contractsOnFile = await prisma.playerContract.count({ where: { configId: config.configId } }).catch(() => 0)
 
   const activeContracts = contracts.filter(
     (c) => c.status === 'active' || c.status === 'tagged' || c.status === 'option_exercised'
@@ -99,6 +104,10 @@ export async function GET(
       return sum
     }, 0)
 
+  // The commissioner of an imported league may upload its contract sheet (see contracts/import).
+  const canImportContracts =
+    !isNativePlatform(leagueRow?.platform) && (await canCommissionerAct(leagueId, userId, 'league').catch(() => false))
+
   return NextResponse.json({
     config: {
       mode: config.mode,
@@ -123,6 +132,8 @@ export async function GET(
       offseasonPhase: config.offseasonPhase,
     },
     myRosterId: myRosterId ?? undefined,
+    contractsNote: importedCapContractsNote(leagueRow?.platform, contractsOnFile),
+    canImportContracts,
     ledger: ledger
       ? {
           rosterId: ledger.rosterId,

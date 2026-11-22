@@ -9,7 +9,7 @@ function money(value: number): number {
 }
 
 export function buildSubscriptionMetaEvent(
-  eventName: "InitiateCheckout" | "Purchase",
+  eventName: "InitiateCheckout" | "Purchase" | "StartTrial",
   item: MonetizationCatalogItem,
   options?: {
     eventId?: string

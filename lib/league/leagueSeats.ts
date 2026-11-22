@@ -15,6 +15,8 @@
  * seat taken after the draft never reached `RedraftRoster.ownerId`, which the owner-repair logic
  * then refused to fix. Every path now goes through `assignLeagueSeat`.
  */
+import { extraTeamOwnerKey, isRosterManagedBy, managedRosterWhere } from '@/lib/league/rosterManager'
+import { multiTeamManagersSupported, readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { Prisma } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -64,7 +66,7 @@ export async function countSeatsHeldByPeopleByLeague(
   return out
 }
 
-export type AssignLeagueSeatResult =
+type AssignLeagueSeatResult =
   | { ok: true; rosterId: string; teamNumber: number | null; alreadyHeld: boolean }
   | {
       ok: false
@@ -93,7 +95,7 @@ function seatOwnerKeys(rosterId: string, ...owners: Array<string | null | undefi
  */
 async function moveSeasonOwnership(
   tx: Db,
-  args: { leagueId: string; fromKeys: string[]; ownerId: string; ownerName: string; teamName?: string | null },
+  args: { leagueId: string; fromKeys: string[]; ownerId: string; managerUserId?: string | null; ownerName: string; teamName?: string | null },
 ): Promise<void> {
   const from = args.fromKeys.filter((k) => k !== args.ownerId)
   if (from.length === 0) return
@@ -113,6 +115,8 @@ async function moveSeasonOwnership(
       where: { id: seat.id },
       data: {
         ownerId: args.ownerId,
+        // Named when a person takes the seat; cleared when it is released.
+        managerUserId: args.managerUserId ?? null,
         ownerName: args.ownerName,
         ...(args.teamName ? { teamName: args.teamName } : {}),
       },
@@ -140,10 +144,10 @@ export async function assignLeagueSeat(
   const { leagueId, rosterId, userId } = args
 
   const [league, roster, user] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, settings: true, leagueVariant: true, leagueType: true } }),
     tx.roster.findFirst({
       where: { id: rosterId, leagueId },
-      select: { id: true, platformUserId: true, playerData: true, settings: true },
+      select: { id: true, platformUserId: true, managerUserId: true, playerData: true, settings: true },
     }),
     tx.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, displayName: true, email: true, avatarUrl: true } }),
   ])
@@ -151,7 +155,9 @@ export async function assignLeagueSeat(
   if (!user) return { ok: false, code: 'USER_NOT_FOUND', message: 'That user does not exist.' }
 
   const previousOwner = roster.platformUserId
-  const alreadyHeld = previousOwner === userId
+  const alreadyHeld = isRosterManagedBy(roster, userId)
+  // The key this team is stored under: the manager's user id, or a key of its own for a further team.
+  let ownerKey = alreadyHeld ? previousOwner : userId
   if (!alreadyHeld) {
     const previousIsPerson = previousOwner
       ? Boolean(await tx.appUser.findUnique({ where: { id: previousOwner }, select: { id: true } }))
@@ -160,11 +166,16 @@ export async function assignLeagueSeat(
       return { ok: false, code: 'ROSTER_TAKEN', message: 'That team is already claimed.' }
     }
     const other = await tx.roster.findFirst({
-      where: { leagueId, platformUserId: userId, NOT: { id: rosterId } },
+      where: { ...managedRosterWhere(leagueId, userId), NOT: { id: rosterId } },
       select: { id: true },
     })
     if (other) {
-      return { ok: false, code: 'ALREADY_HOLDS_ROSTER', message: 'You already hold a team in this league.' }
+      // A league that lets a manager run several teams gives each further team a key of its own.
+      const allowed = multiTeamManagersSupported(league) && readAllowMultiTeamManagers(league.settings)
+      if (!allowed) {
+        return { ok: false, code: 'ALREADY_HOLDS_ROSTER', message: 'You already hold a team in this league.' }
+      }
+      ownerKey = extraTeamOwnerKey(userId, rosterId)
     }
   }
 
@@ -194,7 +205,8 @@ export async function assignLeagueSeat(
   const claimed = await tx.roster.updateMany({
     where: { id: rosterId, leagueId, platformUserId: previousOwner },
     data: {
-      platformUserId: userId,
+      platformUserId: ownerKey,
+      managerUserId: userId,
       ...(Object.keys(foundation).length > 0
         ? {
             playerData: {
@@ -237,7 +249,7 @@ export async function assignLeagueSeat(
             }),
         // An imported team's platformUserId is its provider manager id, which the provider sync
         // matches on. Only a native team's is ours to overwrite.
-        ...(native ? { platformUserId: userId } : {}),
+        ...(native ? { platformUserId: ownerKey } : {}),
       },
     })
   } else if (native) {
@@ -254,7 +266,7 @@ export async function assignLeagueSeat(
       teamName,
       ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
       claimedByUserId: userId,
-      platformUserId: userId,
+      platformUserId: ownerKey,
       isOrphan: false,
       isCommissioner: userId === league.userId,
       isCoCommissioner: false,
@@ -276,9 +288,11 @@ export async function assignLeagueSeat(
   }
   const teamNumber = slot?.slotNumber ?? (typeof foundation.slotNumber === 'number' ? foundation.slotNumber : null)
 
-  // Creation reserves a draft slot for every open Survivor team. Claiming the
-  // roster must also replace its draft-room "Open Team" label and open flag.
-  if (native && league.survivorMode) {
+  // Creation reserves a draft slot for every open team, labelled "Open Team N". Claiming the roster
+  // must also replace that draft-room label and open flag — in EVERY native league. This was Survivor-
+  // only (#2313), so a dynasty or redraft draft room kept showing each joined manager as "Open Team N"
+  // until the draft (found by the dynasty simulation, 2026-11-09: 11 of 12 joined managers).
+  if (native) {
     const draft = await tx.draftSession.findFirst({
       where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },
@@ -311,7 +325,8 @@ export async function assignLeagueSeat(
   await moveSeasonOwnership(tx, {
     leagueId,
     fromKeys: seatOwnerKeys(rosterId, previousOwner, team?.platformUserId, team?.claimedByUserId),
-    ownerId: userId,
+    ownerId: ownerKey,
+    managerUserId: userId,
     ownerName: name,
     teamName,
   })
@@ -330,7 +345,7 @@ export async function releaseLeagueSeat(
 ): Promise<{ ok: true; previousOwner: string | null } | { ok: false; code: 'ROSTER_NOT_FOUND' }> {
   const { leagueId, rosterId } = args
   const [league, roster] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
     tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND' }
@@ -350,6 +365,7 @@ export async function releaseLeagueSeat(
     where: { id: rosterId },
     data: {
       platformUserId: vacantId,
+      managerUserId: null,
       ...(native
         ? {
             playerData: {
@@ -373,7 +389,8 @@ export async function releaseLeagueSeat(
     })
   }
   await tx.leagueEntrySlot.updateMany({ where: { leagueId, rosterId }, data: { status: 'OPEN' } })
-  if (native && league.survivorMode) {
+  // The reverse of the claim above: a seat given up before the draft reads "Open Team N" again.
+  if (native) {
     const draft = await tx.draftSession.findFirst({
       where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },

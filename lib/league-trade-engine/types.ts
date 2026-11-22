@@ -2,22 +2,6 @@
  * Canonical league trade engine — types (in-season, `Roster`-based).
  */
 
-export const LEAGUE_TRADE_STATUSES = [
-  'pending',
-  'accepted',
-  'rejected',
-  'cancelled',
-  'countered',
-  'awaiting_votes',
-  'awaiting_commissioner',
-  'vetoed',
-  'scheduled',
-  'processed',
-  'expired',
-] as const
-
-export type LeagueTradeStatus = (typeof LEAGUE_TRADE_STATUSES)[number]
-
 export const TRADE_ITEM_TYPES = [
   'player',
   'rookie_pick',
@@ -29,7 +13,7 @@ export const TRADE_ITEM_TYPES = [
 
 export type TradeItemType = (typeof TRADE_ITEM_TYPES)[number]
 
-export const TRADE_REVIEW_TYPES = ['none', 'instant', 'commissioner', 'league_vote'] as const
+const TRADE_REVIEW_TYPES = ['none', 'instant', 'commissioner', 'league_vote'] as const
 export type TradeReviewType = (typeof TRADE_REVIEW_TYPES)[number]
 
 export type TradeAssetInput = {

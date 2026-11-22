@@ -8,7 +8,7 @@ import { divisionsCalendar, validateFormatSettings, type FormatSettings } from '
 import { parseIdentity, type DivisionIdentity } from './identity'
 import { parseDivisionsRules, type DivisionsRules } from './rules'
 
-export const formatSettingsSchema = z.object({
+const formatSettingsSchema = z.object({
   sport: z.enum(['NFL', 'NBA']),
   conferencesPerDivision: z.number().int(),
   teamsPerConference: z.number().int(),

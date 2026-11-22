@@ -11,7 +11,7 @@ import type {
 
 export type { WorldCupCurrentDataKey } from "./worldCupCurrentDataEvidence"
 
-export type WorldCupCurrentDataAvailabilityItem = {
+type WorldCupCurrentDataAvailabilityItem = {
   status: "available" | "unavailable" | "partial"
   label: string
   adminAction: string
