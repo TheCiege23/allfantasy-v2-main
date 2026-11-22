@@ -5,7 +5,9 @@ import { liveLeagueDrafts, liveLeagueMatchups, liveLeagueRosters, liveLeagueUser
 import { readStoredFantraxDraft } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './drafts'
 import { buildPipeline, parseStoredDraftPicks, type CollegeProPipeline } from './pipeline'
-import { loadHeadToHead, type HeadToHead, type TeamMapEditor } from './headToHead'
+import { loadCollegeMatchup, loadHeadToHead, type CollegeMatchup, type HeadToHead, type TeamMapEditor } from './headToHead'
+import { fantraxPeriodForWindow } from './teamMatch'
+import { loadNflWeekWindow } from '@/lib/c2c/campusWeeks'
 import { currentFantraxPeriod, loadDailyPoints } from './dailyPoints'
 import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { findLinkCandidates, type LinkCandidate } from './linkHalves'
@@ -138,6 +140,11 @@ export type CollegeProRosterPayload =
       proLeagueId: string
       /** Combined scoring only: your NFL + college total against your opponent's. */
       headToHead: HeadToHead | null
+      /**
+       * The college half's own game this week, from its Fantrax schedule, both sides scored the same way.
+       * With the pro game in `sides`, it is the one-league week view. Null when there is no college game.
+       */
+      collegeMatchup: CollegeMatchup | null
       /** For someone allowed to change scoring, with combined on: the Sleeper-to-Fantrax team map to confirm. */
       teamMap: TeamMapEditor | null
       fetchedAt: string
@@ -343,8 +350,27 @@ export async function loadCollegeProRoster(
     proLeagueId: league.id,
     link,
     headToHead: h2h?.headToHead ?? null,
+    collegeMatchup: await sleeperCollegeMatchup(),
     teamMap: h2h?.editor ?? null,
     fetchedAt: now.toISOString(),
+  }
+
+  /** Your college team's game in the Fantrax period that matches this NFL week. */
+  async function sleeperCollegeMatchup(): Promise<CollegeMatchup | null> {
+    if (!collegeHalf || collegeHalf.platform !== 'fantrax' || !week) return null
+    const settings = (await collegeSettings) as Record<string, unknown> | null
+    const periods = Array.isArray(settings?.fantrax_scoring_periods) ? (settings!.fantrax_scoring_periods as Array<{ number: number; startDate?: string | null; endDate?: string | null }>) : []
+    const window = await loadNflWeekWindow(prisma, { season, nflWeek: week }).catch(() => null)
+    const period = window ? fantraxPeriodForWindow(periods, window) : null
+    return loadCollegeMatchup({
+      fantraxSnapshotId: collegeHalf.memberLeagueId,
+      myTeamName: collegeHalf.teamLabel,
+      period,
+      myTotal: college.score.total,
+      season,
+      nflWeek: week,
+      collegeSettings: settings,
+    }).catch(() => null)
   }
 }
 
@@ -722,6 +748,26 @@ async function loadFantraxProPair(args: {
     pipeline,
     proLeagueId: league.id,
     headToHead: h2h?.headToHead ?? (scoring === 'combined' ? { me: myCombined, opponent: null, missing: "This week's matchup could not be read." } : null),
+    collegeMatchup: await (async (): Promise<CollegeMatchup | null> => {
+      // The college league's OWN period: its schedule is numbered by its periods, not the NBA's.
+      if (collegeSport !== 'NCAAB') return null
+      const cs = (collegeSettings ?? {}) as Record<string, unknown>
+      const fx = (cs.fantrax_settings ?? {}) as Record<string, unknown>
+      const collegePeriod = currentFantraxPeriod(cs.fantrax_scoring_periods ?? fx.scoringPeriods, now)
+      if (!collegePeriod) return null
+      return loadCollegeMatchup({
+        fantraxSnapshotId: collegeHalf.memberLeagueId,
+        myTeamName: collegeHalf.teamLabel,
+        period: collegePeriod.number,
+        myTotal: college.score.total,
+        collegeSport: 'NCAAB',
+        season: proSnap?.season ?? now.getFullYear(),
+        nflWeek: null,
+        scoreCollegePlayers: (players) =>
+          loadDailyPoints({ sport: 'NCAAB', window: collegePeriod.window, players: toPointsInput(players), settings: collegeSettings }).then((r) => r.points),
+        collegeSettings,
+      }).catch(() => null)
+    })(),
     teamMap: h2h?.editor ?? null,
     fetchedAt: now.toISOString(),
   }

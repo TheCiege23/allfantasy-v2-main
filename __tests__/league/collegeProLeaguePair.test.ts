@@ -25,10 +25,12 @@ vi.mock('@/lib/prisma', () => ({
       }),
     },
     leagueTeam: {
-      findMany: vi.fn(async (q: { where: { leagueId: string | { in: string[] }; claimedByUserId?: string } }) =>
-        h.teams.filter((t) =>
-          (typeof q.where.leagueId === 'string' ? t.leagueId === q.where.leagueId : q.where.leagueId.in.includes(t.leagueId)) &&
-          (q.where.claimedByUserId === undefined || t.claimedByUserId === q.where.claimedByUserId))),
+      findMany: vi.fn(async (q: { where: { leagueId: string | { in: string[] }; claimedByUserId?: string | { not: null } } }) =>
+        h.teams.filter((t) => {
+          const c = q.where.claimedByUserId
+          const claimOk = c === undefined ? true : typeof c === 'string' ? t.claimedByUserId === c : t.claimedByUserId != null
+          return (typeof q.where.leagueId === 'string' ? t.leagueId === q.where.leagueId : q.where.leagueId.in.includes(t.leagueId)) && claimOk
+        })),
     },
     fantraxLeague: { findUnique: vi.fn(async (q: { where: { id: string } }) => h.snapshots[q.where.id] ?? null) },
   },
@@ -114,6 +116,14 @@ describe('every member sees the league as one', () => {
 
   it("a commissioner's saved choice decides a member's other team over the automatic match", async () => {
     h.leagues[PEACH]!.settings = { ...h.leagues[PEACH]!.settings, collegeProTeamMap: { '5': 'grind' } }
+    await resolveCollegeProPair(PEACH, 'connor')
+    expect(teamForOf().teamFor({ role: 'college', platform: 'fantrax', leagueId: 'snap-cream' })).toBe('Grindingffb')
+  })
+
+  it('a manager who claimed a team in BOTH halves pairs those two teams for everyone, over any name match', async () => {
+    // Connor claims a Cream Bowl team whose name matches nobody's: the claims, not the names, decide.
+    h.teams.push({ leagueId: CREAM, externalId: '999', teamName: 'Grindingffb', ownerName: null, claimedByUserId: 'connor' })
+    h.teams = h.teams.filter((t) => !(t.leagueId === CREAM && t.claimedByUserId === 'grinder'))
     await resolveCollegeProPair(PEACH, 'connor')
     expect(teamForOf().teamFor({ role: 'college', platform: 'fantrax', leagueId: 'snap-cream' })).toBe('Grindingffb')
   })

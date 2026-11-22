@@ -27,7 +27,7 @@ import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
 import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
@@ -142,6 +142,7 @@ import { LegacyHome } from '@/components/decide/LegacyHome'
 import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
+import { CollegeProStandings, CollegeProWeek } from '@/components/league/college-pro/CollegeProOneLeague'
 import { collegeProFormatOf } from '@/lib/league/collegePro/format'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
@@ -2611,6 +2612,16 @@ function LeagueTabRouter({
     bestBall: lineupSetsItself(selectedLeague),
     collegeRoster: collegeProFormatOf(selectedLeague) !== null,
   })
+  /*
+   * A paired college + pro league (C2C / Devy) reads as ONE league on Matchup and Standings: the week
+   * and the franchise table across both halves sit above this league's own screen. They render nothing
+   * extra for a league in no pair. Only imported Sleeper / Fantrax halves can be paired today.
+   */
+  const pairable = selectedLeague.platform === 'sleeper' || selectedLeague.platform === 'fantrax'
+  const oneLeagueWeek = (screen: ReactNode) =>
+    pairable ? <CollegeProWeek leagueId={leagueId}>{screen}</CollegeProWeek> : screen
+  const oneLeagueStandings = (screen: ReactNode) =>
+    pairable ? <CollegeProStandings leagueId={leagueId}>{screen}</CollegeProStandings> : screen
   if (nativeScreen) {
     const firstTab = (...ids: string[]) => ids.find((id) => tabDefs.some((t) => t.id === id)) ?? ids[0]
     const goTo = (id: string) =>
@@ -2622,7 +2633,7 @@ function LeagueTabRouter({
       )
     switch (nativeScreen) {
       case 'matchup':
-        return <NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />
+        return oneLeagueWeek(<NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />)
       case 'lineup':
         return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
       case 'waivers':
@@ -2630,7 +2641,7 @@ function LeagueTabRouter({
       case 'trades':
         return <NativeTradesScreen league={selectedLeague} teams={teamSlots} />
       case 'standings':
-        return <NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />
+        return oneLeagueStandings(<NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />)
     }
   }
 
@@ -2673,9 +2684,9 @@ function LeagueTabRouter({
         />
       )
     case 'matchups':
-      return <MatchupTabContainer league={selectedLeague} />
+      return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'matchup':
-      return <MatchupTabContainer league={selectedLeague} />
+      return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'schedule':
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <CanonicalRedraftScheduleTab leagueId={leagueId} isCommissioner={isCommissioner} />
@@ -2959,8 +2970,8 @@ function LeagueTabRouter({
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <RedraftStandingsPlayoffsView leagueId={leagueId} isCommissioner={isCommissioner} />
       }
-      return (
-        <StandingsTab league={selectedLeague} tabLabel={tabLabel} idpLeagueUi={idpLeagueActive} />
+      return oneLeagueStandings(
+        <StandingsTab league={selectedLeague} tabLabel={tabLabel} idpLeagueUi={idpLeagueActive} />,
       )
     case 'fixtures':
       return <FixturesTab league={selectedLeague} tabLabel={tabLabel} />
