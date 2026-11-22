@@ -142,7 +142,7 @@ export type FantraxLeagueInfo = {
   ppr: boolean | null
   startDate: string | null
   endDate: string | null
-  teamInfo: Record<string, { id: string; name: string }>
+  teamInfo: Record<string, { id: string; name: string; division?: string | null }>
   /** Present but sparse — eligiblePos and status only, no names. */
   playerInfo: Record<string, unknown>
   rosterInfo: Record<string, unknown>
@@ -409,8 +409,9 @@ async function fxeaGet<T>(
   return { ok: true, data: parsed as T }
 }
 
-export function getFantraxLeagueInfo(leagueId: string): Promise<FantraxResult<FantraxLeagueInfo>> {
-  return fxeaGet<FantraxLeagueInfo>(`/getLeagueInfo?leagueId=${encodeURIComponent(leagueId)}`)
+export function getFantraxLeagueInfo(leagueId: string, options?: { excludePlayerInfo?: boolean }): Promise<FantraxResult<FantraxLeagueInfo>> {
+  const query = options?.excludePlayerInfo ? '&excludePlayerInfo=true' : ''
+  return fxeaGet<FantraxLeagueInfo>(`/getLeagueInfo?leagueId=${encodeURIComponent(leagueId)}${query}`)
 }
 
 export function getFantraxLeagueTeams(leagueId: string) {
@@ -980,6 +981,7 @@ export function applyFantraxScores(
   rows: FantraxScheduleRow[],
   periods: FantraxPeriodScore[],
   info?: Pick<FantraxLeagueInfo, 'teamInfo' | 'playoffs'>,
+  includeUnscheduled = true,
 ): FantraxScheduleRow[] {
   type Pair = FantraxPeriodScore['matchups'][number]
   type ScoredPair = { period: number; pair: Pair; matched: boolean }
@@ -1016,6 +1018,8 @@ export function applyFantraxScores(
     }
   })
 
+  if (!includeUnscheduled) return merged
+
   // Fantrax publishes scored pairings, including postseason games, that its fixture list can omit.
   const playoffStart = info?.playoffs?.used ? info.playoffs.firstPlayoffPeriod : null
   for (const { period, pair: { away, home }, matched } of published) {
@@ -1047,7 +1051,7 @@ export function applyFantraxScores(
 export async function fetchFantraxScheduleWithScores(
   leagueId: string,
   info: FantraxLeagueInfo,
-  options?: { now?: Date; maxPeriods?: number },
+  options?: { now?: Date; maxPeriods?: number; includeUnscheduled?: boolean },
 ): Promise<{
   rows: FantraxScheduleRow[]
   position: FantraxSeasonPosition | null
@@ -1103,7 +1107,7 @@ export async function fetchFantraxScheduleWithScores(
   }
 
   return {
-    rows: applyFantraxScores(rows, scored, info),
+    rows: applyFantraxScores(rows, scored, info, options?.includeUnscheduled),
     position,
     periodsRead: scored.length,
     periodsFailed,

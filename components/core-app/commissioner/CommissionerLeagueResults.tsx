@@ -1,15 +1,43 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import type { Hardwood32Snapshot } from '@/lib/league-import/sleeper/hardwood32'
+import { useEffect, useId, useState } from 'react'
+
+type ScoreSide = { team: string; points: number | null }
+type LeagueResults = {
+  season: number | string
+  fetchedAt: string
+  standings: Array<{
+    rosterId: number | string
+    rank: number | null
+    team: string
+    division: string
+    wins: number
+    losses: number
+    ties: number
+    pointsFor: number
+    pointsAgainst?: number
+  }>
+  weeks: Array<{
+    week: number
+    completed: boolean
+    matchups: Array<{ id: number; first: ScoreSide; second: ScoreSide; winner: string | null }>
+  }>
+}
 
 const formatPoints = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const formatTime = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
 })
 
-export function Hardwood32Results({ leagueId }: { leagueId: string }) {
-  const [snapshot, setSnapshot] = useState<Hardwood32Snapshot | null>(null)
+export function CommissionerLeagueResults({ endpoint, title, provider, sourceUrl, showPointsAgainst = false }: {
+  endpoint: string
+  title: string
+  provider: 'Sleeper' | 'Fantrax'
+  sourceUrl: string
+  showPointsAgainst?: boolean
+}) {
+  const titleId = useId()
+  const [snapshot, setSnapshot] = useState<LeagueResults | null>(null)
   const [error, setError] = useState(false)
   const [view, setView] = useState<'results' | 'standings'>('results')
   const [selectedWeek, setSelectedWeek] = useState('latest')
@@ -18,12 +46,11 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    const endpoint = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/hardwood-32`
     async function refresh() {
       try {
         const response = await fetch(endpoint, { signal: controller.signal })
-        if (!response.ok) throw new Error('Sleeper scores unavailable')
-        const result = await response.json() as Hardwood32Snapshot
+        if (!response.ok) throw new Error('Scores unavailable')
+        const result = await response.json() as LeagueResults
         if (controller.signal.aborted) return
         setSnapshot(result)
         setError(false)
@@ -37,19 +64,19 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
       controller.abort()
       window.clearInterval(timer)
     }
-  }, [leagueId])
+  }, [endpoint])
 
   return (
-    <section aria-labelledby="hardwood-32-title" className="space-y-3 rounded-md border border-current/25 p-4">
+    <section aria-labelledby={titleId} className="space-y-3 rounded-md border border-current/25 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="hardwood-32-title" className="text-lg font-semibold">The Hardwood 32</h2>
-        <a className="underline" href="https://sleeper.com/beta/leagues/1419790450268635136/matchup">Open in Sleeper</a>
+        <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
+        <a className="underline" href={sourceUrl}>Open in {provider}</a>
       </div>
       {!snapshot && !error && <p role="status">Loading standings and weekly results…</p>}
-      {error && <p role="status">Sleeper refresh unavailable. {snapshot ? 'Showing the last successful update.' : 'The next refresh will retry.'}</p>}
+      {error && <p role="status">{provider} refresh unavailable. {snapshot ? 'Showing the last successful update.' : 'The next refresh will retry.'}</p>}
       {snapshot && (
         <>
-          <p className="text-sm">Season {snapshot.season} · Sleeper update {formatTime.format(new Date(snapshot.fetchedAt))}</p>
+          <p className="text-sm">Season {snapshot.season} · {provider} update {formatTime.format(new Date(snapshot.fetchedAt))}</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="afh-btn" aria-pressed={view === 'results'} onClick={() => setView('results')}>Weekly results</button>
             <button type="button" className="afh-btn" aria-pressed={view === 'standings'} onClick={() => setView('standings')}>Standings</button>
@@ -66,18 +93,20 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
           )}
           <div className="overflow-x-auto">
             {view === 'standings' ? (
-              <table className="w-full text-left text-sm" aria-label="Hardwood 32 overall standings">
-                <thead><tr>{['Rank', 'Team', 'Division', 'W', 'L', 'T', 'Points for', 'Points against'].map(label =>
-                  <th key={label} scope="col" className="p-2">{label}</th>)}</tr></thead>
+              <table className="w-full text-left text-sm" aria-label={`${title} overall standings`}>
+                <thead><tr>{['Rank', 'Team', 'Division', 'W', 'L', 'T', 'Points for'].map(label =>
+                  <th key={label} scope="col" className="p-2">{label}</th>)}
+                  {showPointsAgainst && <th scope="col" className="p-2">Points against</th>}</tr></thead>
                 <tbody>{snapshot.standings.map(row => (
                   <tr key={row.rosterId} className="border-t border-current/20">
-                    {[row.rank, row.team, row.division, row.wins, row.losses, row.ties, formatPoints.format(row.pointsFor), formatPoints.format(row.pointsAgainst)].map((value, index) =>
+                    {[row.rank, row.team, row.division, row.wins, row.losses, row.ties, formatPoints.format(row.pointsFor)].map((value, index) =>
                       <td key={index} className="p-2">{value}</td>)}
+                    {showPointsAgainst && <td className="p-2">{row.pointsAgainst == null ? '—' : formatPoints.format(row.pointsAgainst)}</td>}
                   </tr>
                 ))}</tbody>
               </table>
             ) : scores ? (
-              <table className="w-full text-left text-sm" aria-label={`Hardwood 32 Week ${scores.week} results`}>
+              <table className="w-full text-left text-sm" aria-label={`${title} Week ${scores.week} results`}>
                 <thead><tr>{['Matchup', 'Team', 'Score', 'Opponent', 'Score', scores.completed ? 'Winner' : 'Leader'].map((label, index) =>
                   <th key={index} scope="col" className="p-2">{label}</th>)}</tr></thead>
                 <tbody>{scores.matchups.map(row => (
@@ -89,7 +118,7 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
                   </tr>
                 ))}</tbody>
               </table>
-            ) : <p role="status">Sleeper hasn’t posted any weekly scores yet.</p>}
+            ) : <p role="status">{provider} hasn’t posted any weekly scores yet.</p>}
           </div>
         </>
       )}

@@ -77,7 +77,8 @@ import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
 import { HubFold } from '@/components/core-app/commissioner/HubFold'
 import { HubFoldOpener } from '@/components/core-app/commissioner/HubFoldOpener'
 import { isAfcPilotLeague } from '@/lib/afc-championships/staging'
-import { Hardwood32Results } from '@/components/core-app/commissioner/Hardwood32Results'
+import { isRoadToGloryStagingLeague } from '@/lib/core-app/commissionerQa'
+import { CommissionerLeagueResults } from '@/components/core-app/commissioner/CommissionerLeagueResults'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -311,7 +312,20 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       ) : null}
 
       {league.platform === 'fantrax' ? <FantraxResults leagueId={league.id} report={league.fantraxResults ?? null} /> : null}
-      {data.role === 'commissioner' && isAfcPilotLeague(league.id) ? <Hardwood32Results leagueId={league.id} /> : null}
+      {data.role === 'commissioner' && isAfcPilotLeague(league.id) ? (
+        <CommissionerLeagueResults
+          endpoint={`/api/commissioner/leagues/${encodeURIComponent(league.id)}/hardwood-32`}
+          title="The Hardwood 32" provider="Sleeper" showPointsAgainst
+          sourceUrl="https://sleeper.com/beta/leagues/1419790450268635136/matchup"
+        />
+      ) : null}
+      {data.role === 'commissioner' && isRoadToGloryStagingLeague(league.id) ? (
+        <CommissionerLeagueResults
+          endpoint={`/api/commissioner/leagues/${encodeURIComponent(league.id)}/road-to-glory-nfl`}
+          title="Road To Glory NFL" provider="Fantrax"
+          sourceUrl="https://www.fantrax.com/fantasy/league/tau9a8fomvmq84sx/home"
+        />
+      ) : null}
 
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}

@@ -3,6 +3,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import { isCommissionerQaEnvironment } from '@/lib/core-app/commissionerQa'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { prisma } from '@/lib/prisma'
 import { afcRosterId, afcTeams, isAfcSeed, resolveAfcChampionships, validAfcPairings, type AfcSeed } from './bracket'
@@ -26,8 +27,7 @@ export const afcOverrideInput = z.object({
 })
 
 export function isAfcPilotLeague(leagueId: string) {
-  return process.env.RAILWAY_PROJECT_ID === 'bb9805c9-f83a-4e3d-a5dd-cf3214436fbf' &&
-    process.env.RAILWAY_ENVIRONMENT_ID === 'd23b2377-5944-44e7-bba5-57804006fd91' && leagueId === pilotLeagueId
+  return isCommissionerQaEnvironment() && leagueId === pilotLeagueId
 }
 
 function practiceAccountDigest() {
