@@ -5,7 +5,7 @@ const LEAGUES: Record<string, Record<string, unknown>> = {
   cream: { id: 'cream', name: 'Cream Bowl', platform: 'fantrax', platformLeagueId: 'snap-1', leagueType: 'c2c', leagueVariant: null, sport: 'NCAAF', settings: {} },
   lonely: { id: 'lonely', name: 'Unpaired', platform: 'fantrax', platformLeagueId: 'snap-2', leagueType: 'c2c', leagueVariant: null, sport: 'NCAAF', settings: {} },
 }
-const h = vi.hoisted(() => ({ paired: new Map<string, unknown>() }))
+const h = vi.hoisted(() => ({ paired: new Map<string, unknown>(), metrics: vi.fn(async () => null as unknown) }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
@@ -29,6 +29,7 @@ vi.mock('@/lib/sleeper/liveLeagueFeed', () => ({
 vi.mock('@/lib/core-app/connectedRoster', () => ({ connectedRosterPlayers: vi.fn(async () => []) }))
 vi.mock('@/lib/league/commissionerAccess', () => ({ canCommissionerAct: vi.fn(async () => false) }))
 vi.mock('./../../lib/league/collegePro/collegePoints', () => ({ loadCollegePoints: vi.fn(async () => null) }))
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 
 import { loadCollegeProRoster } from '@/lib/league/collegePro/loadCollegeProRoster'
 
@@ -37,6 +38,7 @@ const proSide = { role: 'pro', platform: 'sleeper', leagueId: 'peach', memberLea
 
 beforeEach(() => {
   h.paired.clear()
+  h.metrics.mockReset().mockResolvedValue(null)
   // resolvePairedHalf reports which half the viewed league is, as the real one does.
   h.paired.set('cream', { viewingRole: 'college', sides: [collegeSide, proSide] })
   h.paired.set('peach', { viewingRole: 'pro', sides: [proSide, collegeSide] })
@@ -62,5 +64,26 @@ describe('the combined page opened from the college league', () => {
 
   it('a college league with no pro half keeps its standard page', async () => {
     expect(await loadCollegeProRoster('lonely', 'u1', SUNDAY)).toEqual({ applies: false })
+  })
+})
+
+describe('the PROJ column on a Sleeper + Fantrax pair', () => {
+  it("fills the college half from the college league's own projections", async () => {
+    const withPlayer = { ...collegeSide, players: [{ id: 'fx1', name: 'Freshman', position: 'WR', rosterSlot: 'WR', rosterStatus: 'ACTIVE' }] }
+    h.paired.set('peach', { viewingRole: 'pro', sides: [proSide, withPlayer] })
+    h.metrics.mockImplementation(async (a: { leagueId: string }) =>
+      a.leagueId === 'cream' ? { unit: 'fantasy points', rows: [{ rosterPlayerId: 'fx1', playerId: 'k1', weekly: 14.25, perGame: 14.25 }] } : null,
+    )
+    const r = await loadCollegeProRoster('peach', 'u1', SUNDAY)
+    expect(h.metrics).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'cream', week: null, rosterIds: ['fx1'] }))
+    expect(r.applies && r.sides.find((s) => s.role === 'college')?.weeklyProjections).toEqual({ fx1: 14.25 })
+  })
+
+  it('a league whose board is not in fantasy points shows no projection', async () => {
+    const withPlayer = { ...collegeSide, players: [{ id: 'fx1', name: 'Freshman', position: 'WR', rosterSlot: 'WR', rosterStatus: 'ACTIVE' }] }
+    h.paired.set('peach', { viewingRole: 'pro', sides: [proSide, withPlayer] })
+    h.metrics.mockResolvedValue({ unit: 'category score', rows: [{ rosterPlayerId: 'fx1', playerId: 'k1', weekly: 3, perGame: 3 }] })
+    const r = await loadCollegeProRoster('peach', 'u1', SUNDAY)
+    expect(r.applies && r.sides.find((s) => s.role === 'college')?.weeklyProjections).toBeUndefined()
   })
 })
