@@ -50,6 +50,7 @@ import { HowItWorks } from '@/components/core-app/HowItWorks'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
+import { RailScoresContext, withRailScores, type RailScores } from '@/components/core-app/railScores'
 import { ScopeResetLink, ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
 import {
@@ -1372,7 +1373,12 @@ function AfCoreShell(incoming: AfCoreShellProps) {
    * `props`, so nothing downstream had to change.
    */
   const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
-  const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
+  /* The rail's matchup scores arrive after the shell paints (railScores.tsx). */
+  const [railScores, setRailScores] = useState<RailScores | null>(null)
+  const props = useMemo(
+    () => withRailScores(withPublishedSignals(incoming, publishedSignals), railScores),
+    [incoming, publishedSignals, railScores],
+  )
   const router = useRouter()
   // A lineup set on the platform reaches these screens without a button press — on opening the
   // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
@@ -3019,9 +3025,11 @@ function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           <ScreenGuide path={props.screenGuidePath} />
           <ShellSignalsContext.Provider value={setPublishedSignals}>
-            <CoreNavPendingContext.Provider value={navPending != null}>
-              <PlayerCardProvider>{children}</PlayerCardProvider>
-            </CoreNavPendingContext.Provider>
+            <RailScoresContext.Provider value={setRailScores}>
+              <CoreNavPendingContext.Provider value={navPending != null}>
+                <PlayerCardProvider>{children}</PlayerCardProvider>
+              </CoreNavPendingContext.Provider>
+            </RailScoresContext.Provider>
           </ShellSignalsContext.Provider>
           {/*
             The bracket promo sits AFTER the screen on home (2026-11-06 phone pass). It used to open
