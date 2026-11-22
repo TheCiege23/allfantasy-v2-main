@@ -20,6 +20,8 @@ import { runLiveScoringTickForSeason } from '@/server/services/liveScoring/liveS
 const SEASON = { id: 's-nfl', leagueId: 'l-nfl', sport: 'NFL', season: 2026, currentWeek: 3 }
 
 function fakePrisma(roster: Array<Record<string, unknown>>, upserts: Array<Record<string, unknown>>) {
+  const stats = new Map<string, unknown>()
+  const appliedStats = new Map<string, unknown>()
   const model = (name: string) =>
     new Proxy(
       {},
@@ -30,7 +32,24 @@ function fakePrisma(roster: Array<Record<string, unknown>>, upserts: Array<Recor
           if (name === 'redraftRoster' && method === 'findMany') {
             return [{ id: 'r1', players: roster.map((p) => ({ playerId: p.playerId, slotType: p.slotType })) }]
           }
+          if (name === 'redraftMatchup' && method === 'findMany') {
+            return [{ id: 'matchup', homeRosterId: 'r1', awayRosterId: 'r2', status: 'active' }]
+          }
+          if (name === 'sportsDataCache' && method === 'findUnique') {
+            const { cacheKey } = args.where as { cacheKey: string }
+            return appliedStats.has(cacheKey) ? { data: appliedStats.get(cacheKey) } : null
+          }
+          if (name === 'sportsDataCache' && method === 'upsert') {
+            const { cacheKey, data } = args.create as { cacheKey: string; data: unknown }
+            appliedStats.set(cacheKey, data)
+            return {}
+          }
+          if (name === 'playerWeeklyScore' && method === 'findMany') {
+            return [...stats].map(([playerId, line]) => ({ playerId, stats: line }))
+          }
           if (name === 'playerWeeklyScore' && method === 'upsert') {
+            const { playerId, stats: line } = args.create as { playerId: string; stats: unknown }
+            stats.set(playerId, line)
             upserts.push(args)
             return {}
           }
@@ -107,4 +126,36 @@ describe('live tick — a team defence is one defence, whichever id the roster h
     expect(written['nfl:def:BUF']).toEqual({ def_sack: 1 })
     expect(written.KC).toEqual({ def_sack: 3 })
   })
+})
+
+it('rescoring reaches every league that starts the same player and repeats only when the stats change', async () => {
+  const upserts: Array<Record<string, unknown>> = []
+  const db = fakePrisma([{ playerId: 'qb1', slotType: 'QB', position: 'QB' }], upserts)
+  const statsProvider = provider(new Map())
+  const broadcast = vi.fn()
+  const deps = {
+    provider: statsProvider as unknown as LiveStatsProvider,
+    broadcast,
+    seasonType: 'regular' as const,
+    now: new Date('2026-09-27T18:00:00Z'),
+  }
+  const second = { ...SEASON, id: 's-dynasty', leagueId: 'l-dynasty' }
+  const runBoth = async () => {
+    await runLiveScoringTickForSeason(db, SEASON, deps)
+    await runLiveScoringTickForSeason(db, second, deps)
+  }
+
+  await runBoth()
+  expect(upserts).toHaveLength(1)
+  expect(broadcast.mock.calls.map(([leagueId]) => leagueId)).toEqual([SEASON.leagueId, second.leagueId])
+  broadcast.mockClear()
+
+  await runBoth()
+  expect(upserts).toHaveLength(1)
+  expect(broadcast).not.toHaveBeenCalled()
+
+  statsProvider.fetchPlayerStatsForGames.mockResolvedValue(new Map([['qb1', { pass_yds: 271 }]]))
+  await runBoth()
+  expect(upserts).toHaveLength(2)
+  expect(broadcast.mock.calls.map(([leagueId]) => leagueId)).toEqual([SEASON.leagueId, second.leagueId])
 })

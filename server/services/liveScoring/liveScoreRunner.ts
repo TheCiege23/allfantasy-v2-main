@@ -22,7 +22,7 @@ import { gamesToSnapshots, liveProviderServesSport, liveProviderSports, type Liv
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
 import { NflLiveStatsProvider } from '@/lib/live-scoring/nflLiveStatsProvider'
 import { canonicalTeamDefenseId } from '@/lib/scoring-runtime/nflStatNormalization'
-import type { RescoreRosterInput, RescoreMatchupInput } from '@/lib/live-scoring/rescorePlan'
+import { diffChangedPlayers, type RescoreRosterInput, type RescoreMatchupInput } from '@/lib/live-scoring/rescorePlan'
 
 export type ActiveSeasonForTick = {
   id: string
@@ -262,6 +262,9 @@ export async function runLiveScoringTickForSeason(
 
   const games = await provider.fetchActiveGames(query)
   const snapshots = gamesToSnapshots(games)
+  const appliedCacheKey = 'live-score-applied:' + season.id + ':' + seasonType + ':' + week
+  const appliedStats = new Map<string, Record<string, number>>()
+  let pendingStats = new Map<string, Record<string, number>>()
 
   const result = await runLiveScoringTick(snapshots, {
     fetchActiveStats: async () => {
@@ -317,11 +320,18 @@ export async function runLiveScoringTickForSeason(
       return merged
     },
     loadPreviousStats: async () => {
-      const rows = await prisma.playerWeeklyScore.findMany({
-        where: { week, season: season.season, sport: season.sport },
-        select: { playerId: true, stats: true },
+      // Shared provider rows can change before any individual league scores them.
+      // Compare against the last revision successfully applied to this league.
+      const cached = await prisma.sportsDataCache.findUnique({
+        where: { cacheKey: appliedCacheKey },
+        select: { data: true },
       })
-      return new Map(rows.map((r: { playerId: string; stats: unknown }) => [r.playerId, asNumberStats(r.stats)]))
+      if (cached?.data && typeof cached.data === 'object' && !Array.isArray(cached.data)) {
+        for (const [playerId, stats] of Object.entries(cached.data)) {
+          appliedStats.set(playerId, asNumberStats(stats))
+        }
+      }
+      return appliedStats
     },
     loadTopology: async () => {
       const rosters = await prisma.redraftRoster.findMany({
@@ -367,8 +377,15 @@ export async function runLiveScoringTickForSeason(
        * Removing this guard requires a season-type discriminator on
        * playerWeeklyScore's unique key, not a judgement that it is probably fine.
        */
-      if (seasonType !== 'regular') return
-      for (const [playerId, stats] of changed) {
+      pendingStats = changed
+      if (seasonType !== 'regular' || changed.size === 0) return
+      const rows = await prisma.playerWeeklyScore.findMany({
+        where: { week, season: season.season, sport: season.sport, playerId: { in: [...changed.keys()] } },
+        select: { playerId: true, stats: true },
+      })
+      const sharedStats = new Map(rows.map(row => [row.playerId, asNumberStats(row.stats)]))
+      for (const playerId of diffChangedPlayers(sharedStats, changed)) {
+        const stats = changed.get(playerId)!
         await prisma.playerWeeklyScore.upsert({
           where: { playerId_week_season_sport: { playerId, week, season: season.season, sport: season.sport } },
           update: { stats, isFinalized: false },
@@ -379,6 +396,14 @@ export async function runLiveScoringTickForSeason(
     applyRescore: async (plan) => {
       await recalculateMatchupsForSeasonWeek(season.id, week)
       if (plan.standingsImpacted) await updateStandings(season.id, week).catch(() => undefined)
+      for (const [playerId, stats] of pendingStats) appliedStats.set(playerId, stats)
+      const data = Object.fromEntries(appliedStats)
+      const expiresAt = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000)
+      await prisma.sportsDataCache.upsert({
+        where: { cacheKey: appliedCacheKey },
+        create: { cacheKey: appliedCacheKey, data, expiresAt },
+        update: { data, expiresAt },
+      })
     },
     broadcast: (events) => broadcast(season.leagueId, events),
   }, now)
