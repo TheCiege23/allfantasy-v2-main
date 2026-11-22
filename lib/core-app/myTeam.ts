@@ -1514,11 +1514,12 @@ async function loadMyTeamData(
       const p = players.get(id)
       if (!p) continue
       const row = metricById.get(id)
+      const noNbaRoster = row?.weeklyUnavailableReason === 'no_nba_roster'
       const total = lineupPeriod?.kind === 'day'
         ? (p.periodGames != null && row ? Math.round(p.periodGames * row.perGame * 100) / 100 : null)
         : row?.weekly ?? null
-      const points = board?.unit === 'fantasy points' ? total : null
-      p.afProjectedPoints = p.ruledOut ? 0 : points
+      const points = board?.unit === 'fantasy points' && !noNbaRoster ? total : null
+      p.afProjectedPoints = p.ruledOut && !noNbaRoster ? 0 : points
       p.afEngineProjectedPoints = p.afProjectedPoints
       p.projectionSource = points == null ? null : 'allfantasy'
     }

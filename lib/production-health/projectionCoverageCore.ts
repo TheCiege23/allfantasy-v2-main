@@ -23,7 +23,7 @@ type PlayerInput = {
   evidence?: ProjectionEvidence
   hasWeek: boolean
   lineupAvailable: boolean
-  os?: { perGame: number; weekly: number | null; fullSeason: number | null; weekGames: number | null }
+  os?: { perGame: number; weekly: number | null; fullSeason: number | null; weekGames: number | null; weeklyUnavailableReason?: 'no_nba_roster' }
   lineup?: { points: number | null; unavailable: boolean }
   matchup: number | null
   chimmy?: ChimmyProjection
@@ -46,7 +46,8 @@ export function assessProjectionCoverage(input: PlayerInput) {
   let reason
   if (os) {
     reason = !hasWeek ? 'no_regular_week'
-      : weekly == null ? 'weekly_schedule_missing'
+      : os.weeklyUnavailableReason === 'no_nba_roster' ? 'no_nba_roster'
+        : weekly == null ? 'weekly_schedule_missing'
         : os.weekGames === 0 ? 'no_game_this_week' : 'projected'
   } else if (evidence?.hasSnapshot) reason = 'stored_projection_missing_on_board'
   else if ((evidence?.games ?? 0) >= 2) reason = 'verified_stats_without_projection'

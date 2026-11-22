@@ -9,6 +9,8 @@ import { isSupportedSport } from '@/lib/sport-scope'
 import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { boardPlayerValue, boardUnit, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import { categoryLeagueReason, isFantraxNbaCampusLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
 import { leagueIdColumn, leagueIdOf, loadIdentityForKeys, resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
@@ -42,6 +44,7 @@ export type LeaguePlayerMetric = LeaguePlayerMetricRate & {
   positionRank: number
   weekGames: number | null
   weekly: number | null
+  weeklyUnavailableReason?: 'no_nba_roster'
   fullSeason: number | null
   fullSeasonBasis: 'stored_schedule' | 'standard_season' | null
   restOfSeason: number | null
@@ -360,11 +363,16 @@ export async function loadLeaguePlayerMetrics(args: {
   const idColumn = leagueIdColumn(league.platform, sport)
   const classYears = college && isDynastyLeagueType(league.leagueType)
     ? await loadNcaafClassYears(league.platform, college.rostered.map((p) => p.rosterPlayerId), season) : null
+  const nbaPeriodDay = sport === 'NBA' ? args.day ?? (week == null ? easternCalendarDay(now)
+    : resolveDailySportWeekWindow(sport, season, week)?.start.toISOString().slice(0, 10)) : null
   const rows = selected.map((row) => {
     const linked = identity.get(row.playerId)
     const knownTeam = projectionTeamKey(sport, linked?.team ?? null)
     const statTeam = projectionTeamKey(sport, recordedTeams.get(row.playerId) ?? null)
-    const team = statTeam && schedule.has(statTeam) ? statTeam : knownTeam && schedule.has(knownTeam) ? knownTeam : statTeam ?? knownTeam
+    const inactiveSince = nbaPeriodDay ? activeBoard?.byId.get(row.playerId)?.verifiedNbaInactiveSince : undefined
+    const noNbaRoster = Boolean(nbaPeriodDay && inactiveSince && nbaPeriodDay >= inactiveSince)
+    const scheduledTeam = statTeam && schedule.has(statTeam) ? statTeam : knownTeam && schedule.has(knownTeam) ? knownTeam : statTeam ?? knownTeam
+    const team = noNbaRoster ? null : scheduledTeam
     const value = args.includeTradeValues !== false && activeBoard
       ? boardPlayerValue(activeBoard, { playerId: row.playerId, ...(activeBoard.ctx.requireProviderId ? { rosterPlayerId: activeBoard.byId.get(row.playerId)?.rosterAlias } : {}) })
       : null
@@ -399,6 +407,7 @@ export async function loadLeaguePlayerMetrics(args: {
     return {
       ...row,
       ...totals,
+      ...(noNbaRoster ? { weeklyUnavailableReason: 'no_nba_roster' as const } : {}),
       positionCount: positionCounts.get(row.position),
       remainingGames: team ? schedule.get(team)?.remainingGames ?? null : null,
       ...(args.day ? { daily: projectedTotal(row.perGame, team ? schedule.get(team)?.dayGames ?? null : null) } : {}),

@@ -3,6 +3,7 @@ import 'server-only'
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { extractSeasonAggregate } from '@/lib/af-projections/core'
+import { NBA_VERIFIED_BOX_SOURCE, pickNbaVerifiedSeasonLines } from '@/lib/af-projections/nbaVerifiedSeasonLines'
 import type { LeagueIdColumn } from '@/lib/waivers/seasonRatePool'
 import { normalizeSoccerGameStats } from '@/lib/scoring-runtime/soccerStatNormalization'
 import { hasCollegeBoxParticipation } from '@/lib/workers/providers/collegeFinalBoxes'
@@ -10,7 +11,7 @@ import { hasCollegeBoxParticipation } from '@/lib/workers/providers/collegeFinal
 type Identity = 'linked' | 'ambiguous' | 'missing' | 'unsupported'
 export type ProjectionEvidence = { name: string | null; identity: Identity; games: number; hasSnapshot: boolean; hasPriorSnapshot: boolean }
 
-const SEASON_SOURCES = ['rolling_insights', 'cfbd', 'af_verified_college_boxes']
+const SEASON_SOURCES = ['rolling_insights', 'cfbd', 'af_verified_college_boxes', NBA_VERIFIED_BOX_SOURCE]
 const FINAL_STATUSES = ['final', 'completed', 'ft', 'finished', 'closed', 'aet', 'pen']
 
 function object(value: unknown): Record<string, unknown> {
@@ -48,7 +49,7 @@ export async function loadProjectionEvidence(args: {
   const [lines, snapshots] = keys.length ? await Promise.all([
     prisma.fantasyStatLine.findMany({
       where: { sport, season: String(season), week: 0, source: { in: SEASON_SOURCES }, playerId: { in: keys } },
-      select: { playerId: true, stats: true },
+      select: { playerId: true, stats: true, source: true },
     }),
     prisma.aFProjectionSnapshot.findMany({
       where: { sport, season, week: null, eventId: null, playerId: { in: keys } },
@@ -63,9 +64,14 @@ export async function loadProjectionEvidence(args: {
     const keys = typeof basis === 'number' && basis < season ? priorProjected : projected
     keys.add(row.playerId)
   }
-  for (const { playerId, stats } of lines) {
+  const seasonLines = sport === 'NBA' ? pickNbaVerifiedSeasonLines(lines) : lines
+  for (const { playerId, stats } of seasonLines) {
     const aggregate = extractSeasonAggregate(stats)
     if (!aggregate || !Object.keys(aggregate.components).some(key => key !== 'games_played')) continue
+    // The raw NBA season feed can mark a zero-minute DNP as one game played.
+    if (sport === 'NBA' && aggregate.components.minutes === 0 &&
+        ['field_goals_attempted', 'free_throws_attempted', 'total_rebounds', 'assists', 'blocks', 'steals', 'turnovers', 'fouls']
+          .every(key => !aggregate.components[key])) continue
     games.set(playerId, Math.max(games.get(playerId) ?? 0, aggregate.gamesPlayed))
   }
 
