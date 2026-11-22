@@ -39,6 +39,7 @@ import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
   syncAPISportsGameOddsToDb,
+  apiSportsOddsSportsFor,
   clearAPISportsDiagnostics,
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
@@ -237,13 +238,22 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
      * Cheap by construction: `syncAPISportsGameOddsToDb` drives off SportsGame rows we already
      * store and fetches one game at a time within a bounded window, so an NFL week is ~16 calls
      * against a 300/hr budget. Per-sport isolation matches the games block above.
+     *
+     * College too, by default. With no `?sport=` the odds mode covers NFL then NCAAF; the
+     * schedules default stays NFL-only. Before 2026-11-22 the hourly entry passed no sport, so it
+     * synced NFL only and every college game on the Today strip read "Odds unavailable" while
+     * API-Sports was already supplying those games (5,508 NCAAF 2026 rows, source api_sports).
+     * Defaulting here instead of rewriting the cron path keeps `scripts/cron-freshness-check.mjs`,
+     * which is keyed on the exact path `?odds=1`, pointed at the right job. NCAAF's own window
+     * and cap are in API_SPORTS_ODDS_WINDOW.
      */
     if (oddsOnly) {
+      const oddsSports = apiSportsOddsSportsFor(url.searchParams.get("sport"))
       await withSyncJobRun(
-        { jobName: JOB_ODDS, jobScope: sports.join(","), trigger: "cron" },
+        { jobName: JOB_ODDS, jobScope: oddsSports.join(","), trigger: "cron" },
         async () => {
           const odds: Record<string, unknown> = {}
-          for (const s of sports) {
+          for (const s of oddsSports) {
             if (budget.exhausted()) {
               odds[s] = { deferred: true }
               continue

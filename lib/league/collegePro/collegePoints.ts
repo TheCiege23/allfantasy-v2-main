@@ -21,9 +21,10 @@ import { loadCfbWeeksForNflWeek, loadNflWeekWindow } from '@/lib/c2c/campusWeeks
  * A player whose RI lines score is scored from them alone. Adding both sources would double-count
  * the same game.
  *
- * Scored with the college football defaults, the same scorer native C2C campus scoring uses.
- * ⚠ AN ESTIMATE, NOT FANTRAX'S NUMBER: the league's own Fantrax scoring settings are not stored with
- * the snapshot, and the page says so.
+ * Scored with the college league's own Fantrax scoring when `settings` carries it (the import stores
+ * it as `scoringSettings` with `source: 'fantrax'`, read by `importedNcaafScoring`: categories the
+ * league does not score count zero, so no interception penalty the league never set). Otherwise the
+ * college football defaults native C2C campus scoring uses, and the page says so.
  */
 
 export type CollegePoints = {
@@ -34,6 +35,23 @@ export type CollegePoints = {
   statsOnFile: boolean
   /** True when at least one rostered player's number came from the live Rolling Insights lines. */
   live: boolean
+  /** 'league' when the college league's own Fantrax scoring was applied, 'standard' for the defaults. */
+  scoredWith: 'league' | 'standard'
+}
+
+/**
+ * The college league's own scorer when its imported Fantrax scoring reads cleanly, else null.
+ * `importedNcaafScoring` throws on conflicting or unusable weights; that is a reason to fall back to
+ * the defaults on a read path, never to fail the page.
+ */
+export function leagueNcaafScorer(settings: unknown): ReturnType<typeof buildLeagueStatScorer> {
+  const scoring = settings && typeof settings === 'object' ? (settings as { scoringSettings?: { source?: unknown } }).scoringSettings : null
+  if (scoring?.source !== 'fantrax') return null
+  try {
+    return buildLeagueStatScorer({ sport: 'NCAAF', settings })
+  } catch {
+    return null
+  }
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -58,6 +76,8 @@ export async function loadCollegePoints(args: {
   season: number
   nflWeek: number
   players: Array<{ id: string; cfbdId: string | null; rollingInsightsId: string | null; position: string | null }>
+  /** The college league's `League.settings`, for its own scoring. Omitted → the defaults. */
+  settings?: unknown
 }): Promise<CollegePoints> {
   const [cfbWeeks, window] = await Promise.all([
     loadCfbWeeksForNflWeek(prisma, { season: args.season, nflWeek: args.nflWeek }).catch(() => [] as number[]),
@@ -109,7 +129,8 @@ export async function loadCollegePoints(args: {
   const riByPlayer = groupByPlayer(riRows, (playerId) => fantraxByIdentity.get(playerId))
   const cfbdByPlayer = groupByPlayer(cfbdRows, (playerId) => byCfbd.get(playerId))
 
-  const scorer = buildLeagueStatScorer({ sport: 'NCAAF', settings: null })
+  const own = leagueNcaafScorer(args.settings)
+  const scorer = own ?? buildLeagueStatScorer({ sport: 'NCAAF', settings: null })
   const points: Record<string, number> = {}
   let live = false
   if (scorer) {
@@ -122,5 +143,5 @@ export async function loadCollegePoints(args: {
       if (week === riWeek) live = true
     }
   }
-  return { cfbWeeks, points, statsOnFile: riAny != null || cfbdAny != null, live }
+  return { cfbWeeks, points, statsOnFile: riAny != null || cfbdAny != null, live, scoredWith: own ? 'league' : 'standard' }
 }

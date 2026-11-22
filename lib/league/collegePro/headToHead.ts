@@ -65,6 +65,8 @@ export async function loadHeadToHead(args: {
    * basketball passes the daily-sport reader over the pro league's Fantrax period.
    */
   scoreCollegePlayers?: (players: ConnectedRosterPlayer[]) => Promise<Record<string, number> | null>
+  /** The college league's `League.settings`, so the opponent is scored under the same rules as you. */
+  collegeSettings?: unknown
 }): Promise<{ headToHead: HeadToHead; editor: TeamMapEditor | null }> {
   const { teams: fantraxTeams, rows } = await readSnapshot(args.fantraxSnapshotId)
   const saved = readTeamMap((args.proSettings as Record<string, unknown> | null)?.[COLLEGE_PRO_TEAM_MAP_KEY])
@@ -98,6 +100,7 @@ export async function loadHeadToHead(args: {
         season: args.season,
         nflWeek: args.nflWeek!,
         players: oppPlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
+        settings: args.collegeSettings,
       })
         .then((r) => r.points)
         .catch(() => null)

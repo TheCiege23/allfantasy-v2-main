@@ -108,6 +108,10 @@ export const commissionerToolsMessages = defineMessages({
     signalsTradesTitle: (n: number) => `${plural(n, 'trade')} awaiting your review`,
     signalsTradesDetail: 'Both managers agreed. The trade does not go through until a commissioner approves or vetoes it.',
     signalsTradesAction: 'Review trades',
+    signalsTradeGapsTitle: (n: number, pct: number) => `${plural(n, 'recent trade')} with a value gap of ${pct}% or more`,
+    signalsTradeGapsDetail: (days: number) =>
+      `Completed in the last ${days} days. A gap is what the values said on the day, not a finding. See each one against what similar trades cost.`,
+    signalsTradeGapsAction: 'Look at the trades',
     signalsWaiversTitle: (n: number) => `${plural(n, 'waiver claim')} waiting over a week`,
     signalsWaiversDetail: 'These claims should have been decided by a waiver run by now. Run waivers to process them.',
     signalsWaiversAction: 'Open waivers',
@@ -294,6 +298,10 @@ export const commissionerToolsMessages = defineMessages({
     signalsTradesTitle: (n) => `${plural(n, 'intercambio espera', 'intercambios esperan')} tu revisión`,
     signalsTradesDetail: 'Ambos mánagers aceptaron. El intercambio no se hace efectivo hasta que un comisionado lo apruebe o lo vete.',
     signalsTradesAction: 'Revisar intercambios',
+    signalsTradeGapsTitle: (n, pct) => `${plural(n, 'intercambio reciente', 'intercambios recientes')} con una diferencia de valor del ${pct}% o más`,
+    signalsTradeGapsDetail: (days) =>
+      `Completados en los últimos ${days} días. La diferencia es lo que decían los valores ese día, no una conclusión. Compara cada uno con lo que costaron intercambios similares.`,
+    signalsTradeGapsAction: 'Ver los intercambios',
     signalsWaiversTitle: (n) => `${plural(n, 'reclamo lleva', 'reclamos llevan')} más de una semana esperando`,
     signalsWaiversDetail: 'Estos reclamos ya deberían haberse resuelto en un procesamiento de reclamos. Procésalos para resolverlos.',
     signalsWaiversAction: 'Abrir agentes libres',

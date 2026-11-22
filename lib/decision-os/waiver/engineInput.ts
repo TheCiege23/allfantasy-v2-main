@@ -1,6 +1,8 @@
 import type { WaiverAIServiceInput } from '@/lib/waiver-ai-engine'
 import type { WaiverWorldFacts } from './loader'
 import type { WaiverPool } from './pool'
+import type { TeamNeedsWithTradeEvidence } from './candidateScoring'
+import type { TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
 
 /**
  * The waiver engine's input for one manager, from the facts and the pool — built in ONE place.
@@ -14,6 +16,10 @@ import type { WaiverPool } from './pool'
  * the two surfaces ask the engine the same question and cannot drift into two answers.
  */
 export function waiverEngineInputFrom(facts: WaiverWorldFacts, pool: WaiverPool): WaiverAIServiceInput {
+  // A wider object than the engine's type names; it passes the needs along as they are, so the sentence travels too.
+  const withEvidence: TeamNeedsWithTradeEvidence | null =
+    pool.teamNeeds && pool.tradeNeedEvidence ? { ...pool.teamNeeds, tradeNeedEvidence: pool.tradeNeedEvidence } : pool.teamNeeds
+  const teamNeeds: TeamNeedsMap | null = withEvidence
   return {
     sport: facts.sport,
     leagueSettings: {
@@ -28,7 +34,9 @@ export function waiverEngineInputFrom(facts: WaiverWorldFacts, pool: WaiverPool)
     rosterPositions: pool.rosterPositions,
     allLeagueRosters: pool.leagueRosters,
     /* Precomputed in `loadWaiverPool`, so the season's bye slate is a server read. */
-    ...(pool.teamNeeds ? { teamNeeds: pool.teamNeeds } : {}),
+    // The trade market's evidence per position rides ON the needs it explains (`TeamNeedsWithTradeEvidence`), so it
+    // reaches the scorer through the field the engine already passes along untouched.
+    ...(teamNeeds ? { teamNeeds } : {}),
     ...(pool.currentWeek != null ? { currentWeek: pool.currentWeek } : {}),
     availablePlayers: pool.availablePlayers,
   }

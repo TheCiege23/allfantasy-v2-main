@@ -1,5 +1,7 @@
 import {
   booksOf,
+  LEARNED_BOARD_ENV,
+  learnedBoardOn,
   LEARNED_NEED_ENV,
   LEARNED_PICKS_ENV,
   LEARNED_POSTURE_ENV,
@@ -10,11 +12,15 @@ import {
   learnedPostureAdjustment,
   learnedPostureOn,
   type LearnedTables,
+  withoutNotHeld,
 } from './learnedInGrades'
+import { describeHoldout, HOLDOUT_CACHE_KEY, holdoutRowsOf, learnedMarketHolds, type HoldoutVerdict } from './holdoutCheck'
 import { NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY } from './formatMarkets'
 import { nextDraftYear, type PickClassValue } from './pickMarketLearner'
 import type { PosturePremium } from './postureMarketLearner'
 import type { NeedPremium } from './needMarketLearner'
+import type { BoardSportMarket } from './boardSportLearner'
+import { BOARD_SPORT_MARKET_CACHE_KEY } from './boardSportLearning'
 
 /**
  * THE LEARNED MARKET, ON ONE SCREEN (owner's call, 2026-11-22: /admin/trade-market).
@@ -61,12 +67,31 @@ export type ReportRow = {
   /** What a grade prints for this row when its switch is on; null when it would print nothing. */
   gradeSays: string | null
 }
-export type ReportBook = { book: string; label: string; rows: ReportRow[]; warnings: string[]; tradesUsed: number | null }
+export type ReportBook = {
+  book: string
+  label: string
+  rows: ReportRow[]
+  warnings: string[]
+  tradesUsed: number | null
+  /** Did this learner hold on later trades, for this book (`holdoutCheck.ts`)? Null: no stored verdict. */
+  holdout?: { verdict: HoldoutVerdict; says: string } | null
+}
 export type ReportSection = { key: 'picks' | 'posture' | 'need'; title: string; switch: SwitchState; status: TableStatus; books: ReportBook[] }
-export type LearnedMarketReport = { generatedAt: string; sections: ReportSection[]; publishedRows: number; totalRows: number }
+export type OtherSportRow = { label: string; pct: number | null; trades: number; effectiveSample: number; published: boolean; note: string }
+export type OtherSportReport = { sport: string; tradesRead: number; observations: number; rows: OtherSportRow[] }
+export type LearnedMarketReport = {
+  generatedAt: string
+  sections: ReportSection[]
+  publishedRows: number
+  totalRows: number
+  /** NBA / MLB / NHL / NCAAB / soccer (read by grades only with `TRADE_LEARNED_BOARD=on`). Empty until trades with board values exist. */
+  otherSports: { status: TableStatus; sports: OtherSportReport[]; switch: SwitchState }
+  /** When the hold-out check last ran, and whether the learned market is good enough to show partners. */
+  holdout: { status: TableStatus; cutoff: string | null; releasedToPartners: boolean }
+}
 
 type StoredDoc = { generatedAt?: unknown; books?: unknown } | null
-type RawDocs = { picks: unknown; posture: unknown; need: unknown }
+type RawDocs = { picks: unknown; posture: unknown; need: unknown; boardSports?: unknown; holdout?: unknown }
 
 function statusOf(name: string, raw: unknown, now: Date): TableStatus {
   const d = raw && typeof raw === 'object' ? (raw as StoredDoc) : null
@@ -89,10 +114,16 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 /** The whole report from the three stored documents. PURE. */
 export function summarizeLearnedMarket(raw: RawDocs, env: NodeJS.ProcessEnv, now: Date): LearnedMarketReport {
   // Exactly what the grader would read: published rows of a fresh table only.
-  const tables: LearnedTables = {
-    picks: booksOf(raw.picks, 'classes', now),
-    posture: booksOf(raw.posture, 'premiums', now),
-    need: booksOf(raw.need, 'premiums', now),
+  // A learner that did not hold on later trades is dropped for that book, exactly as the grader drops it.
+  const holdoutRows = holdoutRowsOf(raw.holdout, now)
+  const tables: LearnedTables = withoutNotHeld(
+    { picks: booksOf(raw.picks, 'classes', now), posture: booksOf(raw.posture, 'premiums', now), need: booksOf(raw.need, 'premiums', now) },
+    raw.holdout,
+    now,
+  )
+  const holdoutFor = (learner: 'picks' | 'posture' | 'need', book: string) => {
+    const r = holdoutRows.find((x) => x.learner === learner && x.book === book)
+    return r ? { verdict: r.verdict, says: describeHoldout(r) } : null
   }
   const draft = nextDraftYear(now)
 
@@ -181,8 +212,35 @@ export function summarizeLearnedMarket(raw: RawDocs, env: NodeJS.ProcessEnv, now
       books: need,
     },
   ]
+  for (const sec of sections) for (const b of sec.books) b.holdout = holdoutFor(sec.key, b.book)
   const all = sections.flatMap((s) => s.books.flatMap((b) => b.rows))
-  return { generatedAt: now.toISOString(), sections, publishedRows: all.filter((r) => r.published).length, totalRows: all.length }
+  const board = raw.boardSports && typeof raw.boardSports === 'object' ? (raw.boardSports as { sports?: unknown }) : null
+  const sports: OtherSportReport[] = (Array.isArray(board?.sports) ? (board!.sports as BoardSportMarket[]) : []).map((m) => ({
+    sport: m.sport,
+    tradesRead: m.tradesRead,
+    observations: m.observations,
+    rows: (m.premiums ?? []).map((p) => ({
+      label: p.kind === 'posture' ? `${p.group === 'contend' ? 'Contenders (.600+)' : 'Rebuilders (.400−)'} vs middle teams` : `${p.group} · no spare at the position bought`,
+      pct: p.premiumPct,
+      trades: p.trades,
+      effectiveSample: p.effectiveSample,
+      published: p.published,
+      note: p.note,
+    })),
+  }))
+  return {
+    generatedAt: now.toISOString(), sections, publishedRows: all.filter((r) => r.published).length, totalRows: all.length,
+    otherSports: {
+      status: statusOf('other sports', raw.boardSports, now),
+      sports,
+      switch: { env: LEARNED_BOARD_ENV, on: learnedBoardOn(env), what: 'uses the published premiums for need and record in the "for your team" grade of that sport\'s leagues' },
+    },
+    holdout: {
+      status: statusOf('hold-out check', raw.holdout, now),
+      cutoff: raw.holdout && typeof raw.holdout === 'object' && typeof (raw.holdout as { cutoff?: unknown }).cutoff === 'string' ? (raw.holdout as { cutoff: string }).cutoff : null,
+      releasedToPartners: learnedMarketHolds(holdoutRows),
+    },
+  }
 }
 
 type CacheReader = { sportsDataCache: { findUnique: (args: { where: { cacheKey: string } }) => PromiseLike<unknown> } }
@@ -193,6 +251,6 @@ export async function loadLearnedMarketReport(prisma: CacheReader, env: NodeJS.P
     const row = (await prisma.sportsDataCache.findUnique({ where: { cacheKey: key } })) as { data?: unknown } | null
     return row?.data ?? null
   }
-  const [picks, posture, need] = await Promise.all([read(PICK_MARKET_CACHE_KEY), read(POSTURE_MARKET_CACHE_KEY), read(NEED_MARKET_CACHE_KEY)])
-  return summarizeLearnedMarket({ picks, posture, need }, env, now)
+  const [picks, posture, need, boardSports, holdout] = await Promise.all([read(PICK_MARKET_CACHE_KEY), read(POSTURE_MARKET_CACHE_KEY), read(NEED_MARKET_CACHE_KEY), read(BOARD_SPORT_MARKET_CACHE_KEY), read(HOLDOUT_CACHE_KEY)])
+  return summarizeLearnedMarket({ picks, posture, need, boardSports, holdout }, env, now)
 }

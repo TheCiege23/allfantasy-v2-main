@@ -39,13 +39,17 @@ describe('capturing who was out', () => {
       { playerName: 'Sam Same', team: 'AAA', position: 'WR', status: 'Out', date: NOW, fetchedAt: NOW },
       { playerName: 'Sam Same', team: 'BBB', position: 'WR', status: 'Active', date: NOW, fetchedAt: NOW },
     ])
-    const lookup = await loadInjuryLookup(NOW)
+    const lookup = (await loadInjuryLookup(NOW))!
     expect(lookup({ id: 'x', name: 'Tom Endzone', team: 'AAA', position: 'TE' })).toBe('Out')
     expect(lookup({ id: 'y', name: 'Nobody Hurt', team: 'CCC', position: 'RB' })).toBeNull()
     expect(lookup({ id: 'z', name: 'Sam Same', team: null, position: 'WR' })).toBeUndefined()
     expect(lookup({ id: 'w', team: 'AAA', position: 'WR' })).toBeUndefined()
     // Only fresh NFL reports are read.
     expect(m.injuries.mock.calls[0]![0].where).toMatchObject({ sport: 'NFL' })
+    // No fresh report for a sport is "no feed", never "everyone healthy".
+    m.injuries.mockResolvedValue([])
+    expect(await loadInjuryLookup(NOW, 'NHL')).toBeNull()
+    expect(m.injuries.mock.calls.at(-1)![0].where).toMatchObject({ sport: 'NHL' })
   })
 
   const trade = {
@@ -71,9 +75,12 @@ describe('capturing who was out', () => {
     expect(saved.injuriesRead).toBe(true)
     expect(saved.sides.flatMap((s) => s.rosterBefore).find((p) => p.id === 'te1')!.injuryStatus).toBe('IR')
 
-    const nba = vi.fn(async () => () => null)
-    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: db as never, now: NOW, env: {}, injuries: nba })
-    expect(nba).not.toHaveBeenCalled()
+    // Every sport is read, by its own name (2026-11-22) — and a sport with no feed leaves the snapshot unmarked.
+    const nbaDb = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    const nba = vi.fn(async () => null)
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: nbaDb as never, now: NOW, env: {}, injuries: nba, board: async () => null })
+    expect(nba).toHaveBeenCalledWith(NOW, 'NBA')
+    expect((nbaDb.leagueTrade.updateMany.mock.calls[0] as unknown as [{ data: { contextSnapshot: Record<string, unknown> } }])[0].data.contextSnapshot.injuriesRead).toBeUndefined()
 
     const failingDb = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
     await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NFL'), trades: [trade as never] }, { db: failingDb as never, now: NOW, env: {}, injuries: async () => { throw new Error('down') } })

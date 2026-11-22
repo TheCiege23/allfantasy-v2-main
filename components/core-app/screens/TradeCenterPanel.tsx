@@ -29,6 +29,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { tradeCenterPanelMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
+import { EvidenceLine } from '@/components/core-app/primitives'
 import { letterRecordApplies, tradeLetterRecord } from '@/lib/chimmy-outcomes/engineRecord'
 import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
 
@@ -449,14 +450,25 @@ export function TradeCenterPanel(props: {
         </p>
         {grade ? <p className="af-tcp-grade" data-letter={grade.letter}>{m.gradeLine(grade.letter, grade.getValue.toLocaleString(getAppIntlLocale()), grade.giveValue.toLocaleString(getAppIntlLocale()))}</p> : null}
         {letterRecord ? (
-          <p className="af-tcp-grade-record" data-verdict={letterRecord.verdict} data-testid="tcp-grade-record">
-            {rm.tradeRecord(letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.aheadPct, letterRecord.verdict)}
-          </p>
-        ) : null}
-        {letterRecord?.confidence ? (
-          <p className="af-tcp-grade-confidence" data-level={letterRecord.confidence.level} data-testid="tcp-grade-confidence">
-            {rm.tradeConfidence(letterRecord.confidence.letter, letterRecord.confidence.level, letterRecord.confidence.heldPct, letterRecord.confidence.decided)}
-          </p>
+          <EvidenceLine
+            className="af-tcp-grade-evidence"
+            label={rm.recordLabel}
+            tone={letterRecord.verdict === 'not_held_up' || letterRecord.confidence?.level === 'low' ? 'low' : undefined}
+            lines={[
+              {
+                text: rm.tradeRecord(letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.aheadPct, letterRecord.verdict),
+                testId: 'tcp-grade-record',
+                data: { verdict: letterRecord.verdict },
+              },
+              letterRecord.confidence
+                ? {
+                    text: rm.tradeConfidence(letterRecord.confidence.letter, letterRecord.confidence.level, letterRecord.confidence.heldPct, letterRecord.confidence.decided),
+                    testId: 'tcp-grade-confidence',
+                    data: { level: letterRecord.confidence.level },
+                  }
+                : null,
+            ]}
+          />
         ) : null}
         {sides.map((s) => {
           const standing = teamStanding(t, s.rosterId, proposerId)
