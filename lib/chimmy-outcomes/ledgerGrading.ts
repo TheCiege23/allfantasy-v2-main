@@ -522,8 +522,10 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
 
 /**
  * The same ledger, scoped to a set of leagues — a partner workspace's linked leagues (lib/partner-portal).
- * Start/sit (My Team's bench check) and pickups (the waiver panel's #1 add) only: trade evaluations are not
- * keyed to a league in a way a partner scope can trust yet, so they are left out rather than guessed.
+ * Start/sit (My Team's bench check), pickups (the waiver panel's #1 add) and — since 2026-11-22 — the trade letters
+ * graded on what happened in every other sport and league type (`tradeOutcomesAll.ts`): those are read from trade
+ * snapshots that each carry their league, so the scope is exact. NFL redraft letters are still left out: that grade
+ * reads evaluations not keyed to a league in a way a partner scope can trust.
  *
  * The `users` map is EMPTIED: a partner sees counts for its leagues, never which person was given which call.
  * Null when the schedule has no regular-season weeks for the season, or when no league is given.
@@ -538,10 +540,11 @@ export async function recomputeLedgerForLeagues(
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
   if (cal.size === 0) return null
-  const [bench, adds] = await Promise.all([
+  const [bench, adds, tradeOutcomes] = await Promise.all([
     part(() => loadBenchRows(season, db, leagueIds), [] as BenchRow[]),
     part(() => loadAddRows(season, db, leagueIds), [] as AddRow[]),
+    part(() => import('./tradeOutcomesAll').then(({ gradeAllTradeOutcomes }) => gradeAllTradeOutcomes({ now, db, nflCal: cal, nflSeason: season, leagueIds })), {}),
   ])
-  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 } })
+  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, tradeOutcomes })
   return { ...folded, users: {} }
 }

@@ -169,7 +169,15 @@ const SPORT_KEYS: Record<string, string[]> = {
 }
 const sportKeys = (sport: string) => SPORT_KEYS[sport] ?? [sport, sport.toLowerCase()]
 
-export async function gradeAllTradeOutcomes(opts: { now?: Date; db?: Db; nflCal?: WeekCalendar | null; nflSeason?: number | null } = {}): Promise<TradeOutcomeLedger> {
+export async function gradeAllTradeOutcomes(opts: {
+  now?: Date
+  db?: Db
+  nflCal?: WeekCalendar | null
+  nflSeason?: number | null
+  /** A partner workspace's leagues (lib/partner-portal): only trades evaluated in these leagues. Every snapshot carries its league, so the scope is exact. */
+  leagueIds?: readonly string[]
+} = {}): Promise<TradeOutcomeLedger> {
+  if (opts.leagueIds && opts.leagueIds.length === 0) return {}
   const now = opts.now ?? new Date()
   const db = opts.db ?? prisma
   // Imported here, not at the top: `ledgerGrading` calls this module, and a top-level import would be a cycle.
@@ -184,6 +192,7 @@ export async function gradeAllTradeOutcomes(opts: { now?: Date; db?: Db; nflCal?
       FROM trade_decision_snapshots s
       JOIN leagues l ON l.id = s."leagueId"
       WHERE s."evaluationReceipt" IS NOT NULL AND s."capturedAt" >= ${since}
+        ${opts.leagueIds ? Prisma.sql`AND s."leagueId" = ANY(${[...opts.leagueIds]}::text[])` : Prisma.empty}
       ORDER BY COALESCE(s."inputHash", s.id), s."capturedAt" ASC, s.id ASC
     ) d
     ORDER BY d.captured_at DESC

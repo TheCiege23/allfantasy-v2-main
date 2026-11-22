@@ -260,6 +260,26 @@ export function RecommendationRecord({ record, unavailable }: { record: PartnerR
           </RecordBlock>
         ) : null}
       </div>
+      {record.trades?.length ? (
+        <RecordBlock heading="Trade grades, checked later" value={plural(record.trades.reduce((n, b) => n + b.letters.reduce((m, t) => m + t.n, 0), 0), 'trade', 'trades')} detail="graded in your leagues, then checked against what happened — points under each league's own scoring, or dynasty value a month on">
+          <ul className="space-y-1.5 text-xs text-white/70">
+            {record.trades.flatMap((b) =>
+              b.letters.map((t) => (
+                <li key={`${b.key}-${t.letter}`} className="flex flex-wrap justify-between gap-x-3">
+                  <span>
+                    {b.sport} · graded {t.letter}
+                    {b.kind === 'value' ? ' (dynasty value)' : ''}
+                  </span>
+                  <span className="tabular-nums text-white">
+                    {t.net >= 0 ? '+' : '−'}
+                    {Math.abs(t.net).toFixed(1)} {b.kind === 'value' ? 'value' : 'pts/wk'} · {t.n} trades{t.aheadPct != null ? ` · ahead ${t.aheadPct}%` : ''}
+                  </span>
+                </li>
+              )),
+            )}
+          </ul>
+        </RecordBlock>
+      ) : null}
       <p className="text-xs text-white/45">
         {record.season} NFL season, through week {record.throughWeek}. Start/sit is graded on each league&apos;s own scoring; pickups on standard
         PPR. Counts only — no manager is identified.

@@ -146,3 +146,20 @@ describe('loadPortalView — the record', () => {
     expect(read).not.toHaveBeenCalled()
   })
 })
+
+describe('the partner record carries the trade letters graded in its leagues (2026-11-22)', () => {
+  it('only letters with enough deals, per sport and measure; a record of trades alone is still a record', () => {
+    const rec = buildPartnerRecord(ledger({
+      bench: { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 },
+      pickups: { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 },
+      tradeOutcomes: {
+        'NFL:value': { sport: 'NFL', kind: 'value', byLetter: { A: { n: 24, net: 12.5, ahead: 17, behind: 7 }, B: { n: 3, net: 1, ahead: 2, behind: 1 } }, pending: 0, unscored: 0, gradable: 27, skips: {}, letters: {} },
+        'NBA:points': { sport: 'NBA', kind: 'points', byLetter: { D: { n: 30, net: 2.1, ahead: 18, behind: 12 } }, pending: 0, unscored: 0, gradable: 30, skips: {}, letters: {} },
+      },
+    }))
+    expect(rec).not.toBeNull()
+    const letters = rec!.trades.flatMap((b) => b.letters.map((t) => `${b.sport}:${b.kind}:${t.letter}:${t.n}`)).sort()
+    // B has 3 deals — under the sample floor, so it is not shown.
+    expect(letters).toEqual(['NBA:points:D:30', 'NFL:value:A:24'])
+  })
+})
