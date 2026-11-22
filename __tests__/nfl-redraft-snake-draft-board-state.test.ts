@@ -163,10 +163,9 @@ describe('NFL redraft snake draft — DraftTopBar commissioner gating', () => {
     expect(src).toMatch(/draftStatus === 'pre_draft' && isCommissioner && onStartDraft/)
   })
 
-  it('paused state only treats the pill as a resume control for commissioners', () => {
-    expect(src).toMatch(
-      /isPausedCommissioner = draftStatus === 'paused' && isCommissioner && Boolean\(onResume\)/,
-    )
+  it('paused: the clock is never a resume control; the one Resume pill is commissioner-gated (2026-11-19)', () => {
+    expect(src).toMatch(/const isPausedCommissioner = false/)
+    expect(src).toMatch(/isCommissioner && \(draftStatus === 'in_progress' \|\| draftStatus === 'paused'\)/)
   })
 
   it('inline pause/resume buttons are gated on isCommissioner', () => {

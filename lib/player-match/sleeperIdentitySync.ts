@@ -28,6 +28,7 @@ import { prisma } from '@/lib/prisma'
 
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch, type NameMatchReason } from './verifiedNameMatch'
 import { remainingFor } from '@/lib/cron/runBudget'
+import { fillEspnIdsFromSleeperDirectory, type EspnIdFillSummary } from './sleeperEspnIdFill'
 
 const SLEEPER_PLAYERS_URL = 'https://api.sleeper.app/v1/players/nfl'
 
@@ -120,6 +121,8 @@ export interface BackfillSleeperIdsResult {
   coverageAfter: string
   samples: Array<{ name: string; position: string | null; team: string | null; sleeperId: string; reason: string }>
   errors: string[]
+  /** ESPN ids filled from the same directory download (sleeperEspnIdFill.ts). */
+  espnIds?: EspnIdFillSummary | { error: string }
 }
 
 /**
@@ -388,5 +391,21 @@ export async function backfillSleeperIds(opts: { sport?: string; dryRun?: boolea
 
   const mappedAfter = dryRun ? mappedBefore + result.matched : mappedBefore + result.written
   result.coverageAfter = `${mappedAfter}/${total} (${((mappedAfter / total) * 100).toFixed(1)}%)`
+
+  /*
+   * ESPN ids, from the directory already in hand: each Sleeper record names its ESPN id, so a row
+   * holding that Sleeper id gets it by direct cross-reference — no second download, no name match.
+   * After the Sleeper-id writes above, so rows mapped this run are filled this run too. It must
+   * never fail the backfill it rides on.
+   */
+  try {
+    result.espnIds = await fillEspnIdsFromSleeperDirectory(raw as Record<string, unknown>, {
+      sport,
+      dryRun,
+      isExhausted: () => remainingFor(opts.deadlineAt, 1_000) == null,
+    })
+  } catch (err) {
+    result.espnIds = { error: (err instanceof Error ? err.message : String(err)).slice(0, 160) }
+  }
   return result
 }

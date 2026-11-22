@@ -4,7 +4,6 @@
  * Modes: score-based, seeded random, hybrid (AI theme + deterministic outcome). PROMPT 3.
  */
 
-import { prisma } from '@/lib/prisma'
 import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
 import { getBigBrotherSeasonPoints as getSeasonPointsFromRosterPerformance } from './BigBrotherScores'
 import type { ChallengeMode } from './types'
@@ -25,7 +24,7 @@ function hashSeed(str: string): number {
   return Math.abs(h) || 1
 }
 
-export interface ChallengeInput {
+interface ChallengeInput {
   leagueId: string
   configId: string
   week: number
@@ -35,7 +34,7 @@ export interface ChallengeInput {
   challengeType: 'hoh' | 'veto'
 }
 
-export interface ScoreBasedInput extends ChallengeInput {
+interface ScoreBasedInput extends ChallengeInput {
   /** Per-roster score for this challenge (e.g. weekly fantasy points, bench points, efficiency). Higher wins unless reverse. */
   scores: Record<string, number>
   /** If true, lowest score wins (e.g. "closest to X without going over") */
@@ -90,7 +89,7 @@ export function resolveChallengeBySeededRandom(input: ChallengeInput, seedOverri
  * Hybrid: theme/prompt can be AI-generated; outcome is deterministic.
  * Uses score-based resolution with provided scores, or falls back to seeded random if no scores.
  */
-export async function resolveChallengeHybrid(
+async function resolveChallengeHybrid(
   input: ChallengeInput,
   scores?: Record<string, number>,
   lowestWins?: boolean

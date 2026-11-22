@@ -1,6 +1,6 @@
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport } from "@/lib/sport-scope"
 
-export type SportsRouteSportParam = {
+type SportsRouteSportParam = {
   sport: string
   requestedSport: string
   isWorldCup: boolean

@@ -121,7 +121,7 @@ describe('League shell layout and waivers integration', () => {
     expect(leagueShell).toContain('if (isPredraftLifecycle) return renderPredraftDraftSetup()')
   })
 
-  it('renders AF Pro waiver AI locked/recommendations panel within waiver page', () => {
+  it('renders AF Pro waiver Chimmy locked/recommendations panel within waiver page', () => {
     expect(waiverWire).toContain('<AIWaiverRecommendationsPanel leagueId={leagueId} />')
     expect(waiverAiPanel).toContain('AF_PRO_REQUIRED')
     expect(waiverAiPanel).toContain('Chimmy&apos;s waiver recommendations are an AF Pro feature.')
@@ -130,7 +130,7 @@ describe('League shell layout and waivers integration', () => {
   it('renders commissioner waiver insights panel with lock state within waiver page', () => {
     expect(waiverWire).toContain('<CommissionerWaiverInsightsPanel leagueId={leagueId} />')
     expect(commissionerPanel).toContain('AF_COMMISSIONER_REQUIRED')
-    expect(commissionerPanel).toContain('League-wide AI waiver tools require AF Commissioner.')
+    expect(commissionerPanel).toContain('League-wide Chimmy waiver tools require AF Commissioner.')
   })
 
   it('promotes the complete waiver experience inside the league Players tab', () => {

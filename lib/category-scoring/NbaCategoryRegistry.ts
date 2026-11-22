@@ -21,7 +21,7 @@ export const NBA_CATEGORY_POINTS: CategoryDefinition = {
   computation: { kind: 'sum', statKey: 'points_scored' },
 }
 
-export const NBA_CATEGORY_REBOUNDS: CategoryDefinition = {
+const NBA_CATEGORY_REBOUNDS: CategoryDefinition = {
   id: 'nba_reb',
   label: 'REB',
   description: 'Total rebounds',
@@ -29,21 +29,21 @@ export const NBA_CATEGORY_REBOUNDS: CategoryDefinition = {
   computation: { kind: 'sum', statKey: 'rebound' },
 }
 
-export const NBA_CATEGORY_ASSISTS: CategoryDefinition = {
+const NBA_CATEGORY_ASSISTS: CategoryDefinition = {
   id: 'nba_ast',
   label: 'AST',
   direction: 'higher',
   computation: { kind: 'sum', statKey: 'assist' },
 }
 
-export const NBA_CATEGORY_STEALS: CategoryDefinition = {
+const NBA_CATEGORY_STEALS: CategoryDefinition = {
   id: 'nba_stl',
   label: 'STL',
   direction: 'higher',
   computation: { kind: 'sum', statKey: 'steal' },
 }
 
-export const NBA_CATEGORY_BLOCKS: CategoryDefinition = {
+const NBA_CATEGORY_BLOCKS: CategoryDefinition = {
   id: 'nba_blk',
   label: 'BLK',
   direction: 'higher',
@@ -70,7 +70,7 @@ export const NBA_CATEGORY_FG_PCT: CategoryDefinition = {
   },
 }
 
-export const NBA_CATEGORY_FT_PCT: CategoryDefinition = {
+const NBA_CATEGORY_FT_PCT: CategoryDefinition = {
   id: 'nba_ft_pct',
   label: 'FT%',
   description: 'Free-throw percentage (made / attempted, team totals).',
@@ -82,7 +82,7 @@ export const NBA_CATEGORY_FT_PCT: CategoryDefinition = {
   },
 }
 
-export const NBA_CATEGORY_THREES_MADE: CategoryDefinition = {
+const NBA_CATEGORY_THREES_MADE: CategoryDefinition = {
   id: 'nba_3pm',
   label: '3PM',
   description: 'Three-pointers made.',
@@ -117,7 +117,7 @@ export const NBA_NINE_CAT: readonly CategoryDefinition[] = Object.freeze([
 
 export const NBA_EIGHT_CAT: readonly CategoryDefinition[] = Object.freeze(NBA_NINE_CAT.filter(category => category.id !== 'nba_to'))
 
-export type NbaCategoryPresetId = 'nba_8cat' | 'nba_8cat_standard' | 'nba_9cat'
+type NbaCategoryPresetId = 'nba_8cat' | 'nba_8cat_standard' | 'nba_9cat'
 
 export function getNbaCategoryPreset(preset: NbaCategoryPresetId): readonly CategoryDefinition[] {
   return preset === 'nba_9cat' ? NBA_NINE_CAT : NBA_EIGHT_CAT

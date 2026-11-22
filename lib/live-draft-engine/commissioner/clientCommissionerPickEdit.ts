@@ -24,7 +24,7 @@ export interface CommissionerPickEditClientParams {
   confirmSelfBenefit?: boolean
 }
 
-export interface CommissionerPickEditWarning {
+interface CommissionerPickEditWarning {
   message: string
 }
 

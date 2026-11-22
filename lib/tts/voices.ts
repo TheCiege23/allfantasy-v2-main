@@ -1,6 +1,6 @@
 /** ElevenLabs voice presets for Chimmy TTS (IDs from ElevenLabs). */
 
-export type ChimmyVoice = {
+type ChimmyVoice = {
   id: string
   name: string
   description: string
@@ -12,7 +12,7 @@ export type ChimmyVoice = {
 }
 
 /** ElevenLabs premade Rachel (same id as `ELEVENLABS_RACHEL_PREMADE` in chimmy voice route). */
-export const ELEVENLABS_RACHEL_PREMADE_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
+const ELEVENLABS_RACHEL_PREMADE_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
 
 export const CHIMMY_VOICES: ChimmyVoice[] = [
   {
@@ -66,14 +66,6 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
 ]
 
 export const DEFAULT_VOICE_ID = CHIMMY_VOICES[0]!.id
-
-/**
- * Chimmy dashboard voice dropdown: primary ElevenLabs options (Allison custom + Rachel premade).
- * Full list stays in {@link CHIMMY_VOICES} for TTS allowlist / localStorage.
- */
-export const CHIMMY_VOICE_DROPDOWN_OPTIONS: ChimmyVoice[] = CHIMMY_VOICES.filter((v) =>
-  v.name === 'Allison' || v.name === 'Rachel',
-)
 
 export const CHIMMY_VOICE_ID_STORAGE_KEY = 'chimmy_voice_id'
 

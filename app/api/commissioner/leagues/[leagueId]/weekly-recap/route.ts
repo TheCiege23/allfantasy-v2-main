@@ -5,11 +5,11 @@
  *   PUT   { mode: 'auto' | 'review', autoPostIfUntouched? }
  *   POST  { action: 'post' | 'save' | 'discard', season, week, text? }
  */
+import { commissionerAccessResponse, type CommissionerNeed } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { prisma } from '@/lib/prisma'
 import { REVIEW_SETTINGS_KEY, cleanRecapText, parseRecapReview, readRecapReview } from '@/lib/recap-review/recapReview'
 import { discardRecapDraft, postRecapDraft, readPendingDraft, saveRecapEdit } from '@/lib/recap-review/recapReviewService'
@@ -19,23 +19,20 @@ export const dynamic = 'force-dynamic'
 
 type Ctx = { params: Promise<{ leagueId: string }> }
 
-async function gate(ctx: Ctx) {
+async function gate(ctx: Ctx, need: CommissionerNeed) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const
   const { leagueId } = await ctx.params
-  const role = await getLeagueRole(leagueId, userId)
-  if (role === null) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) } as const
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return { error: NextResponse.json({ error: 'Commissioner only' }, { status: 403 }) } as const
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, need)
+  if (refused) return { error: refused } as const
   return { leagueId, userId } as const
 }
 
 const POST_STATUS = { not_found: 404, not_pending: 409, already_posted: 409, chimmy_quiet: 409, post_failed: 502 } as const
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
-  const g = await gate(ctx)
+  const g = await gate(ctx, 'view')
   if ('error' in g) return g.error
   const league = await prisma.league.findUnique({ where: { id: g.leagueId }, select: { settings: true } })
   return NextResponse.json({
@@ -46,7 +43,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
-  const g = await gate(ctx)
+  const g = await gate(ctx, 'league')
   if ('error' in g) return g.error
   const next = parseRecapReview(await req.json().catch(() => null))
   if (!next) return NextResponse.json({ error: 'invalid_mode' }, { status: 400 })
@@ -61,7 +58,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 }
 
 export async function POST(req: NextRequest, ctx: Ctx) {
-  const g = await gate(ctx)
+  const g = await gate(ctx, 'chat')
   if ('error' in g) return g.error
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const season = typeof body.season === 'string' ? body.season : String(body.season ?? '')

@@ -21,6 +21,7 @@ import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './T
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { TradeMarketEvidence } from './TradeMarketEvidence'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -954,6 +955,8 @@ export function TradeInbox(props: {
                       </ul>
                     ) : null}
                     {withheld ? <p className="af-tc-timeline-gap">{copy('Not graded:')} {copy(withheld)}</p> : null}
+                    {/* Why the values moved, measured from completed trades — open offers and settled trades alike. */}
+                    <TradeMarketEvidence grade={graded} copy={copy} />
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
                     {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
                     {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} original={grade} /> : null}

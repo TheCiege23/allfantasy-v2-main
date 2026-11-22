@@ -40,14 +40,14 @@ describe('Translation source defines the missing legacy tab keys', () => {
     const src = read('lib/i18n/translations.ts')
     expect(src).toMatch(/"draftRoom\.legacy\.queueTab":\s*"Queue"/)
     expect(src).toMatch(/"draftRoom\.legacy\.rosterTab":\s*"Roster"/)
-    expect(src).toMatch(/"draftRoom\.legacy\.aiTab":\s*"AI"/)
+    expect(src).toMatch(/"draftRoom\.legacy\.aiTab":\s*"Chimmy"/)
   })
 
   it('ES parity translations-es-parity.ts has the same three keys (with ES values)', () => {
     const src = read('lib/i18n/translations-es-parity.ts')
     expect(src).toMatch(/"draftRoom\.legacy\.queueTab":\s*"Cola"/)
     expect(src).toMatch(/"draftRoom\.legacy\.rosterTab":\s*"Plantilla"/)
-    expect(src).toMatch(/"draftRoom\.legacy\.aiTab":\s*"IA"/)
+    expect(src).toMatch(/"draftRoom\.legacy\.aiTab":\s*"Chimmy"/)
   })
 })
 
@@ -73,7 +73,7 @@ describe('DraftShell resilient label resolver', () => {
       /\{\s*key:\s*'chat',\s*i18nKey:\s*'draftRoom\.legacy\.draftChat',\s*label:\s*'Draft Chat'\s*\}/,
     )
     expect(src).toMatch(
-      /\{\s*key:\s*'ai',\s*i18nKey:\s*'draftRoom\.legacy\.aiTab',\s*label:\s*'AI'\s*\}/,
+      /\{\s*key:\s*'ai',\s*i18nKey:\s*'draftRoom\.legacy\.aiTab',\s*label:\s*'Chimmy'\s*\}/,
     )
   })
 
@@ -106,7 +106,7 @@ describe('Commit L–V locks still hold after Commit W', () => {
 
   it('Commit S — DraftTeamPanel still computes teamNeeds + byeClusters', () => {
     const dtp = read('components/app/draft-room/DraftTeamPanel.tsx')
-    expect(dtp).toMatch(/computeTeamNeeds\(\{ picks: myPicks, starterSlots \}\)/)
+    expect(dtp).toMatch(/computeStarterNeedsForDisplay\(\{ picks: myPicks, starterSlots \}\)/)
     expect(dtp).toMatch(/detectByeWeekClusters\(myPicks\)/)
   })
 

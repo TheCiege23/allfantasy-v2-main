@@ -20,17 +20,6 @@ export interface C2CImportSource {
   rosterDepth: number | 'all'
 }
 
-/**
- * Multi-source import job payload. `sources` must include exactly one 'pro'
- * and one 'college' entry. Downstream normalizer runs each source through
- * the single-provider pipeline, then merges by manager email/name match.
- */
-export interface MultiSourceImportJob {
-  leagueId?: string
-  leagueName?: string
-  sources: C2CImportSource[]
-}
-
 export interface SourceTracking {
   source_provider: ImportProvider
   source_league_id: string
@@ -97,6 +86,12 @@ export interface NormalizedLeagueSettings {
   is_keeper?: boolean
   /** Sleeper's raw `settings.type` (0 redraft, 1 keeper, 2 dynasty); absent when Sleeper sent none. */
   sleeper_league_type?: number
+  /**
+   * The first NFL week the league scores (Sleeper `settings.start_week`). A league that starts after
+   * week 1 — a mid-season or tournament-stage redraft — scores only part of the season, which the
+   * draft engine uses as its scoring window (lib/shared-services/draft/DraftContextAssembler.ts).
+   */
+  start_week?: number
   /** ESPN's raw keeper count, only when ESPN sent a number (see EspnAdapter `espnKeeperCount`). */
   espn_keeper_count?: number
   /**
@@ -139,6 +134,8 @@ export interface NormalizedLeagueSettings {
 export interface NormalizedRoster {
   source_team_id: string
   source_manager_id: string
+  /** Provider manager ids that share this team with its owner (Sleeper `co_owners`). */
+  co_owner_ids?: string[]
   owner_name: string
   team_name: string
   avatar_url: string | null
@@ -152,6 +149,12 @@ export interface NormalizedRoster {
   points_against?: number
   player_ids: string[]
   starter_ids: string[]
+  /**
+   * The slot each starter is in, keyed by player id, for a provider whose league template cannot
+   * be aligned to `starter_ids` (ESPN — see `startingSlotTemplate`). Stored as
+   * `playerData.starter_slot_by_id`; read by `storedStarterSlotLabels`. Omit when unknown.
+   */
+  starter_slot_by_id?: Record<string, string>
   /**
    * INJURED RESERVE ONLY — never the bench.
    *
@@ -268,10 +271,17 @@ export interface NormalizedTransaction {
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string
   created_at: string
+  /** Provider-reported status change time; distinct from when a trade was proposed. */
+  status_updated_at?: string
   adds?: Record<string, string>
   drops?: Record<string, string>
   roster_ids: string[]
   draft_picks?: unknown[]
+  /**
+   * FAAB moved between rosters in a TRADE, when the provider stated it (`sleeperTradeWaiverBudget`). Absent = not read.
+   * Only Sleeper fills it today.
+   */
+  waiver_budget?: Array<{ sender: string; receiver: string; amount: number }>
   /**
    * Scoring week the transaction belongs to, stamped from the FETCH LOOP rather than read off the
    * payload. Sleeper's transactions endpoint is per-week (`/league/{id}/transactions/{week}`), so
@@ -306,10 +316,31 @@ export interface NormalizedTradedPick {
   original_roster_id: string
   current_owner_roster_id: string
   previous_owner_roster_id?: string
+  /**
+   * Whether the pick has changed hands. Absent means true: Sleeper and MFL list only moved picks.
+   * Fantrax lists every pick with its holder, so its untraded picks carry `false` and are stored
+   * as the team's own.
+   */
+  traded?: boolean
+}
+
+/**
+ * A future pick the provider POSITIVELY reports as held by its original team.
+ *
+ * Exists for the traded-back case. `future_draft_picks` holds a row only for a
+ * pick that has left its original roster, and nothing ever removed one — so a
+ * pick traded away and later traded home kept showing its old holder forever.
+ * A provider that lists every pick (Fantrax, MFL) can say "this one is home",
+ * and that is what clears the stale row.
+ */
+export interface NormalizedReturnedPick {
+  season: number
+  round: number
+  original_roster_id: string
 }
 
 /** Title-game result for one season, in the adapter's own team id space. */
-export interface NormalizedSeasonPlacement {
+interface NormalizedSeasonPlacement {
   champion_source_team_id: string | null
   runner_up_source_team_id: string | null
   /** How the title game was identified — see `sleeper/bracketPlacements.ts`. */
@@ -364,12 +395,21 @@ export interface NormalizedImportResult {
   scoring: NormalizedScoring | null
   schedule: NormalizedMatchup[]
   draft_picks: NormalizedDraftPick[]
+  /** Fresh draft lifecycle observations when the provider exposes them. */
+  drafts?: Array<{ source_draft_id: string; status: string; start_time?: number }>
   /**
    * Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`).
    * Absent = provider does not expose traded picks; empty array = provider
    * exposes them but no picks are currently in a traded state.
    */
   traded_picks?: NormalizedTradedPick[]
+  /**
+   * Future picks the provider reports as back with (or never having left) their
+   * original team. Absent = the provider cannot say — Sleeper's `/traded_picks`
+   * lists moved picks only, so silence about a pick there proves nothing and no
+   * stored row is ever cleared on its account.
+   */
+  returned_picks?: NormalizedReturnedPick[]
   /**
    * Who won the season's title and who lost it, from the provider's own playoff
    * result — NOT from `standings`. Absent = the adapter has no such result (season
@@ -427,7 +467,7 @@ export interface ExternalIdentityMapping {
   external_ids?: { sportradar?: string }
 }
 
-export type ImportWarningSeverity = 'info' | 'warn' | 'error'
+type ImportWarningSeverity = 'info' | 'warn' | 'error'
 
 export interface ImportWarningRecord {
   code: string

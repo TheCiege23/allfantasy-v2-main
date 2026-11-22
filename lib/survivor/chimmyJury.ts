@@ -11,7 +11,7 @@
  * Copy follows League.language (English and Spanish), like chimmyCastawayChat.ts.
  */
 
-export type ChimmyLang = 'en' | 'es'
+type ChimmyLang = 'en' | 'es'
 
 export function chimmyLang(language: string | null | undefined): ChimmyLang {
   return String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'

@@ -4,12 +4,12 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recha
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface ActivityMixSlice {
+interface ActivityMixSlice {
   label: string
   value: number
 }
 
-export interface ActivityMixDonutProps {
+interface ActivityMixDonutProps {
   slices: ActivityMixSlice[]
   height?: number
   /** Required — Recharts' SVG output carries no semantics of its own, so this is the chart's only accessible description. */

@@ -29,7 +29,7 @@ export const PROFILE_LABELS = [
 ] as const
 export type ProfileLabel = (typeof PROFILE_LABELS)[number]
 
-export const EVIDENCE_TYPES = [
+const EVIDENCE_TYPES = [
   'draft_tendency',
   'trade_frequency',
   'trade_timing',
@@ -48,18 +48,6 @@ export const EVIDENCE_TYPES = [
 ] as const
 export type EvidenceType = (typeof EVIDENCE_TYPES)[number]
 
-export interface ManagerPsychProfilePayload {
-  leagueId: string
-  managerId: string
-  sport: string
-  profileLabels: ProfileLabel[]
-  aggressionScore: number
-  activityScore: number
-  tradeFrequencyScore: number
-  waiverFocusScore: number
-  riskToleranceScore: number
-}
-
 export interface ProfileEvidencePayload {
   managerId: string
   leagueId: string
@@ -68,27 +56,6 @@ export interface ProfileEvidencePayload {
   value: number
   sourceReference?: string | null
   createdAt?: Date
-}
-
-export interface BehaviorSignals {
-  tradeCount: number
-  tradeFrequencyNorm: number
-  tradeTimingLateRate: number
-  waiverClaimCount: number
-  waiverFocusNorm: number
-  lineupChangeRate: number
-  benchingPatternScore: number
-  rookieAcquisitionRate: number
-  vetAcquisitionRate: number
-  draftPickCount: number
-  draftEarlyRoundRate: number
-  positionPriorityConcentration: number
-  picksTradedAway: number
-  picksAcquired: number
-  rebuildScore: number
-  contentionScore: number
-  aggressionNorm: number
-  riskNorm: number
 }
 
 export const PSYCH_SPORTS: readonly SupportedSport[] = [...SUPPORTED_SPORTS]

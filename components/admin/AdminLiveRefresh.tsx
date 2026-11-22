@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 import { emitAdminRefresh } from '@/components/admin/adminRefreshSignal'
 
 /**
@@ -91,8 +92,10 @@ export function AdminLiveRefresh({ generatedAt }: { generatedAt: string }) {
       if (pendingRef.current) return
       // Do not re-render the console under someone mid-way through a form.
       if (isTyping()) return
-      refresh()
+      // Guarded: after a deploy a background refresh is a full page reload (lib/core-app/deployGuard).
+      void refreshInBackground(refresh)
     }
+    void primeDeployBaseline()
     const id = window.setInterval(tick, POLL_MS)
 
     const onVisible = () => {

@@ -147,7 +147,7 @@ export default function WorldCupMatchupIntelligencePanel({
         </div>
         {!hasBracketBrainAi && (
           <span className="text-[11px] font-semibold uppercase tracking-wide text-white/35">
-            Basic stats (non-AI)
+            Basic stats (non-Chimmy)
           </span>
         )}
       </div>
@@ -216,12 +216,12 @@ export default function WorldCupMatchupIntelligencePanel({
             </span>
             {intel.generative && (
               <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-bold text-violet-300">
-                AI summary
+                Chimmy summary
               </span>
             )}
             {intel.narrativesGenerative && (
               <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-bold text-violet-300">
-                AI insight
+                Chimmy insight
               </span>
             )}
           </div>

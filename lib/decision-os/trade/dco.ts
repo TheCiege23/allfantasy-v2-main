@@ -50,7 +50,7 @@ export interface TradeProposalContext {
   vetoMode: string | null
 }
 
-export type TradeEvaluatorSupport = 'supported' | 'unsupported_by_legacy_evaluator'
+type TradeEvaluatorSupport = 'supported' | 'unsupported_by_legacy_evaluator'
 
 export interface TradeDCO {
   decision_type: 'manager.trade.evaluate'
@@ -75,7 +75,7 @@ export interface TradeDCO {
   simulation_available: boolean
 }
 
-export interface TradeDCOInput {
+interface TradeDCOInput {
   world: TradeWorld
   userId: string
   leagueId: string

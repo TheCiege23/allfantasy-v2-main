@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -67,7 +68,7 @@ async function sleeperLiveScores(userId: string): Promise<DashboardLiveScore[]> 
     where: {
       platform: 'sleeper',
       platformLeagueId: { not: '' },
-      OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+      OR: leagueMemberWhere(userId),
     },
     select: { id: true, name: true, platformLeagueId: true },
     take: MAX_SLEEPER_LEAGUES,

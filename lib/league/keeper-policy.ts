@@ -1,14 +1,14 @@
 import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export type KeeperWindow = {
+type KeeperWindow = {
   declarationDeadlineDaysBeforeDraft: number
   maxKeepers: number
   roundCostMode: 'previous_round' | 'fixed_round' | 'salary_value'
   requiresCommissionerApproval: boolean
 }
 
-export type KeeperRecommendation = KeeperWindow & {
+type KeeperRecommendation = KeeperWindow & {
   sport: LeagueSport
   leagueType: string
   carryoverSupported: boolean

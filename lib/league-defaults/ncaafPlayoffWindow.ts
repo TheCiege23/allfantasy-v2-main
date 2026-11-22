@@ -12,9 +12,9 @@
  */
 
 /** The last college regular-season week with a full slate. */
-export const NCAAF_LAST_FULL_WEEK = 13
+const NCAAF_LAST_FULL_WEEK = 13
 
-export type NcaafPlayoffWindow = {
+type NcaafPlayoffWindow = {
   playoffStartWeek: number
   regularSeasonEndWeek: number
   championshipWeek: number

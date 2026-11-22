@@ -4,7 +4,7 @@ import { Bot, User, TrendingUp, AlertTriangle } from 'lucide-react'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import type { RedraftStarterHint } from '@/lib/draft-room/redraftPlanningHints'
 import { DraftRosterStrip } from './DraftRosterStrip'
-import { computeTeamNeeds, detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
+import { computeStarterNeedsForDisplay, detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
 
 export type DraftTeamPanelProps = {
   leagueName: string
@@ -85,7 +85,7 @@ export function DraftTeamPanel({
   // `redraftStarterHints` chip strip still renders above for the soft
   // QB/RB/WR/TE balance heuristic; this row surfaces the rule-correct
   // "have / target / remaining" against the actual roster template.
-  const teamNeeds = computeTeamNeeds({ picks: myPicks, starterSlots })
+  const teamNeeds = computeStarterNeedsForDisplay({ picks: myPicks, starterSlots })
   // Commit S — bye-week clustering: 3+ drafted starters sharing a bye
   // is a real lineup risk. Empty / unknown byes are dropped silently
   // so this section disappears for pools that don't carry bye data.
@@ -110,7 +110,7 @@ export function DraftTeamPanel({
           {aiAssignment ? (
             <span className="inline-flex items-center gap-0.5 rounded border border-sky-400/35 bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-100">
               <Bot className="h-3 w-3" aria-hidden />
-              AI · {aiAssignment.aiStyle.replace(/_/g, ' ')}
+              Chimmy · {aiAssignment.aiStyle.replace(/_/g, ' ')}
             </span>
           ) : (
             <span className="inline-flex items-center gap-0.5 rounded border border-white/15 px-1.5 py-0.5 text-[11px] text-white/70">

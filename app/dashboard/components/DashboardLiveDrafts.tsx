@@ -120,4 +120,3 @@ export function DashboardLiveDrafts({ leagues }: { leagues: UserLeague[] }) {
   )
 }
 
-export default DashboardLiveDrafts

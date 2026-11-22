@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         await recalculateMatchupsForSeasonWeek(season.id, season.currentWeek)
       }
       const sweep = await finalizeCompletedWeeksForSeason({ seasonId: season.id, throughWeek: season.currentWeek }, {
-        notifyResults: async () => {}, enqueueTankingScan: async () => {}, resolvePredictions: async () => {},
+        notifyResults: async () => {}, enqueueTankingScan: async () => {}, notifyRebuildPlans: async () => {}, resolvePredictions: async () => {},
         syncWeekStats: async args => { await syncPlayerWeeklyScoresForRedraftSeason({ ...args, actorId: 'system:pirate-rehearsal-backfill' }) },
       })
       if (sweep.finalized) await updateStandings(season.id, season.currentWeek)

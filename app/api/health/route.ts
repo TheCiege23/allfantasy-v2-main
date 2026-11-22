@@ -20,11 +20,10 @@ export async function GET() {
       await prisma.$queryRaw`SELECT 1`
       database = { ...database, connected: true }
     } catch (e) {
-      database = {
-        ...database,
-        connected: false,
-        error: e instanceof Error ? e.message.slice(0, 200) : 'query_failed',
-      }
+      // This route is public: a Prisma message names the database host ("Can't reach database
+      // server at <host>:5432"). Keep the detail in the server log, not the response.
+      console.error('[health] database check failed:', e instanceof Error ? e.message.slice(0, 500) : e)
+      database = { ...database, connected: false, error: 'query_failed' }
     }
   }
 

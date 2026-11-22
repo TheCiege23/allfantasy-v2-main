@@ -12,6 +12,7 @@ import { leagueValueForPlayer, valuePositionsAgree, type TradePlayerIdentity } f
 import type { LeagueNamedValue } from './league-values/leagueTradeValues';
 
 export interface ValuationContext {
+  afLeagueMarketBook?: ReturnType<typeof import('./core-app/valueBook').valueBookFor>;
   leagueValueBySleeperId?: ReadonlyMap<string, LeagueNamedValue>;
   leagueUnpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>;
   leagueUnpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>;
@@ -19,6 +20,8 @@ export interface ValuationContext {
   isSuperFlex: boolean;
   fantasyCalcPlayers?: FantasyCalcPlayer[];
   numTeams?: number;
+  /** Price rookie picks by overall position against the stored 12-team reference chart. */
+  largeLeagueRookiePicks?: boolean;
   rosterConfig?: LeagueRosterConfig;
   playerPositionOverrides?: Record<string, string>;
   /** League scoring; defaults to full PPR when the caller has no league context. */
@@ -53,6 +56,7 @@ export interface AssetValue {
 }
 
 export interface PricedAsset {
+  valueAsOf?: string;
   name: string;
   type: 'player' | 'pick';
   value: number;
@@ -84,6 +88,7 @@ export interface PricedAsset {
   source:
     | 'excel'
     | 'fantasycalc'
+    | 'allfantasy'
     | 'curve'
     | 'idp-vorp'
     | 'kicker-flat'

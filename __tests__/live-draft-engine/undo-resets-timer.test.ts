@@ -37,6 +37,7 @@ const ctx = vi.hoisted(() => {
 
   let capturedUpdateData: Record<string, unknown> | null = null
   let deletedPickId: string | null = null
+  let deletedContractWhere: unknown = null
 
   const store = {
     session: {
@@ -82,6 +83,12 @@ const ctx = vi.hoisted(() => {
       draftPickAuditLog: {
         create: vi.fn(async () => {}),
       },
+      playerContract: {
+        deleteMany: vi.fn(async (args: unknown) => {
+          deletedContractWhere = (args as { where: unknown }).where
+          return { count: 1 }
+        }),
+      },
     }
   }
 
@@ -126,13 +133,14 @@ const ctx = vi.hoisted(() => {
     ]
     capturedUpdateData = null
     deletedPickId = null
+    deletedContractWhere = null
   }
 
   return {
     store,
     prisma,
     reset,
-    getCapture: () => ({ capturedUpdateData, deletedPickId }),
+    getCapture: () => ({ capturedUpdateData, deletedPickId, deletedContractWhere }),
   }
 })
 
@@ -166,6 +174,15 @@ describe('undoLastPick', () => {
   it('deletes the last pick', async () => {
     await undoLastPick('league-1')
     expect(ctx.getCapture().deletedPickId).toBe('pick-1')
+  })
+
+  // A snake salary-cap pick signed a rookie contract; taking the pick back takes the contract back.
+  it("takes back the undone pick's rookie contract", async () => {
+    await undoLastPick('league-1')
+    expect(ctx.getCapture().deletedContractWhere).toEqual({
+      leagueId: 'league-1', rosterId: 'roster-a', playerId: 'draft-1', source: 'rookie_draft',
+      metadata: { path: ['draftPickOverall'], equals: 1 },
+    })
   })
 
   // A completed draft has written its rosters and season; taking its last pick off the board

@@ -3,7 +3,7 @@
  *
  * ── 🛑 WHY THIS FILE EXISTS ─────────────────────────────────────────────────
  *
- * The first version of `lib/core-app/scout.ts` read `lib/decision-os/psychology-os` directly — a
+ * The first version of `lib/core-app/scout.ts` read `lib/decision-os/psychology-os` (deleted 2026-11-17) directly — a
  * clean cached feed with no entitlement or membership check — and handed every opponent's labels,
  * scores and trajectory to every caller. Milestone 32 then withheld characterisation from everyone,
  * and the 2026-09-30 ruling retired every psychology leftover. Scout now shows standings FACTS.
@@ -41,9 +41,11 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: h.membership }))
 vi.mock('@/lib/core-app/leagueStandings', () => ({ getLeagueStandings: h.standings }))
-// Mocked so that a regression which reads the feed again is VISIBLE, not so that Scout can use it.
-vi.mock('@/lib/decision-os/psychology-os', () => ({
-  createPsychologyOsLoaders: () => ({ loadProfiles: h.loadProfiles, drainOutcomes: () => ({}) }),
+// Mocked so that a regression which reads profiles again is VISIBLE, not so that Scout can use it.
+// ⚠ This mocked `lib/decision-os/psychology-os` until that feed was deleted (2026-11-17). Its
+// reader was `listProfilesByLeague`, which is what a regression would reach for now.
+vi.mock('@/lib/psychological-profiles/ManagerBehaviorQueryService', () => ({
+  listProfilesByLeague: h.loadProfiles,
 }))
 vi.mock('@/lib/core-app/currentWeek', () => ({
   resolveCurrentWeekForLeague: vi.fn(async () => ({ seasonYear: 2026, week: 4 })),

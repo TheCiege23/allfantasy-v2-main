@@ -52,26 +52,6 @@ export function useTradeDeadlineCountdownText(countdown: TradeDeadlineCountdown 
     : tInterpolate('tradeDeadline.countdown.scheduledTime')
 }
 
-export function TradeDeadlineCountdownChip(props: {
-  countdown: TradeDeadlineCountdown | null | undefined
-  className?: string
-}) {
-  const text = useTradeDeadlineCountdownText(props.countdown)
-  const closedText = useOptionalLanguage().tInterpolate('tradeDeadline.countdown.closed')
-  if (!text) return null
-  const closed = props.countdown?.state === 'closed' || text === closedText
-  return (
-    <span
-      className={props.className}
-      data-deadline-state={closed ? 'closed' : props.countdown?.state}
-      role="status"
-      style={{ fontSize: 12 }}
-    >
-      {text}
-    </span>
-  )
-}
-
 /**
  * A dynasty league's separate pick-trade rule (lib/trade-deadline/pickTradeDeadline.ts), beside the trade
  * deadline chip: "Pick trades open all season", "Pick trades through Week 16", "Pick trades closed".

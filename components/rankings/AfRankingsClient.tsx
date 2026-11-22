@@ -174,7 +174,7 @@ function playerRankFromApiResponse(data: RankResponse): PlayerRank | null {
       careerXp: String(xpNum),
       aiReportGrade: 'B',
       aiScore: 70,
-      aiInsight: 'Import your leagues to generate your AI insight.',
+      aiInsight: 'Import your leagues to generate your Chimmy insight.',
       winRate: 0,
       playoffRate: 0,
       championshipCount: cs?.championships ?? 0,
@@ -755,7 +755,7 @@ function EmptyRankState({ onImported }: { onImported: () => void }) {
             <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Legacy Profile</span>
           </h2>
           <p className="text-white/50 text-sm max-w-md mx-auto mb-2">
-            Import your career data to unlock your rank badge, AI insight, league access tier, and progression path.
+            Import your career data to unlock your rank badge, Chimmy insight, league access tier, and progression path.
           </p>
         </div>
       </div>
@@ -909,7 +909,7 @@ function RankingsLoadingShell() {
           </Link>
           <h1 className="mt-2 text-3xl font-black text-white sm:text-4xl">AF Rankings</h1>
           <p className="mt-3 max-w-3xl text-sm text-white/65 sm:text-base">
-            Your prestige tier, AI grade, XP progression, and career stats — built from real imported league history.
+            Your prestige tier, Chimmy grade, XP progression, and career stats — built from real imported league history.
           </p>
         </div>
 
@@ -1312,7 +1312,7 @@ function MyRankingsPageInner() {
           </Link>
           <h1 className="mt-2 text-3xl font-black text-white sm:text-4xl">AF Rankings</h1>
           <p className="mt-3 max-w-3xl text-sm text-white/65 sm:text-base">
-            Your prestige tier, AI grade, XP progression, and career stats — built from real imported league history.
+            Your prestige tier, Chimmy grade, XP progression, and career stats — built from real imported league history.
           </p>
         </div>
 

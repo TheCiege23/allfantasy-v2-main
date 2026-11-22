@@ -21,7 +21,7 @@
  * the viewer's local zone would hydrate differently from how it was rendered.
  */
 
-export type Daypart = 'morning' | 'midday' | 'afternoon' | 'evening' | 'late'
+type Daypart = 'morning' | 'midday' | 'afternoon' | 'evening' | 'late'
 
 export type ActivityWindow = {
   /** 0 = Sunday … 6 = Saturday, in the league's zone. */
@@ -63,11 +63,11 @@ const DAYPARTS: Record<Daypart, number[]> = {
 export const DEFAULT_TIME_ZONE = 'America/New_York'
 
 /** At least this many moves before a window is stated at all. */
-export const MIN_SAMPLE = 6
+const MIN_SAMPLE = 6
 /** The winning weekday must hold at least this share of the moves (uniform would be ~0.14). */
-export const MIN_SHARE = 0.3
+const MIN_SHARE = 0.3
 /** …and at least this many of them. Two moves on a Monday are not a habit. */
-export const MIN_WEEKDAY_MOVES = 4
+const MIN_WEEKDAY_MOVES = 4
 
 function daypartOf(hour: number): Daypart {
   for (const [name, hours] of Object.entries(DAYPARTS) as Array<[Daypart, number[]]>) {

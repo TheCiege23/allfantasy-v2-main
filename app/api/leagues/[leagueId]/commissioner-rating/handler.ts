@@ -23,9 +23,10 @@ async function userIdOf(): Promise<string | null> {
   return session?.user?.id ?? null
 }
 
-const SUBMIT_STATUS: Record<string, number> = { not_found: 404, not_member: 403, self: 400, duplicate: 409 }
+const SUBMIT_STATUS: Record<string, number> = { not_found: 404, not_member: 403, self: 400, duplicate: 409, no_commissioner: 409 }
 const SUBMIT_MESSAGE: Record<string, string> = {
   not_member: 'Only managers in this league can rate its commissioner',
+  no_commissioner: 'This league has no commissioner on AllFantasy to rate yet',
   self: 'Commissioners cannot rate themselves',
   duplicate: 'Already submitted for this season',
   ratings_required: 'Ratings required',

@@ -63,10 +63,11 @@ describe('Waivers — the KPI strip', () => {
   it('says the next run once: the sticky line, not a second tile in the strip', () => {
     const { container } = renderWaivers(data())
     const order = [...container.querySelectorAll('.af-wv-tiles .af-pg-stats > .af-wv-tile')].map((t) => t.getAttribute('data-tile'))
-    expect(order).toEqual(['faab', 'priority', 'claims', 'held'])
+    // 2026-11-13 guide: no "Players held", and "Claims queued" only when the count is real (it is not here).
+    expect(order).toEqual(['faab', 'priority'])
     expect(screen.getByTestId('waiver-next-run')).toBeTruthy()
     expect(screen.queryByTestId('waiver-next-run-tile')).toBeNull()
-    expect(container.querySelector('.af-wv-tiles .af-pg-stats')?.getAttribute('data-count')).toBe('4')
+    expect(container.querySelector('.af-wv-tiles .af-pg-stats')?.getAttribute('data-count')).toBe('2')
   })
 
   it('has no FAAB tile in a league known not to bid, and the strip counts what is left', () => {
@@ -74,7 +75,7 @@ describe('Waivers — the KPI strip', () => {
       data({ waiverType: { available: true, data: { kind: 'rolling', label: 'Rolling waiver priority', budget: null } } }),
     )
     expect(container.querySelector('.af-wv-tile[data-tile="faab"]')).toBeNull()
-    expect(container.querySelector('.af-wv-tiles .af-pg-stats')?.getAttribute('data-count')).toBe('3')
+    expect(container.querySelector('.af-wv-tiles .af-pg-stats')?.getAttribute('data-count')).toBe('1')
   })
 
   it('keeps the FAAB tile while the waiver type is unread, and the next-run tile while there is no schedule', () => {
@@ -85,8 +86,8 @@ describe('Waivers — the KPI strip', () => {
       }),
     )
     const order = [...container.querySelectorAll('.af-wv-tiles .af-pg-stats > .af-wv-tile')].map((t) => t.getAttribute('data-tile'))
-    expect(order).toEqual(['faab', 'priority', 'next-run', 'claims', 'held'])
-    expect(container.querySelector('.af-wv-tiles .af-pg-stats')?.getAttribute('data-count')).toBe('5')
+    expect(order).toEqual(['faab', 'priority', 'next-run'])
+    expect(container.querySelector('.af-wv-tiles .af-pg-stats')?.getAttribute('data-count')).toBe('3')
   })
 
   it('a schedule we have not read is the loader’s sentence, never a guessed day', () => {

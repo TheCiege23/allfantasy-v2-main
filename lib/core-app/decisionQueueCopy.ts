@@ -20,7 +20,7 @@ import { ageText } from './shellCopy'
  * English as written — a whole English row, never half of one. PURE, client-safe.
  */
 
-export type IssueText = { title: string; meta: string; actionLabel: string | null }
+type IssueText = { title: string; meta: string; actionLabel: string | null }
 
 const EN_WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 const EN_MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
@@ -99,6 +99,12 @@ function textOf(p: CoreIssueParts): IssueText | null {
         title: `El draft está en vivo — ${p.leagueName}`,
         meta: `${p.platform} › Draft · en curso ahora`,
         actionLabel: `Abrir el ${coreUiCopy('Draft HQ', 'es')}`,
+      }
+    case 'injury-summary':
+      return {
+        title: `${p.starters} ${p.starters === 1 ? 'titular lesionado' : 'titulares lesionados'} en ${p.leagues} ${p.leagues === 1 ? 'liga' : 'ligas'}`,
+        meta: 'Alineación · cada uno muestra su mejor cambio en el informe de lesiones de abajo',
+        actionLabel: 'Ver cambios',
       }
     default:
       return null

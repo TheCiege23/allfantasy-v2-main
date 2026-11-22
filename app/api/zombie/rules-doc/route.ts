@@ -1,8 +1,8 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { generateRulesDocument, getRulesDocAsHtml, getRulesDocAsText } from '@/lib/zombie/rulesDocGenerator'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await requireCommissionerOnly(leagueId, session.user.id)
+    await requireCommissionerAccess(leagueId, session.user.id, 'view')
   } catch (denied) {
     if (denied instanceof Response) return denied
     throw denied
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, session.user.id)
+  await requireCommissionerAccess(leagueId, session.user.id, 'league')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

@@ -3,7 +3,7 @@
  * after Prisma `where` clauses (see /api/league/list).
  */
 
-export type LeagueFilterRecord = {
+type LeagueFilterRecord = {
   name?: string | null
   leagueVariant?: string | null
   league_variant?: string | null

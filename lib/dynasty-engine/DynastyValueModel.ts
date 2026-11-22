@@ -3,12 +3,6 @@
  * Re-exports from dynasty-projection for unified engine.
  */
 
-import type { DynastyLeagueContext, PlayerDynastyAsset, FuturePickAsset } from '@/lib/dynasty-projection/types'
-import { calculateRosterFutureValue } from '@/lib/dynasty-projection/RosterFutureValueCalculator'
-import { valueFuturePicks } from '@/lib/dynasty-projection/DraftPickValueModel'
-
-export type { DynastyLeagueContext, PlayerDynastyAsset, FuturePickAsset }
-export { calculateRosterFutureValue, valueFuturePicks }
 export type { RosterFutureValueBreakdown, DraftPickValueBreakdown } from '@/lib/dynasty-projection/types'
 
 /**

@@ -17,13 +17,13 @@ import { isWorldCupChallengeLocked } from "./worldCupBracketBuilder"
 
 const WORLD_CUP_BRACKET_LOCKED_MESSAGE = "Bracket is locked."
 
-export type WorldCupGroupStageWarning = {
+type WorldCupGroupStageWarning = {
   code: string
   message: string
   groupKey?: WorldCupGroupKey
 }
 
-export type WorldCupGroupStageTeamView = {
+type WorldCupGroupStageTeamView = {
   id: string
   teamId: string
   name: string
@@ -38,7 +38,7 @@ export type WorldCupGroupStageTeamView = {
   goalsFor: number | null
 }
 
-export type WorldCupGroupStageView = {
+type WorldCupGroupStageView = {
   challengeId: string
   entryId: string
   groups: Array<{

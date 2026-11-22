@@ -13,6 +13,7 @@ import type { LiveDraftBrainEnvelope } from '@/lib/live-draft-brain/schemas'
 import type { LiveDraftBrainInput } from '@/lib/live-draft-brain'
 import { WarRoomPanel } from '@/components/war-room/WarRoomPanel'
 import ChimmyChatPanel from '@/components/chimmy/ChimmyChatPanel'
+import ChimmyActionCardTray from '@/components/chimmy/ChimmyActionCardTray'
 import { DraftWarRoom, type DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import type { PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import { DraftHelperRedraftLayout } from '@/components/app/draft-room/DraftHelperRedraftLayout'
@@ -92,7 +93,7 @@ export type DraftHelperPanelProps = {
     orphanAiEnabled: boolean
     commissionerAiManagersCount: number
   } | null
-  /** Live War Room (AI draft assistant) — optional; renders above legacy helper when provided. */
+  /** Live War Room (Chimmy draft assistant) — optional; renders above legacy helper when provided. */
   warRoom?: {
     snapshot: DraftWarRoomSnapshot | null
     loading: boolean
@@ -160,7 +161,6 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
     sportsFeed = null,
     aiFeatureStatus = null,
     warRoom = null,
-    presentationVariant = 'default',
     picksUntilUser = null,
     userOnTheClock = false,
     resolvedRecommendedPlayer = null,
@@ -291,20 +291,20 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
                   Live Brain {aiFeatureStatus.liveBrainReady ? 'live' : 'standby'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.aiAdpEnabled ? 'border-emerald-300/35 bg-emerald-500/10 text-emerald-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
-                  AI ADP {aiFeatureStatus.aiAdpEnabled ? 'on' : 'off'}
+                  Chimmy ADP {aiFeatureStatus.aiAdpEnabled ? 'on' : 'off'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.queueReorderEnabled ? 'border-amber-300/35 bg-amber-500/10 text-amber-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
-                  Queue AI {aiFeatureStatus.queueReorderEnabled ? 'on' : 'off'}
+                  Chimmy queue {aiFeatureStatus.queueReorderEnabled ? 'on' : 'off'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.draftExplanationEnabled ? 'border-sky-300/35 bg-sky-500/10 text-sky-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                   Explain {aiFeatureStatus.draftExplanationEnabled ? 'on' : 'off'}
                 </span>
                 <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.orphanAiEnabled ? 'border-fuchsia-300/35 bg-fuchsia-500/10 text-fuchsia-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
-                  Orphan AI {aiFeatureStatus.orphanAiEnabled ? 'armed' : 'off'}
+                  Orphan Chimmy {aiFeatureStatus.orphanAiEnabled ? 'armed' : 'off'}
                 </span>
                 {aiFeatureStatus.commissionerAiManagersCount > 0 ? (
                   <span className="rounded border border-rose-300/35 bg-rose-500/10 px-1.5 py-0.5 text-[11px] text-rose-100">
-                    Commissioner AI {aiFeatureStatus.commissionerAiManagersCount}
+                    Commissioner Chimmy {aiFeatureStatus.commissionerAiManagersCount}
                   </span>
                 ) : null}
               </div>
@@ -589,7 +589,10 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
               }}
               className="min-h-[340px] h-[380px]"
             />
-          ) : (
+          ) : null}
+          {/* Queue cards Chimmy prepared here ("add Waddle to my queue"): nothing saves until Confirm. */}
+          {aiAssistantEnabled ? <ChimmyActionCardTray leagueId={leagueId ?? null} /> : null}
+          {aiAssistantEnabled ? null : (
             <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-[11px] text-white/60">
               Chimmy is temporarily unavailable. The deterministic draft helper, live brain, and queue tools still work.
             </div>

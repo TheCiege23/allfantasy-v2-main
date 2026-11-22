@@ -37,7 +37,7 @@ export const BLOG_CATEGORY_LABELS: Record<BlogCategory, string> = {
   sport_trends: "Sport Trends",
   creator_recap: "Creator Recap",
   player_trend_feature: "Player Trend Feature",
-  ai_explainer: "AI Explainer",
+  ai_explainer: "Chimmy Explainer",
   tool_landing: "Tool Landing",
 }
 
@@ -144,7 +144,7 @@ export const CONTENT_TYPE_PROMPTS: Record<
   ai_explainer: {
     system:
       "You are an educator for fantasy sports tools. Write an AI explainer article that helps users understand how to use AI tools for fantasy. Output valid JSON with keys: title, slug, excerpt, body (markdown), seoTitle, seoDescription, tags.",
-    userPrefix: "Write an AI explainer article for fantasy tools",
+    userPrefix: "Write a Chimmy explainer article for fantasy tools",
   },
   tool_landing: {
     system:

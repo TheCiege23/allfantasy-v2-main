@@ -714,7 +714,7 @@ Requirements:
 
     const raw = completion.choices[0]?.message?.content
     if (!raw) {
-      throw new Error('No AI response returned.')
+      throw new Error('No Chimmy response returned.')
     }
 
     const parsed = PLAN_SCHEMA.parse(JSON.parse(raw))

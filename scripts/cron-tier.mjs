@@ -52,15 +52,6 @@ export function isFastSchedule(schedule) {
  * Deleting an entry is all it takes to re-enable the job.
  */
 export const SLOW_TIER_EXCLUSIONS = {
-  '/api/redraft/ai/power-rankings': {
-    reason:
-      'BROKEN BY CONSTRUCTION -- POST-only, and gated by requireAfSub() which needs a user ' +
-      'session. A cron has neither, so a GET 405s and a POST 403s. This never worked on Vercel ' +
-      'either; the scheduler outage did not break it. Fix the route before re-enabling.',
-  },
-  '/api/redraft/ai/weekly-recap': {
-    reason: 'BROKEN BY CONSTRUCTION -- same as power-rankings: POST-only behind requireAfSub().',
-  },
   '/api/guillotine/ai/storyline': {
     reason:
       'PRODUCT DIRECTION -- AI generation is on-demand and user-initiated only, never cron-seeded. ' +

@@ -23,17 +23,17 @@ export function ZombieHordeBar({
       <div
         className={clsx(
           'mt-2 flex h-3 overflow-hidden rounded-full bg-white/[0.06]',
-          hordeWinning && 'ring-1 ring-[var(--zombie-red)]/30',
-          urgent && 'animate-pulse ring-2 ring-[var(--zombie-red)]/50',
+          hordeWinning && 'ring-1 ring-zombie-red/30',
+          urgent && 'animate-pulse ring-2 ring-zombie-red/50',
         )}
         role="img"
         aria-label={`${hordePct} percent horde, ${survPct} percent survivors`}
       >
         <div
-          className="h-full bg-gradient-to-r from-[var(--zombie-purple)] to-[var(--zombie-red)]/80 transition-all duration-500"
+          className="h-full bg-gradient-to-r from-[var(--zombie-purple)] to-zombie-red/80 transition-all duration-500"
           style={{ width: `${hordePct}%` }}
         />
-        <div className="h-full bg-[var(--zombie-green)]/35" style={{ width: `${survPct}%` }} />
+        <div className="h-full bg-zombie-green/35" style={{ width: `${survPct}%` }} />
       </div>
       <p className="mt-2 text-[12px] text-[var(--zombie-text-mid)]">
         <span className="text-[var(--zombie-purple)]">{hordePct}% Horde</span>

@@ -201,7 +201,7 @@ function ruleLabel(key: string): string {
   return NFL_STAT_LABELS[key] ?? key.replace(/@/g, ' for ').replace(/_/g, ' ')
 }
 
-export type ImportedNflScoring = {
+type ImportedNflScoring = {
   /** The full panel store: every panel key, plus `te_premium` when the source awards it. */
   rules: Record<string, number>
   /** True when the source awards a tight-end reception bonus (the engine scores it only then). */

@@ -13,7 +13,6 @@ import {
   normalizeNflRedraftProviderPlayerIdentity,
   type NflRedraftPlayerIdentityProviderId,
 } from '@/lib/nfl-provider/nflRedraftPlayerIdentity'
-import type { NflRedraftProviderId } from '@/lib/nfl-provider/nflRedraftProviderFoundation'
 import { normalizeNflRedraftProviderGameContext } from '@/lib/player-data/nflRedraftGameContext'
 import { normalizeNflRedraftProviderLiveScoringContext } from '@/lib/player-data/nflRedraftLiveScoringContext'
 import { normalizeNflRedraftProviderPlayerIntelligence } from '@/lib/player-data/nflRedraftPlayerIntelligence'
@@ -47,7 +46,7 @@ export type NflRedraftProductionProviderRequest = {
   policyOverrides?: Partial<Record<NflRedraftProviderOrchestratorCapability, Partial<NflRedraftProviderCapabilityPolicy>>>
 }
 
-export type NflRedraftProductionProviderAdapterResult = {
+type NflRedraftProductionProviderAdapterResult = {
   providerId: NflRedraftProviderNodeId
   capability: NflRedraftProviderOrchestratorCapability
   canonicalData: Record<string, unknown> | null
@@ -63,7 +62,7 @@ export type NflRedraftProductionProviderAdapterResult = {
   integrationName: string
 }
 
-export type NflRedraftProductionProviderAttempt = {
+type NflRedraftProductionProviderAttempt = {
   providerId: NflRedraftProviderNodeId
   state: NflRedraftProviderLifecycleState
   attempted: boolean
@@ -75,7 +74,7 @@ export type NflRedraftProductionProviderAttempt = {
   error: string | null
 }
 
-export type NflRedraftProductionProviderTrace = {
+type NflRedraftProductionProviderTrace = {
   canonicalPlayerId: string | null
   providerUsed: NflRedraftProviderNodeId | null
   timestampIso: string
@@ -105,11 +104,11 @@ export type NflRedraftProductionProviderAdapter = (
   request: NflRedraftProductionProviderRequest,
 ) => Promise<NflRedraftProductionProviderAdapterResult | null>
 
-export type NflRedraftProductionProviderAdapterRegistry = Partial<
+type NflRedraftProductionProviderAdapterRegistry = Partial<
   Record<NflRedraftProviderNodeId, Partial<Record<NflRedraftProviderOrchestratorCapability, NflRedraftProductionProviderAdapter>>>
 >
 
-export type NflRedraftExistingProviderIntegration = {
+type NflRedraftExistingProviderIntegration = {
   providerId: NflRedraftProviderNodeId
   integrationName: string
   capabilities: NflRedraftProviderOrchestratorCapability[]
@@ -392,7 +391,7 @@ async function readSportsPlayerIdentity(request: NflRedraftProductionProviderReq
  * Now: American-football rows only, minus any row whose team or position contradicts the request,
  * then the shared `pickHeadshotCandidate` (exact name, team breaks ties, ambiguity refuses).
  */
-export function pickNflTheSportsDbHeadshotRow(
+function pickNflTheSportsDbHeadshotRow(
   payload: unknown,
   request: Pick<NflRedraftProductionProviderRequest, 'playerName' | 'teamAbbr' | 'position'>,
 ): Record<string, unknown> | null {

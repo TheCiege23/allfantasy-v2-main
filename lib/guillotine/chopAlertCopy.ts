@@ -9,7 +9,7 @@
  *    out, the rest are told who went and when those players reach waivers.
  */
 
-export type ChopAlert = { title: string; body: string; severity: 'medium' | 'high' }
+type ChopAlert = { title: string; body: string; severity: 'medium' | 'high' }
 
 const points = (n: number) => {
   const r = Math.round(n * 10) / 10
@@ -22,8 +22,17 @@ function names(list: readonly string[]): string {
 }
 
 /** When the chopped teams' players can be claimed, in the league's own release setting. */
-export function releaseWhen(rosterReleaseTiming: string | null | undefined): string {
+function releaseWhen(rosterReleaseTiming: string | null | undefined): string {
   return rosterReleaseTiming === 'immediate' ? 'are free agents now' : 'hit waivers at the next waiver run'
+}
+
+/**
+ * "week 4", or "weeks 3–4" when the chop week closes an MLB two-week period (./eliminationPeriods.ts):
+ * the period's score is both weeks added, so naming one week would be wrong. Absent or 1: one week.
+ */
+function span(week: number, periodWeeks?: number): string {
+  const n = Math.max(1, periodWeeks ?? 1)
+  return n > 1 ? `weeks ${week - n + 1}–${week}` : `week ${week}`
 }
 
 /**
@@ -39,21 +48,24 @@ export function chopZoneWarning(args: {
   late?: boolean
   /** A best ball league (./guillotineBestBall.ts): there is no lineup to check, so the advice differs. */
   bestBall?: boolean
+  /** Weeks per elimination period; `week` is the period's last week. Absent = 1. */
+  periodWeeks?: number
 }): ChopAlert {
+  const when = span(args.week, args.periodWeeks)
   const advice = args.bestBall
     ? 'Your best lineup is picked for you, so the last games are what can save you.'
     : 'Check your lineup before the last games.'
   if (args.status === 'chopped') {
     return {
       title: args.late ? `🪓 You've dropped into the chop zone — ${args.leagueName}` : `🪓 You're in the chop zone — ${args.leagueName}`,
-      body: `${args.late ? 'Other scores have passed yours. ' : ''}If week ${args.week} ended now, your team would be chopped. ${advice}`,
+      body: `${args.late ? 'Other scores have passed yours. ' : ''}If ${when} ended now, your team would be chopped. ${advice}`,
       severity: 'high',
     }
   }
   const gap = args.margin != null && args.margin > 0 ? ` Only ${points(args.margin)} above the chop line.` : ''
   return {
     title: args.late ? `⚠️ You've slipped into the danger zone — ${args.leagueName}` : `⚠️ You're in the danger zone — ${args.leagueName}`,
-    body: `Your team is ${args.late ? 'now ' : ''}close to the chop in week ${args.week}.${gap} ${advice}`,
+    body: `Your team is ${args.late ? 'now ' : ''}close to the chop in ${when}.${gap} ${advice}`,
     severity: 'medium',
   }
 }
@@ -65,17 +77,20 @@ export function chopResultAlert(args: {
   choppedNames: readonly string[]
   youWereChopped: boolean
   rosterReleaseTiming: string | null | undefined
+  /** Weeks per elimination period; `week` is the period's last week. Absent = 1. */
+  periodWeeks?: number
 }): ChopAlert {
+  const when = span(args.week, args.periodWeeks)
   if (args.youWereChopped) {
     return {
       title: `🪓 You've been chopped — ${args.leagueName}`,
-      body: `Your team had the lowest score in week ${args.week} and is out. You can still follow the league to the end.`,
+      body: `Your team had the lowest score ${(args.periodWeeks ?? 1) > 1 ? `over ${when}` : `in ${when}`} and is out. You can still follow the league to the end.`,
       severity: 'high',
     }
   }
   const one = args.choppedNames.length === 1
   return {
-    title: `You survived week ${args.week} — ${args.leagueName}`,
+    title: `You survived ${when} — ${args.leagueName}`,
     body: `${names(args.choppedNames)} ${one ? 'was' : 'were'} chopped. Their players ${releaseWhen(args.rosterReleaseTiming)}.`,
     severity: 'medium',
   }

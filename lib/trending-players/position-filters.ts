@@ -1,7 +1,7 @@
 import type { SupportedSport } from '@/lib/sport-scope'
 
 /** Position dropdown options per sport (ALL + sport-specific). */
-export const POSITION_OPTIONS_BY_SPORT: Record<SupportedSport | 'ALL', string[]> = {
+const POSITION_OPTIONS_BY_SPORT: Record<SupportedSport | 'ALL', string[]> = {
   ALL: ['ALL'],
   NFL: ['ALL', 'QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST', 'IDP'],
   NBA: ['ALL', 'G', 'PG', 'SG', 'SF', 'PF', 'C', 'UTIL'],

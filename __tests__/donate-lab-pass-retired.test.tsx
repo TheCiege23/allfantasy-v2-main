@@ -71,6 +71,19 @@ describe('POST /api/stripe/create-checkout-session', () => {
     expect((await post({ mode: 'donate', amount: 501, currency: 'usd' })).status).toBe(400)
     expect(createSession).not.toHaveBeenCalled()
   })
+
+  it("🛑 a Stripe failure never sends Stripe's own message to the browser", async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createSession.mockRejectedValueOnce(
+      Object.assign(new Error('Expired API Key provided: sk_live_****abcd'), { type: 'StripeAuthenticationError' }),
+    )
+    const res = await post({ mode: 'donate', amount: 5, currency: 'usd' })
+    expect(res.status).toBe(500)
+    const text = await res.text()
+    expect(text).not.toMatch(/sk_live|API Key|Stripe/i)
+    expect(JSON.parse(text)).toEqual({ error: 'Checkout failed. Please try again.' })
+    consoleError.mockRestore()
+  })
 })
 
 describe('/donate', () => {

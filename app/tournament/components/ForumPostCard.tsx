@@ -8,7 +8,7 @@ const typeMeta: Record<
   { label: string; className: string; border: string }
 > = {
   welcome: { label: 'ANNOUNCEMENT', className: 'bg-red-500/15 text-red-100', border: 'border-l-red-500/50' },
-  round_summary: { label: 'AI RECAP', className: 'bg-cyan-500/15 text-cyan-100', border: 'border-l-cyan-500/50' },
+  round_summary: { label: 'CHIMMY RECAP', className: 'bg-cyan-500/15 text-cyan-100', border: 'border-l-cyan-500/50' },
   qualifier_announced: { label: 'ROUND RESULTS', className: 'bg-yellow-500/15 text-yellow-100', border: 'border-l-yellow-500/50' },
   draft_scheduled: { label: 'DRAFT NOTICE', className: 'bg-blue-500/15 text-blue-100', border: 'border-l-blue-500/50' },
   default: { label: 'UPDATE', className: 'bg-white/10 text-white/80', border: 'border-l-white/20' },

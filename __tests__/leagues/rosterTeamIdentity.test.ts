@@ -97,6 +97,23 @@ describe('resolveRostersForTeams', () => {
     expect(resolveRostersForTeams(teams, [b, a]).get('7')?.id).toBe('r-a')
   })
 
+  it('🛑 reads the row the import still writes, not a dead twin with the lower id', () => {
+    /* "RIP Mitch McConnell", production 2026-11-20: both rows hold 17 players, the dead one sorts first. */
+    const teams = [team('7', { platformUserId: '{ESPN-MANAGER}' })]
+    const dead = roster('35ae', '{ESPN-MANAGER}', { source_team_id: '7', imported_at: '2026-09-17T18:29:12.852Z', players: ['a', 'b'] })
+    const live = roster('5da6', 'app-user-uuid', { source_team_id: '7', imported_at: '2026-11-20T08:20:11.674Z', players: ['c', 'd'] })
+    expect(resolveRostersForTeams(teams, [dead, live]).get('7')?.id).toBe('5da6')
+    expect(resolveRostersForTeams(teams, [live, dead]).get('7')?.id).toBe('5da6')
+
+    /* Fresher beats fuller: the dead row can be the bigger one. */
+    const deadFuller = roster('35ae', '{ESPN-MANAGER}', { source_team_id: '7', imported_at: '2026-09-17T18:29:12.852Z', players: ['a', 'b', 'x'] })
+    expect(resolveRostersForTeams(teams, [deadFuller, live]).get('7')?.id).toBe('5da6')
+
+    /* A row with no import time recorded never outranks one that has it. */
+    const undated = roster('0000', 'k', { source_team_id: '7', players: ['a', 'b', 'c', 'd'] })
+    expect(resolveRostersForTeams(teams, [undated, live]).get('7')?.id).toBe('5da6')
+  })
+
   it('keeps the owner rules, which 93 teams still match on alone', () => {
     const teams = [team('3', { platformUserId: 'sleeper-3' }), team('7', { claimedByUserId: 'af-user' })]
     const rosters = [

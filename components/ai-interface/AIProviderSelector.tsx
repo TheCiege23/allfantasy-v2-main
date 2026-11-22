@@ -4,7 +4,7 @@ import React from 'react'
 import { useProviderStatus } from '@/hooks/useProviderStatus'
 import { RefreshCw } from 'lucide-react'
 
-export interface AIProviderSelectorProps {
+interface AIProviderSelectorProps {
   /** When true, show which providers are available (for compare view or status). No secrets. */
   showStatus?: boolean
   /** Optional: trigger compare view when user wants to see per-provider output. */

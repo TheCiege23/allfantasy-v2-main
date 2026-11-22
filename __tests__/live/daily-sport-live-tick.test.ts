@@ -37,8 +37,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: async (run: (tx: unknown) => Promise<unknown>) => run({
       $executeRaw: vi.fn(async () => 0),
+      sportsGame: { upsert: vi.fn(async () => ({})) },
       playerGameStat: {
         findMany: async () => [],
+        count: async () => 0,
         upsert: (...a: unknown[]) => h.upsert(...a),
       },
     }),
@@ -195,14 +197,14 @@ afterEach(() => {
 
 describe('resolveDailyLiveSports — all supported sports default on; explicit off is respected', () => {
   it('enables all sports when unset or empty and respects explicit off', () => {
-    expect(resolveDailyLiveSports({})).toEqual(['NBA', 'NHL', 'MLB'])
-    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '' })).toEqual(['NBA', 'NHL', 'MLB'])
+    expect(resolveDailyLiveSports({})).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'])
+    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '' })).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '0' })).toEqual([])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: 'false' })).toEqual([])
   })
 
   it('"1" enables all three; a list enables only the named, known sports', () => {
-    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '1' })).toEqual(['NBA', 'NHL', 'MLB'])
+    expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: '1' })).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'])
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: 'nba, mlb' })).toEqual(['NBA', 'MLB'])
     // NFL already has its own live path, and SOCCER is not part of this phase.
     expect(resolveDailyLiveSports({ DAILY_SPORT_LIVE_SCORING: 'NFL,SOCCER' })).toEqual([])

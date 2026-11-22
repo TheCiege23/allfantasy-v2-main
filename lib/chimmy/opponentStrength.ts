@@ -6,7 +6,7 @@ import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeason
 
 type ScoredGame = { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }
 type TeamRate = { games: number; scored: number; allowed: number }
-export type StrengthAdjustment = { factor: number; opponents: number; sampleGames: number; source: string }
+type StrengthAdjustment = { factor: number; opponents: number; sampleGames: number; source: string }
 
 /** A bounded real-score proxy; it is not position-specific fantasy points allowed. */
 export function opponentScoreAdjustment(args: { sport: string; position: string | null;

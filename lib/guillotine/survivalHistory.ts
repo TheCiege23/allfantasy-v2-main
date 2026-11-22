@@ -12,7 +12,7 @@
  * above it, so a team that tied on the line and won the tiebreak escaped by 0.
  */
 
-export type SurvivalWeek = {
+type SurvivalWeek = {
   week: number
   /** Null for a no-chop week. */
   chopLine: number | null

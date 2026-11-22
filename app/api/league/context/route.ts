@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -17,7 +18,7 @@ async function resolveLeague(userId: string, leagueId: string, writeAccess: bool
     where: writeAccess
       ? // House-rule declarations change every engine's advice → owner only.
         { id: leagueId, userId }
-      : { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
+      : { id: leagueId, OR: leagueMemberWhere(userId) },
     select: { id: true, platform: true, platformLeagueId: true },
   })
 }

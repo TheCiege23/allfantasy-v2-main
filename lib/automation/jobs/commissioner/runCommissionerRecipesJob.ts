@@ -39,6 +39,7 @@ import { getBoolean } from '@/lib/feature-toggle'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { prisma } from '@/lib/prisma'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
+import { readEliminatedTeams } from '@/lib/guillotine/eliminatedTeams'
 import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import { ownedTeamNames, resolveMemberActivity } from '@/lib/core-app/commissioner/activity'
@@ -57,6 +58,7 @@ import {
   type RecipeFacts,
 } from '@/lib/core-app/commissioner/recipes'
 import { Prisma } from '@prisma/client'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 const SEEN_PREFIX = 'commissioner-recipe:v1:'
 const SEEN_TTL_MS = 400 * 24 * 60 * 60 * 1000
@@ -65,7 +67,7 @@ function utcDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildRecipesIdempotencyKey(leagueId: string, now: Date): string {
+function buildRecipesIdempotencyKey(leagueId: string, now: Date): string {
   return hashIdempotencyKey(buildIdempotencyKey([RECIPES_JOB_TYPE, leagueId, utcDay(now)]))
 }
 
@@ -97,6 +99,9 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       settings: true,
       starters: true,
       lastSyncedAt: true,
+      bestBallMode: true,
+      leagueVariant: true,
+      leagueType: true,
     },
   })
   if (!league?.userId) return null
@@ -105,7 +110,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
 
   const sport = String(league.sport ?? 'NFL')
   const native = resolveWriteAuthority(league.platform) === 'NATIVE'
-  const [teams, rosters, managerHealth, importedManagers, importedWindow, polls, kickoffs] = await Promise.all([
+  const [teams, rosters, managerHealth, importedManagers, importedWindow, polls, kickoffs, eliminated] = await Promise.all([
     prisma.leagueTeam.findMany({
       where: { leagueId },
       select: {
@@ -120,7 +125,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
         pointsFor: true,
       },
     }),
-    prisma.roster.findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } }),
+    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
     /*
      * The same activity answer the Commissioner Hub shows — moves for an imported
      * league, the roster clock only where AllFantasy runs the league. See
@@ -154,6 +159,8 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
           })
           .catch(() => [])
       : Promise.resolve([] as Array<{ startTime: Date | null }>),
+    // A chopped team is out of the league: no lineup reminder, no inactivity warning. Never throws.
+    readEliminatedTeams(leagueId),
   ])
 
   const label = (t: { teamName?: string | null; ownerName?: string | null }) =>
@@ -166,6 +173,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
     const slots = starterSlots(r.playerData)
     const team = byOwner.get(r.platformUserId)
     if (!slots || slots.length === 0 || !team) return []
+    if (eliminated.rosterIds.has(r.id) || eliminated.names.has(label(team))) return []
     const empty = emptyStarterSlots(slots, requiredStarters)
     return empty > 0 ? [{ name: label(team), empty }] : []
   })
@@ -182,8 +190,8 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       ? resolveMemberActivity(
           {
             kind: 'imported',
-            managers: importedManagers,
-            teams: ownedTeamNames(teams),
+            managers: importedManagers.filter((m) => !eliminated.names.has(m.managerName)),
+            teams: ownedTeamNames(teams).filter((name) => !eliminated.names.has(name)),
             lastActivityAt: importedWindow.lastActivityAt,
             eventCount: importedWindow.eventCount,
           },
@@ -215,6 +223,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       leagueName: league.name?.trim() || 'League',
       sport,
       platform: String(league.platform ?? '').toLowerCase(),
+      bestBall: isBestBallLeagueRow(league),
       status: league.status,
       season: league.season,
       currentWeek: leagueWeekFromSettings(league.settings),
@@ -244,7 +253,7 @@ async function markSent(key: string, message: DueMessage): Promise<void> {
   })
 }
 
-export async function runCommissionerRecipesForLeague(input: {
+async function runCommissionerRecipesForLeague(input: {
   leagueId: string
   now?: Date
 }): Promise<AutomationResult & { jobId: string; runId: string }> {
@@ -311,7 +320,7 @@ export async function runCommissionerRecipesForLeague(input: {
   )
 }
 
-export type CommissionerRecipesBatchResult = {
+type CommissionerRecipesBatchResult = {
   enabled: boolean
   discovered: number
   completed: number

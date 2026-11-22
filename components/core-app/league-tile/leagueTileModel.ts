@@ -22,7 +22,7 @@
  * screens and the dev states preview render from it.
  */
 
-export type LeagueTileStateKind =
+type LeagueTileStateKind =
   | 'predraft'
   | 'drafting'
   | 'live'
@@ -30,9 +30,9 @@ export type LeagueTileStateKind =
   | 'finished'
 
 /** Drives the dot colour and the tile's left border. */
-export type LeagueTileTone = 'neutral' | 'accent' | 'live' | 'warn' | 'gold'
+type LeagueTileTone = 'neutral' | 'accent' | 'live' | 'warn' | 'gold'
 
-export type LeagueTileStatus = {
+type LeagueTileStatus = {
   kind: LeagueTileStateKind
   /** The state word — "PRE-DRAFT", "DRAFTING", "LIVE", "WEEK 12", "FINISHED". */
   label: string
@@ -54,7 +54,7 @@ export type LeagueTileStatus = {
  * empty until kickoff. `projected` is what lets the renderer label it as one
  * instead of passing a projection off as a result.
  */
-export type LeagueTileScore = {
+type LeagueTileScore = {
   you: number
   opponent: number
   opponentName: string | null

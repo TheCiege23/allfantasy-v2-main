@@ -20,7 +20,7 @@ import type { EdgeFact } from './tradeEdge'
 /** Drafts a manager must have picked in before any pattern is shown. */
 export const DRAFT_FLOOR = 2
 /** "Early" means these rounds. */
-export const EARLY_ROUNDS = 3
+const EARLY_ROUNDS = 3
 
 export type EdgeDraftPick = {
   season: number
@@ -30,14 +30,14 @@ export type EdgeDraftPick = {
   ownerSleeperId: string
 }
 
-export type EdgeDraftManager = {
+type EdgeDraftManager = {
   /** `LeagueTeam.platformUserId` — the manager's Sleeper user id. */
   ownerSleeperId: string
   name: string
   teamExternalId: string
 }
 
-export type DraftEdgeRival = {
+type DraftEdgeRival = {
   manager: { name: string; teamExternalId: string }
   drafts: number
   picks: number
@@ -149,6 +149,21 @@ function rivalFacts(
     })
   }
   return { facts, drafts, sufficient }
+}
+
+/**
+ * One manager's draft-history facts, for the LIVE draft room's "managers before your next pick"
+ * (./liveDraftManagers.ts). The same rule and wording as the Draft HQ edge — it calls the same
+ * `rivalFacts` — so a manager reads identically on both screens.
+ */
+export function draftHistoryFacts(input: {
+  name: string
+  ownerSleeperId: string
+  picks: readonly EdgeDraftPick[]
+}): { facts: EdgeFact[]; drafts: number; sufficient: boolean } {
+  const draftsOnFile = new Set(input.picks.map((p) => p.season)).size
+  const mine = input.picks.filter((p) => p.ownerSleeperId === input.ownerSleeperId)
+  return rivalFacts(input.name, mine, draftsOnFile)
 }
 
 export function buildDraftEdge(input: {

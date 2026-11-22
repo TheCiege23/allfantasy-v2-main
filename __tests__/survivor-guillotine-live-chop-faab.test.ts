@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/survivor-guillotine/scoringService', () => ({ refreshSGScores: vi.fn(async () => ({})) }))
 vi.mock('@/lib/platform/notification-service', () => ({ createPlatformNotification: vi.fn() }))
 vi.mock('@/lib/survivor-guillotine/capped-scoring', () => ({ loadCappedGameScores: vi.fn() }))
 vi.mock('@/lib/survivor-guillotine/rewards', () => ({ createSGWeeklyReward: vi.fn(), seedSGDraftIdols: vi.fn() }))

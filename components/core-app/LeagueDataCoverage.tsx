@@ -86,4 +86,3 @@ export function LeagueDataCoverageSkeleton() {
   )
 }
 
-export default LeagueDataCoverage

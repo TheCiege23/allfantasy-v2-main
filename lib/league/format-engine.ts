@@ -26,7 +26,7 @@ export type LeagueFormatId =
   | 'big_brother'
   | 'pirate'
 
-export type LeagueDraftTypeId =
+type LeagueDraftTypeId =
   | 'snake'
   | 'linear'
   | 'auction'
@@ -39,11 +39,11 @@ export type LeagueDraftTypeId =
   | 'c2c_linear'
   | 'c2c_auction'
 
-export type LeagueFormatModifierId =
+type LeagueFormatModifierId =
   | FormatRosterModifierId
   | FormatScoringModifierId
 
-export type FormatAutomationAiCapabilities = {
+type FormatAutomationAiCapabilities = {
   deterministicFeatures: string[]
   aiOptionalFeatures: string[]
   weeklyAutomation: boolean

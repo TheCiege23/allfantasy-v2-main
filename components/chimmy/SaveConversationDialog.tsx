@@ -5,7 +5,7 @@ import { X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { saveChimmyConversation } from '@/lib/chimmy-conversation-service'
 
-export interface SaveConversationDialogProps {
+interface SaveConversationDialogProps {
   isOpen: boolean
   messageCount: number
   onClose: () => void

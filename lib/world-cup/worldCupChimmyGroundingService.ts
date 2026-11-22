@@ -6,7 +6,7 @@ import type {
 
 export type WorldCupChimmyUserRole = "participant" | "commissioner" | "admin" | "non_member"
 
-export type WorldCupChimmyIntentCategory =
+type WorldCupChimmyIntentCategory =
   | "pool_leaderboard"
   | "user_path_to_win"
   | "pool_summary"
@@ -19,14 +19,14 @@ export type WorldCupChimmyIntentCategory =
   | "unsupported_live_provider_data"
   | "general"
 
-export type WorldCupChimmyAccessPolicy = {
+type WorldCupChimmyAccessPolicy = {
   freeAllowed: boolean
   proRequired: boolean
   commissionerRequired: boolean
   tokenPolicy: "no_charge" | "charge_after_success" | "blocked_no_charge"
 }
 
-export type WorldCupChimmyIntentRoute = {
+type WorldCupChimmyIntentRoute = {
   category: WorldCupChimmyIntentCategory
   requiredData: string[]
   optionalData: string[]

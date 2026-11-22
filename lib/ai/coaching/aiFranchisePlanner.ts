@@ -5,9 +5,9 @@
 
 import type { CoachingPlanResponse, StrategyLens } from '@/lib/ai/coaching/coachingPlanTypes'
 
-export type FranchisePlanMode = 'contend' | 'retool' | 'rebuild'
+type FranchisePlanMode = 'contend' | 'retool' | 'rebuild'
 
-export type FranchisePlan = {
+type FranchisePlan = {
   mode: FranchisePlanMode
   timelineYears: number
   priorityActions: string[]
@@ -19,7 +19,7 @@ export type FranchisePlan = {
   confidence: number
 }
 
-export type FranchisePlannerInput = {
+type FranchisePlannerInput = {
   isDynasty: boolean
   isDevy?: boolean
   isC2c?: boolean
@@ -33,7 +33,7 @@ export type FranchisePlannerInput = {
   positionalStress?: Record<string, number>
 }
 
-export function buildFranchisePlan(input: FranchisePlannerInput): FranchisePlan {
+function buildFranchisePlan(input: FranchisePlannerInput): FranchisePlan {
   const { youthScore, winNowScore, pickCapitalScore, positionalStress = {}, isDynasty, isDevy, isC2c } = input
 
   let mode: FranchisePlanMode = 'retool'

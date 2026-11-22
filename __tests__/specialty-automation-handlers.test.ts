@@ -19,6 +19,14 @@ vi.mock('@/lib/guillotine/GuillotineEliminationEngine', () => ({
   runElimination: vi.fn(),
 }))
 
+// This suite covers a league with no season of its own: the handler's older call. The path a league
+// hosted here takes (the score sync's own driver) is in __tests__/guillotine/manual-chop-run.test.ts.
+vi.mock('@/lib/prisma', () => ({ prisma: { redraftSeason: { findFirst: vi.fn(async () => null) } } }))
+vi.mock('@/lib/guillotine/importedLeagueGuard', () => ({ IMPORTED_CHOP_REASON: 'imported', isImportedLeague: vi.fn(async () => false) }))
+vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: vi.fn() }))
+vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({ syncPlayerWeeklyScoresForRedraftSeason: vi.fn() }))
+vi.mock('@/lib/season-week', () => ({ resolveSeasonWeekForRedraftSeason: vi.fn() }))
+
 function baseLeague(): HandlerContext['league'] {
   return {
     id: 'league-1',

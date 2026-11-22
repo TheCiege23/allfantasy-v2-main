@@ -24,7 +24,7 @@ function newId(): string {
  * create route, and the Decision OS must never re-run mutating checks). The validateCanonical seam
  * (second validator for parity) is composed in a later step — never retired.
  */
-export function buildProductionTradeRuleDeps(): TradeRuleDeps {
+function buildProductionTradeRuleDeps(): TradeRuleDeps {
   return {}
 }
 

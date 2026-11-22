@@ -11,9 +11,9 @@ import { getZombieCreationProfile, ZOMBIE_DEFAULT_MANAGERS } from './creationPol
  * Default lengths follow the shared platform calendar profiles. Review the selected season/competition.
  */
 
-export type ZombieSeasonPhase = 'setup' | 'early' | 'mid' | 'late' | 'endgame' | 'finale' | 'complete'
+type ZombieSeasonPhase = 'setup' | 'early' | 'mid' | 'late' | 'endgame' | 'finale' | 'complete'
 
-export type ZombieSportSchedule = {
+type ZombieSportSchedule = {
   sport: string
   label: string
   totalWeeks: number
@@ -47,7 +47,7 @@ export type ZombieSportSchedule = {
   notes: string[]
 }
 
-export const ZOMBIE_SEASON_SCHEDULES: Record<string, ZombieSportSchedule> = {
+const ZOMBIE_SEASON_SCHEDULES: Record<string, ZombieSportSchedule> = {
   nfl: {
     sport: 'nfl',
     label: 'NFL',
@@ -249,32 +249,6 @@ export function getCurrentPhase(sport: string, week: number): ZombieSeasonPhase 
   }
   if (week > schedule.totalWeeks) return 'complete'
   return 'setup'
-}
-
-export function getPhaseLabel(sport: string, week: number): string {
-  const schedule = getZombieSeasonSchedule(sport)
-  for (const phase of schedule.phases) {
-    if (week >= phase.startWeek && week <= phase.endWeek) return phase.label
-  }
-  return 'Pre-Season'
-}
-
-export function isBreakWeek(sport: string, week: number): boolean {
-  return getZombieSeasonSchedule(sport).breakWeeks.includes(week)
-}
-
-export function isEndgame(sport: string, week: number): boolean {
-  const schedule = getZombieSeasonSchedule(sport)
-  return week >= schedule.endgameStartWeek
-}
-
-export function areSerumsExpired(sport: string, week: number): boolean {
-  const schedule = getZombieSeasonSchedule(sport)
-  return week >= schedule.serumExpiryWeek
-}
-
-export function getWeeksRemaining(sport: string, week: number): number {
-  return Math.max(0, getZombieSeasonSchedule(sport).totalWeeks - week)
 }
 
 /** Summary for display in UI */

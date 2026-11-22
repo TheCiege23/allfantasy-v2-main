@@ -25,9 +25,9 @@
  * `RETENTION_CURVES.assumptions` and must survive any edit to the series.
  */
 
-export type ModelStatus = 'PROVISIONAL' | 'REVIEWED'
+type ModelStatus = 'PROVISIONAL' | 'REVIEWED'
 
-export type ModelProvenance = {
+type ModelProvenance = {
   status: ModelStatus
   /** Null until a named human owns these numbers. Rendered in the MODEL banner. */
   owner: string | null
@@ -42,7 +42,7 @@ export const MODEL_PROVENANCE: ModelProvenance = {
 }
 
 /** A chart's data plus the assumption set rendered under it. Never optional. */
-export type ModelledSeries<T> = {
+type ModelledSeries<T> = {
   points: T[]
   /** Rendered verbatim beneath the chart. Required by the copy contract. */
   assumptions: string
@@ -50,7 +50,7 @@ export type ModelledSeries<T> = {
 
 // ── Retention curves ────────────────────────────────────────────────────────
 
-export type RetentionPoint = {
+type RetentionPoint = {
   /** Months after season end. 0 = the week the season finishes. */
   month: number
   /** % of the season-end cohort still active. */
@@ -86,7 +86,7 @@ export const RETENTION_CALLOUT_MONTH = 6
 
 // ── Revenue by cohort (the one isometric chart) ─────────────────────────────
 
-export type CohortRevenuePoint = {
+type CohortRevenuePoint = {
   label: string
   /** Indexed to the single-league cohort = 100. Never a dollar figure. */
   index: number
@@ -114,7 +114,7 @@ export const COHORT_REVENUE: ModelledSeries<CohortRevenuePoint> = {
 
 // ── Offseason sessions ──────────────────────────────────────────────────────
 
-export type SessionPoint = {
+type SessionPoint = {
   /** Calendar month label, offseason only. */
   label: string
   crossLeague: number
@@ -139,7 +139,7 @@ export const OFFSEASON_SESSIONS: ModelledSeries<SessionPoint> = {
 
 // ── Churn by league count ───────────────────────────────────────────────────
 
-export type ChurnPoint = {
+type ChurnPoint = {
   label: string
   /** % of the cohort churned by month 6. */
   churnPct: number
@@ -182,14 +182,14 @@ export const CALCULATOR_DEFAULTS: CalculatorInputs = {
  * partner already retaining 55% at M6 does not get our 31% → 66% delta handed
  * to them; they get the same *ratio*, capped.
  */
-export const M6_LIFT_MULTIPLE =
+const M6_LIFT_MULTIPLE =
   RETENTION_CURVES.points[RETENTION_CALLOUT_MONTH].crossLeague /
   RETENTION_CURVES.points[RETENTION_CALLOUT_MONTH].singleLeague
 
 /** Nobody retains everyone. The projection is capped so it cannot claim they do. */
-export const RETENTION_CEILING_PCT = 92
+const RETENTION_CEILING_PCT = 92
 
-export type CalculatorResult = {
+type CalculatorResult = {
   projectedM6RetentionPct: number
   retainedUsersToday: number
   projectedRetainedUsers: number

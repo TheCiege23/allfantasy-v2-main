@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getServerSession } from "next-auth"
@@ -5,7 +6,6 @@ import { getServerSession } from "next-auth"
 import { requireAdminOrBearer } from "@/lib/adminAuth"
 import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { authOptions } from "@/lib/auth"
-import { isCommissioner } from "@/lib/commissioner/permissions"
 import { processLeagueWaiversJob } from "@/lib/automation/jobs/waivers/processLeagueWaiversJob"
 import { toErrorMessage } from "@/lib/automation/errors"
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const membership = await isCommissioner(leagueId, sessionUserId)
+    const membership = await canCommissionerAct(leagueId, sessionUserId, 'league')
     if (!membership) {
       return NextResponse.json(
         { error: "Forbidden: admin access or commissioner role required" },

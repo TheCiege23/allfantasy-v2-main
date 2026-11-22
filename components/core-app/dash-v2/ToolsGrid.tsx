@@ -95,4 +95,3 @@ export function ToolsGrid({
   )
 }
 
-export default ToolsGrid

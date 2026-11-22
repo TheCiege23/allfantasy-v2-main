@@ -25,7 +25,8 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        setError(err.error ?? 'Failed to generate')
+        // The route's `detail` is the readable reason ("No week has been scored yet…"); `error` is a code.
+        setError(err.detail ?? err.error ?? 'Failed to generate')
         return
       }
       const data = await res.json()
@@ -43,7 +44,7 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
         <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-white/30">
           <BookOpen className="h-3.5 w-3.5" /> Weekly Storyline
         </div>
-        <p className="mt-2 text-xs text-white/40">Generate an AI-powered recap of this week&apos;s league action.</p>
+        <p className="mt-2 text-xs text-white/40">Generate a Chimmy-powered recap of this week&apos;s league action.</p>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
         <button
           type="button"

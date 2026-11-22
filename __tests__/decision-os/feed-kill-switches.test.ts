@@ -43,6 +43,27 @@ afterEach(() => {
 })
 
 describe('5.3 — polarity: absence of a kill order is not a kill order', () => {
+  /*
+   * `managerPsychology`, `lineupDecision` and `psychologyConsistency` were removed 2026-11-17. A switch left set
+   * for one of them in Railway or `platform_config` must be inert — never a kill reported for a feed that no longer
+   * exists, and never a reason to drop a live one. The positive control in the same call proves the read is live.
+   */
+  it('a leftover switch for a removed feed is inert', async () => {
+    const removedEnv = ['DECISION_OS_FEED_MANAGER_PSYCHOLOGY', 'DECISION_OS_FEED_LINEUP_DECISION', 'DECISION_OS_FEED_PSYCHOLOGY_CONSISTENCY']
+    for (const k of removedEnv) process.env[k] = 'off'
+    findMany.mockResolvedValue([
+      { key: 'decision_os_feed_lineupDecision', value: 'false' },
+      { key: 'decision_os_feed_projections', value: 'false' },
+    ])
+    try {
+      const f = await resolveDecisionOsFeedFlags()
+      expect(f.killed).toEqual(['projections'])
+      expect(DECISION_OS_FEEDS).not.toContain('lineupDecision')
+    } finally {
+      for (const k of removedEnv) delete process.env[k]
+    }
+  })
+
   it('every feed is enabled when nothing is set anywhere', async () => {
     const f = await resolveDecisionOsFeedFlags()
     expect(f.killed).toEqual([])

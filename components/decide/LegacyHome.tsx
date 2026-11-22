@@ -22,6 +22,10 @@ import { DraftReportCards } from '@/components/decide/DraftReportCards'
 import { ManagerH2H } from '@/components/decide/ManagerH2H'
 import { TradeLedgerGraded } from '@/components/decide/TradeLedgerGraded'
 import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
+import { LeagueRafters } from '@/components/league/LeagueRafters'
+import { LeagueLegend } from '@/components/league/LeagueLegend'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import './broadcast-deck.css'
 
 type ApiResponse =
@@ -136,6 +140,20 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
               </div>
             </div>
           ) : null}
+
+          {/* ── The rafters: champions as pennants, the league type's colours ── */}
+          <LeagueRafters
+            leagueName={league.name ?? 'This league'}
+            seasons={history.seasons.map((s) => {
+              const complete = String(s.status).toLowerCase() === 'complete'
+              return {
+                season: String(s.season),
+                champion: complete ? (s.champion?.name ?? null) : null,
+                mine: complete && isMe(s.champion),
+                open: !complete,
+              }
+            })}
+          />
 
           {/* ── Champions timeline ── */}
           <div className="bdx-kick">
@@ -334,8 +352,11 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
           </div>
         </>
       )}
+      {/* Stat corrections + the league legend, for every league whatever its history state. */}
+      {!loading ? (
+        <LeagueLegend hostLabel={isNativePlatform(league.platform) ? null : sourcePlatformLabel(league.platform)} />
+      ) : null}
     </div>
   )
 }
 
-export default LegacyHome

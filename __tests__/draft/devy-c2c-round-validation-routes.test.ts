@@ -72,6 +72,8 @@ vi.mock('@/lib/draft/computedDraftRounds', () => ({ getComputedDraftRounds: vi.f
 vi.mock('@/lib/draft/syncDraftRoundsToRoster', () => ({ markDraftRoundsManual: vi.fn(async () => undefined) }))
 vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn(async () => ({ synced: true })) }))
 vi.mock('@/lib/tournament/divisions/leagueDraftTimeToTournament', () => ({ copyLeagueDraftTimeToTournament: vi.fn(async () => undefined) }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PATCH as devyPatch } from '@/app/api/leagues/[leagueId]/draft/devy/config/route'
 import { PATCH as c2cPatch } from '@/app/api/leagues/[leagueId]/draft/c2c/config/route'

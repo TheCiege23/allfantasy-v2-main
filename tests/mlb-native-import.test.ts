@@ -41,7 +41,16 @@ describe('public Fantrax baseball contract and native carryover', () => {
     expect(allowedPositionsForSlot('MLB', 'CI')).toEqual(['1B', '3B'])
     expect(allowedPositionsForSlot('MLB', 'MI')).toEqual(['2B', 'SS'])
   })
+  it('carries a split outfield and a DH over as their own slots', () => {
+    const roster = importedMlbRoster({ fantrax_settings: { rosterInfo: {
+      positionConstraints: Object.fromEntries(['P', '2B', 'SS', '1B', 'C', 'CF', 'DH', 'RF', 'LF', 'RP', '3B'].map((code) => [code, { maxActive: 1 }])),
+      maxTotalPlayers: 22, maxTotalActivePlayers: 11, maxTotalReservePlayers: 11,
+    } } })
+    expect(roster.starterSlots).toMatchObject({ LF: 1, CF: 1, RF: 1, DH: 1, P: 1, RP: 1 })
+    expect(roster.benchSlots).toBe(11)
+  })
+
   it('refuses a source slot that the native roster editor cannot represent', () => {
-    expect(() => importedMlbRoster({ fantrax_settings: { rosterInfo: { positionConstraints: { LF: { maxActive: 1 } }, maxTotalReservePlayers: 0 } } })).toThrow('roster slot LF cannot be reproduced')
+    expect(() => importedMlbRoster({ fantrax_settings: { rosterInfo: { positionConstraints: { SW: { maxActive: 1 } }, maxTotalReservePlayers: 0 } } })).toThrow('roster slot SW cannot be reproduced')
   })
 })

@@ -11,7 +11,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type NewsCategory =
+type NewsCategory =
   | 'injury'
   | 'trade'
   | 'depth_chart'
@@ -21,7 +21,7 @@ export type NewsCategory =
   | 'suspension'
   | 'general'
 
-export type NewsImpactSeverity = 'critical' | 'major' | 'moderate' | 'minor'
+type NewsImpactSeverity = 'critical' | 'major' | 'moderate' | 'minor'
 
 export interface RawNewsItem {
   id: string
@@ -35,7 +35,7 @@ export interface RawNewsItem {
   injuryStatus?: string | null
 }
 
-export interface ScoredNewsItem {
+interface ScoredNewsItem {
   id: string
   title: string
   source: string

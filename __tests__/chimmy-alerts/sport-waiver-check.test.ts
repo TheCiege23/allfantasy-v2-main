@@ -206,9 +206,9 @@ describe('the picks', () => {
     expect(selectSportWaiverPicks(section('NBA', rows, { basis: 'weekly_projection' }), NBA, all(['A']))).toEqual([])
     expect(selectSportWaiverPicks(section('NBA', rows, { basis: null }), NBA, all(['A']))).toEqual([])
     expect(selectSportWaiverPicks(section('NHL', rows), NBA, all(['A']))).toEqual([])
-    // A soccer rule someone adds by mistake still sends nothing: soccer has no producer.
+    // Soccer now has a per-game producer and follows the same sport gate.
     const soccerRule = { ...NBA, sport: 'SOCCER' } as unknown as SportWaiverAlertRule
-    expect(selectSportWaiverPicks(section('SOCCER', rows), soccerRule, all(['A']))).toEqual([])
+    expect(selectSportWaiverPicks(section('SOCCER', rows), soccerRule, all(['A']))).toHaveLength(1)
     expect(selectSportWaiverPicks(section('NBA', rows), NBA, all(['A']))).toHaveLength(1)
   })
 
@@ -253,6 +253,20 @@ describe('what it says', () => {
     expect(href.searchParams.get('from')).toBe('waiver_check')
     expect(href.searchParams.get('leagueId')).toBe('N1')
     expect(href.searchParams.get('prompt')).toBe('Should I pick up Add N1 and drop Drop N1?')
+  })
+
+  it('🛑 a row priced on its league’s own value board says so — never "AllFantasy’s default scoring"', () => {
+    const s = section('NBA', [row('A', 9, { basis: 'league_value_board' }), row('B', 8)])
+    const picks = selectSportWaiverPicks(s, rule('NBA'), new Set(['A', 'B']))
+    expect(picks.map((p) => [p.leagueId, p.basis])).toEqual([['A', 'league_value_board'], ['B', s.basis]])
+    const m = renderSportWaiverCheck([picks[0]!])!
+    expect(m.email.html).toContain('on this league&#39;s own value board')
+    expect(m.email.html).not.toContain('default NBA scoring')
+  })
+
+  it('🛑 a category league’s row never becomes a "pts per game" alert — its gain is a category score', () => {
+    const s = section('NBA', [row('A', 9, { basis: 'league_value_board', valueKind: 'categories' }), row('B', 8)])
+    expect(selectSportWaiverPicks(s, rule('NBA'), new Set(['A', 'B'])).map((p) => p.leagueId)).toEqual(['B'])
   })
 
   it('🛑 opens Chimmy in the PICK’S sport — not the NFL the weekly links default to', () => {

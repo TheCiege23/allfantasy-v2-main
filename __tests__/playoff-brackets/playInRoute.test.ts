@@ -11,6 +11,7 @@ vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: vi.fn().mockR
 vi.mock('@/lib/league/execute-league-settings-patch', () => ({ executeLeagueSettingsPatch: vi.fn() }))
 vi.mock('@/lib/subscription/FeatureGateService', () => ({ FeatureGateService: class { evaluateUserFeatureAccess = m.evaluate } }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, redraftSeason: { findUnique: m.season } } }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessAllowAll())
 
 import { GET } from '@/app/api/commissioner/leagues/[leagueId]/playoff-bracket/route'
 

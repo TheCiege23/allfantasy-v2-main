@@ -15,9 +15,9 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 /** Always shown: the lines fantasy scoring is made of. */
 export const FOOTBALL_MAIN_GROUPS = ['passing', 'rushing', 'receiving', 'kicking'] as const
 /** Behind a disclosure: real, but not what someone opening a game looks for first. */
-export const FOOTBALL_MORE_GROUPS = ['defensive', 'interceptions', 'fumbles', 'kickReturns', 'puntReturns', 'punting'] as const
+const FOOTBALL_MORE_GROUPS = ['defensive', 'interceptions', 'fumbles', 'kickReturns', 'puntReturns', 'punting'] as const
 
-export const FOOTBALL_GROUP_TITLES: Record<string, string> = {
+const FOOTBALL_GROUP_TITLES: Record<string, string> = {
   passing: 'Passing',
   rushing: 'Rushing',
   receiving: 'Receiving',
@@ -39,7 +39,7 @@ export type BoxGroup = {
   rows: Array<{ athleteId: string; name: string; jersey: string | null; stats: string[] }>
 }
 
-export type FootballBoxTeam = { teamId: string; groups: BoxGroup[] }
+type FootballBoxTeam = { teamId: string; groups: BoxGroup[] }
 
 /** True for a summary whose box lines are football's. Other sports have their own box score. */
 export function hasFootballBox(detail: Pick<LiveGameDetail, 'players' | 'basketball' | 'hockey' | 'baseball'>): boolean {

@@ -35,6 +35,33 @@ export type LeagueGradeInput = {
   /** What the chart was fetched as. `ppr` MUST be the weight the chart was requested with. */
   chart: { dynasty: boolean; superflex: boolean; teams: number | null; ppr: number }
   needFactors: NeedFactors | null
+  /**
+   * The AllFantasy trade market's move per line (`lib/trade-market/afTradeMarketReads.ts`), index-aligned
+   * with the lines like `needFactors`. Null entries and an absent field mean "no trade evidence" and leave
+   * the line exactly as before.
+   */
+  tradeMarket?: {
+    give: ReadonlyArray<LeagueValueAdjustment | null>
+    get: ReadonlyArray<LeagueValueAdjustment | null>
+  } | null
+  /**
+   * The measured lineup adjustment per line (4-QB, 2-TE, 3-WR … — `afTradeMarketReads.lineupAdjustment`),
+   * index-aligned with the lines. Same contract as `tradeMarket`.
+   */
+  lineup?: {
+    give: ReadonlyArray<LeagueValueAdjustment | null>
+    get: ReadonlyArray<LeagueValueAdjustment | null>
+  } | null
+  /** Sentence(s) the basis must carry about the lineup — e.g. "unusual for TEs, not enough evidence". */
+  lineupNote?: string | null
+  /**
+   * The learned pick market's move per PICK line (`lib/trade-market/learnedInGrades.ts`, `TRADE_LEARNED_PICKS=on`),
+   * index-aligned with the lines. Only pick lines read it — the player market above never touches a pick.
+   */
+  learnedPicks?: {
+    give: ReadonlyArray<LeagueValueAdjustment | null>
+    get: ReadonlyArray<LeagueValueAdjustment | null>
+  } | null
 }
 
 export type LeagueGrade = {
@@ -55,10 +82,25 @@ export function gradeOnLeagueValue(input: LeagueGradeInput): LeagueGrade {
     const fit = scoringFit(league.scoringSettings, l.position, chart.ppr)
     return fit && fit.multiplier !== 1 ? { kind: 'scoring', factor: fit.multiplier, reason: fit.reason } : null
   }
-  const value = (lines: TradeConsolePlayerLine[], priced: PricedAsset[], need: NeedFactors['give'] | undefined) =>
-    lines.map((l, i) => applyLeagueAdjustments(gradeBaseOf(l, priced[i]), [scoringAdjustment(l), need?.[i] ?? null]))
-  const giveValued: LeagueValuedLine[] = value(input.giveLines, input.givePriced, input.needFactors?.give)
-  const getValued: LeagueValuedLine[] = value(input.getLines, input.getPriced, input.needFactors?.get)
+  const value = (
+    lines: TradeConsolePlayerLine[],
+    priced: PricedAsset[],
+    need: NeedFactors['give'] | undefined,
+    market: ReadonlyArray<LeagueValueAdjustment | null> | undefined,
+    lineup: ReadonlyArray<LeagueValueAdjustment | null> | undefined,
+    picks?: ReadonlyArray<LeagueValueAdjustment | null>,
+  ) =>
+    lines.map((l, i) =>
+      applyLeagueAdjustments(gradeBaseOf(l, priced[i]), [
+        isNonPlayerLine(l) ? null : market?.[i] ?? null,
+        isNonPlayerLine(l) ? null : lineup?.[i] ?? null,
+        l.pricedSource === 'pick' ? picks?.[i] ?? null : null,
+        scoringAdjustment(l),
+        need?.[i] ?? null,
+      ]),
+    )
+  const giveValued: LeagueValuedLine[] = value(input.giveLines, input.givePriced, input.needFactors?.give, input.tradeMarket?.give, input.lineup?.give, input.learnedPicks?.give)
+  const getValued: LeagueValuedLine[] = value(input.getLines, input.getPriced, input.needFactors?.get, input.tradeMarket?.get, input.lineup?.get, input.learnedPicks?.get)
   const withLeagueValue = (lines: TradeConsolePlayerLine[], valued: LeagueValuedLine[]) =>
     lines.map((l, i) => ({ ...l, leagueValue: valued[i]?.leagueValue ?? null, valueAdjustments: valued[i]?.adjustments ?? [] }))
 
@@ -69,13 +111,34 @@ export function gradeOnLeagueValue(input: LeagueGradeInput): LeagueGrade {
     tePremium: league && typeof bonusTe === 'number' ? bonusTe : null,
   })
 
+  // Players and picks are counted apart, so a pick is never called "a player" in the basis.
+  const pickFlags = [...input.giveLines, ...input.getLines].map((l) => l.pricedSource === 'pick')
+  const marketAdjusted = [...giveValued, ...getValued].map((v) => v.adjustments.some((a) => a.kind === 'tradeMarket'))
+  const marketCount = marketAdjusted.filter((m, i) => m && !pickFlags[i]).length
+  const pickCount = marketAdjusted.filter((m, i) => m && pickFlags[i]).length
+  const marketWords = marketCount > 0
+    ? ` · ${marketCount} player${marketCount === 1 ? '' : 's'} adjusted by the AllFantasy trade market (completed trades)`
+    : ''
+  const lineupCount = [...giveValued, ...getValued].filter((v) => v.adjustments.some((a) => a.kind === 'lineup')).length
+  const lineupWords = lineupCount > 0
+    ? ` · ${lineupCount} player${lineupCount === 1 ? '' : 's'} adjusted for this lineup (measured from completed trades)`
+    : ''
+  const noteWords = input.lineupNote ? ` ${input.lineupNote}` : ''
+  const pickWords = pickCount > 0
+    ? ` · ${pickCount} pick${pickCount === 1 ? '' : 's'} priced on the AllFantasy pick market (completed trades)`
+    : ''
+  const extra = `${marketWords}${pickWords}${lineupWords}`
+
   return {
     giveLines: withLeagueValue(input.giveLines, giveValued),
     getLines: withLeagueValue(input.getLines, getValued),
     totals: leagueTradeTotals(giveValued, getValued),
     valueBasis: {
       graded: league ? 'league' : 'market',
-      label: league ? chartWords : `${chartWords} — no league selected, so no league rules apply`,
+      label: league ? `${chartWords}${extra}${noteWords}` : `${chartWords}${extra} — no league selected, so no league rules apply${noteWords}`,
+      // Present only when it happened, so a grade the market did not touch keeps its exact old shape.
+      ...(marketCount + pickCount > 0 ? { tradeMarketAdjusted: true } : {}),
+      ...(lineupCount > 0 ? { lineupAdjusted: true } : {}),
       scoringAdjusted: kinds.has('scoring'),
       needAdjusted: kinds.has('need'),
       needGap: input.needFactors?.gap ?? null,

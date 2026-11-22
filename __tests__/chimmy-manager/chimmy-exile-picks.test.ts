@@ -135,6 +135,16 @@ describe('runChimmyExileTurn', () => {
     expect(h.lines).toEqual([['orphan-r9', { kind: 'exile', team: 'KC' }]])
   })
 
+  it('🛑 plays Exile for an open seat of a hosted league (open-slot-…), and asks the database for every seat kind', async () => {
+    const seat = 'open-slot-L1-9'
+    h.exiled = [{ userId: seat, redraftRosterId: 'r9' }]
+    h.settings = { af_managed_lineups: { r9: { ...chimmyEntry, ownerUserId: seat } } }
+    const turn = await runChimmyExileTurn('L1', now)
+    expect(turn.claimed[seat]).toEqual({ team: 'KC', expected: 32, players: 2 })
+    const where = (vi.mocked(prisma.survivorPlayer.findMany).mock.calls.at(-1)![0] as { where: { OR: Array<{ userId: { startsWith: string } }> } }).where
+    expect(where.OR.map((c) => c.userId.startsWith).sort()).toEqual(['ai-manager-', 'open-slot-', 'orphan-'])
+  })
+
   it('leaves a castaway alone once it has a team this period, and while locked', async () => {
     h.waivers!.roster.team = 'KC'
     expect((await runChimmyExileTurn('L1', now)).skipped['orphan-r9']).toBe('already_set')

@@ -13,6 +13,7 @@
  *   trades awaiting review    `tradesAwaitingReview`
  *   pending waiver claims     `overdueWaiverClaims`
  *   no draft date             `draftDateMissing`
+ *   (new, 2026-11-22)         `wideGapTrades` — recent completed trades far from even on the day's values
  *   unreadable health         the stale / never-synced card
  *
  * ⚠ TWO OF THE OLD COUNTS DID NOT MEAN WHAT THEIR LABELS SAID.
@@ -44,15 +45,26 @@ export type LeagueReviewSignals = {
   overdueWaiverClaims: number
   /** A league AllFantasy runs, still before its draft, with no draft date saved. */
   draftDateMissing: boolean
+  /**
+   * Completed trades in the last `WIDE_GAP_TRADE_DAYS` whose audited value gap was `AUDIT_OUTSIDE_PCT` or more
+   * (`lib/integrity/tradeValueAudit.ts`). A count of trades worth a look — a fact about value on the day, never an
+   * accusation: the card says so, and sends the commissioner to the review that puts each one beside the market.
+   */
+  wideGapTrades: number
 }
 
 export const OVERDUE_CLAIM_DAYS = 7
+/** How far back a completed trade still counts as "recent" for the wide-gap card. */
+export const WIDE_GAP_TRADE_DAYS = 14
+/** The gap, in percent, the trade review already calls "outside" (`tradeAudit.AUDIT_OUTSIDE_PCT`). */
+export const WIDE_GAP_PCT = 40
 
 export const NO_REVIEW_SIGNALS: LeagueReviewSignals = {
   integrityAlerts: 0,
   tradesAwaitingReview: 0,
   overdueWaiverClaims: 0,
   draftDateMissing: false,
+  wideGapTrades: 0,
 }
 
 function leaguePage(leagueId: string, view: string): string {
@@ -89,6 +101,19 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       detail: m.signalsTradesDetail,
       due: null,
       action: { label: m.signalsTradesAction, href: leaguePage(leagueId, 'trades'), external: false },
+    })
+  }
+
+  if (s.wideGapTrades > 0) {
+    cards.push({
+      id: 'review:trade-gaps',
+      // Info, not a warning: nothing is waiting on the commissioner and nothing has been found.
+      severity: 'info',
+      source: 'review',
+      title: m.signalsTradeGapsTitle(s.wideGapTrades, WIDE_GAP_PCT),
+      detail: m.signalsTradeGapsDetail(WIDE_GAP_TRADE_DAYS),
+      due: null,
+      action: { label: m.signalsTradeGapsAction, href: `/league/${id}/commissioner/integrity`, external: false },
     })
   }
 

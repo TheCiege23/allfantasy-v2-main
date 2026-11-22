@@ -1,4 +1,4 @@
-export type WeeklyHealthReport = {
+type WeeklyHealthReport = {
   projectedOptimalScore: number
   riskPlayers: { name: string; risk: string; reason: string }[]
   byeWeekImpact: string | null

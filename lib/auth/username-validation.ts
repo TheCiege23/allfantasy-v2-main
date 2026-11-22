@@ -9,18 +9,14 @@
  * - Must not look like a phone number
  */
 
-export const USERNAME_MIN = 3
-export const USERNAME_MAX = 30
+const USERNAME_MIN = 3
+const USERNAME_MAX = 30
 
 const USERNAME_RE = /^[A-Za-z0-9_]+$/
 
-export type UsernameValidationResult =
+type UsernameValidationResult =
   | { ok: true; normalized: string; lookup: string }
   | { ok: false; reason: string }
-
-export function normalizeUsernameLookup(raw: string): string {
-  return String(raw ?? "").trim().toLowerCase()
-}
 
 /**
  * Validates a raw username input.
@@ -52,6 +48,3 @@ export function validateUsername(raw: string): UsernameValidationResult {
   return { ok: true, normalized, lookup: normalized.toLowerCase() }
 }
 
-export function usernamesEqual(a: string | null | undefined, b: string | null | undefined): boolean {
-  return normalizeUsernameLookup(a ?? "") === normalizeUsernameLookup(b ?? "")
-}

@@ -119,7 +119,7 @@ const LOW_FREQUENCY: ReadonlySet<IdpStatKey> = new Set<IdpStatKey>([
   'idp_safe',
 ])
 
-export interface ProjectIdpStatLineInput {
+interface ProjectIdpStatLineInput {
   position: string | null | undefined
   /** Observed games, any order. Only defensive components are read. */
   history: readonly IdpGameObservation[]
@@ -177,7 +177,7 @@ export interface ProjectIdpStatLineInput {
  * Each value is paired with its league mean rather than being an absolute, because a ratio is
  * the only form that survives a season where the whole league throws more.
  */
-export interface IdpMatchupContext {
+interface IdpMatchupContext {
   /** How much the opponent's OFFENSE passes, and the league mean to read it against. */
   opponentPassRate?: number | null
   leagueMeanPassRate?: number | null

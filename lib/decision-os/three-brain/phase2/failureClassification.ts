@@ -6,7 +6,7 @@
 import type { ThreeBrainDecisionResult } from '../types'
 import type { IntelligenceFailureCategory } from './types'
 
-export type OrchestrationOutcome =
+type OrchestrationOutcome =
   | { success: true }
   | { success: false; category: IntelligenceFailureCategory; retryable: boolean; message: string }
 
@@ -15,7 +15,7 @@ export type OrchestrationOutcome =
  * (both specialists down) and a degraded run with no fallback are NOT reusable successes — they must recompute
  * later and must not be billed.
  */
-export function isSuccessfulOrchestration(result: ThreeBrainDecisionResult): boolean {
+function isSuccessfulOrchestration(result: ThreeBrainDecisionResult): boolean {
   return result.specialistStatus.openai === 'completed' || result.claudeState === 'fallback_synthesis'
 }
 

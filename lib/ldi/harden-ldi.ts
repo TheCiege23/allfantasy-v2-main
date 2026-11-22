@@ -1,6 +1,6 @@
-export type LdiPos = "QB" | "RB" | "WR" | "TE" | "PICK"
+type LdiPos = "QB" | "RB" | "WR" | "TE" | "PICK"
 
-export type HardenedLdiResponse = {
+type HardenedLdiResponse = {
   leagueId: string
   leagueName?: string
   season?: number

@@ -4,7 +4,6 @@
  */
 
 import { buildRelationshipSummary } from "./RelationshipSummaryBuilder";
-import type { RelationshipSummaryInput } from "./RelationshipSummaryBuilder";
 import type { LeagueRelationshipProfile, ManagerInfluenceProfile } from "./types";
 
 export interface GraphInfluenceInput {

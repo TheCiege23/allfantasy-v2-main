@@ -1,10 +1,8 @@
 export {
   recordEngagementEvent,
   getActivitySummary,
-  getActiveDaysCount,
   getEngagementStreak,
 } from "./UserActivityTracker"
-export type { ActivitySummary, EngagementStreakData } from "./UserActivityTracker"
 
 export {
   sendDailyDigest,
@@ -21,6 +19,5 @@ export {
 export type {
   EngagementEventType,
   EngagementEventMeta,
-  EngagementNotificationType,
   WeeklyRecapPayload,
 } from "./types"

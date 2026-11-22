@@ -31,7 +31,7 @@ import {
  *  - Server: assemble from `EntitlementResolver.resolveSnapshot(userId)` (see `canAccessForUser`).
  */
 
-export interface CanAccessContext {
+interface CanAccessContext {
   /** Is there a signed-in AllFantasy account? (false = guest/trial visitor). */
   isAuthenticated: boolean
   /** Active (or grace) subscription plans the user holds. Empty for guest/free. */
@@ -42,7 +42,7 @@ export interface CanAccessContext {
   returnTo?: string
 }
 
-export type CanAccessReason =
+type CanAccessReason =
   /** Feature requires no paid plan — available to every tier, including guest/trial. */
   | 'free-feature'
   /** Paid feature the user is entitled to (holds the plan or an inheriting bundle). */

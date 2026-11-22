@@ -19,9 +19,9 @@
  * Pure; no I/O. Must not import a War Room module (`__tests__/decision-os/trade-architecture.test.ts`).
  */
 
-export type WarRoomLegacyVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data' | 'disabled'
+type WarRoomLegacyVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data' | 'disabled'
 
-export type WarRoomVerdictInputs = {
+type WarRoomVerdictInputs = {
   /** Incoming − outgoing value on the engine's own scale; null means no value signal at all. */
   valueDelta: number | null | undefined
   rosterFitDelta: number | null | undefined

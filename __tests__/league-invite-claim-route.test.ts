@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   getServerSessionMock,
   leagueInviteFindFirstMock,
+  leagueFindUniqueMock,
   leagueTeamFindFirstMock,
   leagueTeamUpdateMock,
   leagueManagerClaimFindFirstMock,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   leagueInviteFindFirstMock: vi.fn(),
+  leagueFindUniqueMock: vi.fn(),
   leagueTeamFindFirstMock: vi.fn(),
   leagueTeamUpdateMock: vi.fn(),
   leagueManagerClaimFindFirstMock: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock('@/lib/auth', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    league: { findUnique: leagueFindUniqueMock },
     leagueInvite: {
       findFirst: leagueInviteFindFirstMock,
       update: leagueInviteUpdateMock,
@@ -82,6 +85,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     userProfile: {
       findFirst: userProfileFindFirstMock,
+      findMany: vi.fn(async () => []),
     },
     platformIdentity: {
       findMany: platformIdentityFindManyMock,
@@ -102,6 +106,7 @@ vi.mock('@/lib/prisma', () => ({
 describe('POST /api/league/invite/claim', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    leagueFindUniqueMock.mockResolvedValue({ userId: 'owner', settings: { creatorRankLevel: 1 } })
     getServerSessionMock.mockResolvedValue({ user: { id: 'af-user-1' } })
     leagueInviteFindFirstMock.mockResolvedValue({
       id: 'invite-1',
@@ -175,6 +180,16 @@ describe('POST /api/league/invite/claim', () => {
       isOrphan: true,
       platformUserId: 'open-slot-league-1-3',
     })
+  it('refuses a private invite for an open seat outside the range before writing', async () => {
+    nativeLeague()
+    openNativeTeam()
+    leagueFindUniqueMock.mockResolvedValue({ userId: 'owner', settings: { creatorRankLevel: 10, league_privacy_visibility: 'private' } })
+    const response = await claim({ token: 'token-1', teamExternalId: 'roster-3' })
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ code: 'CAREER_LEVEL_GATE_BLOCKED', band: [7, 13] })
+    expect(assignLeagueSeatMock).not.toHaveBeenCalled()
+  })
+
   const unpaid = { ok: false, code: 'PAYMENT_REQUIRED', message: 'This league requires a paid entry before joining.' }
 
   /**

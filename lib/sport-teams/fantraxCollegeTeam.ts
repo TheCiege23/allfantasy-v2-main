@@ -6,6 +6,7 @@ const SCHOOLS: Record<string, string> = {
   missst: 'Mississippi State', soal: 'South Alabama', sofl: 'South Florida',
   ud: 'Delaware', rut: 'Rutgers', midtn: 'Middle Tennessee', miaoh: 'Miami (OH)',
   scar: 'South Carolina', ind: 'Indiana', nw: 'Northwestern', txam: 'Texas A&M', app: 'App State',
+  nortx: 'North Texas', ncst: 'NC State', cocar: 'Coastal Carolina',
 }
 
 export function resolveFantraxCollegeTeam(team: string, index: CollegeTeamIndex): CollegeTeamRecord | null {

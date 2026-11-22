@@ -1,7 +1,7 @@
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { hasDatabaseUrl } from "@/lib/env/database-url"
 
-export type DashboardRuntimeIssue = {
+type DashboardRuntimeIssue = {
   title: string
   message: string
   missing: string[]

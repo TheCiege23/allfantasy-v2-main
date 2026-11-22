@@ -194,7 +194,7 @@ const SCHEDULE_VARIANT_ALIASES: Record<string, string> = {
   SURVIVOR: 'STANDARD',
 }
 
-export function normalizeScheduleVariant(variant?: string | null): string {
+function normalizeScheduleVariant(variant?: string | null): string {
   const raw = String(variant ?? '').trim().toUpperCase()
   return SCHEDULE_VARIANT_ALIASES[raw] ?? raw
 }

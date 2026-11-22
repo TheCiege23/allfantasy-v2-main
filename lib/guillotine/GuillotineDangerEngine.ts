@@ -7,6 +7,17 @@ import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import type { GuillotineDangerRow, DangerTier } from './types'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
+import { periodEndWeek, previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
+
+/** The league's period length; one week whenever it cannot be read, which is every league's old rule. */
+async function leaguePeriodWeeks(leagueId: string): Promise<number> {
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    return readPeriodWeeks(league?.settings)
+  } catch {
+    return 1
+  }
+}
 
 export interface GetDangerTiersInput {
   leagueId: string
@@ -25,6 +36,14 @@ export async function getDangerTiers(input: GetDangerTiersInput): Promise<Guillo
   if (!config) return []
 
   const margin = input.dangerMarginPoints ?? config.dangerMarginPoints ?? 10
+  /*
+   * MLB two-week periods (./eliminationPeriods.ts): scores are stored under the period's LAST week, so
+   * either week of a period reads that period's row, and "before this" is the previous period's row —
+   * never the period's own first week, which has no row. A one-week league: the week and the week before.
+   */
+  const periodWeeks = await leaguePeriodWeeks(input.leagueId)
+  const periodKey = periodEndWeek(input.weekOrPeriod, config.eliminationStartWeek, periodWeeks)
+  const previousKey = Math.max(1, previousPeriodEnd(periodKey, periodWeeks))
   const chopped = await prisma.guillotineRosterState.findMany({
     where: { leagueId: input.leagueId, choppedAt: { not: null } },
     select: { rosterId: true },
@@ -34,7 +53,7 @@ export async function getDangerTiers(input: GetDangerTiersInput): Promise<Guillo
   let projectedByRoster = input.projectedPointsByRoster
   if (!projectedByRoster || projectedByRoster.size === 0) {
     const currentPeriodScores = await prisma.guillotinePeriodScore.findMany({
-      where: { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod },
+      where: { leagueId: input.leagueId, weekOrPeriod: periodKey },
       select: { rosterId: true, periodPoints: true },
     })
 
@@ -49,7 +68,7 @@ export async function getDangerTiers(input: GetDangerTiersInput): Promise<Guillo
 
   if (!projectedByRoster || projectedByRoster.size === 0) {
     const fallbackScores = await prisma.guillotinePeriodScore.findMany({
-      where: { leagueId: input.leagueId, weekOrPeriod: Math.max(1, input.weekOrPeriod - 1) },
+      where: { leagueId: input.leagueId, weekOrPeriod: previousKey },
       select: { rosterId: true, seasonPointsCumul: true },
     })
     projectedByRoster = new Map(
@@ -78,7 +97,7 @@ export async function getDangerTiers(input: GetDangerTiersInput): Promise<Guillo
   )
 
   const periodScores = await prisma.guillotinePeriodScore.findMany({
-    where: { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod },
+    where: { leagueId: input.leagueId, weekOrPeriod: periodKey },
     select: { rosterId: true, seasonPointsCumul: true },
   })
   const seasonByRoster = new Map(periodScores.map((s) => [s.rosterId, s.seasonPointsCumul]))

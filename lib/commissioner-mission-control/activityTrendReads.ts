@@ -19,7 +19,7 @@ import { prisma } from '@/lib/prisma'
  * series — not a replacement for this one.
  */
 
-export interface LeagueActivityTrendPoint {
+interface LeagueActivityTrendPoint {
   /** The capture date (`periodKey`), `YYYY-MM-DD`. */
   date: string
   /**

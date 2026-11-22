@@ -1,4 +1,5 @@
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -16,11 +17,12 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  const [league, rosterAsMember] = await Promise.all([
+  // The team shown: the named one when the manager holds it, else their first (lib/league/viewerTeams.ts).
+  const [league, viewing] = await Promise.all([
     (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueType: true, leagueVariant: true, userId: true, platform: true, isDynasty: true, settings: true } }),
-    (prisma as any).roster.findFirst({ where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId }, select: { id: true } }),
+    resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(_req)),
   ])
+  const rosterAsMember = viewing ? { id: viewing.rosterId } : null
   const hasAccess = league && (league.userId === userId || rosterAsMember)
   if (!hasAccess) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
@@ -65,8 +67,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
+  // Waiver rules are league setup: the head commissioner, or a co-commissioner granted it
+  // (lib/league/commissionerAccess.ts). This matched the league OWNER only, so a co-commissioner given league setup
+  // was told the league did not exist (2026-11-16).
+  const refused = await commissionerAccessResponse(leagueId, userId, "league")
+  if (refused) return refused.status === 404 ? NextResponse.json({ error: "League not found" }, { status: 404 }) : refused
   const league = await (prisma as any).league.findFirst({
-    where: { id: leagueId, userId },
+    where: { id: leagueId },
   })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 

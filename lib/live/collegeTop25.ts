@@ -18,7 +18,7 @@
  */
 
 /** Sports whose slates are filtered to the Top 25. Baseball polls exist but are not tracked here. */
-export const TOP25_SPORTS = new Set(['NCAAF', 'NCAAB'])
+const TOP25_SPORTS = new Set(['NCAAF', 'NCAAB'])
 
 export function isTop25Sport(sport: string | null | undefined): boolean {
   return TOP25_SPORTS.has(String(sport ?? '').toUpperCase())
@@ -30,7 +30,7 @@ export function top25Rank(raw: unknown): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 25 ? n : null
 }
 
-export type RankEntry = { rank: number; seenAt: string }
+type RankEntry = { rank: number; seenAt: string }
 
 /** team key (ESPN id `id:333`, abbreviation `ab:ALA`) → its last observed Top-25 rank. */
 export type RankBook = { updatedAt: string; teams: Record<string, RankEntry> }
@@ -123,7 +123,7 @@ export function isFollowedSide(side: { abbrev?: string | null; name?: string | n
   })
 }
 
-export type Top25Side = { teamId?: string | null; abbrev?: string | null; name?: string | null; rank?: number | null }
+type Top25Side = { teamId?: string | null; abbrev?: string | null; name?: string | null; rank?: number | null }
 
 /**
  * Should this college game show? `book` null with no row ranks means we hold no poll — fail open.

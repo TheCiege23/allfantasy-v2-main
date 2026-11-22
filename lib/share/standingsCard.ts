@@ -14,12 +14,12 @@ import { formatRecord, type StandingsBoard, type Zone } from '@/lib/core-app/sta
 
 export const STANDINGS_CARD_MAX_ROWS = 10
 
-export type StandingsCardRow =
+type StandingsCardRow =
   | { kind: 'team'; rosterId: string; seed: number; name: string; record: string; pointsFor: string; zone: Zone; isYou: boolean }
   | { kind: 'line'; label: string }
   | { kind: 'gap'; after: number }
 
-export type StandingsCard = {
+type StandingsCard = {
   rows: StandingsCardRow[]
   subtitle: string
   footnote: string

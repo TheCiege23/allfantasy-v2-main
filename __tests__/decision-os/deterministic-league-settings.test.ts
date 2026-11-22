@@ -4,10 +4,18 @@ vi.mock('server-only', () => ({}))
 
 // ⚠ `vi.mock` factories are hoisted above every top-level statement, so the spies have to be
 // created inside `vi.hoisted` or they are read before initialisation.
-const { loadRules, getFantasyCalcValuesDbFirst } = vi.hoisted(() => ({
+const { loadRules, getFantasyCalcValuesDbFirst, leagueFindUnique } = vi.hoisted(() => ({
   loadRules: vi.fn(),
   getFantasyCalcValuesDbFirst: vi.fn(),
+  leagueFindUnique: vi.fn(),
 }))
+
+// The CHART (dynasty/redraft, superflex/1QB) is read off the league row by `valueBookFor`, the rule every
+// screen uses (2026-11-17); team count and PPR still come from the rules. So a league is both: a row and rules.
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: leagueFindUnique } } }))
+const DYNASTY_SF_ROW = { leagueType: 'dynasty', settings: { roster_positions: ['QB', 'RB', 'WR', 'SUPER_FLEX'] } }
+const DYNASTY_1QB_ROW = { leagueType: 'dynasty', settings: { roster_positions: ['QB', 'RB', 'WR'] } }
+const REDRAFT_1QB_ROW = { leagueType: 'redraft', settings: { roster_positions: ['QB', 'RB', 'WR'] } }
 
 vi.mock('@/lib/decision-os/league-os', () => ({
   createLeagueOsLoaders: () => ({ loadRules, drainOutcomes: () => ({}) }),
@@ -38,6 +46,7 @@ import { buildFantasyCalcValueAnswer } from '@/lib/ai/deterministic'
 describe('BUG-1 — the deterministic value path must read the league, not the question', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    leagueFindUnique.mockResolvedValue(null)
     getFantasyCalcValuesDbFirst.mockResolvedValue([
       { player: { name: 'Jeremiyah Love' }, value: 6644, overallRank: 16, positionRank: 4, trend30Day: -375 },
     ])
@@ -49,6 +58,7 @@ describe('BUG-1 — the deterministic value path must read the league, not the q
       roster: { starters: ['QB', 'RB', 'WR', 'SUPER_FLEX'] },
       scoring: { activeRules: [] },
     })
+    leagueFindUnique.mockResolvedValue(DYNASTY_SF_ROW)
     await buildFantasyCalcValueAnswer('What is Jeremiyah Love worth in my league?', 'L1')
     expect(getFantasyCalcValuesDbFirst).toHaveBeenCalledWith(
       expect.objectContaining({ isDynasty: true, numQbs: 2 }),
@@ -70,14 +80,16 @@ describe('BUG-1 — the deterministic value path must read the league, not the q
       roster: { starters: ['QB'] },
       scoring: { activeRules: [] },
     })
+    leagueFindUnique.mockResolvedValue(REDRAFT_1QB_ROW)
     const out = await buildFantasyCalcValueAnswer('What is Jeremiyah Love worth in my league?', 'L1')
     expect(out).not.toMatch(/12-team PPR/i)
   })
 
-  it('falls back HONESTLY when the league exists but its rules will not resolve', async () => {
+  it('falls back HONESTLY when the league is named but cannot be read', async () => {
     // ⚠ Not the same as "no league". The remedy differs, so the wording must too — and it must
     // still not assert settings it could not read.
     loadRules.mockResolvedValue(null)
+    leagueFindUnique.mockResolvedValue(null)
     const out = await buildFantasyCalcValueAnswer('What is Jeremiyah Love worth in my league?', 'L1')
     expect(out).not.toMatch(/Settings:/i)
     expect(out).toBeTruthy()
@@ -98,6 +110,7 @@ describe('BUG-1 — the deterministic value path must read the league, not the q
       roster: { starters: ['QB', 'SUPER_FLEX'] },
       scoring: { activeRules: [{ statKey: 'rec', pointsValue: 1.5 }] },
     })
+    leagueFindUnique.mockResolvedValue(DYNASTY_SF_ROW)
     const out = await buildFantasyCalcValueAnswer('What is Jeremiyah Love worth in my league?', 'L1')
     expect(out).toMatch(/10-team/)      // read, so stated
     expect(out).not.toMatch(/PPR/i)     // not representable, so NOT stated
@@ -131,6 +144,7 @@ describe('the price shortcut steps aside for a trade decision', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadRules.mockResolvedValue({ general: { format: 'dynasty' }, roster: { starters: ['QB'] }, scoring: { activeRules: [] } })
+    leagueFindUnique.mockResolvedValue(DYNASTY_1QB_ROW)
     getFantasyCalcValuesDbFirst.mockResolvedValue([
       { player: { name: 'Rashee Rice' }, value: 3421, overallRank: 60, positionRank: 20, trend30Day: -436 },
     ])

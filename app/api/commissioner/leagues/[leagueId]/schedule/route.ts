@@ -1,7 +1,8 @@
+import { GAMES_PER_WEEK_SETTINGS_KEY, MAX_GAMES_PER_WEEK, isValidGamesPerWeek, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConfigResolver'
 import { regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
@@ -16,11 +17,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const type = req.nextUrl.searchParams?.get('type') || 'settings'
   if (type !== 'settings') {
@@ -29,7 +27,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
 
   const config = await getScheduleConfigForLeague(params.leagueId)
   if (!config) return NextResponse.json({ error: 'League or schedule config not found' }, { status: 404 })
-  return NextResponse.json(config)
+  const stored = await prisma.league.findUnique({ where: { id: params.leagueId }, select: { settings: true } })
+  return NextResponse.json({ ...config, games_per_week: readGamesPerWeek(stored?.settings) })
 }
 
 export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
@@ -38,11 +37,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const league = await (prisma as any).league.findUnique({
@@ -86,6 +82,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     ['lockTimeBehavior', 'lock_time_behavior'],
   ]
 
+  if (hasOwn(body, 'gamesPerWeek')) {
+    if (!isValidGamesPerWeek(body.gamesPerWeek)) {
+      return NextResponse.json({ error: `Games per week must be a whole number from 1 to ${MAX_GAMES_PER_WEEK}.` }, { status: 400 })
+    }
+    nextSettings[GAMES_PER_WEEK_SETTINGS_KEY] = body.gamesPerWeek
+  }
+
   for (const [incoming, target] of map) {
     if (hasOwn(body, incoming)) {
       nextSettings[target] = body[incoming] as unknown
@@ -98,5 +101,5 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   })
 
   const config = await getScheduleConfigForLeague(params.leagueId)
-  return NextResponse.json(config ?? { ok: true })
+  return NextResponse.json(config ? { ...config, games_per_week: readGamesPerWeek(nextSettings) } : { ok: true })
 }

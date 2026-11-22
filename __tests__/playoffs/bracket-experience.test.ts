@@ -14,6 +14,11 @@ function view(): PlayoffChallengeView {
     completion:{ mode:"available_picks_only",isSubmittable:false,requiredPickCount:1,savedRequiredPickCount:0,totalSeriesCount:4,unavailableSeriesCount:3,missingRequiredSeriesIds:["future"] } }
 }
 describe("points explanation and changes",()=>{
+  it("does not award a saved game-day draft on an otherwise finalized entry", () => {
+    const v = view()
+    v.picks[1].confirmedAt = null
+    expect(scoreLedger(v).find(r => r.id === "final")).toMatchObject({ points: 0, reason: "draft" })
+  })
   it("awards only verified finals, explains every point and preserves the official total",()=>{
     const v=view(), before=JSON.stringify(v), rows=scoreLedger(v)
     expect(rows.find(r=>r.id==="final")).toMatchObject({points:1,reason:"correct"})

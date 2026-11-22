@@ -60,5 +60,3 @@ export interface PoolPlayerRecord {
   metadata?: Record<string, unknown>
 }
 
-/** Universal player model for multi-sport ingestion and display (alias + optional fields). */
-export type UniversalPlayerRecord = PoolPlayerRecord

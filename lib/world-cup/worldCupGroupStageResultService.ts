@@ -6,7 +6,7 @@ import { validateWorldCupGroupRanking, validateWorldCupThirdPlaceSelections } fr
 import { rankWorldCupGroupTeams, resolveWorldCupRoundOf32Slots, type WorldCupGroupStanding, type WorldCupRoundOf32MappingRow } from "./worldCupGroupResolver"
 import { getWorldCupDataProvider, WorldCupProviderConfigError, type WorldCupProviderGroupStanding, type WorldCupProviderName } from "./worldCupDataProvider"
 
-export type WorldCupGroupStageResultSummary = {
+type WorldCupGroupStageResultSummary = {
   challengeId: string
   groupsUpdated: number
   groupTeamsUpdated: number
@@ -15,11 +15,11 @@ export type WorldCupGroupStageResultSummary = {
   warnings?: string[]
 }
 
-export type WorldCupProviderStandingsIngestionResult = WorldCupGroupStageResultSummary & {
+type WorldCupProviderStandingsIngestionResult = WorldCupGroupStageResultSummary & {
   standingsReceived: number
 }
 
-export type WorldCupRoundOf32PopulationResult = {
+type WorldCupRoundOf32PopulationResult = {
   challengeId: string
   slotsUpdated: number
   matchesUpdated: number

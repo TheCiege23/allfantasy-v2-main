@@ -18,7 +18,6 @@ export * from './rules'
 export * from './decision'
 export * from './parity'
 export * from './healthCardAdapter'
-export * from './outcome'
 
 export interface RunCommissionerHealthInput {
   snapshot: CommissionerLeagueHealthSnapshot

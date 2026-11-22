@@ -3,7 +3,7 @@
  * Blank / null = no data (render em dash), never coerce missing stats to 0.
  */
 
-import { parseRollingInsightsStatsJson, type RollingInsightsTableStats } from '@/lib/players/rolling-insights-stats-display'
+import { parseRollingInsightsStatsJson } from '@/lib/players/rolling-insights-stats-display'
 
 export type NflDraftProjectionSplits = {
   /** Where splits came from for debugging / future filters */

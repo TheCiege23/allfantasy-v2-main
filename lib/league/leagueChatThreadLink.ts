@@ -26,9 +26,9 @@
  */
 import { getLeagueIdFromVirtualRoom } from '@/lib/chat-core/ChatRoomResolver'
 
-export const LEAGUE_CHAT_THREAD_KEY = 'leagueChatThreadId'
+const LEAGUE_CHAT_THREAD_KEY = 'leagueChatThreadId'
 
-export const LEAGUE_CHAT_LINK_REFUSAL = "League chat can only be linked to this league's own chat."
+const LEAGUE_CHAT_LINK_REFUSAL = "League chat can only be linked to this league's own chat."
 
 /** True only when `threadId` is provably `leagueId`'s own chat. The read side uses this too. */
 export function isLeagueOwnChatThread(leagueId: string, threadId: unknown): boolean {

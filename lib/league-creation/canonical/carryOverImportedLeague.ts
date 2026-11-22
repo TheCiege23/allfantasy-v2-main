@@ -3,6 +3,7 @@ import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
+import { GAMES_PER_WEEK_SETTINGS_KEY, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { importedMlbScoring } from './importedMlbScoring'
 import { importedNflScoring } from './importedNflScoring'
 import { copyImportedHistory } from './copyImportedHistory'
@@ -107,7 +108,7 @@ export function translateImportedRosterData(data: unknown, idMap: Map<string, st
   }
 }
 
-export type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skippedNotTraded: number; skippedPastSeason: number }
+type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skippedNotTraded: number; skippedPastSeason: number }
 
 /**
  * Copy the source league's traded future picks into the new native league, inside the creation
@@ -124,7 +125,7 @@ export type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skip
  * native rookie draft will ever consume it. `skipDuplicates` on the
  * (leagueId, pickSeason, round, originalRosterId) key keeps a retried carryover from duplicating rows.
  */
-export async function carryOverImportedFuturePicks(tx: Tx, args: {
+async function carryOverImportedFuturePicks(tx: Tx, args: {
   sourceLeagueId: string
   targetLeagueId: string
   /** Provider team id (`LeagueTeam.externalId`) → the new native `Roster.id`. */
@@ -361,6 +362,8 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
       } : {}),
       ...(nflScoring ? importedNflSettings(asRecord(target.settings), nflScoring, args.creatorUserId) : {}),
+      // A league that played several games a week keeps doing so; the native schedule reads this setting.
+      ...(readGamesPerWeek(source.settings) > 1 ? { [GAMES_PER_WEEK_SETTINGS_KEY]: readGamesPerWeek(source.settings) } : {}),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,
         ...(nflScoring ? { scoring: { convertedCount: nflScoring.convertedCount, notScored: nflScoring.notScored, approximated: nflScoring.approximated } } : {}),
         ...(futurePicks ? { futurePickCount: futurePicks.copied, futurePicksSkipped: futurePicks.skippedUnmapped + futurePicks.skippedNotTraded + futurePicks.skippedPastSeason } : {}),

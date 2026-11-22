@@ -35,10 +35,10 @@ describe('effectiveRookieDraftOrder — the engine’s precedence', () => {
     expect(effectiveRookieDraftOrder('max_pf', AUTO_WORST)).toBe('auto_worst_to_first')
     expect(effectiveRookieDraftOrder('reverse_standings', AUTO_PF)).toBe('auto_reverse_max_pf')
   })
-  it('a switched-off automatic order: a standings method alone seats nothing, so it reads as set by the commissioner', () => {
-    // The automatic order is an AF Commissioner setting, off by default (lib/rookie-order/automaticRookieOrder.ts).
+  it('a switched-off automatic order reads as set by the commissioner; nothing saved reads as worst record first', () => {
+    // Worst record first is the default (lib/rookie-order/automaticRookieOrder.ts).
     expect(effectiveRookieDraftOrder('max_pf', { rookie_draft_order: { mode: 'reverse_max_pf', enabled: false } })).toBe('commissioner')
-    expect(effectiveRookieDraftOrder('reverse_standings', {})).toBe('commissioner')
+    expect(effectiveRookieDraftOrder('reverse_standings', {})).toBe('auto_worst_to_first')
     expect(effectiveRookieDraftOrder('commissioner', {})).toBe('commissioner')
     expect(effectiveRookieDraftOrder(null, null)).toBeNull()
   })
@@ -69,9 +69,10 @@ describe('the popup says the order the engine uses', () => {
     expect(dynastyLines(AUTO_WORST, 'en').join('\n')).toContain('teams that missed the playoffs pick first, worst record first')
     expect(dynastyLines(AUTO_PF, 'en').join('\n')).toContain('lowest max PF first')
     expect(dynastyLines(LIVE, 'en').join('\n')).toContain('the live rookie order')
-    // the config's method still reads when nothing overrides it
-    // with nothing on, the draft takes the league's own order: the commissioner sets it
-    expect(dynastyLines({}, 'en').join('\n')).toContain('The commissioner sets the rookie draft order.')
+    // with nothing saved, the draft is seated worst record first (the default)
+    expect(dynastyLines({}, 'en').join('\n')).toContain('teams that missed the playoffs pick first, worst record first')
+    // switched off, the draft takes the league's own order: the commissioner sets it
+    expect(dynastyLines({ rookie_draft_order: { enabled: false } }, 'en').join('\n')).toContain('The commissioner sets the rookie draft order.')
   })
   it('in Spanish, with no raw keys and no «waiver»', () => {
     for (const s of [AUTO_WORST, AUTO_PF, LIVE]) {
@@ -98,7 +99,7 @@ describe('publishRookieDraftOrderChange', () => {
   })
   it('publishes one card when the order the engine uses moves', async () => {
     db.league.findUnique.mockResolvedValue({ settings: AUTO_WORST })
-    await publishRookieDraftOrderChange({ leagueId: 'L1', actorUserId: 'u1', settingsBefore: {} })
+    await publishRookieDraftOrderChange({ leagueId: 'L1', actorUserId: 'u1', settingsBefore: { rookie_draft_order: { enabled: false } } })
     expect(publishRuleChangesEvent).toHaveBeenCalledWith({
       leagueId: 'L1',
       actorUserId: 'u1',
@@ -109,6 +110,8 @@ describe('publishRookieDraftOrderChange', () => {
   it('publishes nothing when the effective order is unchanged', async () => {
     db.league.findUnique.mockResolvedValue({ settings: AUTO_WORST })
     await publishRookieDraftOrderChange({ leagueId: 'L1', actorUserId: 'u1', settingsBefore: AUTO_WORST })
+    // saving worst record first over a league that said nothing changes nothing: it was already the default
+    await publishRookieDraftOrderChange({ leagueId: 'L1', actorUserId: 'u1', settingsBefore: {} })
     // a lottery league's order does not move whatever the automatic setting says
     db.dynastyLeagueConfig.findUnique.mockResolvedValue({ rookiePickOrderMethod: 'weighted_lottery' })
     await publishRookieDraftOrderChange({ leagueId: 'L1', actorUserId: 'u1', settingsBefore: {} })

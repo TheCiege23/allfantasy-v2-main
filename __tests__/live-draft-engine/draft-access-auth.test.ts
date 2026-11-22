@@ -19,11 +19,13 @@ const db = vi.hoisted(() => {
   const leagueFindFirst = vi.fn(async () => null as null | { userId: string })
   const rosterFindFirst = vi.fn(async () => null as null | { id: string })
   const leagueTeamFindFirst = vi.fn(async () => null as null | { id: string })
+  // The viewer check reads the league's settings (lib/league/importViewers.ts).
+  const leagueFindUnique = vi.fn(async () => null as null | { settings: unknown })
   return {
-    league: { findFirst: leagueFindFirst },
+    league: { findFirst: leagueFindFirst, findUnique: leagueFindUnique },
     roster: { findFirst: rosterFindFirst },
     leagueTeam: { findFirst: leagueTeamFindFirst },
-    _mocks: { leagueFindFirst, rosterFindFirst, leagueTeamFindFirst },
+    _mocks: { leagueFindFirst, rosterFindFirst, leagueTeamFindFirst, leagueFindUnique },
   }
 })
 
@@ -73,6 +75,7 @@ describe('canAccessLeagueDraft', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     db._mocks.leagueFindFirst.mockResolvedValue(null)
+    db._mocks.leagueFindUnique.mockResolvedValue(null)
     db._mocks.rosterFindFirst.mockResolvedValue(null)
     db._mocks.leagueTeamFindFirst.mockResolvedValue(null)
   })
@@ -161,6 +164,14 @@ describe('canAccessLeagueDraft', () => {
     denyCommissioner()
     // roster: null (default mock)
     // leagueTeam: null (default mock)
+    expect(await canAccessLeagueDraft(LEAGUE, USER)).toBe(false)
+  })
+
+  it('admits a league mate with no team who joined an already-imported league as a viewer', async () => {
+    denyCommissioner()
+    db._mocks.leagueFindUnique.mockResolvedValue({ settings: { importViewerIds: [USER] } })
+    expect(await canAccessLeagueDraft(LEAGUE, USER)).toBe(true)
+    db._mocks.leagueFindUnique.mockResolvedValue({ settings: { importViewerIds: ['someone-else'] } })
     expect(await canAccessLeagueDraft(LEAGUE, USER)).toBe(false)
   })
 

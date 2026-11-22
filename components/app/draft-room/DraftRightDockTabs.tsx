@@ -3,8 +3,10 @@
 /**
  * D.6.1 — Sleeper-style right-dock tabs.
  *
- * One shared body slot. Default tabs: QUEUE | ROSTER | CHAT.
- * Draft rooms can also expose WAR ROOM when a deterministic draft-intel body is passed.
+ * FOUR tabs since 2026-11-19: QUEUE | MY TEAM | CHIMMY | CHAT (+ TEAMS in an auction).
+ * There were eight. Intel, Draft intelligence and AF Legacy were three views of Chimmy's
+ * read on the draft and now live inside the Chimmy tab; Activity duplicated the pick cards
+ * the chat already shows. A stored preference for a removed tab opens Chimmy.
  * Only the active tab fills the dock body. Inactive tab BODIES stay mounted
  * (display:none via CSS) so:
  *   - the Roster tab keeps updating in real-time when picks land while you're
@@ -20,26 +22,29 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
-export type DraftRightDockTab = 'queue' | 'intel' | 'chimmy' | 'roster' | 'war_room' | 'activity' | 'chat'
+export type DraftRightDockTab = 'queue' | 'teams' | 'chimmy' | 'roster' | 'chat'
+
+/** Tabs that existed before 2026-11-19; a stored choice of one of them opens Chimmy. */
+const MERGED_INTO_CHIMMY = new Set(['intel', 'war_room', 'activity'])
 
 const TAB_PREF_KEY = 'af:draft-right-dock-active-tab'
 
-export interface DraftRightDockTabsProps {
+interface DraftRightDockTabsProps {
   queueBody: ReactNode
-  /** "Before your next pick" lookahead. Optional — the tab appears only when a body is supplied. */
-  intelBody?: ReactNode
+  /** "My team": the viewer's roster, with a switcher to look at any other team. */
   rosterBody: ReactNode
-  warRoomBody?: ReactNode
-  /**
-   * 8b's third right-column card. Optional so the tab only appears where a body is supplied —
-   * same pattern warRoomBody already uses.
-   */
-  activityBody?: ReactNode
   /**
    * Chimmy, the draft assistant. Optional like the others, and mounted on first open rather than
    * with the dock: it is a chat surface with its own requests, and most visits never open it.
    */
   chimmyBody?: ReactNode
+  /**
+   * Auction only: every team's budget, max bid and spots, plus recent wins. Moved here from above
+   * the board (2026-11-15) so the auction stage stays compact and the player pool in view.
+   */
+  teamsBody?: ReactNode
+  /** Label for the Teams tab (localized by the caller). */
+  teamsLabel?: string
   chatBody: ReactNode
   /** Default tab when no preference stored. Spec calls for "Queue". */
   defaultTab?: DraftRightDockTab
@@ -57,21 +62,18 @@ export interface DraftRightDockTabsProps {
 
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
-  { id: 'roster', label: 'Roster' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'intel', label: 'Intel' },
+  { id: 'teams', label: 'Teams' },
+  { id: 'roster', label: 'My team' },
   { id: 'chimmy', label: 'Chimmy' },
-  { id: 'war_room', label: 'AF Legacy' },
-  { id: 'activity', label: 'Activity' },
+  { id: 'chat', label: 'Chat' },
 ]
 
 export function DraftRightDockTabs({
   queueBody,
-  intelBody = null,
   rosterBody,
-  warRoomBody = null,
-  activityBody = null,
   chimmyBody = null,
+  teamsBody = null,
+  teamsLabel,
   chatBody,
   defaultTab = 'queue',
   activeTabOverride = null,
@@ -85,16 +87,8 @@ export function DraftRightDockTabs({
   useEffect(() => {
     try {
       const v = window.localStorage.getItem(TAB_PREF_KEY)
-      if (
-        v === 'queue' ||
-        v === 'intel' ||
-        v === 'chimmy' ||
-        v === 'roster' ||
-        v === 'war_room' ||
-        v === 'activity' ||
-        v === 'chat'
-      )
-        setActiveTab(v)
+      if (v === 'queue' || v === 'teams' || v === 'chimmy' || v === 'roster' || v === 'chat') setActiveTab(v)
+      else if (v && MERGED_INTO_CHIMMY.has(v)) setActiveTab('chimmy')
     } catch {
       /* ignore */
     }
@@ -116,10 +110,8 @@ export function DraftRightDockTabs({
    */
   const tabs = BASE_TABS.filter(
     (tab) =>
-      (tab.id !== 'intel' || Boolean(intelBody)) &&
-      (tab.id !== 'chimmy' || Boolean(chimmyBody)) &&
-      (tab.id !== 'war_room' || Boolean(warRoomBody)) &&
-      (tab.id !== 'activity' || Boolean(activityBody)),
+      (tab.id !== 'teams' || Boolean(teamsBody)) &&
+      (tab.id !== 'chimmy' || Boolean(chimmyBody)),
   )
   const rawEffectiveTab = activeTabOverride ?? activeTab
   /*
@@ -192,7 +184,7 @@ export function DraftRightDockTabs({
                   : 'text-[#8b91a7] hover:bg-[#1d2236] hover:text-white'
               }`}
             >
-              <span>{tab.label}</span>
+              <span>{tab.id === 'teams' && teamsLabel ? teamsLabel : tab.label}</span>
               {tab.id === 'queue' && typeof queueCount === 'number' && queueCount > 0 ? (
                 <span
                   className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-white px-1 text-[11px] font-bold text-[#14172a]"
@@ -227,16 +219,16 @@ export function DraftRightDockTabs({
         >
           {queueBody}
         </div>
-        {intelBody ? (
+        {teamsBody ? (
           <div
             role="tabpanel"
-            id={`${testIdBase}-panel-intel`}
-            aria-labelledby={`${testIdBase}-tab-intel`}
-            data-testid={`${testIdBase}-panel-intel`}
-            aria-hidden={effectiveTab !== 'intel'}
-            className={effectiveTab === 'intel' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
+            id={`${testIdBase}-panel-teams`}
+            aria-labelledby={`${testIdBase}-tab-teams`}
+            data-testid={`${testIdBase}-panel-teams`}
+            aria-hidden={effectiveTab !== 'teams'}
+            className={effectiveTab === 'teams' ? 'flex h-full min-h-0 flex-col overflow-auto px-2' : 'hidden'}
           >
-            {intelBody}
+            {teamsBody}
           </div>
         ) : null}
         {chimmyBody ? (
@@ -261,32 +253,6 @@ export function DraftRightDockTabs({
         >
           {rosterBody}
         </div>
-        {activityBody ? (
-          <div
-            role="tabpanel"
-            id={`${testIdBase}-panel-activity`}
-            aria-labelledby={`${testIdBase}-tab-activity`}
-            data-testid={`${testIdBase}-panel-activity`}
-            aria-hidden={effectiveTab !== 'activity'}
-            className={
-              effectiveTab === 'activity' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'
-            }
-          >
-            {activityBody}
-          </div>
-        ) : null}
-        {warRoomBody ? (
-          <div
-            role="tabpanel"
-            id={`${testIdBase}-panel-war_room`}
-            aria-labelledby={`${testIdBase}-tab-war_room`}
-            data-testid={`${testIdBase}-panel-war-room`}
-            aria-hidden={effectiveTab !== 'war_room'}
-            className={effectiveTab === 'war_room' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
-          >
-            {warRoomBody}
-          </div>
-        ) : null}
         <div
           role="tabpanel"
           id={`${testIdBase}-panel-chat`}

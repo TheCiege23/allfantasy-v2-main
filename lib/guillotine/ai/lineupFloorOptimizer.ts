@@ -1,4 +1,4 @@
-export type FloorLineupRec = {
+type FloorLineupRec = {
   starters: { playerId: string; slot: string; floor: number }[]
   swaps: string[]
   narrative: string

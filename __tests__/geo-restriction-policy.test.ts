@@ -54,10 +54,12 @@ describe("the outage this file exists to prevent", () => {
     expect(resolveUsStateCode(cloudflare("US", "WA"))).toBe("WA")
   })
 
-  it("blocks Washington on a request shaped like production traffic today", () => {
+  // Nov 2026, owner on counsel's confirmation: free play is open in Washington, paid is not.
+  it("paid-blocks Washington on a request shaped like production traffic today", () => {
     const state = resolveUsStateCode(cloudflare("US", "WA"))
     expect(state).not.toBeNull()
-    expect(isFullyBlocked(state as string)).toBe(true)
+    expect(isPaidBlocked(state as string)).toBe(true)
+    expect(isFullyBlocked(state as string)).toBe(false)
   })
 
   it("applies the paid-tier block to Nevada on the same header shape", () => {

@@ -86,6 +86,10 @@ export type SubscriptionFeatureId =
   | 'legacy_manager_compare'
   | 'legacy_rankings_analysis'
   | 'legacy_social_pulse'
+  /** /af-legacy Trade Hub report + /af-legacy/trade-analyzer (POST /api/legacy/trade/analyze). AF Legacy, 2026-11-17. */
+  | 'legacy_trade_hub'
+  /** /af-legacy "Chimmy Analysis" career report (POST /api/legacy/ai/run). AF Legacy, 2026-11-17. */
+  | 'legacy_ai_report'
 
 /** Plan slugs returned by entitlements API; used for hasAccess. */
 export type SubscriptionPlanId =

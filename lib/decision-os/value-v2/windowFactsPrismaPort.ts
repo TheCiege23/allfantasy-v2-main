@@ -26,7 +26,7 @@ import type {
  * input here rather than something inferred.
  */
 
-export interface WindowFactsPrismaDeps {
+interface WindowFactsPrismaDeps {
   prisma: PrismaClient
   /** `WeeklyMatchup.leagueId`. Distinct from the AllFantasy `League.id` in scope. */
   platformLeagueId: string | null

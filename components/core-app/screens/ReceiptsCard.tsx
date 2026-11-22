@@ -2,16 +2,9 @@
 
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
-import type {
-  ChimmyAddReceipt,
-  ChimmyReceipt,
-  DecisionReceiptsData,
-  LineupReceipt,
-  StartCallReceipt,
-  TradeReceipt,
-  WaiverReceipt,
-} from '@/lib/core-app/decisionReceipts'
+import type { ChimmyAddReceipt, ChimmyReceipt, DecisionReceiptsData, LineupReceipt, StartCallReceipt, WaiverReceipt } from '@/lib/core-app/decisionReceipts'
 import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
+import { readLedgerRecordView, type LedgerRecordView } from '@/lib/chimmy-outcomes/ledgerRecord'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { receiptsCardMessages } from '@/lib/core-app/messages/receiptsCard'
@@ -200,6 +193,60 @@ function CallNotes({
   )
 }
 
+/**
+ * AllFantasy's own record (lib/chimmy-outcomes/ledgerRecord.ts): My Team's bench check, the waiver
+ * panel's #1 pickup and the trade grades, graded every few hours. Each line is the numbers in words; a
+ * percentage appears only once the sample earns one, exactly as Chimmy's record line.
+ */
+function AfRecord({ r, language }: { r: LedgerRecordView; language: string }) {
+  const m = useMessages(receiptsCardMessages)
+  const bench = r.bench
+  const pick = r.pickups
+  return (
+    <div className="af3a-receipt-record" data-kind="af-record">
+      {bench ? (
+        <p data-kind="af-record-bench">
+          <b>{m.benchRecord}</b>{' '}
+          {bench.you ? (
+            <span className="af3a-mono">
+              {m.recordYou} {trackRecordText(bench.you, describeTrackRecord(bench.you), language)}
+            </span>
+          ) : null}
+          {bench.you && bench.everyone ? ' · ' : null}
+          {bench.everyone ? (
+            <span className="af3a-mono">
+              {m.recordEveryone} {m.everyoneStartSit(bench.everyone.ratePct, bench.everyone.right + bench.everyone.wrong, bench.everyone.gainPerCall)}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+      {pick ? (
+        <p data-kind="af-record-pickups">
+          <b>{m.pickupRecord}</b>{' '}
+          {pick.you ? (
+            <span className="af3a-mono">
+              {m.recordYou} {m.pickupLine(pick.you.startable, pick.you.graded, pick.you.ratePct)}
+            </span>
+          ) : null}
+          {pick.you && pick.everyone ? ' · ' : null}
+          {pick.everyone ? (
+            <span className="af3a-mono">
+              {m.recordEveryone} {m.pickupLine(pick.everyone.startable, pick.everyone.graded, pick.everyone.ratePct)}
+              {pick.everyone.ratePct != null && pick.everyone.vsDrop > 0 ? m.pickupDrop(pick.everyone.beatDrop, pick.everyone.vsDrop) : null}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+      {r.trades ? (
+        <p data-kind="af-record-trades">
+          <b>{m.tradeRecord}</b>{' '}
+          <span className="af3a-mono">{r.trades.map((t) => m.tradeLetter(t.letter, t.netPerWeek, t.n)).join(' · ')}</span>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null; help?: ReactNode }) {
   const { language } = useOptionalLanguage()
   const es = spanishFlag(language)
@@ -233,7 +280,8 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
     chimmyRecord != null || chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
   const afTips: ChimmyReceipt[] = data.afTips ?? []
   const hasAfTips = afTips.length > 0
-  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy, hasAfTips].filter(Boolean).length
+  const afRecord = readLedgerRecordView(data.afRecord)
+  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy, hasAfTips, afRecord != null].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
 
@@ -404,6 +452,13 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
         </>
       ) : null}
 
+      {afRecord ? (
+        <>
+          {headed ? <h3 className="af3a-receipt-group">{m.afRecord}</h3> : null}
+          <AfRecord r={afRecord} language={language} />
+        </>
+      ) : null}
+
       {data.uncoveredLeagues > 0 ? (
         <p className="af3a-exp-note">
           {m.sleeperOnly}
@@ -413,4 +468,3 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   )
 }
 
-export default ReceiptsCard

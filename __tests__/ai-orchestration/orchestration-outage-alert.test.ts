@@ -56,14 +56,14 @@ beforeEach(() => {
  * reply says it is not an answer. On 2026-09-20 it was neither — the fallback read as a poor
  * answer with a MEDIUM confidence badge, and the only record was a status enum in a log.
  */
-describe('when no AI provider answers', () => {
+describe('when no Chimmy provider answers', () => {
   it('alerts before execution when nothing is available to call', async () => {
     const out = await runUnifiedOrchestration(request())
     expect(h.reportAllProvidersDown).toHaveBeenCalledWith(
       expect.objectContaining({ stage: 'before_execution', featureKey: 'outage_alert_test' }),
     )
     expect(out.ok).toBe(true)
-    expect(JSON.stringify(out)).toContain("Chimmy's AI models are unavailable right now")
+    expect(JSON.stringify(out)).toContain("Chimmy's models are unavailable right now")
   })
 
   it('reports each billing failure and then the all-down outage, with a LOW-confidence reply', async () => {
@@ -83,7 +83,7 @@ describe('when no AI provider answers', () => {
     )
     expect(out.ok).toBe(true)
     const body = JSON.stringify(out)
-    expect(body).toContain("Chimmy's AI models are unavailable right now")
+    expect(body).toContain("Chimmy's models are unavailable right now")
     expect(body).toContain('Deterministic guidance from NFL context')
     const pct = Number(body.match(/"confidencePct":(\d+)/)?.[1] ?? body.match(/"scorePct":(\d+)/)?.[1])
     expect(pct).toBeLessThanOrEqual(35)
@@ -113,9 +113,9 @@ describe('the outage reply itself', () => {
 
   it('prints no payload value and no raw field name, only readable names of what it had', async () => {
     const text = answerText(await runUnifiedOrchestration(request()))
-    expect(text).toContain("Chimmy's AI models are unavailable right now")
+    expect(text).toContain("Chimmy's models are unavailable right now")
     expect(text).toContain('Deterministic guidance from NFL context')
-    expect(text).toContain('AI explanation is temporarily unavailable')
+    expect(text).toContain('Chimmy explanation is temporarily unavailable')
     expect(text).toContain('flex candidates')
     expect(text).not.toMatch(/week: 7|flexCandidates|: 2(?![0-9])/)
   })

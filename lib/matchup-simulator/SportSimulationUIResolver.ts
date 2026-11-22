@@ -4,14 +4,13 @@
  */
 
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getDefaultScoreStdDev, getVolatilityTag } from '@/lib/simulation-engine/SportSimulationResolver'
 import type {
   MatchupLineupSlotInput,
   MatchupScheduleFactorsInput,
 } from '@/lib/simulation-engine/types'
 import { getPositionSlotsForSport, getPositionSlotWeight } from './PositionComparisonResolver'
 
-export type SportOption = { value: string; label: string }
+type SportOption = { value: string; label: string }
 export type SimulationTeamPreset = {
   id: string
   name: string
@@ -19,7 +18,7 @@ export type SimulationTeamPreset = {
   stdDev: number
   scheduleFactors?: MatchupScheduleFactorsInput
 }
-export type SimulationScheduleFactorDefinition = {
+type SimulationScheduleFactorDefinition = {
   id: keyof MatchupScheduleFactorsInput
   label: string
   description: string
@@ -125,23 +124,9 @@ export function getSportOptionsForSimulation(): SportOption[] {
 /**
  * Display label for a sport in simulation UI.
  */
-export function getSportLabel(sport: string): string {
+function getSportLabel(sport: string): string {
   const normalized = normalizeToSupportedSport(sport)
   return SPORT_LABELS[normalized] ?? normalized
-}
-
-/**
- * Default score stdDev for a sport (for inputs when not provided).
- */
-export function getDefaultStdDevForSport(sport: string): number {
-  return getDefaultScoreStdDev(sport)
-}
-
-/**
- * Volatility tag from combined stdDev (low/medium/high).
- */
-export function getVolatilityLabel(combinedStdDev: number): 'low' | 'medium' | 'high' {
-  return getVolatilityTag(combinedStdDev)
 }
 
 export function getSimulationTeamPresets(sport: string): SimulationTeamPreset[] {

@@ -6,6 +6,17 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const nav = vi.hoisted(() => ({ refresh: vi.fn(), params: new URLSearchParams() }))
+/* Background refreshes go through the deploy guard (lib/core-app/deployGuard). A synchronous
+   pass-through keeps fake-timer assertions in the same tick and keeps its marker read out of
+   fetch counts; guard.ok=false is "a deploy landed". */
+const guard = vi.hoisted(() => ({ ok: true }))
+vi.mock('@/lib/core-app/deployGuard', () => ({
+  primeDeployBaseline: () => Promise.resolve(),
+  canRefreshInBackground: () => ({ then: (cb: (ok: boolean) => void) => cb(guard.ok) }),
+  refreshInBackground: (fn: () => void) => { if (guard.ok) fn(); return Promise.resolve() },
+  isNewVersionReady: () => false,
+  subscribeNewVersionReady: () => () => {},
+}))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: nav.refresh, push: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => nav.params,

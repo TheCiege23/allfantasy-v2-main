@@ -59,7 +59,7 @@ export function emptyClassRatingCounts(): ClassRatingCounts {
 }
 
 /** The calendar day in New York — the same day key the rankings snapshot uses. */
-export function easternDay(now: Date): string {
+function easternDay(now: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 }
 

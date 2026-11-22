@@ -12,7 +12,7 @@ const read = (rel: string) => stripComments(readFileSync(resolve(process.cwd(), 
 
 const BASE = 'lib/decision-os/commissioner-health'
 const PURE_LAYER = ['world.ts', 'dco.ts', 'decision.ts', 'rules.ts', 'parity.ts'].map((f) => [`${BASE}/${f}`, read(`${BASE}/${f}`)] as const)
-const ALL = ['world.ts', 'dco.ts', 'decision.ts', 'rules.ts', 'parity.ts', 'deps.ts', 'shadow.ts', 'index.ts', 'healthCardAdapter.ts', 'outcome.ts'].map((f) => [`${BASE}/${f}`, read(`${BASE}/${f}`)] as const)
+const ALL = ['world.ts', 'dco.ts', 'decision.ts', 'rules.ts', 'parity.ts', 'deps.ts', 'shadow.ts', 'index.ts', 'healthCardAdapter.ts'].map((f) => [`${BASE}/${f}`, read(`${BASE}/${f}`)] as const)
 
 // Execution / AI / mutation surfaces the slice must NEVER import or consume.
 const FORBIDDEN = [

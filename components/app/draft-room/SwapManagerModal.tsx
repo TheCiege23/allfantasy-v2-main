@@ -20,7 +20,7 @@ type SettingsResponse = {
   }
 }
 
-export type SwapManagerModalProps = {
+type SwapManagerModalProps = {
   leagueId: string
   onClose: () => void
   onAction: (
@@ -211,4 +211,3 @@ export function SwapManagerModal({ leagueId, onClose, onAction }: SwapManagerMod
   )
 }
 
-export default SwapManagerModal

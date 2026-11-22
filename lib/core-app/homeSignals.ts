@@ -23,7 +23,7 @@
 export const HOME_SIGNAL_ID_CAP = 5
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 
-export type HomeSignals = {
+type HomeSignals = {
   /** Leagues where a starter is ruled out. */
   urgent: string[]
   /** Leagues whose draft is live right now. */

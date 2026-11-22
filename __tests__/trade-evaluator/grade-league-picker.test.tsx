@@ -12,18 +12,19 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { GradeLeaguePicker, gradeLeagueOptions, noLeagueGradeHint } from '@/components/trade-evaluator/GradeLeaguePicker'
 
 describe('gradeLeagueOptions', () => {
-  it('offers only unified NFL leagues, one per league, newest season, sorted by name', () => {
+  it('offers unified leagues in supported sports, one per league, newest season, sorted by name', () => {
     const options = gradeLeagueOptions([
       { id: 'sl-1', name: 'Zeta Dynasty', sport: 'NFL', season: 2025, unifiedLeagueId: 'af-z', hasUnifiedRecord: true },
       { id: 'sl-2', name: 'Zeta Dynasty', sport: 'NFL', season: 2026, unifiedLeagueId: 'af-z', hasUnifiedRecord: true },
       { id: 'af-a', name: 'Alpha Redraft', sport: 'nfl', season: 2026, unifiedLeagueId: 'af-a', hasUnifiedRecord: true },
       // A Sleeper-space row: its id would 403 the evaluation's membership check.
       { id: 'sl-3', name: 'Legacy Only', sport: 'NFL', season: 2026, unifiedLeagueId: null, hasUnifiedRecord: false },
-      // The analyzer prices NFL only.
       { id: 'af-n', name: 'Hoops', sport: 'NBA', season: 2026, unifiedLeagueId: 'af-n', hasUnifiedRecord: true },
+      { id: 'af-other', sport: 'unsupported', hasUnifiedRecord: true },
     ])
     expect(options).toEqual([
       { id: 'af-a', label: 'Alpha Redraft · 2026' },
+      { id: 'af-n', label: 'Hoops · 2026' },
       { id: 'af-z', label: 'Zeta Dynasty · 2026' },
     ])
   })

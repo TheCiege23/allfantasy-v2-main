@@ -22,11 +22,11 @@ export type TokenReservation = {
   tokenCost: number
 }
 
-export type TokenAuthorization =
+type TokenAuthorization =
   | { ok: true; reservation: TokenReservation }
   | { ok: false; denyReason: 'token_purchase_required' }
 
-export type TokenReserveInput = {
+type TokenReserveInput = {
   userId: string
   userEmail?: string | null
   entitlementMode: 'subscription' | 'tokens'
@@ -55,22 +55,6 @@ export interface IntelligenceTokenGuard {
     reservation: TokenReservation
     reason: string
   }): Promise<void>
-}
-
-/** A guard that never charges — for surfaces that are always subscription-covered or free. */
-export const subscriptionOnlyTokenGuard: IntelligenceTokenGuard = {
-  async reserve(input) {
-    return {
-      ok: true,
-      reservation: { reservationKey: input.reservationKey, ledgerId: null, charged: false, tokenCost: 0 },
-    }
-  },
-  async finalize() {
-    /* no charge to finalize */
-  },
-  async release() {
-    /* no charge to release */
-  },
 }
 
 /** Durable refresh scheduler — enqueues at most ONE refresh per canonical key using a repository-backed job

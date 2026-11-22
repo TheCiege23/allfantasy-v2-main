@@ -45,7 +45,7 @@ const { prismaMock, store } = vi.hoisted(() => {
     },
     roster: {
       count: vi.fn(async ({ where }: { where: { leagueId: string; platformUserId: string } }) =>
-        store.rosters.filter((r) => r.leagueId === where.leagueId && r.platformUserId === where.platformUserId).length
+        store.rosters.filter((r) => r.leagueId === where.leagueId && (where.OR ?? [where]).some((w: any) => w.platformUserId != null && r.platformUserId === w.platformUserId)).length
       ),
     },
     leagueTeam: {

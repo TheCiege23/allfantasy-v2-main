@@ -24,7 +24,7 @@ import type { IntelligenceRequestContext, IntelligenceRunRecord, IntelligenceToo
 
 type PrismaLike = typeof defaultPrisma
 
-export const INTELLIGENCE_REFRESH_JOB_TYPE = 'decision_os.intelligence_refresh'
+const INTELLIGENCE_REFRESH_JOB_TYPE = 'decision_os.intelligence_refresh'
 
 type SnapshotSignal = { id: string; kind: string; summary: string; severity?: 'info' | 'warning' | 'critical' | null }
 type SnapshotFact = { id: string; label: string; value: string; source?: string | null }

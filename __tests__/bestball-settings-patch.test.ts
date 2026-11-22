@@ -29,8 +29,13 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: leagueFindUniqueMock,
       update: leagueUpdateMock,
     },
+    // Pre-draft: no draft session has started and no season exists, so nothing is locked.
+    draftSession: { findFirst: vi.fn(async () => null) },
+    redraftSeason: { findFirst: vi.fn(async () => null) },
+    leagueAuditLog: { create: vi.fn(async () => ({ id: 'audit-1' })) },
   },
 }))
+vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: vi.fn(async () => undefined) }))
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -118,7 +123,8 @@ describe('PATCH /api/bestball/settings', () => {
     expect(json.error).toMatch(/underdog/i)
   })
 
-  it('returns 400 for underdog mode with trades enabled', async () => {
+  // Trades are refused before the underdog rule: no Best Ball league trades (owner's decision 2026-11-07).
+  it('returns 400 for underdog mode with trades enabled (trades are off in every Best Ball league)', async () => {
     const { PATCH } = await import('@/app/api/bestball/settings/route')
     const res = await PATCH(
       makeRequest({
@@ -129,7 +135,7 @@ describe('PATCH /api/bestball/settings', () => {
     )
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toMatch(/underdog/i)
+    expect(json.error).toMatch(/Trades are off in Best Ball leagues/)
   })
 
   it('persists normalized settings on a happy-path PATCH', async () => {

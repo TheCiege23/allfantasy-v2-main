@@ -24,7 +24,7 @@ export function dynastySeasonClock(league: DynastySeasonClockSource): DynastySea
 }
 
 /** R1 gold, later rounds the line outline, unknown the line outline too (never a guessed R1). */
-export type PickChipTone = 'first' | 'later' | 'unknown'
+type PickChipTone = 'first' | 'later' | 'unknown'
 
 export function pickChipTone(round: number | null | undefined): PickChipTone {
   if (typeof round !== 'number' || !Number.isInteger(round) || round < 1) return 'unknown'

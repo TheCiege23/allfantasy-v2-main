@@ -111,7 +111,7 @@ export function TeamSummaryBar({
               className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 py-2 text-[11px] font-semibold text-cyan-100 min-h-[40px] disabled:opacity-50"
               data-testid="devy-pipeline-ai"
             >
-              {pipeBusy ? 'Analyzing pipeline…' : 'AI pipeline health'}
+              {pipeBusy ? 'Analyzing pipeline…' : 'Chimmy pipeline health'}
             </button>
             {pipeErr ? <p className="text-[11px] text-amber-200/90">{pipeErr}</p> : null}
             {pipeText ? (

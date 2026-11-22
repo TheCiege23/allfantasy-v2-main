@@ -84,7 +84,7 @@ export interface DecisionFact {
   weakestTrust: string
 }
 
-export interface DecisionToSliceOptions<TAction> {
+interface DecisionToSliceOptions<TAction> {
   /**
    * Turns one recommended action into a short line.
    *

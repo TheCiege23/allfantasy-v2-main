@@ -109,4 +109,3 @@ export function RecapShareButton({
   )
 }
 
-export default RecapShareButton

@@ -158,5 +158,3 @@ export function matchupConfidenceText(tier: string, language: string): string {
   return `confianza ${es[tier] ?? tier.toLowerCase()}`
 }
 
-/** Exposed for the coverage test only. */
-export const __MATCHUP_REASON_ES_EXACT = EXACT_ES

@@ -6,22 +6,13 @@
 import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
-/** Sports where Devy is a first-class long-term format in production (no MLB/NHL Devy). */
-export const DEVY_SUPPORTED_SPORTS = ['NFL', 'NCAAF', 'NBA', 'NCAAB'] as const
-export type DevySupportedSport = (typeof DEVY_SUPPORTED_SPORTS)[number]
-
-export function supportsDevyLeagueFormat(sport: LeagueSport | string): sport is DevySupportedSport {
-  const s = normalizeToSupportedSport(sport) as DevySupportedSport
-  return (DEVY_SUPPORTED_SPORTS as readonly string[]).includes(s)
-}
-
-export type DevyModeId =
+type DevyModeId =
   | 'standard_devy'
   | 'campus_to_canton'
   | 'expanded_pipeline'
   | 'future_placeholder'
 
-export type DevyFeederSourceId =
+type DevyFeederSourceId =
   | 'ncaaf_for_nfl'
   | 'ncaab_for_nba'
   | 'custom_prospect_pool'
@@ -40,7 +31,7 @@ export type DevyAnnualDraftOrderStyleId =
   | 'auction'
   | 'weighted_lottery'
 
-export type DevyProspectEligibilityModelId =
+type DevyProspectEligibilityModelId =
   | 'class_year'
   | 'age_declaration'
   | 'manual_curated_pool'
@@ -48,7 +39,7 @@ export type DevyProspectEligibilityModelId =
 
 export type DevyDraftPacingId = 'live_timer' | 'relaxed_timer' | 'commissioner_paused'
 
-export interface DevyLeagueConfigV1 {
+interface DevyLeagueConfigV1 {
   version: 1
   devyMode: DevyModeId
   /** Feature flags for modes not yet globally enabled */
@@ -110,7 +101,7 @@ export interface DevyLeagueConfigV1 {
 
 export type DevyLeagueSetupState = DevyLeagueConfigV1
 
-export function getDefaultFeederForSport(sport: LeagueSport | string): DevyFeederSourceId {
+function getDefaultFeederForSport(sport: LeagueSport | string): DevyFeederSourceId {
   const s = normalizeToSupportedSport(sport)
   if (s === 'NBA' || s === 'NCAAB') return 'ncaab_for_nba'
   return 'ncaaf_for_nfl'

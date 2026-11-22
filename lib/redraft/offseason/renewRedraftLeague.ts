@@ -31,6 +31,7 @@
  * A renew in the following offseason is allowed again, because by then the marked season is
  * `complete` and a new shell is created.
  */
+import { nativeLeagueStatusPatch } from '@/lib/league/nativeLeagueStatus'
 import type { Prisma } from '@prisma/client'
 import { randomInt } from 'crypto'
 import { prisma } from '@/lib/prisma'
@@ -235,6 +236,7 @@ export async function renewRedraftLeague(
     select: {
       id: true,
       sport: true,
+      platform: true,
       waiverBudget: true,
       lifecycleState: true,
       lifecycleMetadata: true,
@@ -428,6 +430,7 @@ export async function renewRedraftLeague(
           where: { id: leagueId },
           data: {
             lifecycleState: 'pre_draft',
+            ...nativeLeagueStatusPatch(league.platform, 'pre_draft'),
             lifecycleMetadata: {
               ...meta,
               lastTransitionAt: now.toISOString(),

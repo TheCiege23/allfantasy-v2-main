@@ -39,6 +39,8 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromBoolean(() => (leagueId: string, userId: string) => h.isCommissioner(leagueId, userId)))
 
 import { GET, PATCH } from '@/app/api/leagues/[leagueId]/league-type/handler'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
@@ -199,5 +201,46 @@ describe('Survivor Guilly', () => {
     expect(rules.concept).toBe('guillotine')
     expect(rules.variant).toBeNull()
     expect(resolveLeagueRules(h.row as never).concept?.id).toBe('guillotine')
+  })
+})
+
+/**
+ * Owner's rule, 2026-11-22: the main commissioner's league type stands. A co-commissioner sets it
+ * only while the main commissioner has not; after a hand-over the old answer binds no one.
+ */
+describe('the main commissioner sets the league type', () => {
+  const as = (id: string) => h.getServerSession.mockResolvedValue({ user: { id } })
+
+  it('a co-commissioner cannot change what the main commissioner confirmed', async () => {
+    h.row = { ...h.row!, userId: 'main' }
+    as('main')
+    expect((await patch({ type: 'dynasty' })).status).toBe(200)
+    as('co')
+    const refused = await patch({ type: 'redraft' })
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).code).toBe('MAIN_COMMISSIONER_SET')
+    expect(h.row!.leagueType).toBe('dynasty')
+  })
+
+  it('a co-commissioner may set it while the main commissioner has not, and the main commissioner then overrides', async () => {
+    h.row = { ...h.row!, userId: 'main' }
+    as('co')
+    expect((await patch({ type: 'redraft' })).status).toBe(200)
+    as('main')
+    expect((await patch({ type: 'dynasty' })).status).toBe(200)
+    expect(h.row!.leagueType).toBe('dynasty')
+  })
+
+  it('after a hand-over the earlier answer no longer blocks, and the new main commissioner decides', async () => {
+    h.row = { ...h.row!, userId: 'first' }
+    as('first')
+    await patch({ type: 'redraft' })
+    // The league is handed to the main commissioner; `first` stays on as a co-commissioner.
+    h.row = { ...h.row!, userId: 'main' }
+    as('main')
+    expect((await patch({ type: 'dynasty' })).status).toBe(200)
+    as('first')
+    expect((await patch({ type: 'redraft' })).status).toBe(403)
+    expect(h.row!.leagueType).toBe('dynasty')
   })
 })

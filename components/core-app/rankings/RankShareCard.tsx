@@ -97,4 +97,3 @@ export function RankShareCard({ data }: { data: RankCardData }) {
   )
 }
 
-export default RankShareCard

@@ -11,9 +11,9 @@ import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineC
 
 /* ── Trade deadline bar ─────────────────────────────────────────────────────────────────────────── */
 
-export type RedraftDeadlineState = 'none' | 'open' | 'final' | 'passed' | 'counting' | 'scheduled'
+type RedraftDeadlineState = 'none' | 'open' | 'final' | 'passed' | 'counting' | 'scheduled'
 
-export type RedraftDeadlineBar = {
+type RedraftDeadlineBar = {
   state: RedraftDeadlineState
   /** The league's deadline week; null for `none`, or a time-only deadline. */
   deadlineWeek: number | null
@@ -77,7 +77,7 @@ function bar(state: RedraftDeadlineState, deadlineWeek: number | null, currentWe
  * The bar's value line. The bar already carries a "Trade deadline" kicker, so the value does not
  * repeat it — it says WHEN, and how much room is left.
  */
-export function redraftDeadlineLabel(state: RedraftDeadlineState, week: number | null, weeksLeft: number | null): string {
+function redraftDeadlineLabel(state: RedraftDeadlineState, week: number | null, weeksLeft: number | null): string {
   const wk = week != null ? `Week ${week}` : null
   switch (state) {
     case 'none':
@@ -96,7 +96,7 @@ export function redraftDeadlineLabel(state: RedraftDeadlineState, week: number |
 
 /* ── Grades ────────────────────────────────────────────────────────────────────────────────────── */
 
-export type RedraftGradeTone = 'good' | 'warn' | 'bad'
+type RedraftGradeTone = 'good' | 'warn' | 'bad'
 
 /**
  * The tone a letter-grade block takes. A and B read good, C even, D and F bad. Anything else — a

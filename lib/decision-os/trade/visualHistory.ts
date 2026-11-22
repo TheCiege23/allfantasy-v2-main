@@ -1,6 +1,6 @@
 /** Client-safe history buckets. Missing captures stay missing; prices are never interpolated. */
 export type ValueCapture = { day: string; value: number }
-export type ValueBucket = { label: string; day: string; value: number | null }
+type ValueBucket = { label: string; day: string; value: number | null }
 export function valueHistoryBuckets(rows: readonly ValueCapture[], mode: 'weeks' | 'seasons'): ValueBucket[] {
   const valid = rows.filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.day) && Number.isFinite(Date.parse(r.day)) && Number.isFinite(r.value) && r.value >= 0).slice().sort((a,b) => a.day.localeCompare(b.day))
   const buckets = new Map<string, ValueCapture>()

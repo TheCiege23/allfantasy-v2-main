@@ -34,10 +34,12 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { weekBoardMessages } from '@/lib/core-app/messages/weekBoard'
+import { weekGuideMessages } from '@/lib/core-app/messages/weekGuide'
+import { projectionDisagrees } from '@/lib/core-app/weekGuide'
 
 /** Universal weekly priorities, then unitless matchup closeness. No playoff-odds exclusion. */
 
-export type WeekBoardProps = {
+type WeekBoardProps = {
   priorityLeagueIds?: string[]
   board: WeekBoardData
   /**
@@ -59,6 +61,13 @@ export type WeekBoardProps = {
   totalLeagues: number
   /** This week's AF and API lineup projections — the rail's read. Optional; absent draws none. */
   lineups?: WeekLineups | null
+  /**
+   * Drawn under the week guide (components/core-app/week/WeekGuide.tsx, 2026-11-13): the guide already
+   * carries the page title and date, so the board drops its own second header for a plain "Every game
+   * this week" heading, folds the methodology note behind "How projections work", and words its footer
+   * without "sit between these two columns".
+   */
+  embedded?: boolean
 }
 
 /** Label a long shot without asserting mathematical elimination. */
@@ -96,9 +105,10 @@ function pctLabel(pct: number | null): string {
  * line; "% to win" sits under the margin; and "historical scoring estimate" is the value's
  * accessible name, because a bare "+38.2" beside a league reads as a score.
  */
-function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?: WeekLineups | null }) {
+function MatchRow({ row, ahead, lineups, plain = false }: { row: Row; ahead: boolean; lineups?: WeekLineups | null; plain?: boolean }) {
   const { language } = useOptionalLanguage()
   const msg = useMessages(weekBoardMessages)
+  const guide = useMessages(weekGuideMessages)
   const { m } = row
   const abs = Math.abs(row.margin).toFixed(1)
   const win = Math.round(m.projection ? m.projection.winProbability * 100 : 0)
@@ -109,7 +119,19 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
    */
   const live = m.live
   const result = live?.final ? (live.margin > 0 ? 'won' : live.margin < 0 ? 'lost' : 'tied') : null
-  const valueSub = live ? coreUiCopy(result ?? 'so far', language) : msg.winChance(win)
+  /*
+   * 🛑 "SO FAR" ALONE OVERSTATES A LEAD THE PROJECTION SAYS WILL NOT HOLD (2026-11-13). A live game you lead
+   * by 4 with your opponent's best players still to play read as a plain "+4.0 so far" in the leading column.
+   * When the live score and the pre-week projection point opposite ways, the label says both.
+   */
+  const disagrees = projectionDisagrees(m)
+  const valueSub = live
+    ? disagrees === 'ahead-projected-lose'
+      ? guide.soFarProjectedLose
+      : disagrees === 'behind-projected-win'
+        ? guide.soFarProjectedWin
+        : coreUiCopy(result ?? 'so far', language)
+    : msg.winChance(win)
   const valueLabel = live
     ? msg.liveValueLabel({ sign, abs, you: live.you, them: live.them, result, resultLocalized: result ? coreUiCopy(result, language) : null })
     : msg.estimateValueLabel(sign, abs, win)
@@ -120,7 +142,8 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
         <LeagueCrest imageUrl={m.leagueImageUrl} name={m.leagueName} platform={m.platform} size="sm" />
         <span className="af-bd-league">
           <span className="af-bd-name">{m.leagueName}</span>
-          <span className="af-bd-sub">{m.season} · {msg.period} {m.week}</span>
+          {/* Under the week guide the season and week are in the page headline already; said once there. */}
+          {plain ? null : <span className="af-bd-sub">{m.season} · {msg.period} {m.week}</span>}
           <span className="af-bd-sub">
             {/*
               ⚠ NEVER AN INVENTED MANAGER. `WeekOpponent.name` is null when no
@@ -133,7 +156,8 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
             {row.playoffPct != null ? msg.playoffOddsSuffix(pctLabel(row.playoffPct), row.playoffPct > 0 && row.playoffPct < LONG_SHOT_PCT) : ''}
             {m.elimination ? msg.lowestEliminated : ''}
           </span>
-          <WeekLineupLine lineups={lineups} leagueId={m.leagueId} season={m.season} week={m.week} />
+          {/* Embedded: the close-games card above says the lineup move in words; the two-source total is noise here. */}
+          {plain ? null : <WeekLineupLine lineups={lineups} leagueId={m.leagueId} season={m.season} week={m.week} />}
         </span>
         <span
           className="af-bd-val"
@@ -160,12 +184,14 @@ function Column({
   ahead,
   quiet,
   lineups,
+  plain = false,
 }: {
   label: string
   rows: Row[]
   ahead: boolean
   quiet: string
   lineups?: WeekLineups | null
+  plain?: boolean
 }) {
   return (
     <section className="af-bd-sec">
@@ -173,7 +199,7 @@ function Column({
       {rows.length > 0 ? (
         <ul className="af-bd-rows af-bd-rows--compact">
           {rows.map((r) => (
-            <MatchRow key={r.m.leagueId} row={r} ahead={ahead} lineups={lineups} />
+            <MatchRow key={r.m.leagueId} row={r} ahead={ahead} lineups={lineups} plain={plain} />
           ))}
         </ul>
       ) : (
@@ -191,9 +217,11 @@ export function WeekBoard({
   totalLeagues,
   lineups,
   priorityLeagueIds = [],
+  embedded = false,
 }: WeekBoardProps) {
   const { language } = useOptionalLanguage()
   const msg = useMessages(weekBoardMessages)
+  const guide = useMessages(weekGuideMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const pctByLeague = new Map<string, number>()
   if (outlook) {
@@ -272,14 +300,49 @@ export function WeekBoard({
     )
   }
 
+  const methodology = (
+    <>
+      {/*
+        ⚠ `model.basis` IS A WHOLE SENTENCE WHEN THERE IS NOTHING TO FIT, and
+        appending ", fitted on 0 roster-weeks" to it produced "…nothing here is
+        projected., fitted on 0 roster-weeks." Found by rendering it. With no
+        sample the basis stands alone; with one it is a clause.
+      */}
+      {board.model.sampleSize > 0
+        ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
+             a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
+             on 40,396 roster-weeks." on production, 2026-09-28. */
+          `${copy(board.model.basis)} ${msg.fittedOn(board.model.sampleSize.toLocaleString(getAppIntlLocale()))}`
+        : copy(board.model.basis)}{' '}
+      {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
+      {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}
+      {msg.lowOddsNote}
+    </>
+  )
+
   return (
     <div className="af-bd">
-      <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
-      <BoardHead
-        eyebrow={copy('Core · Your week')}
-        title={copy('Your week')}
-        blurb={msg.blurb}
-      />
+      {embedded ? (
+        <div className="af-wg-board-head">
+          <h2>{guide.boardTitle}</h2>
+          <p>
+            {guide.boardSub}{' '}
+            {/* The rivalry footer box, folded to one link beside the heading it belongs to. */}
+            <Link className="af-wg-board-link" href={rivalriesHref}>
+              {guide.rivalryLink} →
+            </Link>
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
+          <BoardHead
+            eyebrow={copy('Core · Your week')}
+            title={copy('Your week')}
+            blurb={msg.blurb}
+          />
+        </>
+      )}
 
       <div
         className="af-bd-split"
@@ -291,12 +354,14 @@ export function WeekBoard({
           ahead
           quiet={msg.leadingQuiet}
           lineups={lineups}
+          plain={embedded}
         />
         <Column
           label={msg.trailingLabel}
           rows={trailing}
           ahead={false}
           lineups={lineups}
+          plain={embedded}
           quiet={msg.trailingQuiet}
         />
       </div>
@@ -334,7 +399,7 @@ export function WeekBoard({
       {unprojected.length > 0 ? (
         <section className="af-bd-sec">
           <SectionHead
-            label={copy('On the schedule · not enough history to call')}
+            label={embedded ? guide.unprojectedLabel : copy('On the schedule · not enough history to call')}
             count={
               unprojected.length > UNPROJECTED_SHOWN
                 ? msg.shownOf(UNPROJECTED_SHOWN, unprojected.length)
@@ -353,7 +418,7 @@ export function WeekBoard({
                   />
                   <span className="af-bd-league">
                     <span className="af-bd-name">{m.leagueName}</span>
-                    <span className="af-bd-sub">{m.season} · {msg.period} {m.week}</span>
+                    {embedded ? null : <span className="af-bd-sub">{m.season} · {msg.period} {m.week}</span>}
                     <span className="af-bd-sub">
                       {/* Same rule as MatchRow: a real name, else the roster's own "Team N". */}
                       {`${copy('vs')} ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
@@ -403,11 +468,16 @@ export function WeekBoard({
                       className="af-bd-val af-bd-val--seed"
                       aria-label={msg.sampleAria(m.yourSampleWeeks, MIN_WEEKS_FOR_PROJECTION)}
                     >
+                      {/*
+                        Embedded: "8/3 weeks on file" asked the reader to decode a threshold. The section label
+                        already says why there is no call; the column just says "too early". The count stays in
+                        the accessible name.
+                      */}
                       <span aria-hidden>
-                        {m.yourSampleWeeks}/{MIN_WEEKS_FOR_PROJECTION}
+                        {embedded ? '—' : `${m.yourSampleWeeks}/${MIN_WEEKS_FOR_PROJECTION}`}
                       </span>
                       <span className="af-bd-val-sub" aria-hidden>
-                        {copy('weeks on file')}
+                        {embedded ? guide.tooEarly : copy('weeks on file')}
                       </span>
                     </span>
                   )}
@@ -431,7 +501,8 @@ export function WeekBoard({
         The value column is points clear of the cut line, which is the same
         question "margin" asks in a head-to-head: how much room do you have.
       */}
-      {board.eliminationWeeks.length > 0 ? (
+      {/* Embedded under the week guide, whose "Survival leagues" card lists every one of these in plain words. */}
+      {board.eliminationWeeks.length > 0 && !embedded ? (
         <section className="af-bd-sec">
           <SectionHead
             label={copy('No opponent · lowest score is out')}
@@ -506,23 +577,14 @@ export function WeekBoard({
         </section>
       ) : null}
 
-      <p className="af-bd-note af-bd-note--plain">
-        {/*
-          ⚠ `model.basis` IS A WHOLE SENTENCE WHEN THERE IS NOTHING TO FIT, and
-          appending ", fitted on 0 roster-weeks" to it produced "…nothing here is
-          projected., fitted on 0 roster-weeks." Found by rendering it. With no
-          sample the basis stands alone; with one it is a clause.
-        */}
-        {board.model.sampleSize > 0
-          ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
-               a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
-               on 40,396 roster-weeks." on production, 2026-09-28. */
-            `${copy(board.model.basis)} ${msg.fittedOn(board.model.sampleSize.toLocaleString(getAppIntlLocale()))}`
-          : copy(board.model.basis)}{' '}
-        {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
-        {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}
-        {msg.lowOddsNote}
-      </p>
+      {embedded ? (
+        <details className="af-bd-note af-bd-note--plain af-wg-method">
+          <summary>{guide.howProjections}</summary>
+          <p>{methodology}</p>
+        </details>
+      ) : (
+        <p className="af-bd-note af-bd-note--plain">{methodology}</p>
+      )}
 
       {/*
         ⚠ EVERYTHING THE COLUMNS DID NOT SHOW IS ACCOUNTED FOR BY REASON. Four
@@ -530,7 +592,11 @@ export function WeekBoard({
         below the cut — and collapsing them into one number is how a board stops
         being trustworthy at sixty leagues.
       */}
-      {unprojected.length > UNPROJECTED_SHOWN || board.withoutSchedule > 0 ? (
+      {/*
+        Embedded: "N carry no schedule" repeats the guide headline's "no game this week" count, so only the
+        remainder of the list above is said here.
+      */}
+      {unprojected.length > UNPROJECTED_SHOWN || (board.withoutSchedule > 0 && !embedded) ? (
         <p className="af-bd-note af-bd-note--plain">
           {/*
             ⚠ THE SENTENCE HAD TO CHANGE WHEN THE SECTION ABOVE STARTED LISTING
@@ -542,13 +608,14 @@ export function WeekBoard({
           {unprojected.length > UNPROJECTED_SHOWN
             ? msg.unprojectedMore(unprojected.length - UNPROJECTED_SHOWN)
             : ''}
-          {board.withoutSchedule > 0
+          {board.withoutSchedule > 0 && !embedded
             ? msg.withoutSchedule(board.withoutSchedule)
             : ''}
         </p>
       ) : null}
 
       <FormatWeekCards weeks={board.formatWeeks ?? []} />
+      {embedded ? null : (
       <div className="af-bd-foot">
         <p className="af-bd-foot-text">
           {copy("All-time head-to-head against this week's opponents.")}
@@ -557,12 +624,13 @@ export function WeekBoard({
           {copy('Rivalry radar')} &rarr;
         </Link>
       </div>
+      )}
 
       <FooterSummary
         hidden={Math.max(0, considered - shown)}
         total={considered}
         href={allHref}
-        quiet={copy('sit between these two columns, or have no game we can project this week.')}
+        quiet={embedded ? guide.boardQuiet : copy('sit between these two columns, or have no game we can project this week.')}
         language={language}
       />
     </div>

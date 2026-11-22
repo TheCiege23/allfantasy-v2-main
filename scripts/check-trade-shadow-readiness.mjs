@@ -30,7 +30,7 @@ import { execFileSync } from "node:child_process";
  * `shouldRunTradeSurfaceShadow` calls `shouldRunShadow(SURFACE_FLAGS[surface], env)` with the
  * surface's own flag and nothing else. `DECISION_OS_TRADE_SHADOW` (bare) is a SIBLING gating
  * `lib/decision-os/trade/shadow.ts` — the canonical shadow on the legacy path — not a master over
- * the six below. Setting it enables no surface.
+ * the five below. Setting it enables no surface.
  */
 const LEGACY_PATH_FLAG = "DECISION_OS_TRADE_SHADOW";
 
@@ -40,7 +40,6 @@ const LEGACY_PATH_FLAG = "DECISION_OS_TRADE_SHADOW";
  */
 const SURFACE_FLAGS = [
   { flag: "DECISION_OS_TRADE_SHADOW_CONSOLE", surfaces: ["console"], note: "Trade Value Console" },
-  { flag: "DECISION_OS_TRADE_SHADOW_DYNASTY", surfaces: ["dynasty"], note: "dynasty analyzer" },
   { flag: "DECISION_OS_TRADE_SHADOW_KEEPER", surfaces: ["keeper"], note: "keeper analyzer" },
   { flag: "DECISION_OS_TRADE_SHADOW_DRAFTPICK", surfaces: ["draftpick"], note: "draft-pick builder" },
   { flag: "DECISION_OS_TRADE_SHADOW_LEGACY", surfaces: ["legacy"], note: "/af-legacy analyzer" },

@@ -17,16 +17,16 @@ vi.mock('@/components/create-league-v2/CreateLeagueVideoTile', () => ({
 import { LeagueBasicsStep, ReviewCreateStep, stepForIssue } from '@/components/create-league-v2/CreateLeagueWizard'
 
 describe('team-size steppers walk the sizes the format allows', () => {
-  it('steps a dynasty league by two and refits its playoff block', () => {
+  it('steps a dynasty league by one and refits its playoff block', () => {
     const onChange = vi.fn()
     const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 12, sport: 'NFL' as const }
     render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
     fireEvent.click(screen.getByTestId('g30-team-count-increase'))
-    expect(onChange.mock.calls[0][0].teamCount).toBe(14)
+    expect(onChange.mock.calls[0][0].teamCount).toBe(13)
     fireEvent.click(screen.getByTestId('g30-team-count-decrease'))
     const patch = onChange.mock.calls[1][0]
-    expect(patch.teamCount).toBe(10)
-    expect(patch.dynasty.playoffTeamCount).toBeLessThanOrEqual(10)
+    expect(patch.teamCount).toBe(11)
+    expect(patch.dynasty.playoffTeamCount).toBeLessThanOrEqual(11)
   })
 
   it('snaps a typed off-step size back onto the allowed list', () => {
@@ -40,7 +40,7 @@ describe('team-size steppers walk the sizes the format allows', () => {
   })
 
   it('disables a stepper at each end of the range', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 32, sport: 'NFL' as const }
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 250, sport: 'NFL' as const }
     const view = render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
     expect(screen.getByTestId('g30-team-count-increase')).toBeDisabled()
     expect(screen.getByTestId('g30-team-count-decrease')).toBeEnabled()

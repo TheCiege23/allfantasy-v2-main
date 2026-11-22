@@ -92,7 +92,8 @@ describe('createLeagueContext', () => {
     expect(reads('league')).toEqual([
       { model: 'league', method: 'findUnique', args: { where: { id: L }, select: LEAGUE_CONTEXT_SELECT } },
     ])
-    expect(reads('leagueTeam')).toEqual([
+    // The claimed-team read first checks for a switched-to team, so the two reads can land in either order.
+    expect([...reads('leagueTeam')].sort((x, y) => x.method.localeCompare(y.method))).toEqual([
       {
         model: 'leagueTeam',
         method: 'findFirst',

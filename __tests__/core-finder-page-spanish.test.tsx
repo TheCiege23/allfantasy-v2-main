@@ -304,11 +304,14 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
     expect(out).toContain('Comparar con Dalton Keene')
     expect(out).toContain('Búsquedas recientes')
     expect(out).toContain('También coinciden')
-    expect(out).toContain('Las estadísticas, las lesiones y las noticias vienen de datos deportivos en vivo: nunca un número inventado.')
+    // 2026-11-14: the rail's "never an invented number" footer is gone, in both languages.
+    expect(out).not.toContain('nunca un número inventado')
 
     // The chip and the header line.
     expect(container.querySelector('.af-pf-name-row .af-pf-ready')?.textContent).toBe('Dudoso')
-    expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(' · en 5 de tus 6 ligas, en Yahoo, Sleeper y ESPN · lo tienen otros en 2')
+    // Said once, as the every-league count over the list (2026-11-13 guide) — the header line steps aside.
+    expect(container.querySelector('.af-pf-rostered')).toBeNull()
+    expect(container.querySelector('.af-pfg-count-text')?.textContent).toBe('En 5 de tus 6 ligas · titular en 1 · no es titular en 4 · en Yahoo, Sleeper y ESPN · en el equipo de otro en 2')
     expect(container.querySelector('.af-sync')?.textContent).toBe('hace 12 min')
 
     // Tiles.
@@ -527,7 +530,7 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expect(out).toContain('Coincidencias · 0')
       // Signed in with no player open, the home leads with "Mis jugadores" instead of the
       // "pick a match" card (2026-10-08, "My players").
-      expect(out).toContain('Mis jugadores')
+      expect(out).toContain('Encuentra cualquier jugador en todas tus ligas')
       expect(out).not.toContain('Elige una coincidencia para ver puestos, lesión e historial de temporadas.')
       unmount()
     }
@@ -541,7 +544,8 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expect(out).toContain(
         count === 1 ? 'No está en ninguna plantilla de la liga que conectaste.' : 'No está en ninguna plantilla de las 4 ligas que conectaste.',
       )
-      expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(count === 1 ? ' · no está en tu única liga' : ' · no está en ninguna de tus 4 ligas')
+      // The every-league count says it now (2026-11-13 guide).
+      expect(container.querySelector('.af-pfg-count-text')?.textContent).toBe(count === 1 ? 'No está en tu equipo en tu única liga' : 'No está en tu equipo en ninguna de tus 4 ligas')
       unmount()
     }
   })
@@ -868,7 +872,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
     const card = container.querySelector('section.af-pf-trend') as HTMLElement
     expectWholeSpanish(ownText(container), 'home, trending adds')
     expect(card.querySelector('h2')?.textContent).toBe('Los más añadidos esta semana')
-    expect(card.querySelector('.af-pf-trend-sub')?.textContent).toBe('de 189 ligas con altas · hasta el 28 sep')
+    expect(card.querySelector('.af-pf-trend-sub')?.textContent).toBe('Los más añadidos en 189 ligas · hasta el 28 sep')
     expect([...card.querySelectorAll('.af-pf-trend-count')].map((n) => n.getAttribute('aria-label'))).toEqual(['añadido en 66 ligas', 'añadido en 41 ligas'])
     // Only the words follow the language: the count, the link and the row that cannot link do not.
     expect(card.querySelector('a')?.getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339')
@@ -893,7 +897,9 @@ describe('Player Finder — the whole page, in Spanish', () => {
     expect(container.querySelector('.af-pf-tv, .af-pf-tw, .af-core-free-until')).toBeNull()
     for (const l of locks) {
       expect(l.textContent).toMatch(/: parte de AF Pro/)
-      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toBe('/upgrade?plan=pro')
+      // Every lock links to AF Pro, names itself (from=lock_<depth>, lib/monetization/upgradeEntrySource.ts) and
+      // carries the page it is on (back=, lib/monetization/lockReturn.ts).
+      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toMatch(/^\/upgrade\?plan=pro&offer=monthly&from=lock_[a-z_]+&back=%2F[^&]*$/)
     }
     const out = ownText(container)
     expectWholeSpanish(out, 'locked')
@@ -902,7 +908,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
     }
   })
 
-  it('English: the same locked page still reads the lock’s English, byte for byte', () => {
+  it('English: the same locked page reads the updated English copy', () => {
     const container = wholePage({ depthAccess: FREE_READER, compareRequested: true, whoStartsHim: { leagues: [], locked: true }, valueTrend: valueTrend(true), freeAgentBids: FA_BIDS_LOCKED })
     const heads = [...container.querySelectorAll('.af-core-lock-head [data-ios-purchase]')].map((n) => n.textContent)
     expect(heads).toEqual(
@@ -916,7 +922,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
       ]),
     )
     expect(container.querySelector('.af-core-lock-body [data-ios-purchase]')?.textContent).toBe('Your leagues, scores and the basics stay free. Upgrade to see the rest.')
-    expect(container.querySelector('a.af-core-lock-cta')?.textContent).toBe('See AF Pro')
+    expect(container.querySelector('a.af-core-lock-cta')?.textContent).toBe('Unlock with AF Pro')
   })
 })
 
@@ -959,7 +965,8 @@ describe('Player Finder — English is unchanged', () => {
     const { container } = renderFinder({ depth: DEPTH })
     expect(container.querySelector('h1')?.textContent).toBe('Player Finder')
     expect(container.querySelector('.af-pf-name-row .af-pf-ready')?.textContent).toBe('Questionable')
-    expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(' · on 5 of your 6 leagues, across Yahoo, Sleeper and ESPN · rostered by others in 2')
+    expect(container.querySelector('.af-pf-rostered')).toBeNull()
+    expect(container.querySelector('.af-pfg-count-text')?.textContent).toBe("In 5 of your 6 leagues · starting in 1 · not starting in 4 · on Yahoo, Sleeper and ESPN · on someone else's team in 2")
     expect(container.querySelector('.af-sync')?.textContent).toBe('12m ago')
     expect([...container.querySelectorAll('.af-pf-table th')].map((th) => th.textContent)).toEqual(['League', 'Slot', 'Status', 'Proj', 'AF', 'Value', ''])
     expect([...container.querySelectorAll('.af-pf-slot')].map((s) => s.textContent)).toEqual(['BENCH', 'IR SLOT', 'BENCH', 'BENCH', 'TE', 'NOT YOURS', 'NOT YOURS'])
@@ -982,11 +989,41 @@ describe('Player Finder — English is unchanged', () => {
       'rostered by another manager',
       'value 6,100',
       "Not checked: Office Pool — we could not verify this player's roster status in this ESPN league.",
-      'Stats, injuries and news come from live sports data — never an invented number.',
     ]) {
       expect(text, s).toContain(s)
     }
+    expect(text).not.toContain('never an invented number')
     expect([...container.querySelectorAll('.af-pf-value[title]')].map((v) => v.getAttribute('title'))).toEqual([FIT.reason, 'dynasty · superflex'])
     expect(container.querySelector('.af-pf-value-fit')?.getAttribute('aria-label')).toBe('adjusted for this league’s scoring')
+  })
+})
+
+/* ── 2026-11-14: the home's headline counts your flagged starters ─────────────────────────────────── */
+describe('Player Finder — the home headline answers', () => {
+  const triageRow = (name: string) => ({
+    player: { sport: 'NFL', externalId: name, sleeperId: name, name, position: 'WR', team: 'NYJ', imageUrl: null },
+    status: { label: 'Out', tone: 'bad' as const },
+    description: null,
+    reportedAt: null,
+    leagues: [{ leagueId: 'L1', leagueName: 'Sample League', platform: 'sleeper', platformLeagueId: null, season: 2026, teamId: null }],
+    kickoff: '2026-11-15T18:00:00.000Z',
+    noGame: false,
+    inactive: null,
+    bye: false,
+  })
+  const triage = (n: number) =>
+    ({ available: true, data: { rows: Array.from({ length: n }, (_, i) => triageRow(`Sample ${i}`)), week: { season: 2026, week: 10 }, leaguesRead: 2, startersRead: 18 } }) as never
+
+  it('says how many of your starters may not play, or that none is flagged', () => {
+    lang.language = 'en'
+    const four = renderFinder({ detail: null, matches: [], query: '', triage: triage(4) })
+    expect(four.getByTestId('pf-home-title').textContent).toBe('4 of your starters may not play this week')
+    four.unmount()
+    const none = renderFinder({ detail: null, matches: [], query: '', triage: triage(0) })
+    expect(none.getByTestId('pf-home-title').textContent).toBe('None of your starters is flagged this week')
+    none.unmount()
+    // No game-day read on the page: the old title, which says what the page does.
+    const unread = renderFinder({ detail: null, matches: [], query: '', triage: null })
+    expect(unread.getByTestId('pf-home-title').textContent).toBe('Find any player across all your leagues')
   })
 })

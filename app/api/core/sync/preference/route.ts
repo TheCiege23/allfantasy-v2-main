@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { prisma } from '@/lib/prisma'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
@@ -9,7 +9,7 @@ import { setSyncPaused } from '@/lib/core-app/syncPreferences'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
   const body = await req.json().catch(() => null)
   if (typeof body?.leagueId !== 'string' || typeof body?.paused !== 'boolean') {

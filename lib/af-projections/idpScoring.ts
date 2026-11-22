@@ -13,6 +13,7 @@
  */
 
 import type { IdpScoringBreakdown, IdpSourceKind } from './types'
+import { playerFumbleRecoveries } from '@/lib/providers/rollingInsightsFumbleRecoveries'
 
 /**
  * Measured population split for combined tackles, used ONLY when a source gives a combined
@@ -28,7 +29,7 @@ import type { IdpScoringBreakdown, IdpSourceKind } from './types'
  * projection that uses it says so.
  */
 export const MEASURED_SOLO_TACKLE_SHARE = 0.5364
-export const MEASURED_TACKLE_SPLIT_PROVENANCE =
+const MEASURED_TACKLE_SPLIT_PROVENANCE =
   'NFL 2025, 5,186 weekly rows with solo+assist present (53.64% solo / 46.36% assist)'
 
 /**
@@ -93,7 +94,7 @@ export type IdpComponent =
  * forced fumbles and silently inflate every linebacker. One component resolves to exactly one
  * rule key.
  */
-const COMPONENT_RULE_KEYS: Record<IdpComponent, readonly string[]> = {
+export const COMPONENT_RULE_KEYS: Record<IdpComponent, readonly string[]> = {
   soloTackle: ['idp_solo_tackle', 'idp_tackle_solo', 'idp_tkl_solo', 'tkl_solo'],
   assistTackle: ['idp_assist_tackle', 'idp_tackle_assist', 'idp_assisted_tackle', 'idp_tkl_ast', 'tkl_ast'],
   sack: ['idp_sack'],
@@ -139,8 +140,9 @@ const RI_SEASON_KEYS: Record<string, IdpComponent> = {
   sacks: 'sack',
   interceptions: 'interception',
   forced_fumbles: 'forcedFumble',
-  fumbles_recoveries: 'fumbleRecovery',
-  defense_fumble_recoveries: 'fumbleRecovery',
+  // Fumble recoveries are NOT key-mapped: `fumbles_recoveries` and `defense_fumble_recoveries` are
+  // two copies of one count (adding them scored every recovery twice), and the second is sometimes
+  // the player's games played. `playerFumbleRecoveries` picks one, below.
   interception_touchdowns: 'defensiveTd',
   fumble_return_touchdowns: 'defensiveTd',
 }
@@ -176,6 +178,8 @@ function firstNumeric(rules: Record<string, number>, keys: readonly string[]): n
 export function extractIdpComponents(
   statMap: Record<string, unknown>,
   source: IdpSourceKind,
+  /** RI season rows: games played, so a games-played echo in `defense_fumble_recoveries` is caught. */
+  gamesPlayed?: number | null,
 ): { components: Partial<Record<IdpComponent, number>>; combinedTackles: number | null } {
   const keyMap = source === 'sleeper_weekly' ? SLEEPER_WEEKLY_KEYS : RI_SEASON_KEYS
   const combinedKey = source === 'sleeper_weekly' ? SLEEPER_COMBINED_TACKLE_KEY : RI_COMBINED_TACKLE_KEY
@@ -185,6 +189,10 @@ export function extractIdpComponents(
     const v = num(statMap[rawKey])
     if (v == null) continue
     components[component] = (components[component] ?? 0) + v
+  }
+  if (source !== 'sleeper_weekly') {
+    const recoveries = playerFumbleRecoveries(statMap, gamesPlayed)
+    if (recoveries != null) components.fumbleRecovery = recoveries
   }
   return { components, combinedTackles: num(statMap[combinedKey]) }
 }

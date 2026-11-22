@@ -18,12 +18,6 @@ import { normalizeSportForSimulation, type SimulationSport } from './types'
 const DEFAULT_ITERATIONS = 2000
 const MIN_ITERATIONS = 1000
 const MAX_ITERATIONS = 5000
-const DEFAULT_SCHEDULE_FACTORS: Required<MatchupScheduleFactorsInput> = {
-  venue: 0,
-  rest: 0,
-  matchup: 0,
-  tempo: 0,
-}
 
 const SPORT_SCHEDULE_WEIGHTS: Record<
   SimulationSport,

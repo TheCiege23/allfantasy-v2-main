@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
               scoringMode: 'combined_total',
               draftFormat: 'combined_total',
               reasonings: [smoke.text],
-              warnings: ['Smoke provider response: verify against live AI before publishing.'],
+              warnings: ['Smoke provider response: verify against live Chimmy before publishing.'],
             },
           }
           await writeAiResultCache({
@@ -155,7 +156,7 @@ export async function POST(req: NextRequest) {
               cantonProjection: 'Developmental projection; verify with live model.',
               startRec: 'bench',
               declarationRisk: 'medium - smoke provider fallback',
-              holdRecommendation: 'Hold until live AI is available.',
+              holdRecommendation: 'Hold until live Chimmy is available.',
               verdict: smoke.text,
             },
           }
@@ -370,7 +371,7 @@ export async function POST(req: NextRequest) {
         const msg = typeof body.message === 'string' ? body.message : ''
         if (!leagueId || !msg.trim()) return NextResponse.json({ error: 'leagueId and message required' }, { status: 400 })
         const role = await getLeagueRole(leagueId, userId)
-        if (role !== 'commissioner' && role !== 'co_commissioner') {
+        if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
           return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
         }
         const cacheInputs = {

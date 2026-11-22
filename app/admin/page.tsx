@@ -314,6 +314,14 @@ function AdminOverviewDeck({
             <span className="text-cyan-100/65">Open</span>
           </a>
           <a
+            href="/admin/music-search"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/40"
+            data-testid="admin-music-search-link"
+          >
+            <span>Music search — YouTube searches against the daily limits</span>
+            <span className="text-cyan-100/65">Open</span>
+          </a>
+          <a
             href="/admin/production-health"
             className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/40"
           >
@@ -335,6 +343,14 @@ function AdminOverviewDeck({
             <span className="text-emerald-100/65">Open</span>
           </a>
           <a href="/admin/adp-import" className="rounded-2xl border border-cyan-300/20 px-4 py-3 text-sm font-bold text-cyan-100">Licensed market ADP import</a>
+          <a
+            href="/admin/demo-league"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/40"
+            data-testid="admin-demo-league-link"
+          >
+            <span>Public demo league — choose the source league</span>
+            <span className="text-cyan-100/65">Open</span>
+          </a>
           {/* Rose, not cyan/emerald: this one writes to a real league someone is playing in. */}
           <a
             href="/admin/league-recovery"
@@ -365,6 +381,13 @@ function AdminOverviewDeck({
             className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/35"
           >
             <span>Social newsroom (copy-and-paste posts from real news)</span>
+            <span className="text-cyan-100/65">Open</span>
+          </a>
+          <a
+            href="/admin/leaguesafe/raw"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/35"
+          >
+            <span>LeagueSafe email capture</span>
             <span className="text-cyan-100/65">Open</span>
           </a>
           <a
@@ -1870,6 +1893,21 @@ export default async function AdminPage(
             <div className="af-cc-admin-chip">Admin</div>
             <DeploymentMarker />
             <div className="af-cc-spacer" />
+            <a className="af-cc-tab" href="/admin/growth" data-testid="admin-growth-tab">
+              Growth &amp; revenue
+            </a>
+            <a className="af-cc-tab" href="/admin/trade-market" data-testid="admin-trade-market-tab">
+              Trade market
+            </a>
+            <a className="af-cc-tab" href="/admin/projection-factors" data-testid="admin-projection-factors-tab">
+              Projection factors
+            </a>
+            <a className="af-cc-tab" href="/admin/apps" data-testid="admin-apps-tab">
+              Apps
+            </a>
+            <a className="af-cc-tab" href="/admin/support" data-testid="admin-support-tab">
+              Support inbox
+            </a>
             <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
               Social newsroom
             </a>

@@ -2,14 +2,14 @@
  * Rolling Insights documentation coverage registry (per sport).
  */
 
-export type RollingInsightsDocStatus =
+type RollingInsightsDocStatus =
   | 'unmapped'
   | 'partial'
   | 'mapped'
   | 'mapped_with_sleeper_rookie_fallback'
   | 'mapped_from_uploaded_doc_partial'
 
-export type RollingInsightsRegistryEntry = {
+type RollingInsightsRegistryEntry = {
   sport: 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAABB' | 'NCAAF' | 'SOCCER'
   rollingInsightsSportCode: string
   docUrl: string

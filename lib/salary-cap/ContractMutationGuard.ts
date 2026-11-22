@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import type { Prisma } from '@prisma/client'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { getSalaryCapConfig } from './SalaryCapLeagueConfig'
@@ -21,7 +22,7 @@ export async function requireOwnedSalaryContract(
   if (await isCommissioner(leagueId, actorUserId, tx)) return { config, contract }
   const [roster, claimedTeams] = await Promise.all([
     tx.roster.findFirst({ where: { id: contract.rosterId, leagueId },
-      select: { id: true, leagueId: true, platformUserId: true, playerData: true } }),
+      select: { id: true, leagueId: true, platformUserId: true, managerUserId: true, playerData: true } }),
     tx.leagueTeam.findMany({ where: { leagueId, claimedByUserId: actorUserId, role: { not: 'viewer' } },
       select: { id: true, leagueId: true, externalId: true, platformUserId: true, claimedByUserId: true, role: true } }),
   ])
@@ -29,7 +30,7 @@ export async function requireOwnedSalaryContract(
   const sourceManagerId = currentRoster?.playerData && typeof currentRoster.playerData === 'object'
     && !Array.isArray(currentRoster.playerData)
     ? (currentRoster.playerData as Record<string, unknown>).source_manager_id : undefined
-  const owned = currentRoster?.platformUserId === actorUserId || claimedTeams.some(team =>
+  const owned = isRosterManagedBy(currentRoster, actorUserId) || claimedTeams.some(team =>
     team.leagueId === leagueId && team.claimedByUserId === actorUserId && team.role !== 'viewer'
     && (team.id === contract.rosterId || team.externalId === contract.rosterId
       || (typeof sourceManagerId === 'string' && sourceManagerId === team.platformUserId)))

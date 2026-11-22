@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-export type WarRoomQueueProps = {
+type WarRoomQueueProps = {
   leagueId: string
   draftSessionId?: string | null
   className?: string

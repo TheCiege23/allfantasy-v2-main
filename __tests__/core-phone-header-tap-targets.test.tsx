@@ -19,7 +19,8 @@ vi.mock('@/components/MiniPlayerImg', () => ({ default: () => null }))
 
 import AfCoreShell from '@/components/core-app/AfCoreShell'
 
-const CSS = readFileSync(resolve(__dirname, '../components/core-app/af-core-shell.css'), 'utf8')
+// LF-normalised: a Windows checkout (core.autocrlf=true) has CRLF, and the headers below match "\n".
+const CSS = readFileSync(resolve(__dirname, '../components/core-app/af-core-shell.css'), 'utf8').replace(/\r\n/g, '\n')
 
 /** The text of the top-level block that starts with `header`, braces balanced. */
 function block(header: string): string {

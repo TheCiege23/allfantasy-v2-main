@@ -1,7 +1,7 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getAICommissionerOverview } from '@/lib/ai-commissioner'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +32,7 @@ export async function GET(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'view')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

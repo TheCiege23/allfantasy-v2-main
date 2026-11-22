@@ -148,12 +148,12 @@ describe('empty seats', () => {
 
     const counts = await readOrphanTeamCounts('lg-1')
 
-    expect(counts).toEqual({ totalTeams: 4, orphanCount: 1, ownedTeamNames: ['Mine', 'Linked', 'Legacy'] })
+    expect(counts).toEqual({ totalTeams: 4, orphanCount: 1, ownedTeamNames: ['Mine', 'Linked', 'Legacy'], eliminatedTeamNames: [] })
   })
 
   it('degrades to zeroes instead of failing the scan', async () => {
     mocks.teamFindMany.mockRejectedValue(new Error('db down'))
-    await expect(readOrphanTeamCounts('lg-1')).resolves.toEqual({ totalTeams: 0, orphanCount: 0, ownedTeamNames: [] })
+    await expect(readOrphanTeamCounts('lg-1')).resolves.toEqual({ totalTeams: 0, orphanCount: 0, ownedTeamNames: [], eliminatedTeamNames: [] })
   })
 })
 

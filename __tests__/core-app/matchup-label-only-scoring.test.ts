@@ -14,6 +14,13 @@ vi.mock('server-only', () => ({}))
 
 const db = vi.hoisted(() => ({ settings: null as unknown }))
 
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => ({
+    season: 2026, week, unit: 'fantasy points',
+    rows: (db.settings as { scoring_settings?: { rec?: number } } | null)?.scoring_settings?.rec
+      ? rosterIds.map(rosterPlayerId => ({ rosterPlayerId, weekly: 5 })) : [],
+  }),
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     roster: {
@@ -23,11 +30,7 @@ vi.mock('@/lib/prisma', () => ({
       ]),
     },
     league: { findUnique: vi.fn(async () => ({ settings: db.settings, platform: 'sleeper', sport: 'NFL' })) },
-    fantasyProjection: {
-      findMany: vi.fn(async ({ where }: { where: { playerId: { in: string[] } } }) =>
-        where.playerId.in.map((playerId) => ({ playerId, stats: { stats: { rec: 5 } } })),
-      ),
-    },
+
   },
 }))
 

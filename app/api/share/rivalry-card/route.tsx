@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -182,7 +183,7 @@ async function escapeCard(req: NextRequest, userId: string) {
   // Your own roster in the league is both the access check and whose escape this is.
   const [league, roster] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false }).then((v) => (v ? { id: v.rosterId } : null)),
   ])
   if (!league || !roster) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   const escape = (await getGuillotineEscapesForUser(leagueId, userId)).find((e) => e.weekOrPeriod === week)

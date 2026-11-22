@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
@@ -9,6 +10,7 @@ import { buildLeagueDecisionContext, leagueContextToIntelligence } from '@/lib/t
 import type { Asset } from '@/lib/trade-engine/types'
 import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
 import { gradeInputsFromEngineAssets, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -61,8 +63,8 @@ const RequestSchema = z.object({
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/goal-proposals", tool: "LegacyTradeGoalProposals" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
+  // CSRF protection only -- `requireAuthOrOrigin` stood here and authenticated nobody.
+  if (!validateRequestOrigin(req)) return forbiddenResponse('Invalid request origin')
 
   const ip = getClientIp(req)
   const rl = consumeRateLimit({
@@ -87,7 +89,26 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/goal-proposals",
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.issues }, { status: 400 })
     }
 
-    const { leagueId, username, goal } = parsed.data
+    /*
+     * `username` picks "your" roster and keys the pre-analysis read in the league context, so
+     * it is the caller's own Sleeper identity -- compared against the body, never taken from it.
+     * allowGuest: no model spend here, and the af-legacy trade surface is reachable after a
+     * guest import.
+     */
+    const gate = await requireLegacySleeperIdentity(req, {
+      allowGuest: true,
+      requestedUsername: parsed.data.username,
+    })
+    if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_trade_proposals`, owner's decision 2026-11-17: lock all four free AF Legacy AI tools). Goal Proposals ran its
+     * model for anyone before; the /af-legacy screen now locks it too. A guest actor holds no plan.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_trade_proposals' })
+    if (!plan.ok) return plan.response
+    const username = gate.identity.sleeperUsername
+    const { leagueId, goal } = parsed.data
 
     const leagueCtx = await buildLeagueDecisionContext({ leagueId, username })
     const { intelligence, parsedRosters } = leagueContextToIntelligence(leagueCtx)

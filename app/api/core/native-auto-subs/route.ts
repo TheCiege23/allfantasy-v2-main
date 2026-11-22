@@ -1,3 +1,4 @@
+import { ACTING_TEAM_FIELD, actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -15,7 +16,10 @@ async function handle(req:Request){
   const session=await getServerSession(authOptions as never) as {user?:{id?:string}}|null,userId=session?.user?.id
   if(!userId)return NextResponse.json({error:'Unauthorized'},{status:401})
   const leagueId=new URL(req.url).searchParams.get('league')??''
-  const roster=await prisma.roster.findFirst({where:{leagueId,platformUserId:userId}})
+  // The team acted for: the one named on the request, else the one switched to. Several teams and none chosen is refused.
+  const acting=await resolveActingRoster(leagueId,userId,requestedRosterIdFrom(req)??new URL(req.url).searchParams.get(ACTING_TEAM_FIELD))
+  if(!acting.ok)return acting.code==='NO_TEAM'?NextResponse.json({error:'Roster owner only'},{status:403}):actingTeamRefusal(acting)
+  const roster=await prisma.roster.findFirst({where:{leagueId,id:acting.rosterId}})
   if(!roster)return NextResponse.json({error:'Roster owner only'},{status:403})
   const league=await prisma.league.findUnique({where:{id:leagueId}})
   if(!league || resolveWriteAuthority(league.platform)!=='NATIVE')return NextResponse.json({error:'Native leagues only'},{status:409})

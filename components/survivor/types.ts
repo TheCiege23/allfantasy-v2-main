@@ -13,7 +13,7 @@ export type SurvivorView =
   | 'merge-jury'
   | 'ai'
 
-export interface SurvivorSummaryConfig {
+interface SurvivorSummaryConfig {
   mode: string
   tribeCount: number
   tribeSize: number
@@ -55,7 +55,7 @@ export type SurvivorScrollRevealStep = {
   isExtraVote: boolean
 }
 
-export interface SurvivorSeasonCalendar {
+interface SurvivorSeasonCalendar {
   firstWeek: number
   lastWeek: number
   sport: string
@@ -139,6 +139,8 @@ export interface SurvivorSummary {
   nbaWeeklyScoringMode?: 'all_games' | 'one_game_per_player'
   tribes: SurvivorSummaryTribe[]
   council: SurvivorSummaryCouncil | null
+  /** The viewer has a ballot in the open council (never who for). Older payloads omit it. */
+  myCouncilVoteSubmitted?: boolean
   challenges: SurvivorSummaryChallenge[]
   jury: { rosterId: string; votedOutWeek: number }[]
   exileLeagueId: string | null

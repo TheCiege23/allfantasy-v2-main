@@ -23,7 +23,7 @@
  * import it.
  */
 
-export interface DailySportSeasonShape {
+interface DailySportSeasonShape {
   /** Every fantasy week, regular season and playoffs. */
   totalWeeks: number
   playoffWeeks: number

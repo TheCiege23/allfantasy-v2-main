@@ -2,7 +2,7 @@
 
 import { Activity, Eye, Share2, Trophy, Users } from 'lucide-react'
 
-export interface CreatorStatsPanelProps {
+interface CreatorStatsPanelProps {
   followerCount?: number
   leagueCount?: number
   profileViews?: number

@@ -7,7 +7,7 @@ import { checkLeagueCommissionerEntitlement } from "@/lib/integrity/leagueEntitl
 import { fullLeagueCollusionScan, scanTradeForCollusion } from "@/lib/integrity/CollusionDetectionEngine"
 import { scanWeekForTanking } from "@/lib/integrity/TankingDetectionEngine"
 
-export type IntegrityJobOutcome = { ok: boolean; skipped?: boolean; error?: string }
+type IntegrityJobOutcome = { ok: boolean; skipped?: boolean; error?: string }
 
 /**
  * One integrity scan, run in-process.

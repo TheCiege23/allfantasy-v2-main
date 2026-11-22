@@ -33,7 +33,7 @@ import { toBaselinePick } from './leagueScale'
  */
 const HORIZON_WEIGHT = [0.7, 0.35, 0.1]
 
-export type PickOutlook = {
+type PickOutlook = {
   /**
    * The 12-team pick this is equivalent to, because every stored price is a
    * 12-team price. Null when the league already IS twelve teams.
@@ -50,7 +50,7 @@ export type PickOutlook = {
   basis: string
 }
 
-export type PickSlotDistribution = {
+type PickSlotDistribution = {
   early: number
   middle: number
   late: number

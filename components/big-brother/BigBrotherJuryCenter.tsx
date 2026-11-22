@@ -7,7 +7,7 @@
 import { useCallback, useState } from 'react'
 import type { BigBrotherSummary } from './types'
 
-export interface BigBrotherJuryCenterProps {
+interface BigBrotherJuryCenterProps {
   leagueId: string
   summary: BigBrotherSummary
 }
@@ -157,7 +157,7 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
       )}
 
       <p className="text-xs text-white/40">
-        Finalist summaries and season narratives are available from the AI Finale Moderator (Chimmy / Big Brother AI).
+        Finalist summaries and season narratives are available from Chimmy Finale Moderator (Chimmy / Big Brother Chimmy).
       </p>
     </div>
   )

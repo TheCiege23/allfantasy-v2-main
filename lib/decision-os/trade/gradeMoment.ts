@@ -33,7 +33,7 @@ export type GradeMomentInput = {
 }
 
 /** The fields `gradeMomentOf` keeps — enough for `gradeMoment` to say the same thing later. */
-export type GradeMomentFields = {
+type GradeMomentFields = {
   frozenAt: string | null
   frozenBasis: 'trade_date' | 'first_graded' | null
   pricedAsOf: string | null
@@ -164,10 +164,3 @@ export function gradeMomentToSpanish(english: string): string | null {
   return null
 }
 
-/** Today's letter for the side that sends `give`, when a frozen original has since moved — else null. */
-export function movedLetter(
-  grade: { letter?: string; current?: { letter: string } | null } | null | undefined,
-): string | null {
-  const now = grade?.current?.letter
-  return now && now !== grade?.letter ? now : null
-}

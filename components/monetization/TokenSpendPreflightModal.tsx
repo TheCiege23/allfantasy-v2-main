@@ -15,6 +15,8 @@ import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Coins, Tag, Zap } from 'lucide-react'
 import type { TokenSpendClientPreview } from '@/lib/tokens/client-confirm'
+import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
+import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
 import {
   trackInsufficientTokenBuyClick,
   trackInsufficientTokenFlowViewed,
@@ -40,6 +42,12 @@ export function TokenSpendPreflightModal({
 }) {
   const trackedKeyRef = useRef<string | null>(null)
   const insufficient = Boolean(preview && !preview.canSpend)
+  const tokenHref = useLockUpgradeHref(
+    preview
+      ? `/tokens?ruleCode=${encodeURIComponent(preview.ruleCode)}${isTokenPurchasableRule(preview.ruleCode) ? '&offer=starter' : ''}`
+      : '/tokens',
+    preview ? `token_${preview.ruleCode}` : null,
+  )
 
   useEffect(() => {
     if (!open || !preview || !insufficient) return
@@ -138,7 +146,8 @@ export function TokenSpendPreflightModal({
           </button>
           {insufficient ? (
             <Link
-              href={`/tokens?ruleCode=${encodeURIComponent(preview.ruleCode)}`}
+              href={tokenHref}
+              data-ios-purchase
               onClick={() =>
                 trackInsufficientTokenBuyClick({
                   surface: `token_preflight_modal:${testIdPrefix}`,

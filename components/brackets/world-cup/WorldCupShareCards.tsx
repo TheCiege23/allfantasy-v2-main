@@ -83,7 +83,7 @@ function buildShareText(props: Props) {
   }
 
   return cleanShareText([
-    `AI recap from ${props.poolName}:`,
+    `Chimmy recap from ${props.poolName}:`,
     props.recapBody.slice(0, 700),
     POWERED_BY,
   ].join("\n"))

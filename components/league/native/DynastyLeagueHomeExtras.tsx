@@ -21,7 +21,7 @@ import {
 } from '@/lib/league/dynastyHomeExtras'
 import './dynasty-league-home.css'
 
-export type DynastyHubRead = {
+type DynastyHubRead = {
   picks: HubPick[]
   titles: ChampionRafters | null
   pipeline: PipelineSummary | null

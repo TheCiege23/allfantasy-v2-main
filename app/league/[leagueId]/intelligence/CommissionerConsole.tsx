@@ -32,7 +32,7 @@ import UniversalMessaging, { type MessagingScope } from '@/components/commish/Un
 import AuditLog, { type AuditEntry } from '@/components/commish/AuditLog'
 import StatTiles, { type StatTile } from '@/components/commish/StatTiles'
 
-export type CommissionerConsoleProps = {
+type CommissionerConsoleProps = {
   leagueId: string
   leagueName: string
   score: HealthScoreCardProps
@@ -40,6 +40,8 @@ export type CommissionerConsoleProps = {
   signals: FlaggedSignal[]
   interventions: Intervention[]
   managers: ManagerHealthRow[]
+  /** A league AllFantasy runs: its "inactive" flag reads the manager's own actions, and its record applies. */
+  nativeLeague?: boolean
   rivalries: RivalryBoardRow[]
   seasonsCovered: number
   audit: AuditEntry[]
@@ -108,7 +110,7 @@ export default function CommissionerConsole(props: CommissionerConsoleProps) {
         </div>
 
         <div style={{ marginTop: 18 }}>
-          <ManagerHealthTable rows={managers} />
+          <ManagerHealthTable rows={managers} flagRecord={Boolean(props.nativeLeague)} />
         </div>
 
         {/* ── 11d: rivalries + messaging + audit ──────────────────────── */}

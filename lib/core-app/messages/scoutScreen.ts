@@ -1,4 +1,6 @@
 import { defineMessages } from '@/lib/i18n/messages'
+import { ordinal } from '@/lib/core-app/outlookCopy'
+import { ordinalEs } from '@/lib/core-app/outlookSpanish'
 import type { Zone } from '@/lib/core-app/standingsModel'
 import type { RoomGridColumn } from '@/lib/core-app/scoutRoomGrid'
 
@@ -97,14 +99,32 @@ export const scoutScreenMessages = defineMessages({
     dynastyPicksLabel: 'Dynasty picks',
 
     // Scout
-    blurb: 'Where every manager in this league stands, and how they have played lately.',
+    blurb: 'Who you’re up against, what to fix before lock, and who to trade with.',
     blurbWeek: (week: number, seasonYear: number) => ` Week ${week} of ${seasonYear}.`,
     everyLeaguePlan: "Every league's game plan",
     standingsThroughWeek: 'Standings through week',
     seasonFinal: ' — final',
     noStandingsYet: 'No standings yet',
+    /** Under the manager cards, which show their first SCOUT_CARDS_PREVIEW (Scout). */
+    showAllManagers: (n: number) => `Show all ${n} managers`,
+    showFewerManagers: 'Show fewer managers',
     edgeLockWhat: 'Every manager’s trade and waiver record',
     eyebrow: 'War Room',
+    /** 2026-11-14: the league moves to the eyebrow, and the h1 says something. */
+    eyebrowLeague: (league: string) => `War Room · ${league}`,
+    /**
+     * The headline (2026-11-14). The h1 was "Scout · ‹league›", which says where you are and nothing
+     * else. Now it says who you play and where you both stand — the two facts the page opens on.
+     */
+    headVs: (opp: string, oppSeed: number | null, oppRecord: string | null, youSeed: number | null, teams: number) =>
+      `This week: ${opp}${oppSeed != null && oppRecord ? `, ${ordinal(oppSeed)} at ${oppRecord}` : ''}.${
+        youSeed != null && teams > 0 ? ` You’re ${ordinal(youSeed)} of ${teams}.` : ''
+      }`,
+    headStanding: (league: string, youSeed: number, teams: number) => `You’re ${ordinal(youSeed)} of ${teams} in ${league}`,
+    /** Everything that is information rather than a move, folded (2026-11-14). */
+    moreTitle: 'More about this league',
+    moreHint: 'the table, the road ahead, the race, FAAB, how this league is won, next season',
+    managersTitle: 'Every manager in this league',
 
     // RoomGrid
     roomGridTitle: 'The room at a glance',
@@ -214,14 +234,25 @@ export const scoutScreenMessages = defineMessages({
     dynastyPicksLabel: 'Selecciones de dinastía',
 
     // Scout
-    blurb: 'Dónde está cada mánager de esta liga y cómo viene jugando.',
+    blurb: 'Contra quién juegas, qué arreglar antes del cierre y con quién intercambiar.',
     blurbWeek: (week, seasonYear) => ` Semana ${week} de ${seasonYear}.`,
     everyLeaguePlan: 'El plan de juego de cada liga',
     standingsThroughWeek: 'Clasificación hasta la semana',
     seasonFinal: ' (final)',
     noStandingsYet: 'Todavía no hay clasificación',
+    showAllManagers: (n) => `Ver los ${n} mánagers`,
+    showFewerManagers: 'Ver menos mánagers',
     edgeLockWhat: 'El historial de intercambios y reclamos de cada mánager',
     eyebrow: 'Sala de estrategia',
+    eyebrowLeague: (league) => `Sala de estrategia · ${league}`,
+    headVs: (opp, oppSeed, oppRecord, youSeed, teams) =>
+      `Esta semana: ${opp}${oppSeed != null && oppRecord ? `, ${ordinalEs(oppSeed)} con ${oppRecord}` : ''}.${
+        youSeed != null && teams > 0 ? ` Vas ${ordinalEs(youSeed)} de ${teams}.` : ''
+      }`,
+    headStanding: (league, youSeed, teams) => `Vas ${ordinalEs(youSeed)} de ${teams} en ${league}`,
+    moreTitle: 'Más sobre esta liga',
+    moreHint: 'la tabla, el camino que queda, la carrera, el FAAB, cómo se gana esta liga, la próxima temporada',
+    managersTitle: 'Todos los mánagers de esta liga',
 
     // RoomGrid
     roomGridTitle: 'La liga de un vistazo',

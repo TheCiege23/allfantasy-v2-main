@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Gift, Share2, Trophy } from "lucide-react"
 
-export interface ReferralCTACardProps {
+interface ReferralCTACardProps {
   title?: string
   description?: string
   ctaLabel?: string

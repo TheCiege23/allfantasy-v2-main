@@ -3,15 +3,6 @@ import { prisma } from '@/lib/prisma'
 import type { SleeperPlayer } from '@/lib/sleeper-client'
 import { getLeagueInfo, getLeagueRosters, getLeagueUsers, getPlayersBySport } from '@/lib/sleeper-client'
 
-function abortAfter(ms: number): AbortSignal {
-  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal && typeof AbortSignal.timeout === 'function') {
-    return AbortSignal.timeout(ms)
-  }
-  const c = new AbortController()
-  setTimeout(() => c.abort(), ms)
-  return c.signal
-}
-
 export async function createImportSession(leagueId: string, commissionerId: string): Promise<DevyImportSession> {
   return prisma.devyImportSession.create({
     data: {

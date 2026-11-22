@@ -14,7 +14,7 @@ import {
   type TradeSurface,
 } from "@/lib/decision-os/trade/surfaceShadow"
 
-const SURFACES: TradeSurface[] = ["console", "dynasty", "keeper", "draftpick"]
+const SURFACES: TradeSurface[] = ["console", "keeper", "draftpick"]
 
 function captureEvents(): { events: DecisionTelemetryEvent[]; stop: () => void } {
   const events: DecisionTelemetryEvent[] = []
@@ -28,7 +28,6 @@ describe("trade surface shadow flags", () => {
   it("each surface binds its own DECISION_OS_TRADE_SHADOW_<SURFACE> env var", () => {
     expect(SURFACES.map(tradeSurfaceFlagEnvVar)).toEqual([
       "DECISION_OS_TRADE_SHADOW_CONSOLE",
-      "DECISION_OS_TRADE_SHADOW_DYNASTY",
       "DECISION_OS_TRADE_SHADOW_KEEPER",
       "DECISION_OS_TRADE_SHADOW_DRAFTPICK",
     ])
@@ -37,7 +36,7 @@ describe("trade surface shadow flags", () => {
   it("is off by default and per-surface independent", () => {
     const env = { DECISION_OS_TRADE_SHADOW_CONSOLE: "true" } as NodeJS.ProcessEnv
     expect(shouldRunTradeSurfaceShadow("console", env)).toBe(true)
-    expect(shouldRunTradeSurfaceShadow("dynasty", env)).toBe(false)
+    expect(shouldRunTradeSurfaceShadow("keeper", env)).toBe(false)
     expect(shouldRunTradeSurfaceShadow("console", {} as NodeJS.ProcessEnv)).toBe(false)
   })
 })
@@ -166,8 +165,8 @@ describe("recordTradeSurfaceShadow", () => {
     })
     expect(() =>
       recordTradeSurfaceShadow(
-        { surface: "dynasty", surfaceVerdict: "Side A" },
-        { DECISION_OS_TRADE_SHADOW_DYNASTY: "true" } as NodeJS.ProcessEnv,
+        { surface: "keeper", surfaceVerdict: "Side A" },
+        { DECISION_OS_TRADE_SHADOW_KEEPER: "true" } as NodeJS.ProcessEnv,
       ),
     ).not.toThrow()
   })

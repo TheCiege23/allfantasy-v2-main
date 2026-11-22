@@ -20,7 +20,7 @@
  * PURE — no DB, no I/O, no clock.
  */
 
-export type AiAuthority =
+type AiAuthority =
   /** AI may rewrite the explanation and nothing else. Verdicts, actions and confidence stay the
    *  deterministic engine's. This is the default and the safe direction to be wrong in. */
   | 'explanation_only'

@@ -13,7 +13,7 @@
  * colour on every render and every device.
  */
 
-export type TeamColors = { bg: string; fg: string }
+type TeamColors = { bg: string; fg: string }
 
 /** Keyed by the abbreviation the badge shows, from the design's palette. */
 const NAMED: Record<string, TeamColors> = {

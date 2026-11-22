@@ -60,7 +60,7 @@ describe('the SEO surface follows the new slug', () => {
   it('canonical metadata for /tools/simulation-lab points at itself, titled Simulation Lab', async () => {
     const { generateMetadata } = await import('@/app/tools/[tool]/page')
     const meta = await generateMetadata({ params: Promise.resolve({ tool: 'simulation-lab' }) })
-    expect(meta.alternates?.canonical).toBe('https://allfantasy.ai/tools/simulation-lab')
+    expect(meta.alternates?.canonical).toBe('https://www.allfantasy.ai/tools/simulation-lab')
     expect(String(meta.title)).toMatch(/^Simulation Lab/)
   })
 

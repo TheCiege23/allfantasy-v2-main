@@ -25,8 +25,10 @@ const CATEGORY_LABEL: Record<DisputeCategory, [string, string]> = {
   stat_correction: ['Stat correction', 'Corrección de estadísticas'],
   lineup: ['Lineup', 'Alineación'],
   trade: ['Trade', 'Intercambio'],
+  collusion: ['Possible collusion', 'Posible colusión'],
   waiver: ['Waiver', 'Waiver'],
   rules: ['League rules', 'Reglas de la liga'],
+  leaving: ['I’m thinking about leaving the league', 'Estoy pensando en dejar la liga'],
   other: ['Other', 'Otro'],
 }
 
@@ -43,7 +45,7 @@ const ERROR_COPY: Record<string, [string, string]> = {
   not_open: ['This dispute is already closed.', 'Esta disputa ya está cerrada.'],
 }
 
-export type DisputeDeskProps = { leagueId: string }
+type DisputeDeskProps = { leagueId: string }
 
 export function DisputeDesk({ leagueId }: DisputeDeskProps) {
   const { language } = useOptionalLanguage()

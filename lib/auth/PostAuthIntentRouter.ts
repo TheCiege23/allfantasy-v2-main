@@ -1,9 +1,4 @@
-import {
-  isSafeInternalPath,
-  loginUrlWithIntent,
-  safeRedirectPath,
-  signupUrlWithIntent,
-} from "@/lib/auth/auth-intent-resolver"
+import { isSafeInternalPath, loginUrlWithIntent, safeRedirectPath } from "@/lib/auth/auth-intent-resolver"
 import {
   isAllowedSignupPostAuthDestination,
   isAuthEntrySurfacePathname,
@@ -12,8 +7,8 @@ import {
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute"
 
 /** Was /dashboard. /core is now the signed-in home for a fresh login or signup with no specific target. */
-export const DEFAULT_POST_AUTH_ROUTE = "/core"
-export const AUTH_INTENT_STORAGE_KEY = "af_auth_intent"
+const DEFAULT_POST_AUTH_ROUTE = "/core"
+const AUTH_INTENT_STORAGE_KEY = "af_auth_intent"
 
 const SPORTS_APP_INTENTS = new Set(["sports-app", "sports", "webapp", "app"])
 const BRACKET_INTENTS = new Set(["bracket", "bracket-challenge", "brackets"])
@@ -125,10 +120,6 @@ export function resolvePostAuthIntentDestination(input: PostAuthIntentInput): st
 
 export function buildLoginHrefWithIntent(redirectPath: string): string {
   return loginUrlWithIntent(redirectPath)
-}
-
-export function buildSignupHrefWithIntent(redirectPath: string): string {
-  return signupUrlWithIntent(redirectPath)
 }
 
 export function rememberAuthIntent(path: string | null | undefined): void {

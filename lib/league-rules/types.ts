@@ -23,7 +23,7 @@ import type { LeagueConcept } from '@/lib/trade-intel/leagueFormatRules'
  * rule they did. The brief is explicit: "Defaults must be marked as defaults;
  * missing imported fields remain unknown."
  */
-export type RuleProvenance =
+type RuleProvenance =
   /** Read from this league's own stored settings. Overrides everything. */
   | 'league_setting'
   /** The concept's documented default. True of the format, not of this league. */
@@ -58,7 +58,7 @@ export type ResolvedRule<T> = {
 }
 
 /** A lifecycle phase a league of this concept moves through. */
-export type ConceptPhase = {
+type ConceptPhase = {
   id: string
   label: string
   /** What is legal, and what the manager should be thinking about, in this phase. */
@@ -73,7 +73,7 @@ export type ConceptPhase = {
  * are checked at execution by `lib/chimmy-actions`. A `true` here is a
  * necessary condition, never a sufficient one.
  */
-export type ConceptAction = {
+type ConceptAction = {
   id: string
   label: string
   /** False when the format forbids it outright (e.g. trades in Survivor Guillotine). */

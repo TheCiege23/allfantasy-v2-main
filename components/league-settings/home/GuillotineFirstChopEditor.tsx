@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { SettingsSubPageFooter } from './LeagueSettingsHome'
 
-export type SaveFirstChopWeek = (week: number) => Promise<{ ok: true; week: number } | { ok: false; error: string }>
+type SaveFirstChopWeek = (week: number) => Promise<{ ok: true; week: number } | { ok: false; error: string }>
 
 /** PATCH /api/leagues/:id/guillotine/summary — the commissioner-only handler (rules server-side). */
 export function patchFirstChopWeek(leagueId: string): SaveFirstChopWeek {

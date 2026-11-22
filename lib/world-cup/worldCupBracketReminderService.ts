@@ -12,7 +12,7 @@ import { sendWorldCupLockReminderEmails } from "./worldCupLockReminderEmail"
 
 const WINDOW_MS = 20 * 60 * 1000
 
-export const WORLD_CUP_LOCK_REMINDER_BUCKETS = [
+const WORLD_CUP_LOCK_REMINDER_BUCKETS = [
   { key: "24h", ms: 24 * 3600 * 1000 },
   { key: "6h", ms: 6 * 3600 * 1000 },
   { key: "1h", ms: 3600 * 1000 },
@@ -20,10 +20,10 @@ export const WORLD_CUP_LOCK_REMINDER_BUCKETS = [
   { key: "locked", ms: 0 },
 ] as const
 
-export type WorldCupLockReminderBucketKey =
+type WorldCupLockReminderBucketKey =
   (typeof WORLD_CUP_LOCK_REMINDER_BUCKETS)[number]["key"]
 
-export function lockReminderBucketToEventType(
+function lockReminderBucketToEventType(
   bucketKey: string
 ): string {
   switch (bucketKey) {

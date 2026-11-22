@@ -42,20 +42,6 @@ describe('token shop catalog', () => {
   })
 })
 
-// ── getSurvivorLeagueState type guards ───────────────────────────────────────
-describe('getSurvivorLeagueState module', () => {
-  it('exports getSurvivorLeagueState as a function', async () => {
-    const { getSurvivorLeagueState } = await import('../lib/survivor/getSurvivorLeagueState')
-    expect(typeof getSurvivorLeagueState).toBe('function')
-  })
-
-  it('exports SurvivorStatePhase values via types (compile-time only)', async () => {
-    // TypeScript types are erased at runtime; just verify the module doesn't throw on import
-    const mod = await import('../lib/survivor/getSurvivorLeagueState')
-    expect(mod).toBeDefined()
-  })
-})
-
 // ── Voting engine exports ─────────────────────────────────────────────────────
 describe('votingEngine exports', () => {
   it('exports submitVote, lockVoting, openTribalCouncil', async () => {

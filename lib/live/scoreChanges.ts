@@ -17,9 +17,9 @@ export type ScoreSnapshot = {
   away: { score: number | null }
 }
 
-export type SideChange = { from: number | null; to: number }
+type SideChange = { from: number | null; to: number }
 
-export type ScoreChange = {
+type ScoreChange = {
   gameId: string
   home: SideChange | null
   away: SideChange | null

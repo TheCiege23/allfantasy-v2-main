@@ -53,7 +53,7 @@ export type TradeAsset = {
   pickRound?: number
 }
 
-export function ordinal(n: number): string {
+function ordinal(n: number): string {
   const teens = n % 100
   if (teens >= 11 && teens <= 13) return `${n}th`
   switch (n % 10) {
@@ -115,13 +115,13 @@ export function pickAssets(v: unknown, price?: PickPricer): TradeAsset[] {
  * `rank` is the grading currency and `value` is the display one — see `pickPricerFrom`
  * for why the rank is a MEAN OF RANKS rather than a rank derived from the mean value.
  */
-export type PickPrice = { rank: number; value: number }
+type PickPrice = { rank: number; value: number }
 
 /** Prices one stored pick. Returns null when the book holds no row for it. */
 export type PickPricer = (season: string, round: number) => PickPrice | null
 
 /** A stored FantasyCalc row, narrowed to what pricing a pick needs. */
-export type PickValueRow = { name: string; value: number; overallRank: number | null }
+type PickValueRow = { name: string; value: number; overallRank: number | null }
 
 /**
  * `"2026 Pick 1.01"` and `"2027 1st (Early)"` → `{ season, round }`.
@@ -248,7 +248,7 @@ export function gradeableSide(
 }
 
 /** One asset the book could not price, for `withheldTradeReason` to name. */
-export type UnpricedAsset = {
+type UnpricedAsset = {
   kind: 'player' | 'pick'
   /** Display name where the caller has one. Absent is fine — the kind still carries the truth. */
   name?: string | null
@@ -279,7 +279,7 @@ export type UnpricedAsset = {
  * does not — either beats a count, and neither can attribute the gap to the wrong asset.
  */
 /** When the trade happened, against the season the prices describe. */
-export type WithheldContext = {
+type WithheldContext = {
   /** The trade's own season, as stored. */
   tradeSeason?: number | null
   /** The season the market snapshot being priced against belongs to. */

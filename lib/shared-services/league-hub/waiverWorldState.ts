@@ -13,7 +13,7 @@
  */
 import { prisma } from '@/lib/prisma'
 
-export type WaiverClaimMode = 'faab' | 'priority' | 'first_come' | 'unknown'
+type WaiverClaimMode = 'faab' | 'priority' | 'first_come' | 'unknown'
 
 export interface LeagueWaiverWorldState {
   leagueId: string

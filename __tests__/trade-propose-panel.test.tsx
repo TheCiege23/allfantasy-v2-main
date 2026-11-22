@@ -207,7 +207,7 @@ describe('⚠ never write a row the counterparty cannot open', () => {
      * The viewer and write paths both allow the roster owner and an accepted
      * co-owner scoped to that roster. Keep those predicates in agreement.
      */
-    expect(ROSTERS).toContain('rosters.find((r) => r.platformUserId === userId || r.id === coOwnerRosterId)')
+    expect(ROSTERS).toContain('rosters.find((r) => isRosterManagedBy(r, userId) || r.id === coOwnerRosterId)')
     expect(ROSTERS).toContain('acceptedCoOwnerRosterId(leagueId, userId)')
     expect(ROSTERS).toContain('viewerRosterId: viewerRosterId?.id ?? null')
   })

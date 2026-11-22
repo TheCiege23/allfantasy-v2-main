@@ -13,7 +13,7 @@
 
 import type { NormalizedRoster, NormalizedImportResult, C2CImportSource } from './types'
 
-export interface MergedPlayerInfo {
+interface MergedPlayerInfo {
   playerId: string
   name: string
   position: string
@@ -31,7 +31,7 @@ export interface MergedC2CRoster {
   collegeSource: { provider: string; teamId: string }
 }
 
-export interface MergeResult {
+interface MergeResult {
   merged: MergedC2CRoster[]
   unmatched: {
     pro: NormalizedRoster[]

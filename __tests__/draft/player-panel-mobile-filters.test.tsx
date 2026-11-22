@@ -27,15 +27,15 @@ function panel() {
 }
 
 describe('PlayerPanel phone filter header', () => {
-  it('keeps secondary filters collapsed on phones and desktop-visible via md:contents / md:block', () => {
+  it('keeps secondary filters collapsed behind Filters; the filter rows stay closed on desktop too (2026-11-19)', () => {
     panel()
     const toggle = screen.getByTestId('draft-mobile-filters-toggle')
-    expect(toggle.className).toMatch(/\bmd:hidden\b/)
+    expect(toggle.className).not.toMatch(/\bmd:hidden\b/)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     const more = screen.getByTestId('draft-player-more-filters')
     const rows = screen.getByTestId('draft-player-more-filter-rows')
     expect(more.className.split(/\s+/)).toEqual(['hidden', 'md:contents'])
-    expect(rows.className.split(/\s+/)).toEqual(['hidden', 'md:block'])
+    expect(rows.className.split(/\s+/)).toEqual(['hidden'])
     // The controls it hides still exist in the DOM (desktop and e2e reach them).
     expect(more.contains(screen.getByTestId('draft-team-filter'))).toBe(true)
     expect(rows.contains(screen.getByTestId('draft-filter-hide-drafted'))).toBe(true)

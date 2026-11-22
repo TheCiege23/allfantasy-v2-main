@@ -13,7 +13,7 @@
  * known decision rather than a discovery.
  */
 
-export type TenantScopedTable = {
+type TenantScopedTable = {
   /** Prisma model name — what `schema.prisma` declares. */
   readonly model: string
   /**

@@ -18,5 +18,5 @@ export default async function RedraftChatHarnessPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  return <RedraftChatHarnessClient sport={sp.sport ?? 'NFL'} withScore={sp.score !== '0'} />
+  return <RedraftChatHarnessClient sport={sp.sport ?? 'NFL'} withScore={sp.score !== '0'} withChimmyShare={sp.share === '1'} />
 }

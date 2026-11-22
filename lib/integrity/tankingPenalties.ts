@@ -21,10 +21,10 @@ export const TANKING_PENALTIES_KEY = 'integrity_tanking_penalties'
  * `lottery_odds`: the team's chance in the next rookie-draft lottery is cut (100% = left out of the draw).
  * `faab`: the team loses a share of its season FAAB budget from what it has left.
  */
-export const TANKING_PENALTY_KINDS = ['forfeit_pick', 'lottery_odds', 'faab'] as const
-export type TankingPenaltyKind = (typeof TANKING_PENALTY_KINDS)[number]
-export const LOTTERY_ODDS_CUTS = [25, 50, 75, 100] as const
-export const FAAB_PENALTY_PERCENTS = [10, 25, 50, 100] as const
+const TANKING_PENALTY_KINDS = ['forfeit_pick', 'lottery_odds', 'faab'] as const
+type TankingPenaltyKind = (typeof TANKING_PENALTY_KINDS)[number]
+const LOTTERY_ODDS_CUTS = [25, 50, 75, 100] as const
+const FAAB_PENALTY_PERCENTS = [10, 25, 50, 100] as const
 
 export type TankingPenaltyPolicy = {
   /** Off: flags are still raised and reviewed, but no warning is sent and nothing is taken. */
@@ -119,7 +119,7 @@ export function tankingStepForStrike(policy: TankingPenaltyPolicy, confirmedStri
   return { kind: 'warning', strike: confirmedStrikes, strikesLeft: policy.pickAtStrike - confirmedStrikes }
 }
 
-export type HeldPick = { season: number; round: number; ownerTeamId: string; originalTeamId: string }
+type HeldPick = { season: number; round: number; ownerTeamId: string; originalTeamId: string }
 
 /**
  * The pick a team loses: its OWN pick in `round`, in the nearest season it still holds one. If it has
@@ -164,7 +164,7 @@ export function faabPenaltyAmount(budget: number | null | undefined, remaining: 
  */
 export const TANKING_LOTTERY_PENALTIES_KEY = 'integrity_tanking_lottery_penalties'
 
-export type LotteryOddsPenalty = { rosterId: string; cutPct: number; at: string; flagId: string }
+type LotteryOddsPenalty = { rosterId: string; cutPct: number; at: string; flagId: string }
 
 export function readLotteryOddsPenalties(settings: unknown): LotteryOddsPenalty[] {
   const raw = settings && typeof settings === 'object' ? (settings as Record<string, unknown>)[TANKING_LOTTERY_PENALTIES_KEY] : null

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
 
 vi.mock('server-only', () => ({}))
 const store = vi.hoisted(() => ({ row: null as unknown, upsertFails: false, upserts: 0 }))
@@ -16,11 +15,9 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: 'en' }) }))
 
 import { checkIn, dayKey, shiftDay, summarizeStreak, type StreakRecord } from '@/lib/core-app/dailyStreak'
 import { loadDailyStreak } from '@/lib/core-app/dailyStreakStore'
-import { DailyStreakCardView, StreakGlanceView } from '@/components/core-app/home/DailyStreakCardView'
 
 const rec = (days: string[], best = 0): StreakRecord => ({ version: 1, days, best })
 
@@ -91,37 +88,5 @@ describe('daily streak — the store', () => {
     store.row = rec(['2026-10-07'], 1)
     store.upsertFails = true
     expect(await loadDailyStreak('u1', NOW, { record: true })).toMatchObject({ current: 1, justExtended: false, checkedInToday: false })
-  })
-})
-
-describe('daily streak — the strip', () => {
-  it('celebrates the extending visit and shows the glance chips', () => {
-    const before = rec(['2026-10-06', '2026-10-07'], 2)
-    const s = summarizeStreak(before, checkIn(before, '2026-10-08'), '2026-10-08')
-    const { container } = render(
-      <DailyStreakCardView streak={s}>
-        <StreakGlanceView
-          items={[
-            { key: 'lineups', tone: 'warn', count: 2, href: '/core/my-team?league=L1' },
-            { key: 'injuries', tone: 'ok', count: 0, href: '/my-players' },
-            { key: 'trades', tone: 'ok', count: 3, href: '/core/trades' },
-          ]}
-        />
-      </DailyStreakCardView>,
-    )
-    expect(screen.getByText('Day 3!')).toBeTruthy()
-    expect(screen.getByText('🏅 3-day milestone!')).toBeTruthy()
-    expect(container.querySelector('.af-streak')?.getAttribute('data-celebrate')).toBe('true')
-    expect(screen.getByText('2 lineups to fix')).toBeTruthy()
-    expect(screen.getByText('No injury flags')).toBeTruthy()
-    expect(screen.getByText('3 new trades')).toBeTruthy()
-  })
-
-  it('says a streak is at risk when today has no check-in yet', () => {
-    const r = rec(['2026-10-06', '2026-10-07'], 2)
-    const { container } = render(<DailyStreakCardView streak={summarizeStreak(r, r, '2026-10-08')} />)
-    expect(screen.getByText('2-day streak')).toBeTruthy()
-    expect(screen.getByText('Check in today to keep it alive')).toBeTruthy()
-    expect(container.querySelector('.af-streak')?.getAttribute('data-at-risk')).toBe('true')
   })
 })

@@ -1,52 +1,22 @@
 import type { CommissionerPlatformResponse } from '../../contracts'
+import type { ManagerRecord } from '@/lib/competitive-edge/managerRecord'
 
 /**
- * Manager Intelligence owns behavioral pattern analysis only — never
- * fantasy strategy, player evaluation, or message content. Per the
- * Manager Intelligence blueprint's Privacy & Trust section: no single
- * overall "manager score" exists here — reliability is one specific,
- * labeled trait among several, never a collapsed grade.
+ * The commissioner's Managers screen: every manager's RECORD, as facts (2026-11-16, re-score item 11 —
+ * Manager Psychology returns as facts only, paid).
+ *
+ * 🛑 NOT A PROFILE. This namespace used to carry a "Manager DNA" profile — an archetype, a reliability
+ * level, an engagement trend — from the classifier Milestone 32 retired. It now carries the same
+ * Competitive Edge record Chimmy and the manager card read (lib/competitive-edge/managerRecord.ts):
+ * counts of trades by position, waiver claims and FAAB, past drafts. No label, no score, no prediction.
  */
-export interface ManagerDnaProfile {
+export interface ManagerDirectoryEntry {
+  /** `LeagueTeam.externalId`. */
   id: string
   managerName: string
-  /*
-   * 🛑 NO `archetype`. It carried a characterisation label for a named manager ("Active Trader",
-   * "Waiver Hawk", "Quiet Participant"…) and Milestone 32 shows those to NOBODY — commissioners
-   * included. Everything below is a fact or a continuity signal about the league, not a verdict
-   * on the person.
-   */
-  /**
-   * OPTIONAL because it has no source in the live backend. Tenure is a roster-history fact, not a
-   * Decision OS concept, and there is no season-continuity query to reuse. Demo and stub supply it;
-   * the live client omits it rather than inventing a number, and the view renders it only when
-   * present.
-   */
-  tenureSeasons?: number
-  /**
-   * OPTIONAL because a manager can genuinely have no trend: fewer than two behavioral snapshots
-   * means there is nothing to compare.
-   *
-   * ⚠ Absent means UNKNOWN, never 'steady'. A direction and a reliability LEVEL are orthogonal —
-   * a manager can be reliably absent — so this must never be back-filled from
-   * `engagementReliability`, and a missing trend must never be rendered as a flat one. That
-   * substitution is the exact misrepresentation this module refused to make when it had no DNA
-   * source at all.
-   */
-  engagementTrend?: 'rising' | 'steady' | 'declining'
-  /**
-   * OPTIONAL. The live backend classifies reliability as an ORDINAL LEVEL, not a score; see
-   * `engagementReliability`. Demo and stub keep supplying a number, so the view still renders one
-   * in preview mode, but the live client does not manufacture a score to fill this field.
-   */
-  reliabilityScore?: number
-  /** The live backend's real reliability classification. Preferred over `reliabilityScore` when present. */
-  engagementReliability?: 'reliable' | 'inconsistent' | 'unreliable'
-  /** League-continuity risk framing only — never a characterological judgment. */
-  riskFlag?: string
-  recognition?: string
+  record: ManagerRecord
 }
 
 export interface ManagerIntelligenceClient {
-  getManagerDirectory(): Promise<CommissionerPlatformResponse<ManagerDnaProfile[]>>
+  getManagerDirectory(): Promise<CommissionerPlatformResponse<ManagerDirectoryEntry[]>>
 }

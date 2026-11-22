@@ -41,7 +41,7 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
-export type AwardCardData = {
+type AwardCardData = {
   handle: string
   award: CareerAward
 }
@@ -114,7 +114,7 @@ export function AwardShareCard({ data }: { data: AwardCardData }) {
   )
 }
 
-export type AwardCabinetData = {
+type AwardCabinetData = {
   handle: string
   awards: CareerAward[]
   record: string | null

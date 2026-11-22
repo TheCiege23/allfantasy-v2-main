@@ -48,7 +48,7 @@ const FOCUS_AREAS: { key: string; label: string; categories: RecommendationCateg
 
 // ─── Flagship: Platform Focus ──────────────────────────────────────────────────
 
-export type PlatformFocusArea = {
+type PlatformFocusArea = {
   key: string
   label: string
   openCount: number
@@ -58,7 +58,7 @@ export type PlatformFocusArea = {
   detail: string
 }
 
-export type PlatformFocusViewModel = {
+type PlatformFocusViewModel = {
   available: boolean
   areas: PlatformFocusArea[]
   totalOpenDecisions: number

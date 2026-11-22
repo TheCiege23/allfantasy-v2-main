@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const leagueId = body.leagueId?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const s = await createImportSession(leagueId, userId)
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   if (!sessionId && leagueIdParam) {
     // Past import sessions for a league — the commissioner's history list. Commissioner-only,
     // because sources name the external league each session pulled from.
-    const gate = await assertLeagueCommissioner(leagueIdParam, userId)
+    const gate = await assertLeagueCommissioner(leagueIdParam, userId, 'view')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
     const sessions = await prisma.devyImportSession.findMany({
       where: { leagueId: leagueIdParam },

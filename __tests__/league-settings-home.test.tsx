@@ -98,7 +98,10 @@ describe('LeagueSettingsHome — list', () => {
       'lsh-row-teams',
       'lsh-row-format',
       'lsh-row-waivers',
+      // An NBA league can be a copy league since 2026-11-19 (lib/league/copyLeagueTeamTables.ts).
+      'lsh-row-af-options',
     ])
+    expect(rowValue('af-options')).toBe('Copy league')
     expect(screen.getByTestId('lsh-section-trades').querySelector('[data-testid="lsh-row-waivers"]')).toBeNull()
     expect(screen.getByTestId('lsh-section-commissioner').querySelector('[data-testid="lsh-row-dues"]')).toBeTruthy()
   })
