@@ -752,6 +752,27 @@ export async function syncCompletedDraftToRedraftSeason(
     })
   })
 
+  /*
+   * A late start: load the weeks played before the draft, scored on the drafted rosters, so managers
+   * can look back at them (lib/redraft/preLeagueWeeks.ts). Not awaited — it pulls one stat payload per
+   * missed week, and draft completion must not wait on that or fail with it. Idempotent, so a re-sync
+   * fills any week it missed. `scheduleStartWeek > 1` only happens for the formats that start late.
+   */
+  if (scheduleStartWeek > 1) {
+    void import('@/lib/redraft/preLeagueWeeks')
+      .then(({ backfillPreLeagueWeeks }) => backfillPreLeagueWeeks({ seasonId: season.id, firstLeagueWeek: scheduleStartWeek }))
+      .then((r) => {
+        if (r.failures.length > 0) console.warn('[syncCompletedDraftToRedraftSeason] pre-league weeks partly loaded', r)
+      })
+      .catch((err) => {
+        console.warn('[syncCompletedDraftToRedraftSeason] pre-league weeks not loaded', {
+          leagueId,
+          seasonId: season.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+  }
+
   // G15.2 / G12: DRAFT_COMPLETED is now emitted generically from completeDraftSession
   // (all league types). SEASON_ACTIVATED remains here — it carries the season-specific
   // payload and is Redraft-concept-specific.
