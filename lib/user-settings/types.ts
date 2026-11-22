@@ -115,6 +115,8 @@ export interface UserProfileForSettings {
   discordConnectedAt: Date | null
   spotifyDisplayName: string | null
   spotifyConnectedAt: Date | null
+  /** True when this account may start a Spotify connection (tester allowlist / open). */
+  spotifyConnectAllowed?: boolean
   bio: string | null
   preferredSports: PreferredSportCode[] | null
   /** Notification preferences (NotificationPreferences shape from lib/notification-settings). */

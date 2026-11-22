@@ -1,3 +1,4 @@
+import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -6,7 +7,9 @@ import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { lookupNcaafProjections } from './ncaafProjections'
+import { isKnownNonNflSport } from './rosterIdSpace'
 import { isIdpEligiblePosition } from '@/lib/af-projections/idpScoring'
+import { loadAfNflWeek } from '@/lib/af-projections/nflLeagueWeek'
 import type { StoredProjectionFactors } from '@/lib/af-projections/rescoreForLeague'
 
 /**
@@ -52,6 +55,11 @@ export type PlayerProjection = {
   seasonLong?: true
   /** Baseline points per game, without a game-specific opponent or weather adjustment. */
   perGame?: true
+  /**
+   * Who wrote the row: `fantasy_projections.source` (`sleeper`, or a provider-chain name). The
+   * screens label the column from the sources actually present — see projectionSourceLabel.ts.
+   */
+  source?: string | null
 }
 
 type ProjectionStats = {
@@ -65,6 +73,7 @@ function toProjection(row: {
   playerId: string
   projectedPoints: number
   stats: unknown
+  source?: string | null
 }): PlayerProjection {
   const s = (row.stats ?? {}) as ProjectionStats
   const inner = s.stats
@@ -78,6 +87,7 @@ function toProjection(row: {
       inner && typeof inner === 'object' && !Array.isArray(inner)
         ? (inner as Record<string, unknown>)
         : null,
+    ...(row.source !== undefined ? { source: row.source } : {}),
   }
 }
 
@@ -91,27 +101,17 @@ function toProjection(row: {
  * is that it asked for the wrong week.
  */
 export async function latestProjectionWeek(): Promise<{ season: string; week: number } | null> {
-  /*
-   * ⚠ NO SPORT PARAMETER, AND THAT IS THE CORRECTED DESIGN. A first cut gave this a
-   * `sport` and returned a college week for NCAAF. There is no college week to
-   * return: college baseline `AFProjectionSnapshot` rows have `week = null`, because
-   * the writer gates week-scoped rows on Sleeper's season state, which is the NFL's.
-   * A sport-aware version here could only have invented a number or returned null and
-   * switched college projections off entirely. `lookupProjections` resolves the
-   * college season itself and ignores the week — see lib/core-app/ncaafProjections.ts.
-   */
-  /*
-   * 🛑 THE WEEK THE FEED IS BEING REFRESHED FOR, NOT THE HIGHEST WEEK ON FILE. Those differ the
-   * moment a week is written early, and it was — every week of 2026 until the importer was fixed:
-   * its date guess ran a week ahead (see `approximateCurrentWeek` in cron/import-projections), so
-   * "highest week" answered NEXT week from each Tuesday through Monday night's game, and every
-   * lineup, matchup and waiver number shown as "this week" was next week's. The importer now pulls
-   * Sleeper's own current week each day, so the most recently fetched week IS the current one —
-   * and the early rows already on file stop deciding anything the next time it runs.
-   *
-   * ⚠ A HAND-RUN `?week=N` import becomes "the week" until the next scheduled run. That is the
-   * price of reading this from the data rather than a clock, and the reason not to prefill.
-   */
+  const baseline = await prisma.aFProjectionSnapshot?.findFirst({
+    where: { sport: 'NFL', week: null, eventId: null }, orderBy: { computedAt: 'desc' }, select: { season: true },
+  }).catch(() => null)
+  if (baseline?.season) {
+    const period = await resolveSportWeek('NFL', baseline.season).catch(() => null)
+    if (period?.ok && period.seasonType === 'regular') {
+      const week = period.state === 'played' ? period.nextSportWeek : period.sportWeek
+      if (week != null) return { season: String(baseline.season), week }
+    }
+  }
+  // Older installations with only vendor projections still expose their refreshed week.
   const row = await prisma.fantasyProjection.findFirst({
     // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
     // provider feed — they must not decide, or serve as, "the week the feed holds".
@@ -140,6 +140,25 @@ export interface IdpEnrichment {
   injuryBySleeperId?: ReadonlyMap<string, string | null>
 }
 
+/**
+ * The `fantasy_projections.sport` filter a lookup for `sport` must carry.
+ *
+ * 🛑 A NON-NFL LEAGUE IS NEVER PRICED FROM NFL ROWS (2026-11-06). Both lookups below match on
+ * `playerId` alone, and a Sleeper league of another sport hands them Sleeper ids from THAT sport's
+ * namespace — "Sleeper's NBA ids are independent of its NFL ids" (migration
+ * 20261103050000_nba_sleeper_identity_bridge; `PlayerIdentityMap.sleeperNbaId`). Both are short
+ * numeric strings, so an NBA id equal to an NFL id matched the NFL row and summed an NFL stranger
+ * into an NBA lineup — a hit, which no downstream guard examines. The rows carry `sport` (every writer
+ * sets it: the importer as 'NFL', the AF mirror as the run's sport), so a known non-NFL sport reads
+ * only its own rows — today none, which renders "no projection", the true statement.
+ *
+ * ⚠ NFL AND AN UNKNOWN SPORT ADD NO FILTER, so every NFL caller's query is byte-identical to before.
+ * Same rule as `isKnownNonNflSport` in rosterIdSpace.ts: an unthreaded caller keeps its old answer.
+ */
+export function projectionSportScope(sport: string | null | undefined): { sport?: string } {
+  return isKnownNonNflSport(sport) ? { sport: String(sport).trim().toUpperCase() } : {}
+}
+
 /** Projections for a set of players, keyed by player id. */
 export async function lookupProjections(
   playerIds: readonly string[],
@@ -166,13 +185,20 @@ export async function lookupProjections(
   const when = at ?? (await latestProjectionWeek())
   if (!when) return new Map()
 
+  if (idp?.scoringSettings && String(sport ?? '').trim().toUpperCase() === 'NFL') {
+    const pool = await loadAfNflWeek(when)
+    return new Map(ids.flatMap((id) => pool.has(id) ? [[id, pool.get(id)!] as const] : []))
+  }
+
   const rows = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' } },
-    select: { playerId: true, projectedPoints: true, stats: true },
+    where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
+    select: { playerId: true, projectedPoints: true, stats: true, source: true },
   })
   const out = new Map(rows.map((r) => [r.playerId, toProjection(r)]))
 
-  if (idp && hasIdpScoring(idp.scoringSettings)) {
+  // IDP enrichment loads NFL defensive lines keyed on NFL Sleeper ids — the same collision, so a
+  // known non-NFL sport never reaches it.
+  if (idp && hasIdpScoring(idp.scoringSettings) && !isKnownNonNflSport(sport)) {
     await enrichWithIdpProjections(out, ids, when, idp)
   }
   return out
@@ -298,6 +324,8 @@ export type AfEngineProjection = {
 export async function lookupAfEngineProjections(
   playerIds: readonly string[],
   at?: { season: string; week: number } | null,
+  /** The league's sport. A known non-NFL sport reads only its own rows — see `projectionSportScope`. */
+  sport?: string | null,
 ): Promise<Map<string, AfEngineProjection>> {
   const ids = [...new Set(playerIds.filter((id) => typeof id === 'string' && id.length > 0 && !id.startsWith('name:')))]
   if (ids.length === 0) return new Map()
@@ -305,7 +333,7 @@ export async function lookupAfEngineProjections(
   if (!when) return new Map()
 
   const rows = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: ids }, season: when.season, week: when.week, source: 'allfantasy' },
+    where: { playerId: { in: ids }, season: when.season, week: when.week, source: 'allfantasy', ...projectionSportScope(sport) },
     select: { playerId: true, projectedPoints: true, stats: true },
   })
   const out = new Map<string, AfEngineProjection>()

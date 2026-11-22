@@ -4,10 +4,10 @@
  * architecture. SHADOW MODE ONLY — nothing here is consumed by any live route.
  */
 
-import type { RecommendationInput, RecommendationPlayer, RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
+import type { RecommendationInput } from '@/lib/draft-helper/RecommendationEngine'
 import type { ManagerBehaviorProfile, PlayerExposure } from '@/lib/shared-services/knowledge-graph/types'
 
-export type { RecommendationInput, RecommendationPlayer, RecommendationResult }
+export type { RecommendationInput }
 
 /**
  * The one real, independently-computed comparison-only draft engine found
@@ -17,7 +17,7 @@ export type { RecommendationInput, RecommendationPlayer, RecommendationResult }
  * already-defined 'balanced_builder' archetype (lib/ai/opponents/botProfiles.ts)
  * as a neutral baseline — never a fabricated or invented personality.
  */
-export type LegacyDraftGraderId = 'ai_opponent_draft'
+type LegacyDraftGraderId = 'ai_opponent_draft'
 
 export interface LegacyDraftGraderResult {
   graderId: LegacyDraftGraderId

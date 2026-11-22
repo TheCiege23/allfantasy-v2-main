@@ -5,6 +5,7 @@ import { loadNativeWeekResults } from './ZombieInfectionEngine'
 import { beta2025ContextFromSnapshot, computeBeta2025Winnings } from './beta2025Winnings'
 import { prisma } from '@/lib/prisma'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { canViewerSeeWhisperer } from './whispererVisibility'
 
 export type ZombieSettlementSnapshotV1 = {
   version: 1
@@ -50,14 +51,12 @@ export type ZombieSettlementSnapshotV1 = {
   }
 }
 
-/** Capture the game state immediately before any weekly side effect. Never overwrite on retry. */
-export async function captureZombieSettlementSnapshot(
+async function readZombieOpeningState(
   leagueId: string,
   zombieLeagueId: string,
   sport: string,
   week: number,
-  season: number,
-  db: Prisma.TransactionClient = prisma,
+  db: Prisma.TransactionClient,
 ): Promise<ZombieSettlementSnapshotV1> {
   const priorWinnings = await db.zombieWeeklyWinnings.findMany({
     where: { leagueId, week: { lt: week } }, select: { rosterId: true, amount: true, source: true },
@@ -116,7 +115,7 @@ export async function captureZombieSettlementSnapshot(
   const openingByRoster = Object.fromEntries(teams.map(team => [team.rosterId, 0]))
   for (const row of priorWinnings) openingByRoster[row.rosterId] = Math.round(((openingByRoster[row.rosterId] ?? 0) + row.amount) * 100) / 100
   if (Object.values(openingByRoster).some(n => !Number.isFinite(n) || n < 0)) throw new Error('ZOMBIE_WINNINGS_INVALID_BALANCE')
-  const snapshot: ZombieSettlementSnapshotV1 = {
+  return {
     version: 1,
     winnings: { policy: 'beta_2025', openingByRoster },
     capturedAt: new Date().toISOString(),
@@ -134,6 +133,18 @@ export async function captureZombieSettlementSnapshot(
       weaponAmbushThreshold: rules.weaponAmbushThreshold,
     },
   }
+}
+
+/** Capture the game state immediately before any weekly side effect. Never overwrite on retry. */
+export async function captureZombieSettlementSnapshot(
+  leagueId: string,
+  zombieLeagueId: string,
+  sport: string,
+  week: number,
+  season: number,
+  db: Prisma.TransactionClient = prisma,
+): Promise<ZombieSettlementSnapshotV1> {
+  const snapshot = await readZombieOpeningState(leagueId, zombieLeagueId, sport, week, db)
   const results = await loadNativeWeekResults(leagueId, week, season, db)
   // Validate roles, balances, pairings and thresholds before any infection or item side effect.
   if (results) computeBeta2025Winnings(results, beta2025ContextFromSnapshot(snapshot)!, snapshot.rules)
@@ -149,6 +160,35 @@ export async function captureZombieSettlementSnapshot(
     if (!snapshot.itemMatchups.length) throw new Error('ZOMBIE_ITEMS_MISSING_SCORE_RECEIPT')
   }
   return snapshot
+}
+
+/** Server-side opening state for a public forecast. Every role affecting the result must be public. */
+export async function capturePublicZombieForecastSnapshot(input: {
+  leagueId: string
+  zombieLeagueId: string
+  openingWeek: number
+  matches: ItemWeekMatchup[]
+}): Promise<ZombieSettlementSnapshotV1 | null> {
+  return prisma.$transaction(async db => {
+    const league = await db.zombieLeague.findUnique({
+      where: { id: input.zombieLeagueId },
+      select: { leagueId: true, sport: true, currentWeek: true, experienceMode: true, whispererIsPublic: true },
+    })
+    if (!league || league.leagueId !== input.leagueId || league.currentWeek !== input.openingWeek ||
+        league.sport.toUpperCase() !== 'NFL' || !league.whispererIsPublic) return null
+    const [primary, secondary] = await Promise.all([
+      db.whispererRecord.findUnique({ where: { zombieLeagueId: input.zombieLeagueId }, select: { isPubliclyRevealed: true } }),
+      db.zombieCoWhisperer.findMany({ where: { zombieLeagueId: input.zombieLeagueId }, select: { isPubliclyRevealed: true } }),
+    ])
+    if (!primary || [primary, ...secondary].some(record => !canViewerSeeWhisperer({
+      whispererIsPublic: league.whispererIsPublic,
+      isPubliclyRevealed: record.isPubliclyRevealed,
+      viewerIsCommissioner: false,
+      viewerIsWhisperer: false,
+    }))) return null
+    const snapshot = await readZombieOpeningState(input.leagueId, input.zombieLeagueId, league.sport, league.currentWeek, db)
+    return { ...snapshot, itemsPolicy: 'beta_2025', itemWeaponsEnabled: league.experienceMode !== 'simple', itemMatchups: input.matches }
+  }, { isolationLevel: 'RepeatableRead' })
 }
 
 export function parseZombieSettlementSnapshot(value: unknown): ZombieSettlementSnapshotV1 | null {

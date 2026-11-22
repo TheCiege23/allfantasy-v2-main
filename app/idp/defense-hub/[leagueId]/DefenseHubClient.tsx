@@ -24,10 +24,15 @@ import '@/components/core-app/af-core.css'
  * no style of their own.
  */
 import '@/components/core-app/af-core-redraft-myteam.css'
+/* The 2026-11 redesign (board: DefenseHub). Its own `af-dfh-*` prefix, because `.af-dh` is also Draft HQ's. */
+import '@/components/core-app/af-defense-hub.css'
 
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
+import { useMessages } from '@/components/i18n/useMessages'
+import { defenseHubMessages } from '@/lib/core-app/messages/defenseHub'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Defense Hub — rostered defenders, what they are projected for under THIS league's scoring,
@@ -41,6 +46,11 @@ import { ValuesPageLink } from '@/components/values/ValuesPageLink'
  * The rule that replaced it: if a number cannot be traced to a stat line, it does not render.
  * An absence shows as an em dash with the reason beside it — never a zero, never a placeholder,
  * and never a row quietly dropped, because a missing row reads as "nobody thought to look".
+ *
+ * 2026-11-14, said once: the headline is the answer (who leads your defense), one line says what the
+ * projections are built from, snap share and "what they actually do" are one table, and every method
+ * note — the rule above included — sits once in "How these numbers work" at the bottom instead of on
+ * every card. The rule itself is unchanged.
  */
 
 const FALLBACK_REASON: Record<DefenseHubState, { title: string; body: string }> = {
@@ -113,14 +123,25 @@ function Blocked({ state, leagueId }: { state: DefenseHubState; leagueId: string
 }
 
 const Label = ({ children }: { children: React.ReactNode }) => (
-  <div className="af-dh-label mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
+  <h2 className="af-dh-label af-dfh-label mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
     {children}
-  </div>
+  </h2>
 )
 
 const Dash = () => <span className="text-[var(--faint)]">—</span>
 
 const pct = (n: number) => `${Math.round(n * 100)}%`
+
+/**
+ * The headline: who leads your defense this week (2026-11-14). It used to read "Defense Hub" over a
+ * sentence about the page's honesty rule, three counts, and a banner repeating the counts.
+ * The defenders arrive sorted by projection, so the first one with a projection leads.
+ */
+export function defenseHeadline(data: DefenseHubPayload, m: (typeof defenseHubMessages)['en']): string {
+  const top = data.defenders.find((d) => !d.reason && d.projection != null)
+  if (!top || top.projection == null) return m.title
+  return m.headLeader(top.name, top.projection.toFixed(1), data.defenders.length, data.projectedFor?.week ?? null)
+}
 
 export function DefenseHubClient({
   leagueId,
@@ -134,6 +155,7 @@ export function DefenseHubClient({
    */
   embedded?: boolean
 }) {
+  const m = useMessages(defenseHubMessages)
   const [data, setData] = useState<DefenseHubPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -152,6 +174,14 @@ export function DefenseHubClient({
       live = false
     }
   }, [leagueId])
+
+  const ok = data && data.state === 'ok' ? data : null
+  /*
+   * Stated as the evidence, not as a target week. The projector resolves its week from the newest
+   * game on file rather than from a clock, so the target is one PAST the last real week; what the
+   * reader needs is which games the number was built from.
+   */
+  const basis = ok?.projectedFor ? m.basisLine(ok.projectedFor.season, ok.projectedFor.week - 1) : null
 
   return (
     /*
@@ -180,55 +210,55 @@ export function DefenseHubClient({
       }
     >
       <div className="mx-auto max-w-[1200px]">
-        <header className="mb-6">
-          {!embedded ? (
-            <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">
-              <Link href={`/league/${leagueId}`} className="hover:text-[var(--accent)]">
-                ← League
-              </Link>
-            </div>
-          ) : null}
-          <h1 className="af-dh-title mt-2 text-[24px] font-black tracking-[-0.03em]">Defense Hub</h1>
-          <p className="mt-1.5 max-w-[520px] text-[13px] leading-relaxed text-[var(--muted)]">
-            If a number can’t be traced to a real stat line, it doesn’t render — this page shows
-            an absence, never a guess.
-          </p>
+        <header className="af-dfh-head mb-6">
+          <div className="af-dfh-head-text">
+            {!embedded ? (
+              <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                <Link href={`/league/${leagueId}`} className="hover:text-[var(--accent)]">
+                  {m.backToLeague}
+                </Link>
+              </div>
+            ) : null}
+            <p className="af-dfh-eyebrow">{ok ? m.title : m.eyebrow}</p>
+            <h1 className="af-dh-title af-dfh-title mt-2 text-[24px] font-black tracking-[-0.03em]" data-testid="defense-hub-headline">
+              {ok ? defenseHeadline(ok, m) : m.title}
+            </h1>
+            {basis ? (
+              <p className="af-dfh-lede mt-1.5 max-w-[620px] text-[13px] leading-relaxed text-[var(--muted)]" data-testid="defense-hub-basis">
+                {basis}
+              </p>
+            ) : null}
+          </div>
         </header>
 
         {error && (
           <div className="rounded-[13px] border border-[color-mix(in_srgb,var(--bad)_30%,transparent)] bg-[var(--bad-soft)] px-4 py-3.5 text-[13px] text-[var(--text)]">
-            {error === 'not-a-member'
-              ? 'You don’t have access to this league.'
-              : 'We couldn’t load this page. Nothing is shown rather than something wrong.'}
+            {error === 'not-a-member' ? m.notMember : m.loadFailed}
           </div>
         )}
 
         {!data && !error && (
           <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 font-mono text-[11px] text-[var(--faint)]">
-            Loading…
+            {m.loading}
           </div>
         )}
 
         {data && data.state !== 'ok' && <Blocked state={data.state} leagueId={leagueId} />}
 
-        {data && data.state === 'ok' && (
+        {ok && (
           <div className="flex flex-col gap-[22px]">
-            <CoverageBanner data={data} />
-            <DefenderTable data={data} />
+            <DefenderTable data={ok} />
             {/*
-              The league-wide board. Rendered directly under "your rostered defenders" because
-              it answers the question that one raises: you can now see what yours are worth, so
-              what is HIS worth? It fetches separately — the board queries every roster in the
-              league rather than one, and pairing the two would make the fast half of this page
-              wait for the slow half.
+              The league-wide board. Rendered directly under "your defenders" because it answers
+              the question that one raises: you can now see what yours are worth, so what is HIS
+              worth? It fetches separately — the board queries every roster in the league rather
+              than one, and pairing the two would make the fast half of this page wait for the slow half.
             */}
             <TradeBoardSection leagueId={leagueId} />
-            <Kickers data={data} />
-            <SnapShare data={data} />
-            <RoleCards data={data} />
-            <Tendencies data={data} />
-            {/* Only renders when this league starts defenders or kickers. */}
-            <ValuesPageLink leagueId={leagueId} />
+            <Kickers data={ok} />
+            <PlayTable data={ok} />
+            <Tendencies data={ok} />
+            <HowItWorks data={ok} leagueId={leagueId} />
           </div>
         )}
       </div>
@@ -249,11 +279,12 @@ export function DefenseHubClient({
  * a comparison the data cannot support — see lib/kicker-values/leagueKickerValue.ts.
  */
 function Kickers({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   if (!data.kickerValue || data.kickers.length === 0) return null
 
   return (
     <section>
-      <Label>Your kickers</Label>
+      <Label>{m.yourKickers}</Label>
       <div className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
         <div className="flex items-baseline gap-2.5">
           <div className="font-mono text-[17px] font-black text-[var(--text)]">
@@ -279,58 +310,28 @@ function Kickers({ data }: { data: DefenseHubPayload }) {
   )
 }
 
-function CoverageBanner({ data }: { data: DefenseHubPayload }) {
-  const { defenders, projected } = data.coverage
-  // Amber the moment anything is missing: a green banner over a partial board is the lie.
-  const full = projected >= data.defenders.length && data.defenders.every((d) => !d.reason)
-  const week = data.projectedFor
-
-  return (
-    <div
-      data-full={full ? 'true' : 'false'}
-      className={`af-dh-coverage rounded-[13px] border px-4 py-3.5 text-[13px] ${
-        full
-          ? 'border-[color-mix(in_srgb,var(--good)_30%,transparent)] bg-[var(--good-soft)]'
-          : 'border-[color-mix(in_srgb,var(--warn)_30%,transparent)] bg-[var(--warn-soft)]'
-      }`}
-    >
-      <span
-        className={`mr-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] ${
-          full ? 'text-[var(--good)]' : 'text-[var(--warn)]'
-        }`}
-      >
-        Coverage
-      </span>
-      {data.defenders.filter((d) => !d.reason).length} of {data.defenders.length} rostered
-      defenders projected
-      {/*
-        Stated as the evidence, not as a target week. The projector resolves its week from the
-        newest game on file rather than from a clock — correct, because the ingest stalls over
-        the offseason — but that makes the target one PAST the last real week, so naming it
-        renders a week that does not exist ("2025 week 19"). What the reader needs is which
-        games the number was built from.
-      */}
-      {week ? ` from games through ${week.season} week ${week.week - 1}` : ''} · {projected} of{' '}
-      {defenders} defenders priced league-wide.
-    </div>
-  )
-}
-
 function DefenderTable({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   return (
-    <section>
-      <Label>Your rostered defenders</Label>
-      <div className="af-dh-card af-dh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
+    <section className="af-dfh-section" data-section="defenders">
+      <div className="af-dfh-section-head">
+        <Label>{m.yourDefenders}</Label>
+      </div>
+      <div className="af-dh-card af-dh-table af-dfh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full min-w-[680px] text-left">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
-              <th className="px-4 py-3">Player</th>
-              <th className="px-2 py-3">Pos</th>
-              <th className="af-dh-proj-head px-2 py-3 text-right text-[var(--accent)]">Proj ↓</th>
-              <th className="px-2 py-3 text-right">Last wk</th>
-              <th className="px-2 py-3 text-right">VORP</th>
-              <th className="px-2 py-3 text-right">Pos rank</th>
-              <th className="px-4 py-3 text-right">Value</th>
+              <th className="px-4 py-3">{m.colPlayer}</th>
+              <th className="px-2 py-3">{m.colPos}</th>
+              <th className="af-dh-proj-head px-2 py-3 text-right text-[var(--accent)]">{m.colProj}</th>
+              <th className="px-2 py-3 text-right">{m.colLastWeek}</th>
+              <th className="px-2 py-3 text-right">
+                <abbr title={m.vorpTip} className="no-underline">
+                  {m.colVorp}
+                </abbr>
+              </th>
+              <th className="px-2 py-3 text-right">{m.colPosRank}</th>
+              <th className="px-4 py-3 text-right">{m.colValue}</th>
             </tr>
           </thead>
           <tbody>
@@ -368,10 +369,10 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                       title={
                         d.lastWeek && !d.lastWeek.scored
                           ? d.lastWeek.reason === 'no_game'
-                            ? 'no game on file for him that week'
+                            ? m.lastWeekNoGame
                             : (d.lastWeek.lineKeys ?? 0) <= 4
-                              ? 'we hold a line for him but none of the stats this league scores'
-                              : 'this league’s scoring prices none of what he did'
+                              ? m.lastWeekUnscored
+                              : m.lastWeekPricedNothing
                           : undefined
                       }
                     >
@@ -406,12 +407,9 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                          * floor-priced defenders look like equivalent trade assets. Muted and
                          * marked instead, with the explanation on hover.
                          */
-                        <span
-                          className="text-[var(--muted)]"
-                          title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
-                        >
+                        <span className="text-[var(--muted)]" title={m.floorTip}>
                           {d.value.toLocaleString()}
-                          <span className="ml-1 text-[11px]">floor</span>
+                          <span className="ml-1 text-[11px]"> {m.floor}</span>
                         </span>
                       ) : (
                         d.value.toLocaleString()
@@ -424,139 +422,142 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
           </tbody>
         </table>
       </div>
-      {data.notes.map((n) => (
-        <p key={n} className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">
-          {n}
-        </p>
-      ))}
     </section>
   )
 }
 
-function SnapShare({ data }: { data: DefenseHubPayload }) {
-  return (
-    <section>
-      <Label>Snap share</Label>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {data.snaps.map((s) => (
-          <div
-            key={s.sleeperId}
-            className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4"
-          >
-            <div className="text-[13px] font-extrabold">{s.name}</div>
-            <div className="mt-1.5 font-mono text-[26px] font-extrabold leading-none">
-              {s.share != null ? pct(s.share) : <Dash />}
-            </div>
-            <div className="mt-2 text-[11px] text-[var(--muted)]">
-              {s.share != null ? (
-                <>
-                  {s.basis === 'defense' ? 'Defensive' : 'Offensive'} snaps · {s.games} game
-                  {s.games === 1 ? '' : 's'}
-                </>
-              ) : (
-                s.reason
-              )}
-            </div>
-            {/*
-              The trend is null until a second week of the CURRENT season exists. Comparing the
-              opener against last year's finale would report an offseason of roster and scheme
-              change as though it were form.
-            */}
-            {s.share != null && (
-              <div className="mt-1 font-mono text-[11px] text-[var(--faint)]">— first week</div>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] text-[var(--faint)]">
-        Snap data can lag a game by 24–48 hours.
-      </p>
-    </section>
-  )
+/**
+ * "2,236" for a big rate, "11.7" for a small one. The decimal is written as a point in every language,
+ * like the projections in the table above it — one page should not mix "13.8" and "8,4".
+ */
+function rate(n: number): string {
+  return n >= 100 ? Math.round(n).toLocaleString(getAppIntlLocale()) : n.toFixed(1)
 }
 
-function RoleCards({ data }: { data: DefenseHubPayload }) {
+/**
+ * How much they play (2026-11-14): one row per defender, where there used to be a snap-share card
+ * AND a "what they actually do" card for each — 44 cards, each signing off with "— first week" or
+ * "Coverage — no targets-allowed column is ingested by any provider we read". The rates are the
+ * same counts (deriveDefenderRole), worded here so Spanish reads Spanish.
+ */
+function PlayTable({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
+  if (data.snaps.length === 0) return null
+  const roleOf = new Map(data.roles.map((r) => [r.sleeperId, r]))
   return (
-    <section>
-      <Label>What they actually do</Label>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {data.roles.map((r) => (
-          <div
-            key={r.sleeperId}
-            className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4"
-          >
-            <div className="mb-2.5 text-[13px] font-extrabold">{r.name}</div>
-            <div className="flex flex-col gap-2">
-              {r.lines.map((l) => (
-                <div key={l.label}>
-                  <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
-                    {l.label}
-                  </div>
-                  <div
-                    className={`text-[12px] font-semibold ${
-                      l.value ? 'text-[var(--text)]' : 'text-[var(--warn)]'
-                    }`}
-                  >
-                    {l.value ?? '—'}
-                  </div>
-                  <div className="text-[11px] leading-snug text-[var(--faint)]">{l.basis}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+    <section className="af-dfh-section" data-section="play">
+      <Label>{m.playTitle}</Label>
+      <div className="af-dh-card af-dfh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
+        <table className="w-full min-w-[560px] text-left" data-testid="defense-hub-play">
+          <thead>
+            <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+              <th className="px-4 py-3">{m.colPlayer}</th>
+              <th className="px-2 py-3 text-right">{m.colSnaps}</th>
+              <th className="px-2 py-3 text-right">{m.colGames}</th>
+              <th className="px-2 py-3 text-right">{m.colSackEvery}</th>
+              <th className="px-4 py-3 text-right">{m.colTackleEvery}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.snaps.map((s) => {
+              const r = roleOf.get(s.sleeperId)
+              /* Optional on the wire: a server older than 2026-11-14 sends only the worded lines. */
+              const counted = r && typeof r.snaps === 'number' && r.games > 0 && r.snaps > 0
+              const games = s.share != null ? s.games : counted ? r!.games : null
+              if (s.share == null && !counted) {
+                return (
+                  <tr key={s.sleeperId} className="border-b border-[var(--line)] last:border-0" data-testid="defense-hub-play-row">
+                    <td className="px-4 py-3 text-[13px] font-extrabold">{s.name}</td>
+                    {/* Left-aligned so a phone shows it beside the name, not off the table's right edge. */}
+                    <td colSpan={4} className="px-2 py-3 text-left text-[12px] text-[var(--muted)]">
+                      {m.noSnaps}
+                    </td>
+                  </tr>
+                )
+              }
+              return (
+                <tr key={s.sleeperId} className="border-b border-[var(--line)] last:border-0" data-testid="defense-hub-play-row">
+                  <td className="px-4 py-3 text-[13px] font-extrabold">{s.name}</td>
+                  <td className="px-2 py-3 text-right font-mono text-[13px] font-bold">
+                    {s.share != null ? (
+                      <>
+                        {pct(s.share)}
+                        {s.basis === 'offense' ? <span className="ml-1 text-[11px] font-normal text-[var(--muted)]">{m.offenseSnaps}</span> : null}
+                      </>
+                    ) : (
+                      <Dash />
+                    )}
+                  </td>
+                  <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">{games ?? <Dash />}</td>
+                  <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
+                    {counted ? (r!.sacks > 0 ? m.everySnaps(rate(r!.snaps / r!.sacks)) : m.noSackYet) : <Dash />}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
+                    {counted && r!.tackles != null && r!.tackles > 0 ? m.everySnaps(rate(r!.snaps / r!.tackles)) : <Dash />}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
-      {/*
-        No archetype label. "Run Stopper" / "Coverage" needs snap SPLITS, which no provider we
-        ingest carries — the version this replaces derived them from the character codes of the
-        player id.
-      */}
-      <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">
-        No run-stopper / coverage / edge archetypes: those need per-snap role splits, and no
-        provider we read carries them.
-      </p>
     </section>
   )
 }
 
 function Tendencies({ data }: { data: DefenseHubPayload }) {
+  const m = useMessages(defenseHubMessages)
   if (data.tendencies.length === 0) return null
 
   return (
-    <section>
-      <Label>How their defence has been played</Label>
+    <section className="af-dfh-section" data-section="tendencies">
+      <Label>{m.tendencies}</Label>
       <div className="flex flex-col gap-3">
         {data.tendencies.map(({ team, tendency: t }) => (
           <div key={team} className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4">
             <div className="mb-3 flex items-baseline gap-2">
-              <span className="text-[13px] font-extrabold">{team} defence</span>
+              <span className="text-[13px] font-extrabold">{m.tendencyTeam(team)}</span>
               {/* The season is not decoration — coordinators change between years. */}
-              <span className="font-mono text-[11px] text-[var(--faint)]">{t.season} season</span>
+              <span className="font-mono text-[11px] text-[var(--faint)]">{m.tendencySeason(t.season)}</span>
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Stat label="Pass rate faced" value={t.passRateFaced != null ? pct(t.passRateFaced) : null} />
+              <Stat label={m.passRateFaced} value={t.passRateFaced != null ? pct(t.passRateFaced) : null} />
               {/*
                 NOT "faced". `blitzRate` has no `Faced` suffix in the source because it describes
                 what THIS defence does — which is the half a defender's own sack chances rest on.
               */}
-              <Stat label="Blitz rate (own)" value={t.blitzRate != null ? pct(t.blitzRate) : null} />
-              <Stat
-                label="Plays faced (season)"
-                value={t.playsFacedSeason != null ? t.playsFacedSeason.toLocaleString() : null}
-              />
-              <Stat
-                label="3rd-down rate faced"
-                value={t.thirdDownRateFaced != null ? pct(t.thirdDownRateFaced) : null}
-              />
+              <Stat label={m.blitzRate} value={t.blitzRate != null ? pct(t.blitzRate) : null} />
+              <Stat label={m.playsFaced} value={t.playsFacedSeason != null ? t.playsFacedSeason.toLocaleString() : null} />
+              <Stat label={m.thirdDownFaced} value={t.thirdDownRateFaced != null ? pct(t.thirdDownRateFaced) : null} />
             </div>
           </div>
         ))}
       </div>
-      <p className="mt-2 max-w-[640px] text-[11px] leading-relaxed text-[var(--faint)]">
-        These are facts about how the defence has been played, not a matchup grade. Grading them
-        measured worse than leaving them out, over 5,291 out-of-sample player-weeks.
-      </p>
     </section>
+  )
+}
+
+/**
+ * Every method note, once, folded (2026-11-14). They used to sit under the tables they qualify — and
+ * the coverage one was printed under every defender — so the page read as an explanation of itself.
+ */
+function HowItWorks({ data, leagueId }: { data: DefenseHubPayload; leagueId: string }) {
+  const m = useMessages(defenseHubMessages)
+  const unresolved = data.unresolvedIds ?? 0
+  return (
+    <details className="af-dfh-how rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3" data-testid="defense-hub-how">
+      <summary className="cursor-pointer text-[13px] font-bold text-[var(--text)]">{m.howTitle}</summary>
+      <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-[12px] leading-relaxed text-[var(--muted)]">
+        {unresolved > 0 ? <li>{m.noteUnresolved(unresolved)}</li> : null}
+        <li>{m.noteSnapLag}</li>
+        <li>{m.noteCoverage}</li>
+        {data.tendencies.length > 0 ? <li>{m.noteTendency}</li> : null}
+      </ul>
+      {/* Only renders when this league starts defenders or kickers. */}
+      <div className="mt-3">
+        <ValuesPageLink leagueId={leagueId} />
+      </div>
+    </details>
   )
 }
 

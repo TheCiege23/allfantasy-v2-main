@@ -17,6 +17,8 @@ const db = vi.hoisted(() => ({
   zombieRulesTemplate: { findUnique: vi.fn() },
   league: { findUnique: vi.fn() },
   survivorGuillotineLeague: { findUnique: vi.fn() },
+  // The roster transaction gate also refuses a chopped native Guilly team (one count; none here).
+  guillotineRosterState: { count: vi.fn(async () => 0) },
   roster: { findFirst: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))

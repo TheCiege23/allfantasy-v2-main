@@ -73,3 +73,14 @@ describe('frozen originals in a Guilly league', () => {
     expect((await loadFrozenCompletedGrades('L', ['T1'])).get('T1')?.grade.letter).toBe('F')
   })
 })
+
+describe('frozen originals in a confirmed Zombie league', () => {
+  it('drops the old market letter and keeps a later Zombie player grade', async () => {
+    db.league = { ...GUILLOTINE, leagueType: 'redraft', settings: { leagueTypeConfirmation: { type: 'zombie' } } }
+    row(original('fantasycalc', 'F', '2026-10-11T04:00:00Z'), '2026-10-11T04:00:00Z')
+    const zombie = original('zombie_points', 'D', '2026-10-12T04:00:00Z')
+    zombie.grade.lines[1]!.valueSource = 'zombie_points'
+    row(zombie, '2026-10-12T04:00:00Z')
+    expect((await loadFrozenCompletedGrades('L', ['T1'])).get('T1')?.grade.letter).toBe('D')
+  })
+})

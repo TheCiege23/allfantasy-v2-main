@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   authAccountFindFirst: vi.fn(),
   authAccountCreate: vi.fn(),
   authAccountUpdate: vi.fn(),
+  authAccountDeleteMany: vi.fn(),
   appUserFindUnique: vi.fn(),
   appUserFindFirst: vi.fn(),
   appUserCreate: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/lib/prisma", () => ({
       findFirst: mocks.authAccountFindFirst,
       create: mocks.authAccountCreate,
       update: mocks.authAccountUpdate,
+      deleteMany: mocks.authAccountDeleteMany,
     },
     appUser: {
       findUnique: mocks.appUserFindUnique,
@@ -84,6 +86,7 @@ describe("linkSocialAccountToAppUser — duplicate-account protections", () => {
     mocks.bcryptHash.mockResolvedValue("hashed-placeholder")
     mocks.appUserUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ ...EXISTING_USER, ...data }))
     mocks.authAccountUpdate.mockResolvedValue({})
+    mocks.authAccountDeleteMany.mockResolvedValue({ count: 0 })
     // Run the create transaction by invoking the callback with a tx client backed by the
     // same appUser/betaInvite mocks, so behavior is identical to a bare create when the
     // gate is off (INVITE_ONLY unset).
@@ -125,6 +128,70 @@ describe("linkSocialAccountToAppUser — duplicate-account protections", () => {
     // is not revoked on arrival — `iat <= cutoff` would catch a cutoff of "now".
     expect(cutoff).toBeLessThan(Math.floor(Date.now() / 1000))
     expect(cutoff).toBeGreaterThanOrEqual(before - 2)
+    // Provider identities planted before the proof are dropped too, and BEFORE the
+    // new link is written — otherwise the attacker's own Google login still opens it.
+    expect(mocks.authAccountDeleteMany).toHaveBeenCalledWith({ where: { userId: EXISTING_USER.id } })
+    expect(mocks.authAccountDeleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.authAccountCreate.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("does not drop linked provider identities on an already-VERIFIED account", async () => {
+    mocks.authAccountFindFirst.mockResolvedValue(null)
+    mocks.appUserFindFirst.mockResolvedValue(EXISTING_USER)
+    mocks.authAccountCreate.mockResolvedValue({})
+
+    await linkSocialAccountToAppUser({
+      provider: "discord",
+      providerAccountId: "discord-owner",
+      email: "shared@example.com",
+      emailVerified: true,
+    })
+
+    expect(mocks.authAccountDeleteMany).not.toHaveBeenCalled()
+  })
+
+  // The account's own address differs from the provider's and cannot take it (another
+  // row holds it). The account keeps an address nobody proved — it must stay unverified.
+  it("never marks the account's OWN unproven email verified when the provider email could not be applied", async () => {
+    mocks.authAccountFindFirst.mockResolvedValue({ id: "auth-acct-1", userId: EXISTING_USER.id })
+    mocks.appUserFindUnique.mockResolvedValue({
+      ...EXISTING_USER,
+      email: "admin-target@example.com",
+      emailVerified: null,
+    })
+    mocks.appUserFindFirst.mockResolvedValue({ id: "user-b-holds-provider-email" })
+
+    await linkSocialAccountToAppUser({
+      provider: "google",
+      providerAccountId: "google-acct-1",
+      email: "shared@example.com",
+      emailVerified: true,
+    })
+
+    for (const call of mocks.appUserUpdate.mock.calls) {
+      expect(call[0].data).not.toHaveProperty("emailVerified")
+      expect(call[0].data).not.toHaveProperty("email")
+    }
+  })
+
+  it("marks verified when the provider email IS applied to the account", async () => {
+    mocks.authAccountFindFirst.mockResolvedValue({ id: "auth-acct-1", userId: EXISTING_USER.id })
+    mocks.appUserFindUnique.mockResolvedValue({ ...EXISTING_USER, email: "old@example.com", emailVerified: null })
+    mocks.appUserFindFirst.mockResolvedValue(null)
+
+    await linkSocialAccountToAppUser({
+      provider: "google",
+      providerAccountId: "google-acct-1",
+      email: "shared@example.com",
+      emailVerified: true,
+    })
+
+    expect(mocks.appUserUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ email: "shared@example.com", emailVerified: expect.any(Date) }),
+      }),
+    )
   })
 
   it("leaves an already-VERIFIED account's password and sessions alone", async () => {

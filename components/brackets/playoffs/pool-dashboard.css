@@ -57,6 +57,7 @@
 .af-pd-details dd { margin: 3px 0 0; color: #eafff6; font-size: 14px; font-weight: 750; text-transform: capitalize; overflow-wrap: anywhere; }
 .af-pd-details .af-pd-code { text-transform: none; font-family: "JetBrains Mono", ui-monospace, monospace; color: #afffdc; letter-spacing: .06em; }
 .af-pd-invite { margin-top: 12px; }
+#league-invite { scroll-margin-top: 72px; }
 .af-pd-invite code { overflow-wrap: anywhere; font-size: 13px; }
 
 .af-pd-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

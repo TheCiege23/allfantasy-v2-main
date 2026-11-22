@@ -15,6 +15,7 @@ vi.mock("@/lib/openai-client", () => ({
 vi.mock("@/lib/xai-client", () => ({
   xaiChatJson: vi.fn(),
   parseTextFromXaiChatCompletion: vi.fn((json: any) => json?.choices?.[0]?.message?.content ?? null),
+  parseFinishReason: vi.fn((json: any) => json?.choices?.[0]?.finish_reason ?? null),
 }))
 vi.mock("@/lib/deepseek-client", () => ({
   deepseekChat: vi.fn(),
@@ -187,6 +188,61 @@ describe("routeTextCall — fallback chain", () => {
     mockXai.mockResolvedValue(xaiSuccess("xAI ok"))
     const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
     expect(result).toMatchObject({ ok: true, provider: "xai" })
+  })
+
+  // ── 2026-11-15: why it failed, and empty / cut-off replies ("Chimmy is unavailable") ──
+
+  it("a failure says WHY, per provider, and that it is worth retrying when every cause was transient", async () => {
+    mockOpenaiText.mockResolvedValue(openaiFailure(429, "rate limit"))
+    mockXai.mockResolvedValue(xaiFailure(503))
+    mockDeepseek.mockResolvedValue(deepseekFailure())
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.failure?.attempts.map((a) => a.provider)).toEqual(["openai", "xai", "deepseek"])
+    expect(result.failure?.attempts[0]).toMatchObject({ category: "rate_limit", status: 429 })
+    expect(result.failure?.retryable).toBe(true)
+  })
+
+  it("dead keys and no credit are NOT retryable — waiting will not fix them", async () => {
+    process.env.AI_PROVIDER_ORDER = "openai,xai"
+    mockOpenaiText.mockResolvedValue(openaiFailure(401, "invalid api key"))
+    mockXai.mockResolvedValue(xaiFailure(402, "billing"))
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
+    expect(result).toMatchObject({ ok: false, failure: { retryable: false } })
+  })
+
+  it("an EMPTY reply is not an answer: it falls through to the next provider", async () => {
+    mockOpenaiText.mockResolvedValue(openaiSuccess("   "))
+    mockXai.mockResolvedValue(xaiSuccess("xAI answer"))
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
+    expect(result).toMatchObject({ ok: true, provider: "xai", text: "xAI answer" })
+  })
+
+  it("flags a reply cut off at maxTokens (OpenAI finish_reason length)", async () => {
+    mockOpenaiText.mockResolvedValue({ ...openaiSuccess("The best team is Gridiron Gremlins because"), finishReason: "length" })
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
+    expect(result).toMatchObject({ ok: true, provider: "openai", truncated: true })
+  })
+
+  it("a whole reply is not flagged", async () => {
+    mockOpenaiText.mockResolvedValue({ ...openaiSuccess("Done."), finishReason: "stop" })
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
+    expect(result).toMatchObject({ ok: true, truncated: false })
+  })
+
+  it("flags a cut-off xAI reply", async () => {
+    process.env.AI_PROVIDER_ORDER = "xai"
+    mockXai.mockResolvedValue({ ok: true, status: 200, json: { choices: [{ message: { content: "partial" }, finish_reason: "length" }], model: "grok" } })
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }] })
+    expect(result).toMatchObject({ ok: true, provider: "xai", truncated: true })
+  })
+
+  it("passes skipCache through to DeepSeek (it used to cache regardless)", async () => {
+    process.env.AI_PROVIDER_ORDER = "deepseek"
+    mockDeepseek.mockResolvedValue(deepseekSuccess("fresh"))
+    await routeTextCall({ messages: [{ role: "user", content: "test" }], skipCache: true })
+    expect(mockDeepseek).toHaveBeenCalledWith(expect.objectContaining({ skipCache: true }))
   })
 })
 
@@ -456,7 +512,7 @@ describe("Anthropic adapter — AI spend kill switch", () => {
 
     const result = await router.routeTextCall({ messages })
 
-    expect(result).toEqual({ ok: false })
+    expect(result).toMatchObject({ ok: false, failure: { retryable: false } })
     expect(anthropicSdk.ctor).not.toHaveBeenCalled()
     expect(anthropicSdk.create).not.toHaveBeenCalled()
   })
@@ -484,7 +540,7 @@ describe("Anthropic adapter — AI spend kill switch", () => {
 
     const result = await router.routeTextCall({ messages })
 
-    expect(result).toEqual({ ok: false })
+    expect(result).toMatchObject({ ok: false, failure: { retryable: false } })
     expect(xai.xaiChatJson).not.toHaveBeenCalled()
     expect(deepseek.deepseekChat).not.toHaveBeenCalled()
   })
@@ -500,7 +556,7 @@ describe("Anthropic adapter — AI spend kill switch", () => {
 
     const result = await router.routeTextCall({ messages })
 
-    expect(result).toEqual({ ok: false })
+    expect(result).toMatchObject({ ok: false, failure: { retryable: false } })
     expect(openai.openaiChatText).toHaveBeenCalledTimes(1)
     expect(anthropicSdk.ctor).not.toHaveBeenCalled()
     expect(anthropicSdk.create).not.toHaveBeenCalled()
@@ -518,7 +574,7 @@ describe("Anthropic adapter — AI spend kill switch", () => {
 
     const result = await router.routeTextCall({ messages })
 
-    expect(result).toEqual({ ok: false })
+    expect(result).toMatchObject({ ok: false, failure: { retryable: false } })
     expect(openai.openaiChatText).toHaveBeenCalledTimes(1)
     expect(anthropicSdk.ctor).not.toHaveBeenCalled()
     expect(anthropicSdk.create).not.toHaveBeenCalled()

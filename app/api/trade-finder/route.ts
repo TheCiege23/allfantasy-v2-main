@@ -8,19 +8,12 @@ import { buildBaselineMeta } from '@/lib/engine/response-guard'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { aiCostGate } from '@/lib/ai-protection/costGate'
-import { buildLeagueDecisionContext, summarizeLeagueDecisionContext } from '@/lib/league-decision-context'
+import { buildLeagueDecisionContext } from '@/lib/league-decision-context'
 import { getLeagueInfo, getLeagueRosters, getTradedDraftPicks, getAllPlayers } from '@/lib/sleeper-client'
 import { findPlayerByName, findPlayerBySleeperId, FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
-import {
-  generateTradeCandidates,
-  TradeCandidate,
-  PricedAsset,
-  TradeObjective,
-  FinderMode,
-  TradeOpportunity,
-} from '@/lib/trade-finder/candidate-generator'
+import { generateTradeCandidates, PricedAsset, TradeObjective, FinderMode } from '@/lib/trade-finder/candidate-generator'
 import { Position } from '@/lib/league-decision-context'
 import {
   NEGOTIATION_RULES,
@@ -137,7 +130,6 @@ RESPONSE FORMAT:
   "objectiveNotes": string
 }
 `
-
 
 type TradeFinderProviderAudit = {
   modelRole: 'openai_reasoning'
@@ -736,7 +728,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
           rawCandidatesGenerated: generatorOutput.rawCandidatesGenerated,
           prunedTo: generatorOutput.prunedTo,
           aiEnhanced: false,
-          note: 'AI enhancement unavailable — showing raw scored candidates',
+          note: 'Chimmy enhancement unavailable — showing raw scored candidates',
         },
       })
     }
@@ -825,7 +817,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
   } catch (error) {
     console.error('Trade Finder error:', error)
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request format', details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format', details: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to find trades' }, { status: 500 })
   }
@@ -833,7 +825,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
 
 export const GET = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFinder" })(async () => {
   return NextResponse.json({
-    message: 'AllFantasy Trade Finder API v1 — Candidate Generator + AI Ranking',
+    message: 'AllFantasy Trade Finder API v1 — Candidate Generator + Chimmy Ranking',
     usage: {
       method: 'POST',
       body: {

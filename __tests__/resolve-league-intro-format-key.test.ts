@@ -64,7 +64,7 @@ describe('league type media (poster / video assets)', () => {
     const m = getLeagueTypeMedia('redraft')
     expect(m.introVideo).toBe('/media/create-league/concept/videos/Redraft.mp4')
     expect(m.thumbnail).toBe('/images/league-types/redraft.png')
-    expect(m.defaultLeagueImageUrl).toBe('/af-robot-king.png')
+    expect(m.defaultLeagueImageUrl).toBe('/league-art/af-robot-king.webp')
     expect(m.thumbnail).not.toMatch(/guillotine/i)
   })
 
@@ -166,7 +166,7 @@ describe('canonical concept / draft media resolution', () => {
         isDynasty: false,
       }),
     ).defaultLeagueImageUrl
-    expect(url).toBe('/af-robot-king.png')
+    expect(url).toBe('/league-art/af-robot-king.webp')
     expect(url).not.toMatch(/guillotine/i)
   })
 

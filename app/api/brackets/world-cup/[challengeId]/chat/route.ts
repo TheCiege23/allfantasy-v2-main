@@ -1198,7 +1198,7 @@ async function paidToolPost(
         sourceType: "world_cup_chimmy_coaching",
         sourceId: params.data.challengeId,
         idempotencyKey: `chimmy-coaching:${auth.user.id}:${randomUUID()}`,
-        description: "World Cup Chimmy AI coaching answer",
+        description: "World Cup Chimmy coaching answer",
         metadata: { challengeId: params.data.challengeId },
         upgradePath: "/pricing?from=wc-chimmy",
       })

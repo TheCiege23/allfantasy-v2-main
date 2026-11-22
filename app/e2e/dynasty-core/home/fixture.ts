@@ -11,7 +11,15 @@ import { homeFixture } from '../../redraft-core/home/fixture'
 
 const VIEWER = 'e2e-viewer'
 
-export function dynastyHomeFixture(opts: { identity: boolean; sparse: boolean }): LeagueHomeData {
+/**
+ * `?phase=offseason`: the 2026 season is over (Sleeper `complete`), its champion is hung, and the
+ * clock is pinned so the countdown is stable. The stored inputs are invented but shaped like the reads
+ * in leagueHome.ts `loadDynastyOffseasonInput`: a rookie-draft start in League.settings, a rollover row,
+ * and NO next-season game on file — so the kickoff milestone draws undated, as it would in February.
+ */
+const OFFSEASON_NOW = new Date('2027-02-20T17:00:00Z')
+
+export function dynastyHomeFixture(opts: { identity: boolean; sparse: boolean; offseason?: boolean }): LeagueHomeData {
   const { data } = homeFixture('nfl', { identity: false, leagueType: 'dynasty' })
   const rafters = opts.sparse
     ? null
@@ -21,7 +29,7 @@ export function dynastyHomeFixture(opts: { identity: boolean; sparse: boolean })
           { season: 2023, championName: 'Gridiron Ghosts', championTeamUserIds: ['other'], championTeamName: null },
           { season: 2024, championName: 'Fourth & Long', championTeamUserIds: [VIEWER], championTeamName: null },
           { season: 2025, championName: 'Bench Mob', championTeamUserIds: ['other'], championTeamName: null },
-          { season: 2026, championName: null, championTeamUserIds: [], championTeamName: null },
+          { season: 2026, championName: opts.offseason ? 'Taco Tuesday' : null, championTeamUserIds: opts.offseason ? ['other'] : [], championTeamName: null },
         ],
         championships: [],
         viewerUserId: VIEWER,
@@ -68,6 +76,18 @@ export function dynastyHomeFixture(opts: { identity: boolean; sparse: boolean })
           },
         },
         taxi: { count: 3, slots: 4 },
+        offseason: opts.offseason
+          ? {
+              stage: 'complete',
+              now: OFFSEASON_NOW,
+              draftAt: new Date('2027-05-09T00:00:00Z'),
+              draftLive: false,
+              draftScheduled: false,
+              keeperDeadlineAt: null,
+              rolledOverAt: new Date('2027-02-02T15:00:00Z'),
+              nextSeasonStartAt: null,
+            }
+          : null,
       })
     : null
   return {

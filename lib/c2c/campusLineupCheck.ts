@@ -7,22 +7,30 @@
 import type { PrismaClient } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
-import { campusSport, campusStarterIds, isC2CVariant, validateCampusLineup, type CampusLineupIssue } from './campusLineup'
+import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
+import { bridgeNcaabCampusTeams } from '@/lib/redraft/ncaabCampusTeamBridge'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { readRiScheduleWindow, scheduleKeyPrefix } from '@/lib/sports-data/riScheduleCache'
+import { nbaCampusScheduleCoversWindow } from './nbaCampusScheduleCoverage'
+import { nbaCampusMoveLock } from './nbaCampusMoveLock'
+import { campusSport, campusStarterIds, isC2CVariant, isBasketballC2CLeague, validateCampusLineup, type CampusLineupIssue } from './campusLineup'
 
 type League = { id: string; platform: string | null; sport: string | null; leagueVariant: string | null }
 
 export async function checkCampusSave(
-  db: Pick<PrismaClient, 'redraftRosterPlayer'>,
-  input: { league: League; redraftRosterId: string | null; before: unknown; after: unknown },
+  db: Pick<PrismaClient, 'redraftRosterPlayer' | 'sportsDataCache' | 'teamProviderIdentity'>,
+  input: { league: League; redraftRosterId: string | null; before: unknown; after: unknown; season?: number; week?: number; now?: Date },
 ): Promise<CampusLineupIssue[]> {
   const campus = campusStarterIds(input.after)
   // Unchanged campus starters are not re-judged, so a commissioner narrowing the college slots never
   // blocks a manager's pro lineup save; the next campus change has to fit.
-  if (campus.length === 0 || campus.join('\n') === campusStarterIds(input.before).join('\n')) return []
+  if (campus.join('\n') === campusStarterIds(input.before).join('\n')) return []
+  if (campus.length === 0 && !isBasketballC2CLeague(input.league)) return []
   if (!isNativePlatform(input.league.platform) || !input.redraftRosterId || !isC2CVariant(input.league.leagueVariant)) {
     return [{ code: 'campus_not_c2c', message: 'Campus lineups are only for Campus to Canton leagues.' }]
   }
   const sport = campusSport(input.league)
+  const basketball = sport === 'basketball'
   const config = sport ? await getC2CConfig(input.league.id) : null
   const rows = sport
     ? await db.redraftRosterPlayer.findMany({
@@ -31,7 +39,7 @@ export async function checkCampusSave(
       })
     : []
   const byId = new Map(rows.map((r) => [r.playerId, r]))
-  return validateCampusLineup({
+  const issues = validateCampusLineup({
     before: input.before,
     after: input.after,
     slots: config?.collegeActiveLineupSlots,
@@ -39,4 +47,30 @@ export async function checkCampusSave(
     nameOf: (id) => byId.get(id)?.playerName ?? id,
     sport,
   })
+  if (issues.length || !basketball) return issues
+  const before = new Set(campusStarterIds(input.before))
+  const after = new Set(campus)
+  const changed = [...new Set([...before, ...after])].filter(id => before.has(id) !== after.has(id))
+  const window = input.season && input.week ? resolveDailySportWeekWindow('NBA', input.season, input.week) : null
+  if (!window) return [{ code: 'campus_ineligible', message: 'College game schedule is unavailable; try again when the schedule is ready.' }]
+  try {
+    const now = input.now ?? new Date()
+    const [evidence, games, meta] = await Promise.all([
+      currentNcaabRosterEvidence(db, now),
+      readRiScheduleWindow(db as never, { sport: 'NCAAB', season: input.season!, window }),
+      db.sportsDataCache.findUnique({ where: { cacheKey: `${scheduleKeyPrefix('NCAAB', input.season!)}meta` } }),
+    ])
+    if (!meta || meta.expiresAt <= now || !nbaCampusScheduleCoversWindow(meta.data, window)) return [{ code: 'campus_ineligible', message: 'College game schedule is unavailable; try again when the schedule is ready.' }]
+    const athletes = new Map(evidence.athletes.map(a => [a.id, a]))
+    const teamIds = changed.map(id => athletes.get(id)?.teamId).filter((id): id is string => Boolean(id))
+    const teamBridge = await bridgeNcaabCampusTeams(db, teamIds)
+    const teamForPlayer = new Map<string, string>()
+    for (const id of changed) { const teamId = athletes.get(id)?.teamId; const ri = teamId ? teamBridge.resolved.get(teamId) : null; if (ri) teamForPlayer.set(id, ri) }
+    const lock = nbaCampusMoveLock({ changedPlayerIds: changed, teamForPlayer, games, now })
+    if (lock.lockedPlayerIds.length) return [{ code: 'campus_ineligible', message: 'A college player’s game has started, so that campus spot is locked.' }]
+    if (lock.unknownPlayerIds.length) return [{ code: 'campus_ineligible', message: 'College game or roster information is unavailable; try again when it refreshes.' }]
+    return []
+  } catch {
+    return [{ code: 'campus_ineligible', message: 'College game or roster information is unavailable; try again when it refreshes.' }]
+  }
 }

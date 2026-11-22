@@ -97,6 +97,16 @@ export type UnifiedPlayerWireDto = {
    */
   periodOpponent?: string | null
   periodHomeAway?: 'home' | 'away' | null
+  /**
+   * NFL leagues that play here: the week's kickoff, the opponent's rank against the player's position
+   * and the opponent's crest, stamped by the roster route (lib/redraft/nflRosterOutlook.ts).
+   */
+  periodKickoffIso?: string | null
+  opponentRank?: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  opponentLogoUrl?: string | null
+  /** NFL: the club's bye week, and the cached forecast at this week's game. */
+  teamByeWeek?: number | null
+  periodWeather?: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
 }
 
 export type { ProviderFallbackDiagnostics }

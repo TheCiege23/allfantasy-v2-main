@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -14,8 +14,12 @@ import {
 } from "@/lib/playoffs/playoffClientApi"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
+import { bracketInviteUrl } from "@/lib/brackets/inviteUrl"
+import AndroidBracketAppOption from "@/components/brackets/AndroidBracketAppOption"
+import IosBracketAppOption from "@/components/brackets/IosBracketAppOption"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import { useNbaCupLiveView } from "./useNbaCupLiveView"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
@@ -25,6 +29,7 @@ import BracketCoachPanel from "./BracketCoachPanel"
 
 type Props = {
   initialView: PlayoffChallengeView
+  initialInviteCode?: string | null
 }
 
 type PlayoffDashboardSyncMode = "teams_schedule_only" | "results_only" | "official_bracket" | "autofill_results"
@@ -47,7 +52,7 @@ const SYNC_SUCCESS_MESSAGES: Record<PlayoffDashboardSyncMode, string> = {
  * Commissioner sync tools stay English on purpose: they are staff and
  * commissioner diagnostics, and their messages are asserted verbatim.
  */
-export default function PlayoffBracketShell({ initialView }: Props) {
+export default function PlayoffBracketShell({ initialView, initialInviteCode }: Props) {
   const router = useRouter()
   const { data: session } = useSession()
   const { language } = useOptionalLanguage()
@@ -92,6 +97,25 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const tournamentQuotaReached = tournamentLimit != null && tournamentUsed != null && tournamentUsed >= tournamentLimit
   const rollingCup = safeChallenge.sport === "nba_cup" && !safeChallenge.isTestMode
   useNbaCupLiveView(safeChallenge.id, rollingCup, setView)
+  // The public live feed contains scores only. Refresh the dashboard view as
+  // well so entries finalized by other participants appear without a reload.
+  useEffect(() => {
+    if (!rollingCup) return
+    let stopped = false, pending = false
+    const refreshEntries = async () => {
+      if (stopped || pending || document.visibilityState !== "visible") return
+      pending = true
+      try {
+        const latest = await getPlayoffBracketViewClient(safeChallenge.id)
+        if (!stopped) setView(latest)
+      } catch { /* Keep the last successful view if the refresh fails. */ }
+      finally { pending = false }
+    }
+    const timer = setInterval(() => { void refreshEntries() }, 30_000)
+    const onVisible = () => { void refreshEntries() }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible) }
+  }, [rollingCup, safeChallenge.id])
   const tournamentLocked = singleGameSport && !rollingCup && !safeChallenge.isTestMode && view.challenge.firstGameStartsAt != null && Date.now() >= Date.parse(view.challenge.firstGameStartsAt)
   const canCreateEntry = viewerEntryCount < safeChallenge.maxEntriesPerParticipant && !tournamentLocked && !tournamentQuotaReached
   const primaryEntry = useMemo(() => {
@@ -141,6 +165,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       .slice(0, 2)
     : []
   const hasScoredLeaderboard = leaderboardRows.some((row) => row.hasScoredResults)
+  const draftCount = entries.filter((entry) => !entry.isComplete).length
   const hasClientAdminAccess = hasPoolAdminAccess(session?.user)
   const hasServerAdminAccess = view.lockDiagnostics?.hasPoolAdminAccess === true
   const hasAdminAccess = hasClientAdminAccess || hasServerAdminAccess
@@ -153,7 +178,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
   function handleRefresh() {
     startRefreshing(async () => {
-      const latest = await getPlayoffBracketViewClient(safeChallenge.id)
+      const latest = await getPlayoffBracketViewClient(safeChallenge.id, undefined, initialInviteCode)
       setView(latest)
     })
   }
@@ -163,6 +188,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   function handleCreateEntry() {
+    if (!view.viewerUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/brackets/leagues/${safeChallenge.id}${initialInviteCode ? `?code=${encodeURIComponent(initialInviteCode)}` : ""}`)}`)
+      return
+    }
     startCreatingEntry(async () => {
       try {
         const nextEntryIndex = viewerEntryCount + 1
@@ -173,6 +202,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
         const created = await createPlayoffBracketEntryClient({
           challengeId: safeChallenge.id,
+          inviteCode: initialInviteCode,
         })
 
         toast.success(copy.created(nextEntryIndex))
@@ -227,20 +257,26 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     })
   }
 
+  // The link the box shows is the link the button copies. The canonical host first (so server and client render
+  // the same text), then this page's own origin once mounted — which is what bracketInviteUrl keeps on staging.
+  const [inviteOrigin, setInviteOrigin] = useState("https://www.allfantasy.ai")
+  useEffect(() => { setInviteOrigin(window.location.origin) }, [])
+  const inviteLink = bracketInviteUrl(inviteOrigin, safeChallenge.id, safeChallenge.inviteCode)
+
   async function copyInvite() {
     try {
-      const absoluteUrl = `${window.location.origin}${safeChallenge.inviteUrl}`
-      await navigator.clipboard.writeText(`${absoluteUrl}?code=${safeChallenge.inviteCode}`)
+      await navigator.clipboard.writeText(inviteLink)
       toast.success(copy.inviteCopied)
     } catch {
       toast.error(copy.inviteCopyFailed)
+      document.getElementById("league-invite")?.scrollIntoView({ block: "center" })
     }
   }
 
   async function copyBestBracket() {
     if (!bestViewerRow) return
     try {
-      const path = `/brackets/leagues/${safeChallenge.id}/entries/${bestViewerRow.id}/view`
+      const path = `/brackets/leagues/${encodeURIComponent(safeChallenge.id)}/entries/${encodeURIComponent(bestViewerRow.id)}/view?view=bracket`
       await navigator.clipboard.writeText(`${window.location.origin}${path}`)
       toast.success(copy.bestCopied)
     } catch {
@@ -249,7 +285,11 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   return (
+    <>
+    <BracketQuickNav current="league" leagueId={safeChallenge.id} language={language} />
     <main className="af-bracket-experience af-pd">
+      <AndroidBracketAppOption />
+      <IosBracketAppOption />
       <div className="af-bx-top af-pd-top">
         <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
         <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} className="af-pd-wordmark" />
@@ -312,7 +352,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 className="af-bx-btn af-bx-primary"
               >
                 <ArrowRightCircle className="h-4 w-4" aria-hidden />
-                {primaryButtonLabel}
+                {!view.viewerUserId && !primaryEntry ? (language === "es" ? "Inicia sesión para crear tu cuadro" : "Sign in to create your bracket") : primaryButtonLabel}
               </button>
               {primaryEntry && canCreateEntry ? (
                 <button type="button" onClick={handleCreateEntry} disabled={creatingEntry} className="af-bx-btn">
@@ -320,10 +360,10 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                   {copy.createAnother}
                 </button>
               ) : null}
-              {canManagePlayoffPool && (
+              {canManagePlayoffPool && safeChallenge.inviteCode && (
                 <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-btn" className="af-bx-btn">
                   <Clipboard className="h-4 w-4" aria-hidden />
-                  {copy.invite}
+                  {copy.copyLeagueInvite}
                 </button>
               )}
               {canSyncPlayoffPool ? (
@@ -371,11 +411,11 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           </article>
 
           {canManagePlayoffPool ? (
-            <article data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
+            <article id="league-invite" data-testid="playoff-invite-panel" className="af-bx-panel af-pd-card">
               <h2 className="af-pd-h2">{copy.invitePanel}</h2>
               <p className="af-pd-muted">{copy.shareLink}</p>
               <div className="af-bx-invite af-pd-invite">
-                <code>{safeChallenge.inviteUrl}?code={safeChallenge.inviteCode}</code>
+                <code data-testid="playoff-invite-link">{inviteLink}</code>
               </div>
               <button type="button" onClick={copyInvite} data-testid="playoff-copy-invite-link-btn" className="af-bx-btn af-bx-wide af-pd-gap">
                 <Link2 className="h-4 w-4" aria-hidden />
@@ -406,7 +446,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
                 <p className="af-pd-muted">
                   Provider sync updates official NBA/NHL playoff data. User picks are not created unless the testing-only auto-fill action is used.
                 </p>
-                <p data-testid="playoff-sync-tools-visibility-debug" className="af-pd-debug">
+                {/* Kept in the DOM for the visibility tests, never shown: it is a diagnostic, not copy. */}
+                <p data-testid="playoff-sync-tools-visibility-debug" className="af-pd-debug" hidden>
                   syncToolsVisible=true; isOwner={String(isOwner)}; isAdmin={String(hasAdminAccess)}; hasPoolAdminAccess={String(hasAdminAccess)}
                 </p>
               </div>
@@ -554,6 +595,13 @@ export default function PlayoffBracketShell({ initialView }: Props) {
           <p className="af-pd-muted">
             {singleGameSport ? copy.boardSingle : hasScoredLeaderboard ? copy.boardScored : copy.boardPicks}
           </p>
+          {singleGameSport && draftCount > 0 ? (
+            <p className="af-pd-muted">
+              {language?.startsWith("es")
+                ? `${draftCount} cuadros guardados aún no aparecen en la clasificación porque no se han finalizado.`
+                : `${draftCount} saved ${draftCount === 1 ? "bracket is" : "brackets are"} not ranked yet because ${draftCount === 1 ? "it has" : "they have"} not been finalized.`}
+            </p>
+          ) : null}
           {leaderboardRows.length === 0 ? (
             <p className="af-pd-empty">{copy.noBoard}</p>
           ) : (
@@ -573,5 +621,6 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         {singleGameSport && <p className="af-bx-disclaimer af-pd-disclaimer">{copy.disclaimer}</p>}
       </div>
     </main>
+    </>
   )
 }

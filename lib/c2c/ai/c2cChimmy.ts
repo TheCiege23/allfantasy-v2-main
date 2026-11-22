@@ -14,7 +14,7 @@ Leagues score BOTH college (campus) and pro (canton) sides. Label projections vs
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-export type C2CSetupRec = {
+type C2CSetupRec = {
   scoringMode: string
   draftFormat: string
   reasonings: string[]
@@ -30,7 +30,7 @@ export type CampusPlayerEval = {
   verdict: string
 }
 
-export type CampusRanking = {
+type CampusRanking = {
   rank: number
   playerId: string
   name: string
@@ -38,7 +38,7 @@ export type CampusRanking = {
   note: string
 }
 
-export type BreakoutAlert = {
+type BreakoutAlert = {
   playerId: string
   name: string
   alertType: string
@@ -55,7 +55,7 @@ export type RosterBalanceReport = {
   recommendations: string[]
 }
 
-export type TransitionDecision = {
+type TransitionDecision = {
   recommendation: string
   timing: string
   targetCantonSlot: string
@@ -64,7 +64,7 @@ export type TransitionDecision = {
   verdict: string
 }
 
-export type C2CDraftAdvice = {
+type C2CDraftAdvice = {
   topOptions: string[]
   recommendation: string
   tierBreakAlert: string
@@ -72,7 +72,7 @@ export type C2CDraftAdvice = {
   sideBalance: string
 }
 
-export type ChimmyResponse = { reply: string }
+type ChimmyResponse = { reply: string }
 
 export async function buildC2CAiCacheContextSummary(input: {
   leagueId?: string
@@ -576,7 +576,7 @@ export async function handleC2CCommissionerQuery(leagueId: string, message: stri
     temperature: 0.35,
   })
 
-  return { reply: r.ok && r.text?.trim() ? r.text.trim() : 'Chimmy could not generate a reply. Check AI configuration.' }
+  return { reply: r.ok && r.text?.trim() ? r.text.trim() : 'Chimmy could not generate a reply. Check Chimmy configuration.' }
 }
 
 export async function generateC2CConstitution(leagueId: string): Promise<string> {
@@ -606,24 +606,20 @@ export async function generateC2CConstitution(leagueId: string): Promise<string>
 
 export async function generateWeeklyC2CRecap(leagueId: string, week: number): Promise<string> {
   await requireAfSub()
-
-  const r = await openaiChatText({
-    messages: [
-      {
-        role: 'system',
-        content: CHIMMY_C2C + ' Write a weekly recap narrative: campus top scorers, canton top scorers, combined standouts, side imbalance stories, Saturday slate note. If stats unknown, say so.',
-      },
-      { role: 'user', content: `League ${leagueId} week ${week}. No fabricated box scores.` },
-    ],
-    maxTokens: 900,
-    temperature: 0.45,
+  if (!Number.isInteger(week) || week < 1) return 'Choose a valid week to view the recap.'
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true } })
+  if (league?.season == null) return 'The league season is not available yet.'
+  const season = await prisma.redraftSeason.findUnique({ where: { leagueId_season: { leagueId, season: league.season } }, select: { id: true } })
+  if (!season) return 'The league season is not available yet.'
+  const games = await prisma.redraftMatchup.findMany({
+    where: { seasonId: season.id, week, isMedianMatchup: false },
+    select: { status: true, homeScore: true, awayScore: true, homeRoster: { select: { teamName: true, ownerName: true } }, awayRoster: { select: { teamName: true, ownerName: true } } },
   })
-
-  return (
-    r.ok && r.text?.trim()
-      ? r.text.trim()
-      : `Week ${week} recap placeholder — wire PlayerWeeklyScore aggregates for real top scorers.`
-  )
+  if (!games.length || games.some((game) => game.status !== 'final')) return `Week ${week} results are not final yet. The recap will be available once scoring is complete.`
+  const name = (roster: { teamName: string | null; ownerName: string }) => roster.teamName?.trim() || roster.ownerName.trim() || 'Open team'
+  const results = games.filter((game) => game.awayRoster).map((game) => `${name(game.homeRoster)} ${game.homeScore.toFixed(2)} – ${game.awayScore.toFixed(2)} ${name(game.awayRoster!)}`)
+  if (!results.length) return `No head-to-head results are available for week ${week}.`
+  return [`Week ${week} results (${league.season})`, ...results, 'Player and campus/canton breakdowns are not included in this recap.'].join('\n')
 }
 
 export function getC2CChimmyHelpText(): string {

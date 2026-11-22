@@ -145,7 +145,7 @@ describe('get_player_game_log', () => {
     expect(out).toContain('Week 18 vs CLE (2026-01-04): 10 tgt, 8 rec, 96 rec yds, 1 rec TD')
     expect(out).toContain('23.6 PPR')
     expect(out).not.toContain('0 rush yds') // zeros are not listed as stats
-    const q = calls.find((c) => c.text.includes('stat_payload'))!
+    const q = calls.find((c) => c.text.includes('stat_payload AS "statPayload"'))!
     expect(q.values).toContain('7564')
   })
 
@@ -209,9 +209,39 @@ describe('get_player_game_log', () => {
     const out = await buildPlayerGameLogContext({ playerName: 'Jared Curtis', sport: 'NCAAF' }, db)
 
     expect(out).toContain('Week 3 vs NC State (2026-09-19): 20 cmp, 34 att, 277 pass yds, 64 rush yds')
-    const q = calls.find((c) => c.text.includes('stat_payload'))!
+    const q = calls.find((c) => c.text.includes('stat_payload AS "statPayload"'))!
     expect(q.text).toContain(`"sportType" = 'NCAAF'`)
     expect(q.values).toContain('5158948') // the CFBD athlete id, straight from the season row
+  })
+
+  it('uses the stored Sleeper player ID when the NFL identity registry has no row', async () => {
+    const { db, calls } = fakeDb((s) => {
+      if (s.text.includes('WITH names AS')) return [
+        { sleeperId: '7564', canonicalName: "Ja'Marr Chase", position: 'WR', currentTeam: 'CIN' },
+        { sleeperId: '7564', canonicalName: 'Ja Marr Chase', position: 'WR', currentTeam: 'CIN' },
+      ]
+      if (s.text.includes('max(season)')) return [{ season: 2025 }]
+      return [week18]
+    })
+    const answer = await buildPlayerGameLogContext({ playerName: "Ja'Marr Chase", season: 2025 }, db)
+    expect(calls[0]!.text).toContain('FROM "SportsPlayer"')
+    expect(answer).toContain('Week 18 vs CLE')
+    expect(answer).not.toContain('different players')
+  })
+
+  it('uses named weekly CFBD rows and preserves ambiguity across athlete IDs', async () => {
+    const candidates = [{ playerId: '111', name: 'Example Athlete', team: 'Texas', position: null }]
+    const { db, calls } = fakeDb((s) => {
+      if (s.text.includes('WITH names AS')) return candidates
+      if (s.text.includes('max(season)')) return [{ season: 2026 }]
+      return [{ playerId: '111', season: 2026, week: 3, team: 'Texas', opponent: null, gameDate: null,
+        statPayload: { 'rushing.YDS': 42 } }]
+    })
+    const question = { playerName: 'Example Athlete', sport: 'NCAAF', season: 2026 }
+    expect(await buildPlayerGameLogContext(question, db)).toContain('42 rush yds')
+    expect(calls[0]!.text).toContain("g.source = 'cfbd-weekly'")
+    candidates.push({ playerId: '222', name: 'Example Athlete', team: 'Vanderbilt', position: null })
+    expect(await buildPlayerGameLogContext(question, db)).toContain('2 college players')
   })
 
   it('college: says plainly when no game lines are stored yet, instead of inventing one', async () => {

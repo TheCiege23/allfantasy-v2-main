@@ -193,10 +193,3 @@ Welcome to Exile Island. Your main island journey is over — but the game isn't
   }
 }
 
-/**
- * Regenerate both FAQs (call after commissioner changes settings).
- */
-export async function regenerateAllFAQs(leagueId: string): Promise<void> {
-  await generateAndPinMainIslandFAQ(leagueId)
-  await generateAndPinExileIslandFAQ(leagueId)
-}

@@ -22,6 +22,9 @@ import { getManagerColorBySeed } from '@/lib/draft-room'
 import type { DraftSessionSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { isDraftPickRowEmpty, PICK_EDITOR_EMPTY_POSITION } from '@/lib/live-draft-engine/draftPickEmpty'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { verifyNcaabCollegeDraftPick } from '@/lib/devy/verifyNcaabDraftPick'
+import { createDraftCollegeRight, removeDraftCollegeRight, transferDraftCollegeRight, type NbaCollegeAssetType } from '@/lib/devy/nbaDraftRights'
+import { moveRookieDraftContract, removeRookieDraftContract, signRookieContractForPick } from '@/lib/salary-cap/RookieContractService'
 
 export const COMMISSIONER_PICK_EDIT_ACTIONS = [
   'REMOVE_PLAYER_FROM_PICK',
@@ -129,6 +132,7 @@ function buildTradedPickMetaForSnapshot(
 
 async function runSpecialtyAndPoolValidation(params: {
   leagueId: string
+  leagueSport: string
   session: {
     draftModeLabel?: string | null
     dispersalPoolConfig?: unknown
@@ -170,13 +174,19 @@ async function runSpecialtyAndPoolValidation(params: {
         }
       : null
 
-  if (c2cConfig?.enabled) {
+  const isNba = String(params.leagueSport).toUpperCase() === 'NBA'
+  const college = params.assetType === 'c2c_college' || params.assetType === 'devy_pick'
+  if (isNba && (c2cConfig || devyConfig)) {
+    const collegeRound = c2cConfig?.collegeRounds.includes(roundForEligibility) ?? devyConfig?.devyRounds.includes(roundForEligibility) ?? false
+    if (collegeRound !== college) return { ok: false, error: collegeRound ? 'This round is college-only.' : 'This round is pro-only.' }
+  }
+  if (!isNba && c2cConfig?.enabled) {
     const c2cValidation = await validateC2CEligibilityAsync(
       { currentRound: roundForEligibility, playerName: params.playerName, c2cConfig },
       params.tx,
     )
     if (!c2cValidation.valid) return { ok: false, error: c2cValidation.error ?? 'C2C ineligible' }
-  } else if (devyConfig?.enabled) {
+  } else if (!isNba && devyConfig?.enabled) {
     const devyValidation = await validateDevyEligibilityAsync(
       {
         currentRound: roundForEligibility,
@@ -228,7 +238,14 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
 
   const uiSettings = await getDraftUISettingsForLeague(params.leagueId)
 
+  /**
+   * A snake salary-cap pick signs a rookie contract. The editor signs it AFTER its transaction
+   * commits, the way `submitPick` does, so a contract failure can never undo a commissioner's edit.
+   */
+  // A holder, not a `let`: TypeScript does not see an assignment inside the transaction callback.
+  const rookieContract: { toSign: Parameters<typeof signRookieContractForPick>[0] | null } = { toSign: null }
   const audit = await prisma.$transaction(async (tx) => {
+    rookieContract.toSign = null
     // NOTE: default Prisma interactive-tx timeout is 5s; this flow (session
     // load + validations + presentation resolver + pick write + audit + session
     // bump) can exceed that on cold Neon pools. Raise to 30s; real commits
@@ -239,7 +256,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
       include: {
         picks: { orderBy: { overall: 'asc' } },
-        league: { select: { id: true, sport: true } },
+        league: { select: { id: true, sport: true, leagueVariant: true } },
       },
     })
 
@@ -260,6 +277,21 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
     const teamCount = session.teamCount
     const picks = session.picks as unknown as PickRow[]
     const leagueSport = session.league?.sport ?? session.sportType ?? 'NFL'
+
+    const resolveCollegeAsset = async (playerId: string | null | undefined, playerName: string, position: string): Promise<NbaCollegeAssetType | null> => {
+      if (!String(playerId ?? '').startsWith('espn:ncaab:')) return null
+      if (String(leagueSport).toUpperCase() !== 'NBA') throw Object.assign(new Error('This college player is not eligible in this league.'), { status: 400 })
+      const [c2cConfig, devyConfig, verified] = await Promise.all([
+        tx.c2CLeagueConfig.findUnique({ where: { leagueId: params.leagueId }, select: { id: true } }),
+        tx.devyLeagueConfig.findUnique({ where: { leagueId: params.leagueId }, select: { id: true } }),
+        verifyNcaabCollegeDraftPick(tx, { playerId, playerName, position, now: new Date() }),
+      ])
+      const variant = String(session.league?.leagueVariant ?? '').toLowerCase()
+      const isC2c = Boolean(c2cConfig) || variant === 'merged_devy_c2c' || variant === 'c2c'
+      const isDevy = Boolean(devyConfig) || variant === 'devy_dynasty'
+      if (!verified || (!isC2c && !isDevy)) throw Object.assign(new Error('This college player is not on a verified current roster.'), { status: 400 })
+      return isC2c ? 'c2c_college' : 'devy_pick'
+    }
 
     // ── Slice 2: on-clock detection ─────────────────────────────────────────
     // The current on-clock pick is the next overall whose row is empty (or, on
@@ -364,6 +396,8 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         // Live → restarts active clock; paused → stages full timer for Resume.
         // The reset happens post-tx so resetTimer reads updated session state.
         shouldResetTimerAfterTx = true
+        await removeDraftCollegeRight(tx, params.leagueId, pick)
+        await removeRookieDraftContract(tx, params.leagueId, pick)
         await tx.draftPick.update({
           where: { id: pick.id },
           data: {
@@ -436,8 +470,11 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           }
         }
 
+        const collegeAsset = await resolveCollegeAsset(params.playerId, playerName, position)
+        const editedAssetType = collegeAsset ?? (String(leagueSport).toUpperCase() === 'NBA' && /^espn:ncaab:/.test(pick.playerId ?? '') ? 'player' : pick.assetType ?? 'player')
         const spec = await runSpecialtyAndPoolValidation({
           leagueId: params.leagueId,
+          leagueSport,
           session: session as any,
           overall: pick.overall,
           teamCount,
@@ -446,7 +483,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           playerName,
           position,
           playerId: params.playerId ?? null,
-          assetType: pick.assetType ?? 'player',
+          assetType: editedAssetType,
           pickMetadata: pick.pickMetadata as Record<string, unknown> | null,
           tx,
         })
@@ -454,7 +491,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           throw Object.assign(new Error(spec.error), { status: 400 })
         }
 
-        const presentation = await resolveDraftPickPresentation({
+        const presentation = collegeAsset ? { playerId: params.playerId!, playerImageUrl: params.playerImageUrl ?? null } : await resolveDraftPickPresentation({
           leagueSport,
           playerName,
           position,
@@ -463,6 +500,13 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           playerImageUrl: params.playerImageUrl ?? null,
         })
 
+        await removeDraftCollegeRight(tx, params.leagueId, pick)
+        await removeRookieDraftContract(tx, params.leagueId, pick)
+        rookieContract.toSign = { leagueId: params.leagueId, rosterId: pick.rosterId, playerId: presentation.playerId ?? null, playerName, position, overall: pick.overall }
+        const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: pick.rosterId, playerId: params.playerId!, assetType: collegeAsset }) : null
+        const metadata = pick.pickMetadata && typeof pick.pickMetadata === 'object' && !Array.isArray(pick.pickMetadata) ? { ...pick.pickMetadata as Record<string, unknown> } : {}
+        delete metadata.draftCollegeRightsId
+        if (rightId) metadata.draftCollegeRightsId = rightId
         await tx.draftPick.update({
           where: { id: pick.id },
           data: {
@@ -473,6 +517,8 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
             playerId: presentation.playerId,
             playerImageUrl: presentation.playerImageUrl,
             sportType: session.sportType ?? undefined,
+            assetType: editedAssetType,
+            pickMetadata: metadata as Prisma.InputJsonValue,
           },
         })
 
@@ -559,8 +605,10 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           }
         }
 
+        const collegeAsset = await resolveCollegeAsset(params.playerId, playerName, position)
         const spec = await runSpecialtyAndPoolValidation({
           leagueId: params.leagueId,
+          leagueSport,
           session: session as any,
           overall,
           teamCount,
@@ -569,7 +617,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           playerName,
           position,
           playerId: params.playerId ?? null,
-          assetType: 'player',
+          assetType: collegeAsset ?? 'player',
           pickMetadata: null,
           tx,
         })
@@ -577,7 +625,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           throw Object.assign(new Error(spec.error), { status: 400 })
         }
 
-        const presentation = await resolveDraftPickPresentation({
+        const presentation = collegeAsset ? { playerId: params.playerId!, playerImageUrl: params.playerImageUrl ?? null } : await resolveDraftPickPresentation({
           leagueSport,
           playerName,
           position,
@@ -594,6 +642,9 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
             | undefined
         }
 
+        rookieContract.toSign = { leagueId: params.leagueId, rosterId: onClockRosterId, playerId: presentation.playerId ?? null, playerName, position, overall }
+        const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: onClockRosterId, playerId: params.playerId!, assetType: collegeAsset }) : null
+        const pickMetadata = rightId ? { draftCollegeRightsId: rightId } : {}
         let savedPickId: string
         if (existing && isDraftPickRowEmpty(existing)) {
           const updated = await tx.draftPick.update({
@@ -610,8 +661,8 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
               playerImageUrl: presentation.playerImageUrl,
               tradedPickMeta,
               source: 'commissioner',
-              assetType: 'player',
-              pickMetadata: {} as Prisma.InputJsonValue,
+              assetType: collegeAsset ?? 'player',
+              pickMetadata: pickMetadata as Prisma.InputJsonValue,
               ownerUserId: params.actorUserId,
               pickedAt: new Date(),
             },
@@ -636,7 +687,8 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
               playerImageUrl: presentation.playerImageUrl,
               tradedPickMeta,
               source: 'commissioner',
-              assetType: 'player',
+              assetType: collegeAsset ?? 'player',
+              pickMetadata: pickMetadata as Prisma.InputJsonValue,
               ownerUserId: params.actorUserId,
               pickedAt: new Date(),
             },
@@ -713,6 +765,8 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
             | undefined
         }
 
+        await transferDraftCollegeRight(tx, params.leagueId, pick, newRosterId)
+        await moveRookieDraftContract(tx, params.leagueId, pick, newRosterId)
         await tx.draftPick.update({
           where: { id: pick.id },
           data: {
@@ -771,7 +825,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
       },
     })
 
-    return { ok: true as const, shouldResetTimer: shouldResetTimerAfterTx }
+    return { ok: true as const, shouldResetTimer: shouldResetTimerAfterTx, auditRow }
   }, { timeout: 30_000, maxWait: 10_000 }).catch((e: unknown) => e)
 
   if (!audit || typeof audit !== 'object' || !('ok' in audit) || (audit as { ok?: unknown }).ok !== true) {
@@ -816,11 +870,55 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
     }
   }
 
+  if (rookieContract.toSign) {
+    try {
+      await signRookieContractForPick(rookieContract.toSign)
+    } catch (err) {
+      console.error('[commissionerPickEdit] rookie contract failed (non-fatal)', err)
+    }
+  }
+
   invalidateLeagueDraftCaches(params.leagueId)
 
   const snapshot = await buildSessionSnapshot(params.leagueId)
   if (!snapshot) {
     return { ok: false, status: 500, error: 'Failed to build session snapshot' }
+  }
+
+  // Tell the room in its chat. Posted after the commit, fire-and-forget: chat never fails the edit.
+  const committed = (audit as { auditRow?: { overallPickNumber: number; oldRosterId: string | null; newRosterId: string | null; oldPlayerName: string | null; newPlayerName: string | null } }).auditRow
+  if (committed && params.actorUserId) {
+    const nameOf = (rosterId: string | null) =>
+      rosterId ? snapshot.slotOrder?.find((s) => s.rosterId === rosterId)?.displayName?.trim() || null : null
+    const pickNow = snapshot.picks?.find((p) => p.overall === committed.overallPickNumber) ?? null
+    const tc = Math.max(1, snapshot.teamCount)
+    const pickLabel =
+      pickNow?.pickLabel ??
+      `${Math.ceil(committed.overallPickNumber / tc)}.${String(((committed.overallPickNumber - 1) % tc) + 1).padStart(2, '0')}`
+    void import('@/lib/draft-room/postDraftRoomEventChat')
+      .then(({ postDraftRoomEventChat, describeCommissionerPickEdit }) => {
+        const event = describeCommissionerPickEdit({
+          action: params.action as CommissionerPickEditAction,
+          pickLabel,
+          oldPlayerName: committed.oldPlayerName,
+          newPlayerName: committed.newPlayerName,
+          oldOwnerName: nameOf(committed.oldRosterId),
+          newOwnerName: nameOf(committed.newRosterId),
+        })
+        const showsNewPlayer = params.action !== 'REMOVE_PLAYER_FROM_PICK' && pickNow?.playerName?.trim()
+        return postDraftRoomEventChat({
+          leagueId: params.leagueId,
+          actorUserId: params.actorUserId,
+          event: {
+            ...event,
+            overall: committed.overallPickNumber,
+            ...(showsNewPlayer
+              ? { position: pickNow?.position ?? null, team: pickNow?.team ?? null, headshotUrl: pickNow?.playerImageUrl ?? null }
+              : {}),
+          },
+        })
+      })
+      .catch(() => {})
   }
   return { ok: true, snapshot }
 }

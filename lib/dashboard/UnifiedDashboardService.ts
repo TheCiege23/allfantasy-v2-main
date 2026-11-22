@@ -14,7 +14,7 @@ import {
 } from "./DashboardLeagueSummaryService"
 import { getDashboardSections, type DashboardLayoutInput } from "./DashboardLayoutEngine"
 
-export interface UnifiedDashboardPayload {
+interface UnifiedDashboardPayload {
   /** Ordered section specs (visibility + viewAllHref). */
   sections: ReturnType<typeof getDashboardSections>
   /** Product launcher cards (bracket, webapp, legacy). */

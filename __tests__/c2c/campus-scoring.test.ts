@@ -199,7 +199,12 @@ describe('checkCampusSave', () => {
     const codes = async (l: typeof league) => (await checkCampusSave(db as never, { league: l, redraftRosterId: 'R1', before, after: after(['c1']) })).map((i) => i.code)
     expect(await codes({ ...league, leagueVariant: 'devy_dynasty' })).toEqual(['campus_not_c2c'])
     expect(await codes({ ...league, platform: 'sleeper' })).toEqual(['campus_not_c2c'])
-    expect(await codes({ ...league, sport: 'NHL' })).toEqual(['campus_not_football'])
+    expect(await codes({ ...league, sport: 'NBA' })).toEqual(['campus_ineligible'])
+  })
+
+  it('checks the game lock when removing the last basketball campus starter', async () => {
+    const result = await checkCampusSave(db as never, { league: { ...league, sport: 'NBA' }, redraftRosterId: 'R1', before: after(['c1']), after: after([]) })
+    expect(result.map(issue => issue.code)).toContain('campus_ineligible')
   })
 
   it('does not re-judge an unchanged campus lineup', async () => {

@@ -19,7 +19,7 @@ import { coreLang } from './messages/coreLocale'
  * PURE, client-safe.
  */
 
-export type MoveText = { title: string; path: string; note: string | null }
+type MoveText = { title: string; path: string; note: string | null }
 
 const SCREEN_ES: Record<MoveScreen, string> = {
   Roster: 'Plantilla',
@@ -67,7 +67,8 @@ export function moveText(move: PlayerMove, language: string): MoveText {
       return {
         title: `Reclama a ${p.name} en lugar de ${p.last}`,
         path,
-        note: note(p.position, 'sin equipo', p.week != null ? `semana ${p.week}` : null, 'puntuación estándar'),
+        note: note(p.position, 'sin equipo', p.periodLabel === 'today' ? 'hoy' : p.week != null ? `semana ${p.week}` : null,
+          p.scoringBasis === 'league' ? 'puntuación de esta liga' : 'puntuación estándar'),
       }
     default:
       return english

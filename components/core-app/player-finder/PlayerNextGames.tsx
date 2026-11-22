@@ -116,4 +116,3 @@ export function PlayerNextGames({
   )
 }
 
-export default PlayerNextGames

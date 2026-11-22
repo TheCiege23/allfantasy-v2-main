@@ -10,14 +10,7 @@
   flex-wrap: wrap;
 }
 
-.af-pf-title {
-  margin: 0;
-  font: 900 26px/1.15 'Archivo', system-ui, sans-serif;
-  letter-spacing: -0.03em;
-  color: var(--text);
-}
-
-.af-pf-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+/* The title (and eyebrow) are the shared PageHeader's (primitives/af-primitives.css). */
 
 .af-pf-btn {
   appearance: none;

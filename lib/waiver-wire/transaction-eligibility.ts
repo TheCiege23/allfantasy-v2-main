@@ -53,6 +53,8 @@ export type WaiverClaimEligibilityInput = {
    * A first-come add in an offseason the commissioner opened to free agency
    * (lib/waiver-wire/season-phase-policy.ts): a `completed` season does not lock it.
    */
+  /** True only for the immediate-add service, not a submitted waiver claim. */
+  freeAgent?: boolean
   offseasonFreeAgency?: boolean
   /** Told what the gate let through but wants said — an imported roster's IR findings. Never a refusal. */
   onNotice?: (message: string) => void
@@ -97,6 +99,20 @@ function sectionForPlayerId(playerData: unknown, pid: string): RosterSectionKey 
  * Deterministic checks before creating a waiver claim. Throws `Error` with a user-facing message.
  */
 export async function assertWaiverClaimEligibility(input: WaiverClaimEligibilityInput): Promise<void> {
+  await checkWaiverEligibility(input)
+}
+
+/** Trusted server-side simulation only; never accepted from a claim request payload. No writes. */
+export async function previewWaiverClaimEligibility(input: WaiverClaimEligibilityInput, projection: {
+  playerData: unknown; priorDrops: number
+}): Promise<void> {
+  if (!Number.isSafeInteger(projection.priorDrops) || projection.priorDrops < 0) throw new Error('Invalid simulated drop count.')
+  await checkWaiverEligibility(input, projection)
+}
+
+async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projection?: {
+  playerData: unknown; priorDrops: number
+}): Promise<void> {
   const { leagueId, rosterId, addPlayerId, dropPlayerId } = input
   const addId = String(addPlayerId).trim()
   if (!addId) throw new Error('Add player is required.')
@@ -127,6 +143,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   ])
 
   if (!league || !roster) throw new Error('Roster not found or does not belong to this league.')
+  if (projection) roster.playerData = projection.playerData as typeof roster.playerData
   if (await isCommissionerRosterLocked(leagueId, rosterId)) {
     throw new Error('This roster is locked by the commissioner.')
   }
@@ -138,6 +155,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
     throw new Error('This league season is complete; roster moves are locked.')
   }
 
+  if (league.leagueVariant === 'survivor_guillotine' && input.freeAgent) throw new Error('Survivor Guilly acquisitions use blind FAAB waivers; immediate free-agent adds are disabled.')
   await assertCurrentNbaWaiverPlayer(league, addId)
 
   const engineConfig = parseWaiverEngineConfig(settingsRow?.waiverEngineConfig ?? null)
@@ -196,7 +214,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
       leagueId,
       rosterId,
       eff.maxDropsPerWeek,
-      input.excludeClaimId ? { excludeClaimId: input.excludeClaimId } : undefined,
+      { ...(input.excludeClaimId ? { excludeClaimId: input.excludeClaimId } : {}), additionalDrops: projection?.priorDrops ?? 0 },
     )
     if (!dropLimit.ok) throw new Error(dropLimit.message)
   }
@@ -246,6 +264,7 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   }
 
   const ev = await evaluateLegalityForProjectedRoster({ id: roster.id, leagueId, playerData: roster.playerData }, projected)
+  if (projection && !ev) throw new Error('Projected roster legality is unavailable.')
   if (ev) {
     // `isLegal` folds in the whole-roster weekly lineup lock (e.g. "Mon-Tue" football_weekly
     // policy), which exists to freeze STARTER edits during game windows. A free-agent add/drop
@@ -255,6 +274,15 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
     // of whether the move ever touched a starter slot.
     const blocking = ev.result.blockingReasons.filter((r) => {
       if (r.code === 'LEAGUE_LINEUP_LOCK_ACTIVE') return false
+      // An empty starting slot never blocks a claim. A roster that is ALREADY short (an auction team that
+      // won no catcher, a QB lost to injury) could otherwise claim no one at all — not even the player who
+      // fills the gap — and the request failed as an unhandled 500 (dynasty simulation, 2026-11-09: MLB,
+      // "Not enough starters (22/23)"). A claim whose DROP opens the gap is already the manager's call:
+      // the claims route asks once (lib/waiver-wire/lineup-fill-warning.ts) — a warning, never a block.
+      if (r.code === 'STARTER_SLOT_EMPTY_WHEN_REQUIRED') {
+        notices.push(r.message)
+        return false
+      }
       if (imported && isImportedProviderStateIssue(r)) {
         notices.push(r.message)
         return false

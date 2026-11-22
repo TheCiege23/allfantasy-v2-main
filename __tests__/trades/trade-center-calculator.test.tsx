@@ -517,8 +517,14 @@ describe('stylesheet', () => {
     expect(CSS).not.toContain('[data-mstep]')
   })
 
-  it('on a phone, "You get" is ordered above "You send"', () => {
-    expect(phoneBlockWith(CSS, "[data-side='get']")).toMatch(/\.af-tc-builder \.af-tc-team\[data-side='get'\] \{\n    order: -1;/)
+  it('Team A (you) comes before Team B at every width — no phone rule reorders the sides', () => {
+    // 2026-11-05: Team A is your roster, Team B the manager you pick, in that order everywhere.
+    expect(CSS).not.toMatch(/\.af-tc-team\[data-side='get'\] \{\n\s*order:/)
+  })
+
+  it('one analyze button per width: the bottom one hides on a phone, where the balance bar has it', () => {
+    const phone = [...CSS.matchAll(/@media \(max-width: 720px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n')
+    expect(phone).toMatch(/\.af-tc-actions \.af-tc-actions-analyze \{\n\s*display: none;/)
   })
 
   it('🛑 the action row is not sticky to the bottom', () => {

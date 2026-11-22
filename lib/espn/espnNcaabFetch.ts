@@ -16,6 +16,8 @@
  */
 
 import { espnSiteApiUrl } from '@/lib/providers/espnUrls'
+import { parseEspnCollegeBoxScore } from './espnNcaabBoxScore'
+import { parseEspnCollegeScoreboard } from './espnNcaabScoreboard'
 
 const NCAAB_PATH = 'basketball/mens-college-basketball'
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -28,7 +30,7 @@ export class EspnBlockedError extends Error {
   }
 }
 
-export type EspnNcaabTeam = {
+type EspnNcaabTeam = {
   /** ESPN team id — the same id space as CFBD team ids (contracts/espn GAPS R-02). */
   id: string
   abbreviation: string | null
@@ -43,6 +45,8 @@ export type EspnNcaabAthlete = {
   fullName: string
   jersey: string | null
   position: string | null
+  /** Standard class year from the season-qualified ESPN roster. */
+  classYear?: number
   /** Present only when ESPN has a photo; absent means none (R-05). */
   headshotUrl: string | null
 }
@@ -88,11 +92,14 @@ export function parseEspnNcaabRoster(body: unknown): { seasonYear: number | null
     const id = str(a?.id)
     const fullName = str(a?.fullName) ?? str(a?.displayName)
     if (!id || !fullName) { rejectedCount++; continue }
+    const experience = a.experience as { years?: unknown; abbreviation?: unknown } | undefined
+    const classYear = ['FR', 'SO', 'JR', 'SR'].indexOf(str(experience?.abbreviation) ?? '') + 1
     athletes.push({
       id,
       fullName,
       jersey: str(a.jersey),
       position: str((a.position as { abbreviation?: unknown } | undefined)?.abbreviation),
+      ...(classYear > 0 && experience?.years === classYear ? { classYear } : {}),
       headshotUrl: str((a.headshot as { href?: unknown } | undefined)?.href),
     })
   }
@@ -124,4 +131,17 @@ export async function fetchEspnNcaabRoster(
   if (!/^\d+$/.test(espnTeamId)) throw new Error(`not an ESPN team id: ${espnTeamId}`)
   const url = espnSiteApiUrl(`${NCAAB_PATH}/teams/${espnTeamId}/roster`)
   return parseEspnNcaabRoster(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS))
+}
+
+/** Authorized college game data is fetched only by scheduled ingestion; readers use the cache. */
+export async function fetchEspnCollegeBoxScore(eventId: string, opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
+  if (!/^\d+$/.test(eventId)) throw new Error('Invalid ESPN event ID')
+  const url = espnSiteApiUrl(`${NCAAB_PATH}/summary`, { event: eventId })
+  return parseEspnCollegeBoxScore(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS), eventId)
+}
+
+export async function fetchEspnCollegeScoreboard(day: string, opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(new Date(`${day}T00:00:00Z`).getTime())) throw new Error('Invalid scoreboard day')
+  const url = espnSiteApiUrl(`${NCAAB_PATH}/scoreboard`, { dates: day.replaceAll('-', ''), groups: 50, limit: 1000 })
+  return parseEspnCollegeScoreboard(await getJson(url, opts.fetchImpl ?? fetch, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS))
 }

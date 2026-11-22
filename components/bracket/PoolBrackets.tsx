@@ -78,8 +78,6 @@ function BracketScoreCard({
 }) {
   const pts = row.totalPoints ?? row.points ?? 0
   const roundCorrect = row.roundCorrect ?? {}
-  const champion = row.championPick
-  const maxPossible = row.maxPossible ?? 0
   const name = row.displayName ?? row.ownerName ?? row.entryName
 
   return (

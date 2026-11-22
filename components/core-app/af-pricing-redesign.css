@@ -1,0 +1,101 @@
+/* /pricing, restyled toward the Plans board (2026-11-05). Layered over af-pricing.css and scoped to the
+   page's redesign stamp. /core tokens only, except the account banner, which is dark in every mode
+   like the board's .af-keep-dark section. */
+
+/* Account banner: which plan you are on, when it renews, your tokens, billing. */
+.af-pr[data-redesign='plans'] .af-pr-account {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+  padding: 18px 20px; border-radius: 18px; background: #11181c; color: #ffffff;
+}
+.af-pr[data-redesign='plans'] .af-pr-account-mark {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+  border-radius: 13px; background: var(--accent); color: #ffffff;
+}
+.af-pr[data-redesign='plans'] .af-pr-account-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 320px; min-width: 0; }
+.af-pr[data-redesign='plans'] .af-pr-account-title { font-size: 17px; font-weight: 800; }
+.af-pr[data-redesign='plans'] .af-pr-account-detail { font: 500 12px/1.4 'JetBrains Mono', ui-monospace, monospace; color: #a9b4b8; }
+.af-pr[data-redesign='plans'] .af-pr-account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-pr[data-redesign='plans'] .af-pr-account-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px;
+  border-radius: 10px; border: 1px solid #3c474d; background: transparent; color: #ffffff;
+  font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer;
+}
+.af-pr[data-redesign='plans'] .af-pr-account-btn:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
+
+/* Cards: the board's 18px radius, a kicker row, a big mono price, roomier features. */
+.af-pr[data-redesign='plans'] .af-pr-grid { gap: 14px; }
+.af-pr[data-redesign='plans'] .af-pr-card { gap: 12px; padding: 20px; border-radius: 18px; border-color: var(--line); }
+.af-pr[data-redesign='plans'] .af-pr-card[data-yours='true'] { border: 2px solid var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.af-pr[data-redesign='plans'] .af-pr-kicker-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.af-pr[data-redesign='plans'] .af-pr-kicker {
+  font: 600 11px/1.2 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.af-pr[data-redesign='plans'] .af-pr-yours {
+  flex: none; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+  font: 600 11px/1.3 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.af-pr[data-redesign='plans'] .af-pr-yours[data-status='included'] { background: var(--chip); color: var(--text2); }
+.af-pr[data-redesign='plans'] .af-pr-name { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.af-pr[data-redesign='plans'] .af-pr-desc { font-size: 14px; line-height: 1.4; color: var(--text2); }
+.af-pr[data-redesign='plans'] .af-pr-amount { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; letter-spacing: -0.03em; }
+/* Flex so a link-styled CTA ("Go to my leagues") centres its label like the buttons do. */
+.af-pr[data-redesign='plans'] .af-pr-cta {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-height: 48px; border-radius: 12px; font-size: 15px;
+}
+.af-pr[data-redesign='plans'] .af-pr-features { gap: 9px; }
+.af-pr[data-redesign='plans'] .af-pr-features li { font-size: 14px; line-height: 1.4; }
+
+@media (max-width: 760px) {
+  .af-pr[data-redesign='plans'] .af-pr-account { padding: 16px; }
+  .af-pr[data-redesign='plans'] .af-pr-account-actions { width: 100%; }
+  .af-pr[data-redesign='plans'] .af-pr-account-btn { flex: 1 1 auto; }
+}
+
+/* ── Tokens spent per week (lib/tokens/weeklyTokenSpend.ts). One series in --chart-1, the partial
+   current week lighter, 4px rounded tops on the baseline and a 2px gap between bars. ─────────── */
+.af-pr[data-redesign='plans'] .af-pr-spend {
+  display: flex; flex-direction: column; gap: 10px; margin-top: 12px;
+  padding: 16px 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--text);
+}
+.af-pr[data-redesign='plans'] .af-pr-spend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.af-pr[data-redesign='plans'] .af-pr-spend-title {
+  margin: 0; color: var(--muted);
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.af-pr[data-redesign='plans'] .af-pr-spend-total { font: 800 14px/1 'JetBrains Mono', ui-monospace, monospace; color: var(--text); }
+.af-pr[data-redesign='plans'] .af-pr-spend-none,
+.af-pr[data-redesign='plans'] .af-pr-spend-note { margin: 0; color: var(--text2); font-size: 12px; }
+.af-pr[data-redesign='plans'] .af-pr-spend-bars {
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; align-items: end;
+  height: 140px; margin: 0; padding: 18px 0 0; list-style: none; border-bottom: 1px solid var(--line2);
+}
+.af-pr[data-redesign='plans'] .af-pr-spend-col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
+.af-pr[data-redesign='plans'] .af-pr-spend-bar {
+  position: relative; display: block; width: 100%; max-width: 44px; margin: 0 auto;
+  border-radius: 4px 4px 0 0; background: var(--chart-1); outline-offset: 2px;
+}
+.af-pr[data-redesign='plans'] .af-pr-spend-col[data-current] .af-pr-spend-bar { opacity: 0.45; }
+.af-pr[data-redesign='plans'] .af-pr-spend-bar:focus-visible { outline: 2px solid var(--accent); }
+.af-pr[data-redesign='plans'] .af-pr-spend-tip {
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  padding: 2px 6px; border-radius: 6px; background: var(--text); color: var(--surface);
+  font: 700 11px/1.3 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; opacity: 0; pointer-events: none;
+}
+.af-pr[data-redesign='plans'] .af-pr-spend-bar:hover .af-pr-spend-tip,
+.af-pr[data-redesign='plans'] .af-pr-spend-bar:focus-visible .af-pr-spend-tip { opacity: 1; }
+.af-pr[data-redesign='plans'] .af-pr-spend-x {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; text-align: center;
+  color: var(--muted); font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; overflow: hidden;
+}
+.af-pr[data-redesign='plans'] .af-pr-spend-note { margin-top: 18px; }
+.af-pr[data-redesign='plans'] .af-pr-spend-data summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text); }
+.af-pr[data-redesign='plans'] .af-pr-spend-data table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.af-pr[data-redesign='plans'] .af-pr-spend-data th,
+.af-pr[data-redesign='plans'] .af-pr-spend-data td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+.af-pr[data-redesign='plans'] .af-pr-spend-data td:last-child,
+.af-pr[data-redesign='plans'] .af-pr-spend-data th:last-child { text-align: right; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+@media (max-width: 480px) {
+  .af-pr[data-redesign='plans'] .af-pr-spend { padding: 14px 12px; }
+  .af-pr[data-redesign='plans'] .af-pr-spend-col:nth-child(odd) .af-pr-spend-x { visibility: hidden; }
+}

@@ -27,7 +27,7 @@
  * canonical path for live writes. Mock writes pass through unchanged.
  */
 
-export type LegacyDraftRuntimeWriteGuardInput = {
+type LegacyDraftRuntimeWriteGuardInput = {
   /** Logical caller — usually the API route or service name. */
   route: string
   /** What the caller is trying to do (e.g. `'commit_pick'`, `'undo_pick'`). */

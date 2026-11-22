@@ -1,6 +1,6 @@
 /**
  * The Draft tab's rookie draft order (DraftSettingsCommissionerPanel → PUT .../rookie-draft-order): the
- * preview and the mode are free, switching automatic ordering on is the league owner's AF Commissioner
+ * preview and worst record first are free; automating lowest max PF is the league owner's AF Commissioner
  * plan — the route says which through `canAutomate`, and refuses with AF_COMMISSIONER_REQUIRED.
  */
 import React from 'react'
@@ -45,17 +45,21 @@ afterEach(() => {
 })
 
 describe('legacy rookie draft order, on the Draft tab', () => {
-  it('without the owner’s plan the switch cannot be turned on, and the panel says why', async () => {
-    stub({ canAutomate: false })
+  it('without the owner’s plan the switch still works: worst record first is free, and no plan note shows', async () => {
+    const calls = stub({ canAutomate: false })
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
-    expect((await r.findByTestId('rookie-auto-plan')).textContent).toContain(translations.en['lsEd.dr.rookieAutoPlan'])
-    expect(autoSwitch(r).disabled).toBe(true)
+    await waitFor(() => expect(autoSwitch(r).disabled).toBe(false))
+    expect(r.queryByTestId('rookie-auto-plan')).toBeNull()
+    fireEvent.click(autoSwitch(r))
+    fireEvent.click(r.getByText(translations.en['draft.saveRookieSettings']))
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true))
+    expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ mode: 'worst_to_first', enabled: true })
   })
 
-  it('a league whose auto-ordering is already on can still switch it off without the plan', async () => {
-    stub({ canAutomate: false, enabled: true })
+  it('without the plan, choosing lowest max PF says it is part of AF Commissioner', async () => {
+    stub({ canAutomate: false, savedMode: 'reverse_max_pf', enabled: true })
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
-    await r.findByTestId('rookie-auto-plan')
+    expect((await r.findByTestId('rookie-auto-plan')).textContent).toContain(translations.en['lsEd.dr.rookieAutoPlan'])
     expect(autoSwitch(r).disabled).toBe(false)
   })
 
@@ -72,12 +76,12 @@ describe('legacy rookie draft order, on the Draft tab', () => {
 
   it('a refusal reads in the viewer’s language, not the server’s English', async () => {
     lang.language = 'es'
-    stub({ canAutomate: true }, { status: 402, body: { error: 'AF Commissioner is required to automate the rookie draft order.', errorCode: 'AF_COMMISSIONER_REQUIRED' } })
+    stub({ canAutomate: true }, { status: 402, body: { error: 'AF Commissioner is required to order the rookie draft by lowest max points for.', errorCode: 'AF_COMMISSIONER_REQUIRED' } })
     const r = render(<DraftSettingsCommissionerPanel leagueId="l1" />)
     await waitFor(() => expect(autoSwitch(r).disabled).toBe(false))
     fireEvent.click(autoSwitch(r))
     fireEvent.click(r.getByText(translations.es['draft.saveRookieSettings'] ?? translations.en['draft.saveRookieSettings']))
     await r.findByText(translations.es['lsEd.dr.rookieAutoPlan']!)
-    expect(r.container.textContent).not.toContain('AF Commissioner is required to automate')
+    expect(r.container.textContent).not.toContain('AF Commissioner is required to order')
   })
 })

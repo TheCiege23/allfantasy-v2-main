@@ -144,6 +144,11 @@ export async function getMarketValues(
   const numTeams = Math.min(Math.max(context.teams || 12, 8), 16)
   const ppr = context.scoring.format === 'ppr' ? 1 : context.scoring.format === 'half_ppr' ? 0.5 : 0
   const mode: 'dynasty' | 'redraft' = isDynasty ? 'dynasty' : 'redraft'
+  // The chart is shared with ordinary leagues, but this note belongs to the request.
+  const bestBallNote = context.variant.bestBall
+    ? `Best ball: no public best-ball chart exists, so ${mode} market values are used; weekly-lineup-free formats reward depth — read borderline calls with that lens.`
+    : null
+  const withFormatNote = (payload: MarketValuesPayload): MarketValuesPayload => ({ ...payload, bestBallNote })
   const cacheKey = cacheKeyFor(mode, numQbs, numTeams, ppr)
 
   const now = new Date()
@@ -152,10 +157,10 @@ export async function getMarketValues(
     cached && cached.data && typeof cached.data === 'object'
       ? (cached.data as unknown as MarketValuesPayload)
       : null
-  if (cachedPayload?.version === 1 && cached && cached.expiresAt > now) return cachedPayload
+  if (cachedPayload?.version === 1 && cached && cached.expiresAt > now) return withFormatNote(cachedPayload)
 
   const rows = await fetchFcRows(isDynasty, numQbs, numTeams, ppr)
-  if (!rows) return cachedPayload?.version === 1 ? cachedPayload : null
+  if (!rows) return cachedPayload?.version === 1 ? withFormatNote(cachedPayload) : null
 
   const bySleeperId: Record<string, MarketValueEntry> = {}
   const pickBySlot: Record<string, number> = {}
@@ -213,9 +218,7 @@ export async function getMarketValues(
     fetchedAt: new Date().toISOString(),
     source: 'FantasyCalc market consensus (built from real trades)',
     mode,
-    bestBallNote: context.variant.bestBall
-      ? 'Best ball: no public best-ball chart exists, so redraft market values are used; weekly-lineup-free formats reward depth — read borderline calls with that lens.'
-      : null,
+    bestBallNote,
     numQbs,
     numTeams,
     ppr,

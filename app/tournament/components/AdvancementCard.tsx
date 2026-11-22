@@ -82,8 +82,8 @@ export function AdvancementOverlay({
       <div
         className={`tournament-scale-in relative w-full max-w-md overflow-hidden rounded-2xl border p-6 shadow-2xl ${
           gold
-            ? 'border-[var(--tournament-gold)]/50 bg-[#0a0f16]'
-            : 'border-[var(--tournament-accent)]/45 bg-[#0a1018]'
+            ? 'border-tournament-gold/50 bg-[#0a0f16]'
+            : 'border-tournament-accent/45 bg-[#0a1018]'
         }`}
         style={
           gold

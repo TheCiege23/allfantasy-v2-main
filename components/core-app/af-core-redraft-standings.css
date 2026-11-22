@@ -31,7 +31,7 @@
 /* The four tiles about you: lifted toward the sport, the table position first and filled. */
 .af-core.af-shell[data-format=redraft] .af-st-tile{background:var(--rd-surface-elev);border-color:var(--rd-accent-line)}
 .af-core.af-shell[data-format=redraft] .af-st-tile:first-child{box-shadow:inset 0 3px 0 var(--rd-accent)}
-.af-core.af-shell[data-format=redraft] .af-st-tile-v[data-tone='accent']{color:var(--rd-accent-text)}
+.af-core.af-shell[data-format=redraft] .af-st-tile[data-tone='accent'] .af-pg-stat-value{color:var(--rd-accent-text)}
 
 /* What is at stake: the race panel, marked down its leading edge. */
 .af-core.af-shell[data-format=redraft] .af-st-stakes{background:var(--rd-surface-elev);border-color:var(--rd-accent-line);box-shadow:inset 4px 0 0 var(--rd-accent)}

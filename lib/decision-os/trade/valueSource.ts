@@ -6,6 +6,7 @@
  * as of when, which the Trade OS promotion gate requires (trade price coverage audit). The pricer
  * already knew (`PricedAsset.source`); it was dropped where grade lines were built.
  *
+ *   af_completed_trades  the league format's AF completed-trade price   dated by the market snapshot
  *   fantasycalc        market value from FantasyCalc's chart            dated by the chart's sync
  *   fantasycalc_pick   a pick row on that chart (rounds 5+ decayed)     dated by the chart's sync
  *   league_idp         this league's scoring over the defender's games  scoped to a projection week
@@ -17,6 +18,8 @@
  *   sport_projection   NBA / college hoops / NHL points or category value over replacement, at grading
  *   guillotine_points  guillotine: points over the free agent for the same lineup slot × weeks of survival
  *   guillotine_faab    guillotine: FAAB's share of what the remaining chops will release, at grading
+ *   zombie_points      zombie: league points over the best free agent for the slot × remaining weeks
+ *   zombie_item        zombie: team-specific future item score from actual inventory and Horde state
  *   historical_file    the name-keyed historical value file             its snapshot date
  *   draft_analytics    a draft-capital lifetime value                   no date recorded
  *   position_baseline  a flat per-position constant                     no date recorded
@@ -24,6 +27,7 @@
  *   sports_db          a non-NFL player row's dynasty value/projection  no date recorded
  */
 export type TradeValueSource =
+  | 'af_completed_trades'
   | 'fantasycalc'
   | 'fantasycalc_pick'
   | 'league_idp'
@@ -35,6 +39,8 @@ export type TradeValueSource =
   | 'sport_projection'
   | 'guillotine_points'
   | 'guillotine_faab'
+  | 'zombie_points'
+  | 'zombie_item'
   | 'historical_file'
   | 'draft_analytics'
   | 'position_baseline'
@@ -55,7 +61,9 @@ export function tradeValueSourceOf(priced: PricedLike | null | undefined, line: 
   if (/^(nba|ncaab|nhl|mlb|soccer)-(points|category)-vorp$/.test(String(line.dataSource ?? ''))) return 'sport_projection'
   if (line.dataSource === 'guillotine-vorp') return 'guillotine_points'
   if (line.dataSource === 'guillotine-faab') return 'guillotine_faab'
+  if (line.dataSource === 'zombie-player-vorp') return 'zombie_points'
   switch (priced?.source) {
+    case 'allfantasy': return 'af_completed_trades'
     case 'fantasycalc':
       return String(line.position ?? '').toUpperCase() === 'PICK' ? 'fantasycalc_pick' : 'fantasycalc'
     case 'idp-vorp': return 'league_idp'

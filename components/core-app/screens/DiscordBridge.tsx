@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 import '@/components/core-app/af-discord.css'
 import {
   BRIDGE_SCOPES_REFUSED,
@@ -202,8 +203,10 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
    */
   useEffect(() => {
     if (data.connected) return
+    void primeDeployBaseline()
+    // Guarded: after a deploy a background refresh is a full page reload (lib/core-app/deployGuard).
     const onVisible = () => {
-      if (document.visibilityState === 'visible') router.refresh()
+      if (document.visibilityState === 'visible') void refreshInBackground(() => router.refresh())
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)

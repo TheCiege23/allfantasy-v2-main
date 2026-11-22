@@ -21,6 +21,10 @@ import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { checkGuillotineStatCorrectionsForSeason } from '@/lib/guillotine/statCorrectionHandler'
+import { maintainPirateClaims, queuePirateProtectionReminders, seedPirateClaims } from '@/lib/pirate/service'
+import { capturePirateLineupEvidence } from '@/lib/pirate/lineupEvidence'
+import { isPirateLeague } from '@/lib/pirate/rules'
 import { sendChopZoneWarningsForSeason } from '@/lib/guillotine/chopAlerts'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
@@ -198,7 +202,8 @@ async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
     // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
     where: {
-      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }), {
+      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }),
+        { OR: [{ league: { leagueVariant: null } }, { league: { leagueVariant: { not: 'season_tournament' } } }] }, {
         OR: [
           { status: { in: [...SCORING_SEASON_STATUSES] } },
           { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },
@@ -213,7 +218,7 @@ async function runRedraftReconciliation() {
         ],
       }],
     },
-    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
+    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true, leagueType: true, leagueVariant: true } } },
     orderBy: { id: 'asc' },
   })
   const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
@@ -231,11 +236,34 @@ async function runRedraftReconciliation() {
   let guillotineChops = 0
   let guillotineFailed = 0
   const guillotineOutcomes: Record<string, number> = {}
+  let pirateClaimsCreated = 0
+  let pirateSeedFailed = 0
   let playoffMatchupsScored = 0
   let playoffFailed = 0
   const playoffOutcomes: Record<string, number> = {}
   let statCorrectionFailed = 0
   const statCorrectionOutcomes: Record<string, number> = {}
+
+  /*
+   * A Guilly week's stat corrections after its chop (lib/guillotine/statCorrectionHandler.ts): the
+   * week's scores, running totals and survival history take the corrected numbers; the chop and any
+   * crowned champion stand, and a chop the corrected scores would have changed is logged for the
+   * commissioner. Hourly per week and only inside the correction window, so most ticks are one read.
+   * Counted beside the head-to-head corrections, prefixed `guilly_`.
+   */
+  const checkGuillotineCorrections = async (seasonId: string) => {
+    try {
+      const correction = await checkGuillotineStatCorrectionsForSeason(seasonId, {
+        syncWeekStats: async ({ seasonId: id, week }) => {
+          await syncPlayerWeeklyScoresForRedraftSeason({ seasonId: id, week, actorId: 'system:guillotine-correction' })
+        },
+      })
+      const key = `guilly_${correction.outcome}`
+      statCorrectionOutcomes[key] = (statCorrectionOutcomes[key] ?? 0) + 1
+    } catch {
+      statCorrectionFailed += 1
+    }
+  }
 
   for (const season of seasons) {
     // A finished contest needs no provider fetch or live-season calendar to repair its archive.
@@ -251,6 +279,8 @@ async function runRedraftReconciliation() {
       try {
         const guillotine = await runNativeGuillotineWeek({ seasonId: season.id, currentFantasyWeek: 0 })
         guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
+        // A correction to the final weeks still lands after the crown; the champion stands.
+        if (guillotine.outcome !== 'not_guillotine') await checkGuillotineCorrections(season.id)
       } catch { guillotineFailed += 1 }
       continue
     }
@@ -294,6 +324,12 @@ async function runRedraftReconciliation() {
         playoffMatchupsScored += playoff.matchupsScored + (playoff.lowerBracket?.matchupsScored ?? 0)
       } catch {
         playoffFailed += 1
+      }
+      if (season.league?.leagueType === 'pirate' || season.league?.leagueVariant === 'pirate') {
+        try {
+          pirateClaimsCreated += await seedPirateClaims(season.leagueId)
+          await queuePirateProtectionReminders(season.leagueId)
+        } catch { pirateSeedFailed += 1 }
       }
       continue
     }
@@ -367,13 +403,15 @@ async function runRedraftReconciliation() {
               .canCall('sleeper', 'stats/nfl/week')
               .catch(() => true)
 
-            await syncPlayerWeeklyScoresForRedraftSeason({
+            const synced = await syncPlayerWeeklyScoresForRedraftSeason({
               seasonId,
               week,
               actorId: 'system:score-sync-backfill',
             })
             await recalculateMatchupsForSeasonWeek(seasonId, week)
-            return { rateLimited: !canCall }
+            // Lines the provider just returned for this league's players: what lets the finalizer seal a
+            // small or short-handed week whose only missing starters provably did not play.
+            return { rateLimited: !canCall, providerRows: synced?.weekStatsFromProvider ?? 0 }
           },
         },
       )
@@ -389,7 +427,7 @@ async function runRedraftReconciliation() {
 
     /*
      * Stat corrections for the latest SEALED week: compared and shown to the commissioner, never
-     * applied. Read-only against scoring (see statCorrectionDetector.ts), throttled to an hourly
+     * applied (head-to-head weeks; a Guilly week's corrections are applied after its chop, below). Read-only against scoring (see statCorrectionDetector.ts), throttled to an hourly
      * provider pull per week, and only for a few days after the seal.
      */
     try {
@@ -423,6 +461,7 @@ async function runRedraftReconciliation() {
         guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
       }
       if (guillotine.outcome === 'chopped') guillotineChops += 1
+      if (guillotine.outcome !== 'not_guillotine') await checkGuillotineCorrections(season.id)
       /*
        * The chop-zone warning (lib/guillotine/chopAlerts.ts): the week being played is the next one to
        * chop, so about a day before its last game the teams at the bottom are told. Once a week, claimed
@@ -439,7 +478,15 @@ async function runRedraftReconciliation() {
     } catch {
       guillotineFailed += 1
     }
+    if (season.league?.leagueType === 'pirate' || season.league?.leagueVariant === 'pirate') {
+      try {
+        pirateClaimsCreated += await seedPirateClaims(season.leagueId)
+        await queuePirateProtectionReminders(season.leagueId)
+      } catch { pirateSeedFailed += 1 }
+    }
   }
+
+  const pirateSettlements = await maintainPirateClaims({ limit: 30 }).catch(() => ({ considered: 0, transferred: 0, failed: 1 }))
 
   return {
     seasonsConsidered: seasons.length,
@@ -456,12 +503,37 @@ async function runRedraftReconciliation() {
     guillotineChops,
     guillotineFailed,
     guillotineOutcomes,
+    pirateClaimsCreated,
+    pirateSeedFailed,
+    pirateSettlements,
     playoffMatchupsScored,
     playoffFailed,
     playoffOutcomes,
     statCorrectionFailed,
     statCorrectionOutcomes,
   }
+}
+
+async function runPirateLineupEvidenceCapture() {
+  const seasons = await prisma.redraftSeason.findMany({ where: { AND: [
+    engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES] }),
+    { league: { OR: [{ leagueType: 'pirate' }, { leagueVariant: 'pirate' }] } },
+  ] }, select: { id: true, leagueId: true, season: true, league: { select: { leagueType: true, leagueVariant: true } } } })
+  // Capture every Pirate league before the rotating scoring batch and slower
+  // automation bridges: a lock snapshot cannot be reconstructed on a later tick.
+  const results = await Promise.allSettled(seasons.map(async (season) => {
+    if (!season.league || !isPirateLeague(season.league)) return 0
+    const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
+    if (!resolved.ok) return 0
+    let captured = 0
+    for (const week of [resolved.fantasyWeek, resolved.fantasyWeek + 1]) {
+      captured += await capturePirateLineupEvidence({ leagueId: season.leagueId,
+        seasonId: season.id, season: season.season, week })
+    }
+    return captured
+  }))
+  return { considered: seasons.length, captured: results.reduce((count, r) => count + (r.status === 'fulfilled' ? r.value : 0), 0),
+    failed: results.filter((r) => r.status === 'rejected').length }
 }
 
 // This branch added its own cron GET here. #284 landed an equivalent one further down
@@ -543,6 +615,7 @@ export async function GET(request: Request) {
   const bridge = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron', sport: 'NFL' },
     async () => {
+      const pirateEvidence = await runPirateLineupEvidenceCapture().catch(() => ({ considered: 0, captured: 0, failed: 1 }))
       // Both halves, and the redraft half is the one this job advertised and
       // never ran. Legacy first so a redraft failure cannot cost the
       // survivor/zombie/C2C sweep that has been working all along.
@@ -568,7 +641,7 @@ export async function GET(request: Request) {
         return { leagues: 0, sent: 0, failed: 1 }
       })
       const redraft = await runRedraftReconciliation()
-      return { ...legacy, redraft, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
+      return { ...legacy, redraft, pirateEvidence, survivorSeason, survivorSitOuts, survivorNotifications, updated: redraft.reconciled }
     },
     (r) => ({
       rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
@@ -585,6 +658,9 @@ export async function GET(request: Request) {
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
         r.redraft.guillotineFailed > 0 ||
+        r.redraft.pirateSeedFailed > 0 ||
+        r.pirateEvidence.failed > 0 ||
+        r.redraft.pirateSettlements.failed > 0 ||
         r.redraft.tournamentFailed > 0 ||
         r.redraft.playoffFailed > 0
           ? 'partial'
@@ -605,6 +681,7 @@ export async function GET(request: Request) {
         zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,
         redraft: r.redraft,
+        pirateEvidence: r.pirateEvidence,
       },
     }),
   )

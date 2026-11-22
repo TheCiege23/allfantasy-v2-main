@@ -37,17 +37,17 @@ describe('buildRedraftSettingsView', () => {
     const v = buildRedraftSettingsView(base, 'Regular season')!
     expect(v.sections.general.when).toBe('Before the draft')
     expect(v.sections.draft.when).toBe('Draft day')
-    expect(v.sections['waivers-trades'].when).toBe('Weeks 1–14 · trade deadline Wk 12')
+    expect(v.sections['trades'].when).toBe('Weeks 1–14 · trade deadline Wk 12')
     expect(v.sections.playoffs.when).toBe('From Week 15')
     expect(v.subPages.trades).toEqual({ when: 'Weeks 1–14 · trade deadline Wk 12', stage: 'now' })
   })
 
   it('never prints a week the league did not choose, nor a deadline at or after the playoffs', () => {
     const none = buildRedraftSettingsView({ ...base, playoffStartWeek: null, tradeDeadlineWeek: null }, 'Regular season')!
-    expect(none.sections['waivers-trades'].when).toBe('All season')
+    expect(none.sections['trades'].when).toBe('All season')
     expect(none.sections.playoffs.when).toBe('Season’s end')
     const late = buildRedraftSettingsView({ ...base, tradeDeadlineWeek: 16 }, 'Regular season')!
-    expect(late.sections['waivers-trades'].when).toBe('Weeks 1–14')
+    expect(late.sections['trades'].when).toBe('Weeks 1–14')
     const fromJson = buildRedraftSettingsView({ ...base, playoffStartWeek: null, settings: { playoff_structure: { playoff_start_week: 20 } } }, 'Regular season')!
     expect(fromJson.sections.playoffs.when).toBe('From Week 20')
   })
@@ -55,7 +55,7 @@ describe('buildRedraftSettingsView', () => {
   it('stages the timeline from the lifecycle phase', () => {
     const stages = (phase: Parameters<typeof buildRedraftSettingsView>[1]) => {
       const v = buildRedraftSettingsView(base, phase)!
-      return ['general', 'roster-scoring', 'draft', 'waivers-trades', 'playoffs'].map((id) => v.sections[id].stage)
+      return ['general', 'roster-scoring', 'draft', 'trades', 'playoffs'].map((id) => v.sections[id].stage)
     }
     expect(stages('Setup')).toEqual(['now', 'now', 'next', 'next', 'next'])
     expect(stages('Regular season')).toEqual(['done', 'done', 'done', 'now', 'next'])
@@ -68,7 +68,7 @@ describe('buildRedraftSettingsView', () => {
   it('speaks Spanish, and never says «waiver»', () => {
     const v = buildRedraftSettingsView(base, 'Regular season', 'es')!
     expect(v.sections.general.when).toBe('Antes del draft')
-    expect(v.sections['waivers-trades'].when).toBe('Semanas 1–14 · fecha límite de intercambios Sem 12')
+    expect(v.sections['trades'].when).toBe('Semanas 1–14 · fecha límite de intercambios Sem 12')
     const all = [...Object.values(v.sections).map((s) => s.when), ...Object.values(v.subPages).map((s) => s?.when ?? '')]
     expect(all.filter((s) => /waiver/i.test(s))).toEqual([])
   })

@@ -7,7 +7,7 @@ import {
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { currentTradeIds } from '@/lib/trade-intel/sleeperTradeSync'
 import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
-import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
+import { loadTradeExpectation, tradeExpectationShared } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
 import type { ResolvedPlayerMedia } from '@/lib/player-media'
@@ -21,6 +21,8 @@ import {
 } from '@/lib/decision-os/trade/frozenCompletedGrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { TradeRecord } from './trades'
+import { runWithConcurrency } from '@/lib/async-utils'
+import { readTradeHistoryGrades, writeTradeHistoryGrades, type CachedTradeGrade } from './tradeHistoryGradeCache'
 
 function expectationNote(expectation: TradeExpectation | null, rosterId: number): string {
   if (!expectation) return 'Not enough league-specific market data to issue a grade.'
@@ -143,6 +145,62 @@ export async function getReconciledTradeGrades(
   }
 }
 
+/**
+ * Trades graded at once in a history read — a POOL across the whole set, not batches.
+ *
+ * ⚠ IT WAS FOUR AT A TIME IN FIFTEEN SEQUENTIAL BATCHES (until 2026-11-06): each batch waited for its
+ * slowest trade before the next four started, so one slow projection held three idle slots, sixty
+ * trades paid fifteen tail latencies, and the history was the slowest section on /core Trades (19–30s
+ * cold). A pool keeps every slot busy until the set is done. Six, not more: each trade still makes a
+ * few indexed reads of its own (frozen originals are preloaded; the league-scoped inputs are shared —
+ * see `tradeExpectationShared`), and this runs beside the rest of the screen's reads on one pool.
+ */
+export const HISTORY_GRADE_CONCURRENCY = 6
+
+type GradedHistoryTrade = CachedTradeGrade & { freezes: FrozenCompletedGrade[]; failed: boolean }
+
+/**
+ * Grade every trade in a history — the projection and THE grade — returned in `trades` order.
+ * Exported for the concurrency test; the screen reaches it through `getSleeperTradeHistory`.
+ */
+export async function gradeHistoryTrades(input: {
+  sleeperLeagueId: string
+  trades: ReadonlyArray<GradedTrade>
+  afLeagueId: string | null
+  currentSeason: number
+  frozen: ReadonlyMap<string, FrozenCompletedGrade>
+  now: Date
+  concurrency?: number
+}): Promise<GradedHistoryTrade[]> {
+  const { sleeperLeagueId, afLeagueId, currentSeason, frozen, now } = input
+  // League-scoped inputs read once for the whole history, not once per trade.
+  const shared = tradeExpectationShared()
+  return runWithConcurrency([...input.trades], input.concurrency ?? HISTORY_GRADE_CONCURRENCY, async (trade) => {
+    const freezes: FrozenCompletedGrade[] = []
+    let failed = false
+    const [expectation, leagueGrade] = await Promise.all([
+      // Only trades without realized points need the same market projection used in the email.
+      hasNoSignal(trade)
+        ? loadTradeExpectation(sleeperLeagueId, trade, { afLeagueId, shared }).catch(() => { failed = true; return null })
+        : Promise.resolve(null),
+      /*
+       * 🛑 THE ONE GRADE, WHICH THIS HISTORY NEVER CARRIED (2026-09-27). Every archived trade on
+       * the Trade Center timeline read "— → —" with no value on any asset, because the only
+       * letter on the record was the realized-points one. This is the letter the grade email,
+       * the league grade list and the live-scan rows already show — graded on the viewer's own
+       * AF row, memoised grader, so sixty trades cost one chart read.
+       */
+      afLeagueId
+        ? oneGradeForCompletedTrade(afLeagueId, trade, currentSeason, { frozen, onFreeze: (f) => freezes.push(f), now }).catch(() => { failed = true; return null })
+        : Promise.resolve(null),
+    ])
+    // A projection that came back empty is an input that failed to read — never reused from the cache.
+    if (hasNoSignal(trade) && expectation == null) failed = true
+    if (afLeagueId && leagueGrade == null) failed = true
+    return { expectation, leagueGrade, freezes, failed }
+  })
+}
+
 export async function getSleeperTradeHistory(
   leagueId: string,
   viewerOwnerId: string | null,
@@ -153,41 +211,57 @@ export async function getSleeperTradeHistory(
   const grades = reconciled.grades
   if (!grades) return null
   const trades = [...grades.trades].sort((a, b) => Date.parse(b.createdIso) - Date.parse(a.createdIso)).slice(0, 60)
-  const mediaByPlayerId = await attachPlayerMediaBatch(
-    [...new Set(trades.flatMap((t) => t.sides.flatMap((s) => s.playersIn.map((p) => p.playerId))))]
-      .map((playerId) => ({ playerId, sport: 'nfl' })),
-  ).catch(() => new Map<string, ResolvedPlayerMedia>())
-  const history: TradeRecord[] = []
+  const afLeagueId = opts.afLeagueId ?? null
   const currentSeason = new Date().getUTCFullYear()
-  // Each trade's frozen original on the viewer's row — one read, one insert (`frozenCompletedGrade.ts`).
-  const frozen = opts.afLeagueId
-    ? await loadFrozenCompletedGrades(opts.afLeagueId, trades.map((t) => t.id))
-    : new Map<string, FrozenCompletedGrade>()
-  const toFreeze: FrozenCompletedGrade[] = []
   const now = new Date()
-  // Only trades without realized points need the same market projection used
-  // in the email. Bound expensive enrichment to four concurrent trades.
-  for (let i = 0; i < trades.length; i += 4) {
-    history.push(...await Promise.all(trades.slice(i, i + 4).map(async (trade) => {
-      const [expectation, leagueGrade] = await Promise.all([
-        hasNoSignal(trade)
-          ? loadTradeExpectation(leagueId, trade, { afLeagueId: opts.afLeagueId ?? null }).catch(() => null)
-          : Promise.resolve(null),
-        /*
-         * 🛑 THE ONE GRADE, WHICH THIS HISTORY NEVER CARRIED (2026-09-27). Every archived trade on
-         * the Trade Center timeline read "— → —" with no value on any asset, because the only
-         * letter on the record was the realized-points one. This is the letter the grade email,
-         * the league grade list and the live-scan rows already show — graded on the viewer's own
-         * AF row, memoised grader, so sixty trades cost one chart read.
-         */
-        opts.afLeagueId
-          ? oneGradeForCompletedTrade(opts.afLeagueId, trade, currentSeason, { frozen, onFreeze: (f) => toFreeze.push(f), now }).catch(() => null)
-          : Promise.resolve(null),
-      ])
-      return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId, leagueGrade)
-    })))
+  const tradeIds = trades.map((t) => t.id)
+  /*
+   * Three independent reads, side by side (the first two used to run one after the other): the media,
+   * the frozen originals on the viewer's row (one read, `frozenCompletedGrade.ts`), and the graded
+   * history this same ledger already produced (`tradeHistoryGradeCache.ts`).
+   */
+  const [mediaByPlayerId, frozen, cached] = await Promise.all([
+    attachPlayerMediaBatch(
+      [...new Set(trades.flatMap((t) => t.sides.flatMap((s) => s.playersIn.map((p) => p.playerId))))]
+        .map((playerId) => ({ playerId, sport: 'nfl' })),
+    ).catch(() => new Map<string, ResolvedPlayerMedia>()),
+    afLeagueId
+      ? loadFrozenCompletedGrades(afLeagueId, tradeIds)
+      : Promise.resolve(new Map<string, FrozenCompletedGrade>()),
+    afLeagueId
+      ? readTradeHistoryGrades({ afLeagueId, sleeperLeagueId: leagueId, ledgerFetchedAt: grades.fetchedAt, season: currentSeason, tradeIds, now })
+      : Promise.resolve(null),
+  ])
+
+  let graded: CachedTradeGrade[]
+  if (cached) {
+    graded = tradeIds.map((id) => cached.get(id) ?? { expectation: null, leagueGrade: null })
+  } else {
+    const fresh = await gradeHistoryTrades({ sleeperLeagueId: leagueId, trades, afLeagueId, currentSeason, frozen, now })
+    graded = fresh
+    if (afLeagueId) {
+      // One insert, in trade order.
+      const saved = await saveFrozenCompletedGrades(afLeagueId, fresh.flatMap((g) => g.freezes))
+      /*
+       * Only a complete, failure-free history is reused — an outage is never kept for the TTL. And only
+       * once its originals are on record: a cached view must not carry an original the snapshot table
+       * never received, which another surface could then freeze differently.
+       */
+      if (saved && fresh.every((g) => !g.failed)) {
+        void writeTradeHistoryGrades({
+          afLeagueId,
+          sleeperLeagueId: leagueId,
+          ledgerFetchedAt: grades.fetchedAt,
+          season: currentSeason,
+          grades: new Map(trades.map((t, i) => [t.id, { expectation: fresh[i].expectation, leagueGrade: fresh[i].leagueGrade }])),
+          now,
+        })
+      }
+    }
   }
-  if (opts.afLeagueId) await saveFrozenCompletedGrades(opts.afLeagueId, toFreeze)
+  const history: TradeRecord[] = trades.map((trade, i) =>
+    toTradeRecord(trade, viewerOwnerId, graded[i].expectation, mediaByPlayerId, graded[i].leagueGrade),
+  )
   return {
     history,
     notice: grades.staleAsOf || reconciled.incomplete

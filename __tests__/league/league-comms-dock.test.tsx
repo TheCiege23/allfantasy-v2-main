@@ -10,6 +10,24 @@ describe('league communications dock', () => {
     render(<ChimmyBubble userId="u1" selectedLeague={{ id: 'af-1', name: 'My league', platform: 'sleeper', sport: 'NFL', format: 'redraft', teamCount: 12, sleeperLeagueId: 'sleeper-123' }} />)
     expect(dock.props.leagues).toEqual([expect.objectContaining({ id: 'af-1', platformLeagueId: 'sleeper-123' })])
   })
+  it('opens the requested league for each chat notification', () => {
+    const listener = vi.fn()
+    window.addEventListener('af-comms-open', listener)
+    try {
+      const props = { selectedLeague: null, activeLeagueId: 'league-1', userId: 'u1' } as const
+      const { rerender } = render(<ChimmyBubble {...props} />)
+      expect(listener).not.toHaveBeenCalled()
+      rerender(<ChimmyBubble {...props} initialOpenChat="league" chatMessageId="msg-1" />)
+      rerender(<ChimmyBubble {...props} initialOpenChat="league" chatMessageId="msg-2" />)
+      expect(listener).toHaveBeenCalledTimes(2)
+      for (const [event] of listener.mock.calls) {
+        expect(event.detail).toEqual({ tab: 'league', leagueId: 'league-1' })
+      }
+    } finally {
+      window.removeEventListener('af-comms-open', listener)
+    }
+  })
+
   it('forwards league Ask Chimmy prompts with their league scope', () => {
     const listener = vi.fn()
     window.addEventListener('af-comms-open', listener)

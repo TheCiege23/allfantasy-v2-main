@@ -19,7 +19,7 @@ import type { Trajectory, TrajectoryDelta, TrajectoryDirection, TrajectoryPoint 
  * (percent-odds vs. a raw 0–100 score). Default `0` → any nonzero change has a
  * direction, and an exactly-zero change is `'flat'`.
  */
-export const DEFAULT_FLAT_EPSILON = 0
+const DEFAULT_FLAT_EPSILON = 0
 
 export interface DeltaOptions {
   /** `|change|` at or below this is reported as `'flat'`. Default `0`. */

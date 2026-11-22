@@ -60,8 +60,40 @@ describe('Commish Inbox detectors', () => {
     expect(keys({ teams, settings: dues([{ teamId: 't1', paid: true }, { teamId: 't2', paid: true }, { teamId: 't3', paid: true }]) })).toEqual([])
   })
 
-  it('payout requests awaiting approval', () => {
-    expect(keys({ payouts: [{ id: 'P' }] })).toEqual(['operational:payout:P:v1'])
+  it('payout requests awaiting approval — only while AllFantasy holds league money', () => {
+    expect(keys({ payouts: [{ id: 'P' }], moneyHoldingEnabled: true })).toEqual(['operational:payout:P:v1'])
+    // With money off every payout route refuses, so a task would be one nobody could act on.
+    expect(keys({ payouts: [{ id: 'P' }], moneyHoldingEnabled: false })).toEqual([])
+  })
+
+  it('dues: a league that set an amount is tracking, even though the switch was never shown', () => {
+    const teams = [{ id: 't1', teamName: 'Aces' }]
+    expect(keys({ teams, settings: { dues_tracker: { amount: 50, entries: [] } } })).toEqual(['operational:dues:2026:v1'])
+  })
+
+  it('dues: an "I paid" claim waits for the commissioner to confirm it', () => {
+    const teams = [{ id: 't1', teamName: 'Aces' }, { id: 't2', teamName: 'Bees' }]
+    const settings = { dues_tracker: { amount: 50, entries: [{ teamId: 't1', paid: false, paidSeasons: [], paidAt: null, selfReportedAt: '2026-10-18T00:00:00Z' }] } }
+    const claim = detectInboxConditions({ ...empty, teams, settings }, now).find((t) => t.sourceKey === 'operational:dues-claims:2026:v1')
+    expect(claim).toMatchObject({ priority: 'elevated', description: 'Aces says it paid. Confirm it in the dues tracker once the money has arrived.' })
+    // Confirmed: no longer a claim.
+    const confirmed = { dues_tracker: { amount: 50, entries: [{ teamId: 't1', paid: true, paidSeasons: [2026], paidAt: 'x', selfReportedAt: 'x' }] } }
+    expect(keys({ teams, settings: confirmed })).not.toContain('operational:dues-claims:2026:v1')
+  })
+
+  it('a member rule proposal waits for the commissioner; a decided one does not', () => {
+    const settings = { constitution_amendments: [{ id: 'A1', title: 'Later deadline', status: 'pending_approval' }, { id: 'A2', title: 'Old', status: 'declined' }] }
+    const [task] = detectInboxConditions({ ...empty, settings }, now)
+    expect(task).toMatchObject({ sourceKey: 'operational:amendment-pending:A1:v1', priority: 'elevated' })
+    expect(task.relatedLinks[0].href).toBe('/league/L1/constitution')
+  })
+
+  it('an open draft-time poll asks to be locked once it closes within a day', () => {
+    const poll = (closesAt: string, status = 'open') => ({ draft_schedule_poll: { id: 'P1', status, closesAt } })
+    expect(keys({ settings: poll('2026-10-25T00:00:00Z') })).toEqual([])
+    expect(detectInboxConditions({ ...empty, settings: poll(new Date(now.getTime() + 3600_000).toISOString()) }, now)[0]).toMatchObject({ sourceKey: 'operational:draft-time-poll:P1:v1', priority: 'elevated' })
+    expect(detectInboxConditions({ ...empty, settings: poll(new Date(now.getTime() - 3600_000).toISOString()) }, now)[0]).toMatchObject({ priority: 'critical' })
+    expect(keys({ settings: poll(new Date(now.getTime() - 3600_000).toISOString(), 'locked') })).toEqual([])
   })
 
   it('open disputes: one task each, critical after three days, cleared once ruled or withdrawn', () => {
@@ -85,18 +117,21 @@ describe('Commish Inbox detectors', () => {
         alerts: [{ alertId: 'A', headline: 'x', summary: null, severity: 'medium', snoozedUntil: null }],
         integrity: [{ id: 'F', flagType: 'duplicate_manager', severity: 'medium', summary: null }],
         settings: {
-          dues_tracker: { enabled: true, entries: [] },
+          dues_tracker: { enabled: true, entries: [{ teamId: 't2', paid: false, paidSeasons: [], paidAt: null, selfReportedAt: '2026-10-18T00:00:00Z' }] },
+          constitution_amendments: [{ id: 'AM', title: 'Later deadline', status: 'pending_approval' }],
+          draft_schedule_poll: { id: 'DP', status: 'open', closesAt: '2026-10-19T00:00:00Z' },
           classJoinRequests: [{ userId: 'u1', requestedAt: 'x', divisionAtRequest: 3 }],
           orphan_adoption_requests: [{ id: 'O', leagueId: 'L1', rosterId: 'r', userId: 'u', requesterName: 'Sam', message: null, status: 'pending', createdAt: 'x', resolvedAt: null, resolvedBy: null }],
           league_disputes: [{ id: 'D', category: 'rules', subject: 'Bye week rule', details: '', filedByUserId: 'u', filedByName: 'Sam', status: 'open', createdAt: '2026-10-18T00:00:00Z', closedAt: null, ruling: null }],
         },
-        teams: [{ id: 't1', teamName: 'Ghosts' }],
+        teams: [{ id: 't1', teamName: 'Ghosts' }, { id: 't2', teamName: 'Hawks' }],
         payouts: [{ id: 'P' }],
+        moneyHoldingEnabled: true,
       },
       now,
     )
     const texts = tasks.flatMap((t) => (t.sourceKey.startsWith('operational:alert:') ? [t.description] : [t.title, t.description]))
-    expect(tasks.map((t) => t.sourceKey.split(':')[1]).sort()).toEqual(['adoption', 'alert', 'dispute', 'dues', 'integrity', 'join-requests', 'keeper-conflicts', 'keepers', 'payout'])
+    expect(tasks.map((t) => t.sourceKey.split(':')[1]).sort()).toEqual(['adoption', 'alert', 'amendment-pending', 'dispute', 'draft-time-poll', 'dues', 'dues-claims', 'integrity', 'join-requests', 'keeper-conflicts', 'keepers', 'payout'])
     expect(texts.length).toBeGreaterThan(10)
     for (const text of texts) expect(taskText(text, 'es'), text).not.toBe(text)
   })

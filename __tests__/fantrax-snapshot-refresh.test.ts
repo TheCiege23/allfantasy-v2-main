@@ -14,6 +14,8 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (original) => ({
   getFantraxLeagueInfo: h.info, getFantraxTeamRosters: h.rosters,
   getFantraxStandings: h.standings, getFantraxPlayerIds: h.players,
   fetchFantraxScheduleWithScores: h.schedule, getFantraxDraftResults: h.draft,
+  // Not under test here; without this the real client would call Fantrax.
+  getFantraxDraftPicks: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'not read in this test' } })),
 }))
 import { importFantraxLeague } from '@/lib/league-import/fantrax/importFantraxLeague'
 const args = { leagueId: 'vendor-id', teamName: 'My team', appUserId: 'owner', refreshSnapshotId: 'stable-uuid' }
@@ -35,6 +37,24 @@ beforeEach(() => {
 })
 
 describe('Fantrax snapshot refresh', () => {
+  it('classifies a 160-team league named NCAA-FB by its college basketball player IDs', async () => {
+    h.info.mockResolvedValue({ ok: true, data: { leagueName: 'NCAA-FB', seasonYear: 2026 } })
+    const teams = Object.fromEntries(Array.from({ length: 160 }, (_, i) => [
+      `team-${i}`,
+      { teamName: i === 0 ? 'My team' : `Team ${i}`, rosterItems: [
+        { id: 'college-guard', position: 'G', status: 'ACTIVE' },
+      ] },
+    ]))
+    h.rosters.mockResolvedValue({ ok: true, data: teams })
+    h.players.mockImplementation(async (sport: string) => ({
+      ok: true,
+      data: sport === 'NCAAB' ? { 'college-guard': { name: 'College Guard', position: 'G' } } : {},
+    }))
+
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true, leagueName: 'NCAA-FB' })
+    expect(h.updateMany.mock.calls[0][0].data).toMatchObject({ sport: 'ncaab', teamCount: 160 })
+  })
+
   it('replaces stale rosters in the same owned UUID and preserves unnamed source reserves', async () => {
     const outcome = await importFantraxLeague(args)
     expect(outcome).toMatchObject({ ok: true, fantraxLeagueId: 'stable-uuid', leagueName: 'Renamed league' })

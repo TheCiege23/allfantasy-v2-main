@@ -4,31 +4,31 @@
  */
 
 /** Confessionals: text always; audio/video when clients + storage support it. */
-export type SurvivorConfessionalMedia = 'text' | 'audio' | 'video'
+type SurvivorConfessionalMedia = 'text' | 'audio' | 'video'
 
 /** Hidden idol clue chain — sequential reveals toward an idol or advantage. */
-export type SurvivorIdolClueChainMode = 'linear' | 'branching' | 'merge'
+type SurvivorIdolClueChainMode = 'linear' | 'branching' | 'merge'
 
 /** Advantage / idol inventory expiration semantics. */
-export type SurvivorAdvantageExpirationRule =
+type SurvivorAdvantageExpirationRule =
   | 'at_merge'
   | 'at_fixed_week'
   | 'after_n_tribals'
   | 'none'
 
 /** Tribe swap / merge engine beyond baseline merge week. */
-export type SurvivorTribeSwapEngineMode = 'manual_only' | 'scheduled_swap' | 'auto_rebalance' | 'auction_draft_order'
+type SurvivorTribeSwapEngineMode = 'manual_only' | 'scheduled_swap' | 'auto_rebalance' | 'auction_draft_order'
 
-export type SurvivorMergeStyle = 'standard' | 'absorb' | 'shuffle_into_two' | 'draft_order_pick'
+type SurvivorMergeStyle = 'standard' | 'absorb' | 'shuffle_into_two' | 'draft_order_pick'
 
 /** Jury + final tribal enhancements. */
-export type SurvivorJuryChamberMode = 'standard' | 'enhanced_reveal' | 'live_ftc_questions' | 'sealed_finale'
+type SurvivorJuryChamberMode = 'standard' | 'enhanced_reveal' | 'live_ftc_questions' | 'sealed_finale'
 
 /** Story / recap cadence. */
-export type SurvivorStoryModeCadence = 'off' | 'weekly' | 'per_tribal' | 'per_episode'
+type SurvivorStoryModeCadence = 'off' | 'weekly' | 'per_tribal' | 'per_episode'
 
 /** Exile / redemption style variants (multiple can be enabled; engine picks active by week rules). */
-export type SurvivorExileVariantKey =
+type SurvivorExileVariantKey =
   | 'classic_exile_island'
   | 'redemption_arena'
   | 'edge_of_extinction_style'
@@ -37,10 +37,10 @@ export type SurvivorExileVariantKey =
   | 'challenge_re_entry'
 
 /** Activity + social health tooling. */
-export type SurvivorActivityPolicy = 'none' | 'nudge_only' | 'strike_system' | 'commissioner_review'
+type SurvivorActivityPolicy = 'none' | 'nudge_only' | 'strike_system' | 'commissioner_review'
 
 /** Host / co-host control surface. */
-export type SurvivorHostToolKey =
+type SurvivorHostToolKey =
   | 'ceremony_script'
   | 'vote_clock'
   | 'advantage_reveal_order'
@@ -49,7 +49,7 @@ export type SurvivorHostToolKey =
   | 'broadcast_pins'
 
 /** Season rule presets — commissioner picks one as a starting template. */
-export type SurvivorSeasonRulePresetId =
+type SurvivorSeasonRulePresetId =
   | 'classic_20_2_tribes'
   | 'three_tribe_open'
   | 'day_zero_twist_light'
@@ -59,7 +59,7 @@ export type SurvivorSeasonRulePresetId =
   | 'custom_commissioner'
 
 /** Expanded mini-game / challenge pool keys (sport-agnostic labels; scoring binds to League.sport). */
-export const SURVIVOR_MINIGAME_POOL_KEYS = [
+const SURVIVOR_MINIGAME_POOL_KEYS = [
   'point_spread_pick',
   'pick_game_winner',
   'pick_a_lineup',
@@ -79,9 +79,9 @@ export const SURVIVOR_MINIGAME_POOL_KEYS = [
   'elimination_bracket_light',
 ] as const
 
-export type SurvivorMinigamePoolKey = (typeof SURVIVOR_MINIGAME_POOL_KEYS)[number]
+type SurvivorMinigamePoolKey = (typeof SURVIVOR_MINIGAME_POOL_KEYS)[number]
 
-export type SurvivorMinigameRandomizer = 'uniform' | 'weighted_by_sport' | 'commissioner_curated'
+type SurvivorMinigameRandomizer = 'uniform' | 'weighted_by_sport' | 'commissioner_curated'
 
 export type SurvivorEngineSpecV2 = {
   version: 2

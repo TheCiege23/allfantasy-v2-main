@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   raw: vi.fn(), players: vi.fn(), injuries: vi.fn(), projections: vi.fn(), latest: vi.fn(), byes: vi.fn(),
-  afEngine: vi.fn(),
+  afEngine: vi.fn(), metrics: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   $queryRawUnsafe: h.raw, sportsPlayer: { findMany: h.players }, sportsInjury: { findMany: h.injuries },
@@ -14,6 +14,7 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
   latestProjectionWeek: h.latest,
   lookupAfEngineProjections: h.afEngine,
 }))
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 vi.mock('@/lib/core-app/byeWeeks', () => ({ getByeWeeks: h.byes }))
 
 import { loadRailProjections } from '@/lib/core-app/railMatchups'
@@ -131,7 +132,10 @@ describe('rail projections use the roster availability rules', () => {
     h.byes.mockResolvedValue(null)
     const result = await loadRailProjections(fixtures(['L1', 'L2']))
     expect(result.byLeague.get('L1')?.sides.get('team')?.projected).toBe(0)
-    expect(result.byLeague.get('L2')?.sides.get('team')?.projected).toBe(25)
+    /* The NFL player's OUT does not zero the NBA starter. This used to read 25 — the feed's NFL row for
+       the same id, priced into the NBA side. That was the collision itself (rail-projections-sport-scope
+       test); the NBA side is now unpriced, `PROJ —`, and still not the NFL namesake's 0. */
+    expect(result.byLeague.get('L2')?.sides.get('team')?.projected ?? null).toBeNull()
   })
 })
 
@@ -199,5 +203,35 @@ describe('rail projections — the AF engine column', () => {
     const side = (await loadRailProjections(fixtures())).byLeague.get('L1')?.sides.get('team')
     expect(side?.projected).toBe(15)
     expect(side?.afEngine).toBeNull()
+  })
+})
+
+describe('the AF league rail', () => {
+  it('sums verified league roster IDs for all seven sports and keeps their fixture weeks', async () => {
+    const sports = ['NFL', 'NBA', 'MLB', 'NHL', 'SOCCER', 'NCAAF', 'NCAAB']
+    const input = fixtures(sports)
+    h.raw.mockReset().mockResolvedValueOnce(sports.map(sport => ({ ...meta(sport, { rec: 1 }, sport), platform: 'fantrax' })))
+      .mockResolvedValueOnce(sports.map(leagueId => ({ leagueId, platformUserId: 'user', starters: ['123', '456', '0'] })))
+    h.metrics.mockImplementation(async ({ leagueId, week, rosterIds }) => {
+      expect(rosterIds).toEqual(['123', '456'])
+      return { season: 2026, week, sport: leagueId, unit: 'fantasy points', rows: [
+        { rosterPlayerId: '123', weekly: sports.indexOf(leagueId) + 1 }, { rosterPlayerId: '456', weekly: null },
+      ] }
+    })
+    const board = await loadRailProjections({ ...input, sharedAf: true, fixtures: input.fixtures.map((fixture, i) => ({ ...fixture, week: i + 1 })) })
+    expect(board.projectionWeek).toBeNull()
+    sports.forEach((sport, i) => {
+      expect(h.metrics).toHaveBeenCalledWith(expect.objectContaining({ leagueId: sport, week: i + 1 }))
+      expect(board.byLeague.get(sport)?.sides.get('team')).toMatchObject({ afProjected: i + 1, pricedFrom: 1, starterCount: 2 })
+    })
+    expect(h.projections).not.toHaveBeenCalled()
+  })
+
+  it('withholds category scores and rows belonging to a different season', async () => {
+    for (const [unit, season] of [['category score', 2026], ['fantasy points', 2025]]) {
+      h.raw.mockReset().mockResolvedValueOnce([meta('L1')]).mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: ['a'] }])
+      h.metrics.mockResolvedValue({ unit, season, week: 3, rows: [{ rosterPlayerId: 'a', weekly: 99 }] })
+      expect((await loadRailProjections({ ...fixtures(), sharedAf: true })).byLeague.size).toBe(0)
+    }
   })
 })

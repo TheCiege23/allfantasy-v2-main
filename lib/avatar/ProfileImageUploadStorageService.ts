@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { put } from "@vercel/blob"
+import { UTApi, UTFile } from "uploadthing/server"
 import { getBlobReadWriteToken } from "@/lib/blob/readWriteToken"
 import {
   ALLOWED_PROFILE_IMAGE_TYPES,
@@ -64,7 +65,9 @@ export async function persistProfileImageBytes(params: {
     throw new Error(PROFILE_IMAGE_BAD_TYPE_MESSAGE)
   }
 
-  if (!getBlobReadWriteToken()) {
+  const blobToken = getBlobReadWriteToken()
+  const uploadThingToken = process.env.UPLOADTHING_TOKEN?.trim()
+  if (!blobToken && !uploadThingToken) {
     throw new Error("Storage not configured")
   }
 
@@ -78,11 +81,24 @@ export async function persistProfileImageBytes(params: {
 
   const body = Buffer.from(params.bytes)
 
-  const blob = await put(key, body, {
-    access: "public",
-    contentType: params.mimeType,
-    token: getBlobReadWriteToken(),
-  })
+  if (blobToken) {
+    const blob = await put(key, body, {
+      access: "public",
+      contentType: params.mimeType,
+      token: blobToken,
+    })
+    return { url: blob.url }
+  }
 
-  return { url: blob.url }
+  // Railway production has an UploadThing token but no Blob write token. Use its
+  // existing public file store for avatars instead of refusing every upload.
+  const uploader = new UTApi({ token: uploadThingToken })
+  const uploaded = await uploader.uploadFiles(
+    new UTFile([body], filename, { type: params.mimeType }),
+    { contentDisposition: "inline" },
+  )
+  if (uploaded.error || !uploaded.data?.url) {
+    throw new Error(uploaded.error?.message ?? "Picture upload failed")
+  }
+  return { url: uploaded.data.url }
 }

@@ -1,4 +1,4 @@
-export type LiveMatchupRow = {
+type LiveMatchupRow = {
   roster_id: number
   matchup_id: number | null
   points: number
@@ -27,7 +27,7 @@ export function mostHavePlayed(played: number, fieldSize: number): boolean {
   return played * 2 > fieldSize
 }
 
-export type LiveFieldOptions = {
+type LiveFieldOptions = {
   /** Rosters already chopped in an elimination league (`choppedBefore`). They leave the field; your own roster never does. */
   out?: ReadonlySet<string>
   /** A roster's display name, for the team currently at the cut line. */

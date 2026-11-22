@@ -17,9 +17,9 @@
 
 export const EXTERNAL_LISTING_KEY = "findLeagueExternal"
 
-export type ListingVerification = "provider" | "attestation"
+type ListingVerification = "provider" | "attestation"
 
-export interface ExternalListing {
+interface ExternalListing {
   listed: boolean
   /** Spots the commissioner says are open. The other platform's roster is not readable here. */
   openSpots: number

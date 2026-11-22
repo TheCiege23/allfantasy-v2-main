@@ -74,7 +74,7 @@ vi.mock('@/lib/redraft/lineupValidation', async (importOriginal) => ({
   validateRedraftLineup: vi.fn(() => ({ ok: true, issues: [] })),
 }))
 
-import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
+import { persistRosterLineupWithEngine, previewRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
 import { PATCH } from '@/app/api/redraft/roster/route'
 
 const OK = { issues: [], promotions: ['p1'], seasonId: 's1', season: 2026 }
@@ -132,5 +132,33 @@ describe('the redraft PATCH save', () => {
     const res = await routeSave()
     expect(res.status).toBe(200)
     expect(t.log).toHaveBeenCalledWith(h.tx, expect.objectContaining({ leagueId: 'L', redraftRosterId: 'rr-1', week: 11, check: OK }))
+  })
+})
+
+describe('read-only member lineup preview for Pirate evidence', () => {
+  const preview = () => previewRosterLineupWithEngine({ leagueId: 'L', rosterId: 'af-1', season: 2026, week: 11,
+    nextPlayerData: { lineup_sections: { starters: [{ id: 'p1', name: 'P1' }] } }, actorUserId: 'user-1' })
+  it('checks the full promotion without a transaction, promotion history, or roster write', async () => {
+    expect(await preview()).toEqual({ ok: true })
+    expect(t.check).toHaveBeenCalledWith(expect.objectContaining({ beforeTaxi: ['p1'], afterTaxi: [], afterRoster: ['p1'], protectedPromotions: undefined }))
+    expect(h.prisma.$transaction).not.toHaveBeenCalled()
+    expect(t.log).not.toHaveBeenCalled()
+    expect(h.tx.roster.update).not.toHaveBeenCalled()
+  })
+  it('honors the same closed promotion window as a member save', async () => {
+    t.check.mockResolvedValue(REFUSED)
+    expect(await preview()).toMatchObject({ ok: false, error: REFUSED.issues[0].message })
+    expect(h.prisma.$transaction).not.toHaveBeenCalled()
+    expect(t.log).not.toHaveBeenCalled()
+  })
+  it('cannot accept a commissioner or lock bypass from an unexpected input property', async () => {
+    const { resolveFullLineupLockContext } = await import('@/lib/roster-lineup-engine/lineupLockService')
+    vi.mocked(resolveFullLineupLockContext).mockResolvedValueOnce({ locked: true, reason: 'Game locked', lockedPlayerIds: [] } as never)
+    const result = await previewRosterLineupWithEngine({ leagueId: 'L', rosterId: 'af-1', season: 2026, week: 11,
+      nextPlayerData: { lineup_sections: { starters: [{ id: 'p1' }] } }, actorUserId: 'user-1',
+      source: 'commissioner_override', skipLockCheck: true, taxiProtection: ['p1'] } as never)
+    expect(result).toMatchObject({ ok: false, error: 'Game locked' })
+    expect(t.check).toHaveBeenCalledWith(expect.objectContaining({ protectedPromotions: undefined }))
+    expect(h.prisma.$transaction).not.toHaveBeenCalled()
   })
 })

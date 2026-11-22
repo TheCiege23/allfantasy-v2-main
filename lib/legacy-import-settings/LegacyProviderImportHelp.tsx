@@ -87,7 +87,7 @@ export function LegacyProviderImportHelp({ providerId }: { providerId: LegacyPro
             appears in the league URL on fleaflicker.com.
           </p>
           <p className="text-white/55">
-            Automated import for Fleaflicker is still rolling out platform-wide; use Settings → Legacy import for status,
+            Automated import for Fleaflicker is still rolling out platform-wide; use Settings → Import past seasons for status,
             or the Import page when your account shows as eligible.
           </p>
         </div>

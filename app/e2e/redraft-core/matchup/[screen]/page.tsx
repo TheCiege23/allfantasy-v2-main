@@ -34,6 +34,7 @@ export default async function RedraftCoreMatchupHarnessPage({
       state={sp.state === 'final' || sp.state === 'upcoming' ? sp.state : 'live'}
       leagueType={sp.leagueType ?? 'redraft'}
       identityOff={sp.identity === 'off'}
+      bestBall={sp.bestBall === '1'}
     />
   )
 }

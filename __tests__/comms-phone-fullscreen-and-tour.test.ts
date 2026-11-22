@@ -61,6 +61,11 @@ describe('the welcome tour stays out of the chat bubble and page controls', () =
     expect(phone).toContain('right: auto;')
   })
 
+  it('does not stack above the top-bar dropdowns that open over it', () => {
+    expect(base).not.toMatch(/^\s+z-index:/m)
+    expect(phone).not.toMatch(/^\s+z-index:/m)
+  })
+
   it('no longer uses the fixed corner offsets that put it on the bubble', () => {
     expect(base).not.toMatch(/^\s+bottom: 24px;$/m)
     expect(phone).not.toContain('bottom: calc(82px')

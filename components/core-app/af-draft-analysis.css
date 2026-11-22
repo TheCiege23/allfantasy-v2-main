@@ -4,7 +4,7 @@
 :is(.af-draft-reference,.af-draft-analysis) :is(th,td){padding:.7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
 :is(.af-draft-reference,.af-draft-analysis) th{position:sticky;top:0;background:var(--surface2);z-index:1}
 .af-draft-reference label{display:grid;gap:.4rem;max-width:28rem;margin:.7rem 0}
-.af-draft-reference :is(input,button){min-height:44px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.5rem}
+.af-draft-reference :is(input,button:not(.af-info-tip)){min-height:44px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.5rem}
 .af-draft-reference nav{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin:1rem 0}
 .af-draft-reference summary{min-height:44px;cursor:pointer;padding:.5rem 0}
 :is(.af-draft-reference,.af-draft-analysis) :is(input,select,button,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
@@ -12,10 +12,9 @@
 @media(max-width:767px){.af-draft-reference,.af-draft-analysis{padding:.75rem}.af-draft-reference label{max-width:100%}}
 
 .af-phase4-tabs{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:1rem 0}
-.af-draft-phase4 :is(button,input,select,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+.af-draft-phase4 :is(button:not(.af-info-tip),input,select,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
 .af-draft-phase4 button[aria-pressed=true]{border-color:var(--accent);background:var(--surface)}
 .af-draft-phase4 button:disabled{opacity:.5}
-.af-draft-phase4 .af-info-tip{width:44px;height:44px;min-width:44px;border-radius:50%;padding:0;box-sizing:border-box}
 .af-draft-phase4 label{display:grid;gap:.4rem;margin:.6rem 0;max-width:28rem}
 .af-draft-phase4 :is(input,select){max-width:100%;min-width:0;box-sizing:border-box;font-size:16px}
 .af-draft-phase4 small{display:block;margin-top:.3rem}
@@ -31,3 +30,31 @@
 
 .af-draft-phase4 .af-college-values table{min-width:900px}
 .af-draft-phase4 .af-college-values th{white-space:nowrap;overflow-wrap:normal}
+
+/* Draft analysis: title first, one note, each part its own block with a status chip (2026-11-06). */
+.af-draft-analysis .af-analysis-head{display:flex;align-items:center;gap:.5rem;margin:0 0 .75rem}
+.af-draft-analysis .af-analysis-head h3{margin:0;font-size:1.05rem;line-height:1.3}
+.af-draft-analysis .af-analysis-note{margin:0 0 1rem;padding:.6rem .75rem;border-left:3px solid var(--warn);border-radius:6px;background:var(--warn-soft);color:var(--text2);font-size:13px;line-height:1.45}
+.af-draft-analysis .af-analysis-part{padding:.9rem 0 0;margin-top:.9rem;border-top:1px solid var(--line)}
+.af-draft-analysis .af-analysis-note+.af-analysis-part,.af-draft-analysis .af-analysis-head+.af-analysis-part{margin-top:0;border-top:0;padding-top:0}
+.af-draft-analysis .af-analysis-part-head{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;margin:0 0 .35rem}
+.af-draft-analysis .af-analysis-part-head h4{margin:0;font-size:.95rem;line-height:1.3}
+.af-draft-analysis .af-analysis-state{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;line-height:18px;white-space:nowrap;border:1px solid var(--line);color:var(--text2)}
+.af-draft-analysis .af-analysis-state[data-tone=ok]{color:var(--good);background:var(--good-soft);border-color:transparent}
+.af-draft-analysis .af-analysis-state[data-tone=warn]{color:var(--warn);background:var(--warn-soft);border-color:transparent}
+.af-draft-analysis .af-analysis-reason{margin:0 0 .75rem;max-width:68ch;color:var(--text2);font-size:13px;line-height:1.5}
+.af-draft-analysis .af-analysis-rank{font-weight:700;font-variant-numeric:tabular-nums}
+.af-draft-analysis td{font-variant-numeric:tabular-nums}
+.af-draft-analysis details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
+
+/* Draft HQ lower half (2026-11-06). The "?" is the shared 14px ring with its own invisible tap area
+   (af-core.css); the two button rules above used to catch it and stretch it to 44px or an oval. */
+.af-draft-analysis .af-rank-compare table{min-width:0}
+.af-draft-analysis .af-rank-compare td:not(:first-child),.af-draft-analysis .af-rank-compare th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.af-draft-analysis .af-rank-compare td small{display:block;color:var(--text2);font-size:12px;white-space:normal}
+.af-briefing-actions{display:grid;gap:.6rem;margin:1rem 0 .25rem}
+.af-briefing-ask{display:flex;align-items:center;gap:.6rem}
+.af-draft-phase4 .af-briefing-ask>button{flex:1 1 auto;font-weight:700;background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.af-briefing-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:.5rem}
+.af-draft-phase4 .af-briefing-links a{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none}
+.af-draft-reference p a{display:inline-block;padding:12px 0;margin:-12px 0}

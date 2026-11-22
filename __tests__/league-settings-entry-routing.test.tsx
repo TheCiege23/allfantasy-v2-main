@@ -51,6 +51,7 @@ describe('resolveLegacySettingsPanel: old settings entries → the League Settin
     // CommissionerOperationsWorkspace "Trade Settings" passes the singular
     ['trade', 'trades'],
     ['waivers', 'waivers'],
+    ['pirate-rules', 'pirate-rules'],
   ])('%s → %s', (panel, target) => {
     expect(resolveLegacySettingsPanel(panel)).toBe(target)
   })
@@ -192,6 +193,8 @@ describe('League AI is one of the settings now (it was only in the old control c
     expect(commish?.rows.map((r) => [r.id, r.target])).toEqual([
       ['league-ai', 'ai'],
       ['commissioner-tools', 'commissioner-tools'],
+      // Dues left Commissioner tools for a row of their own (2026-11-01). Tracking only.
+      ['dues', 'dues'],
       ['settings-lock', 'settings-lock'],
       ['score-adjustments', 'score-adjustments'],
     ])

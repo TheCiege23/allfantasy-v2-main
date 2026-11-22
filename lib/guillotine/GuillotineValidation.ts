@@ -22,6 +22,7 @@ import {
   GUILLOTINE_MIN_TEAMS,
   GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS,
 } from './teamCountLimits'
+import { PRO_LEAGUE_TEAMS } from '@/lib/league/teamCountLimits'
 
 export interface ValidTeamCountRange {
   min: number
@@ -33,16 +34,19 @@ export interface ValidTeamCountRange {
 }
 
 /**
- * Get valid Guilly team count range. Same for every sport: 4–27 with single elimination,
- * up to 35 when the commissioner adds double-elimination weeks (see ./teamCountLimits.ts).
+ * Get valid Guilly team count range: 4–27 with single elimination, up to 35 when the commissioner
+ * adds double-elimination weeks (see ./teamCountLimits.ts), and never past a pro sport's real league.
  */
 export async function getValidGuillotineTeamCountRange(
-  _sport: LeagueSport | string
+  sport: LeagueSport | string
 ): Promise<ValidTeamCountRange> {
+  // A pro sport stops at its real league's size (lib/league/teamCountLimits.ts `PRO_LEAGUE_TEAMS`).
+  const realLeague = PRO_LEAGUE_TEAMS[String(sport ?? '').trim().toUpperCase()]
+  const max = realLeague ? Math.min(GUILLOTINE_MAX_TEAMS, realLeague) : GUILLOTINE_MAX_TEAMS
   return {
     min: GUILLOTINE_MIN_TEAMS,
-    max: GUILLOTINE_MAX_TEAMS,
-    singleEliminationMax: GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS,
+    max,
+    singleEliminationMax: Math.min(GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, max),
     supportsDoubleElimination: true,
   }
 }

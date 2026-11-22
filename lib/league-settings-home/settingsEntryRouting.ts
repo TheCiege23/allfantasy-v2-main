@@ -22,6 +22,8 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'guillotine-first-chop',
   'guillotine-chop-rules',
   'guillotine-rules',
+  'pirate-rules',
+  'af-options',
   'playoffs',
   'members',
   'team-settings',
@@ -79,11 +81,23 @@ export const LEGACY_SETTINGS_PANEL_TO_SUB_PAGE: Readonly<Record<string, Settings
  *   feature cards, IDP panels…): keep opening the old modal panel for it.
  */
 export function resolveLegacySettingsPanel(panel: string | null | undefined): SettingsSubPageId | null | undefined {
-  const key = String(panel ?? '').trim().toLowerCase()
+  // `<sub-page>:<view>` names a view inside the sub-page (settingsPanelView); the sub-page decides here.
+  const key = String(panel ?? '').split(':', 1)[0]!.trim().toLowerCase()
   if (!key) return null
   return Object.prototype.hasOwnProperty.call(LEGACY_SETTINGS_PANEL_TO_SUB_PAGE, key)
     ? LEGACY_SETTINGS_PANEL_TO_SUB_PAGE[key]
     : undefined
+}
+
+/**
+ * The view inside a sub-page that `<sub-page>:<view>` asks for — the Commissioner Hub's cards open
+ * `commissioner-tools:edit-schedule` and the like (CommissionerControlPanel's views). Null for none.
+ */
+export function settingsPanelView(panel: string | null | undefined): string | null {
+  const raw = String(panel ?? '')
+  const at = raw.indexOf(':')
+  const view = at >= 0 ? raw.slice(at + 1).trim().toLowerCase() : ''
+  return view || null
 }
 
 /** `/league/:id?view=settings[&settingsPanel=<sub-page>]` — the canonical link for a native league. */

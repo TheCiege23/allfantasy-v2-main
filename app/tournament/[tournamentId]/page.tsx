@@ -213,7 +213,9 @@ export default function TournamentHomePage() {
   for (const r of ctx.rounds) {
     const tls = ctx.tournamentLeagues.filter((l) => l.roundId === r.id)
     const n = tls.reduce((acc, l) => acc + l.currentTeamCount, 0)
-    remainingByRound[r.roundNumber] = n || shell.currentParticipantCount
+    // A round with no leagues yet has no field: it showed the whole tournament ("32 left") under every future round.
+    if (n > 0) remainingByRound[r.roundNumber] = n
+    else if (r.roundNumber === (shell.currentRoundNumber || 1)) remainingByRound[r.roundNumber] = shell.currentParticipantCount
   }
 
   const isFinals = currentRoundMeta?.roundType === 'championship'
@@ -223,7 +225,8 @@ export default function TournamentHomePage() {
   const tournamentMedia = LEAGUE_TYPE_MEDIA.tournament
   const feederCards: FeederCard[] = useMemo(() => {
     if (!legacyFeederLeagues) return []
-    return legacyFeederLeagues.map((row) => ({
+    // The round the tournament is in: after a cut the earlier round's leagues are history, not feeders.
+    return legacyFeederLeagues.filter((row) => row.inCurrentRound !== false).map((row) => ({
       id: row.tournamentLeagueId,
       href: `/league/${row.leagueId}?openChat=league`,
       name: row.name,
@@ -538,15 +541,23 @@ export default function TournamentHomePage() {
               </li>
             ))}
           </ul>
-          {adv > 0 ? (
-            <div className="mt-3 border-t border-dashed border-[var(--tournament-gold)]/50 pt-2 text-center text-[11px] font-bold uppercase tracking-wide text-[var(--tournament-gold)]">
-              {tInterpolate('tournament.hub.qualificationLine', { adv: String(adv) })}
-            </div>
-          ) : null}
-          {bubbleN > 0 ? (
-            <div className="mt-2 border-t border-dashed border-amber-500/50 pt-2 text-center text-[11px] font-bold uppercase tracking-wide text-amber-200">
-              {tInterpolate('tournament.hub.bubbleZone', { n: String(bubbleN) })}
-            </div>
+          {/*
+            The rule, as a caption. These were dashed divider lines drawn UNDER the whole list, so they read as "the cut
+            is after 5th" — and the cut is per league, not by conference rank, so no position in this list would be
+            right (2026-11-09 tournament audit).
+          */}
+          {adv > 0 || bubbleN > 0 ? (
+            <p className="mt-3 text-center text-[11px] text-[var(--tournament-text-dim)]" data-testid="tournament-conference-race-rule">
+              {adv > 0 ? (
+                <span className="font-semibold text-[var(--tournament-gold)]">
+                  {tInterpolate('tournament.hub.raceAdvance', { adv: String(adv) })}
+                </span>
+              ) : null}
+              {adv > 0 && bubbleN > 0 ? ' · ' : null}
+              {bubbleN > 0 ? (
+                <span className="font-semibold text-amber-200">{tInterpolate('tournament.hub.raceBubble', { n: String(bubbleN) })}</span>
+              ) : null}
+            </p>
           ) : null}
         </div>
       ) : null}

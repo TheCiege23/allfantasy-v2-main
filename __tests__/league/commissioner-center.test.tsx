@@ -40,11 +40,11 @@ function renderCenter(i: BuildSettingsHomeInput, inSeason = false) {
 }
 
 describe('CommissionerCenter', () => {
-  it('opens on Draft before the draft and shows that section’s existing editor', () => {
+  it('opens on League settings and shows that section’s existing editor', () => {
     renderCenter(input())
-    expect(screen.getByTestId('cc-pane').getAttribute('data-subpage')).toBe('draft')
-    expect(screen.getByText('editor for draft')).toBeTruthy()
-    expect(screen.getByTestId('cc-nav-draft').getAttribute('aria-current')).toBe('page')
+    expect(screen.getByTestId('cc-pane').getAttribute('data-subpage')).toBe('general')
+    expect(screen.getByText('editor for general')).toBeTruthy()
+    expect(screen.getByTestId('cc-nav-general').getAttribute('aria-current')).toBe('page')
   })
 
   it('switches the pane from the nav and from a commissioner tool', () => {
@@ -65,6 +65,16 @@ describe('CommissionerCenter', () => {
     expect(screen.queryByTestId('cc-nav-survivor-tribes')).toBeNull()
   })
 
+  it('makes Pirate rules directly reachable in the sidebar and mobile category picker', () => {
+    renderCenter(input({ leagueVariant: 'pirate' }))
+    fireEvent.click(screen.getByTestId('cc-nav-pirate-rules'))
+    expect(screen.getByText('editor for pirate-rules')).toBeTruthy()
+    expect((screen.getByLabelText('Settings category') as HTMLSelectElement).value).toBe('pirate-rules')
+    fireEvent.change(screen.getByLabelText('Settings category'), { target: { value: 'roster' } })
+    expect(screen.getByText('editor for roster')).toBeTruthy()
+    expect(screen.getByTestId('cc-nav-roster').querySelector('.cc-nav-label')?.textContent).toBe('Roster settings')
+  })
+
   it('a Survivor league gets the tribe setup entry (handoff §5.4)', () => {
     renderCenter(input({ leagueVariant: 'survivor' }))
     fireEvent.click(screen.getByTestId('cc-nav-survivor-tribes'))
@@ -77,9 +87,68 @@ describe('CommissionerCenter', () => {
     expect(screen.queryByTestId('cc-tool-roster-locks')).toBeNull()
   })
 
+  it('keeps Waivers with General and Format in the League group, not with the draft (owner, 2026-11-01)', () => {
+    renderCenter(input())
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' })
+    const groups = [...nav.querySelectorAll('section')].map((s) => ({
+      title: s.querySelector('h2')?.textContent,
+      ids: [...s.querySelectorAll('button')].map((b) => b.getAttribute('data-testid')),
+    }))
+    const league = groups.find((g) => g.title === 'League')!
+    expect(league.ids.slice(0, 3)).toEqual(['cc-nav-general', 'cc-nav-format', 'cc-nav-waivers'])
+    expect(groups.find((g) => g.title === 'Rules')!.ids).not.toContain('cc-nav-waivers')
+  })
+
+  it('gives every nav item a one-line summary and repeats it under the open section’s title', () => {
+    renderCenter(input())
+    expect(screen.getByTestId('cc-nav-draft').textContent).toBe('Draft settingsType, date, timer, order')
+    // The page opens on League settings (main's rule), so the pane repeats that section's line.
+    expect(screen.getByTestId('cc-pane-sub').textContent).toBe('Name, teams, timezone')
+    expect(screen.getByTestId('cc-eyebrow').textContent).toBe('Blah · Commissioner only')
+  })
+
+  it('opens Dues & payouts as its own section from the nav and from the tool', () => {
+    renderCenter(input())
+    fireEvent.click(screen.getByTestId('cc-tool-dues'))
+    expect(screen.getByTestId('cc-pane').getAttribute('data-subpage')).toBe('dues')
+    expect(screen.getByText('editor for dues')).toBeTruthy()
+    expect(screen.getByTestId('cc-nav-dues').getAttribute('aria-current')).toBe('page')
+  })
+
   it('shows managers joined against league size with the copy invite action', () => {
     renderCenter(input())
     expect(screen.getByText(/\/ 12 joined/)).toBeTruthy()
     expect(screen.getByTestId('cc-copy-invite')).toBeTruthy()
+  })
+})
+
+describe('CommissionerCenter back button', () => {
+  const center = (exitTo?: 'home' | 'settings') => {
+    const onExit = vi.fn()
+    render(
+      <CommissionerCenter
+        leagueName="Blah"
+        sections={buildLeagueSettingsHome(input())}
+        renderSubPage={(() => ({ title: 'Edit', content: <p>editor</p> })) as never}
+        inSeason={false}
+        managers={{ joined: 3, total: 12, inviteUrl: null }}
+        onExit={onExit}
+        exitTo={exitTo}
+      />,
+    )
+    return onExit
+  }
+
+  it('says "Back to settings" when it returns to the Settings tab hub', () => {
+    const onExit = center('settings')
+    const back = screen.getByTestId('cc-back')
+    expect(back.textContent).toContain('Back to settings')
+    fireEvent.click(back)
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps "Back to league home" when opened from the Commissioner link', () => {
+    center()
+    expect(screen.getByTestId('cc-back').textContent).toContain('Back to league home')
   })
 })

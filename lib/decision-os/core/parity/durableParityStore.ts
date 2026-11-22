@@ -157,7 +157,7 @@ export async function awaitPendingParityWrites(timeoutMs = 5_000): Promise<numbe
   return inFlight.length
 }
 
-export type PersistedParityFilters = {
+type PersistedParityFilters = {
   decisionType?: string | null
   since?: Date | null
   limit?: number | null

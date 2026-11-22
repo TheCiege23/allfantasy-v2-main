@@ -691,7 +691,12 @@ describe('through the database', () => {
     const last = toiletFinal.winnerRosterId === toiletFinal.homeRosterId ? toiletFinal.awayRosterId : toiletFinal.homeRosterId
     expect(readBracketResult(store.bracket!.structure)!.finishByRosterId.get(last)).toBe(14)
     // The champion record excludes the toilet bowl: the champion played three title games at most.
-    expect(store.championships).toHaveLength(1)
+    // The fake keeps every upsert; the real table keeps one row per league and season. The title winner
+    // is written when the final is decided and again by the finalizer, so every write must name the
+    // same one champion, and the last (the finalizer's) carries the playoff record.
+    expect(store.championships.length).toBeGreaterThanOrEqual(1)
+    expect(new Set(store.championships.map((c) => `${c.leagueId}|${c.season}|${c.championUserId}`)).size).toBe(1)
+    expect(store.championships[store.championships.length - 1].playoffRecord).toBeTruthy()
   })
 
   it('a lower-bracket week that will not seal does not hold the title round, and is sealed on its own', async () => {

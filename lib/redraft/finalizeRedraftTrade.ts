@@ -8,6 +8,8 @@
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
+import { isPirateLeague } from '@/lib/pirate/rules'
 import {
   applyRedraftTradeCapTransfersInTransaction,
   refreshCapProjections,
@@ -16,6 +18,7 @@ import {
   type RedraftTradeCapTransferResult,
 } from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
+import { assertSeasonTradeSettlement, readSeasonTradePolicy, SeasonTradeError } from '@/lib/tournament/seasonTradePolicy'
 import { captureRedraftRosterState, writeRedraftTradeExecutionSnapshot } from '@/lib/redraft/tradeExecutionSnapshot'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
@@ -126,6 +129,8 @@ export async function finalizeRedraftTrade(
       eventType: 'trade_failed',
       actorUserId: decidedByUserId,
     })
+  const league = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { leagueType: true, leagueVariant: true } })
+  const pirateLeague = league != null && isPirateLeague(league)
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
   // Multi-team: every team in the trade, for the roster evidence, the integrity scan and settlement.
@@ -167,6 +172,12 @@ export async function finalizeRedraftTrade(
   let capTransfer: RedraftTradeCapTransferResult = { moved: 0, transactionIds: [] }
   try {
     updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const seasonTrade = league?.leagueVariant === 'season_tournament' ? await readSeasonTradePolicy(tx, proposal.leagueId, true) : null
+      if (league?.leagueVariant === 'season_tournament') {
+        const current = await tx.redraftTradeProposal.findUnique({ where: { id: proposal.id }, select: { seasonId: true, acceptedAt: true, expiresAt: true } })
+        if (!seasonTrade || !current) throw new SeasonTradeError('The tournament trade is unavailable.')
+        assertSeasonTradeSettlement(seasonTrade, current, new Date())
+      }
       // Concurrency guard: atomically claim the proposal BEFORE moving any rosters.
       // A conditional update on status='pending' ensures only one of two racing
       // finalizers (double-click, vote-threshold vs. commissioner-approve) settles.
@@ -177,6 +188,9 @@ export async function finalizeRedraftTrade(
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
+      if (pirateLeague) await assertPirateTradeAllowed(proposal.leagueId, (proposal.assets ?? []).map((asset) => ({
+        fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+      })), tx)
       // 🛑 THE CAP CHECK THAT DECIDES, ON THE SETTLEMENT'S OWN TRANSACTION.
       //
       // The only cap check used to be the one above, run before this transaction existed. Anything
@@ -221,6 +235,7 @@ export async function finalizeRedraftTrade(
       const settlement = await settleRedraftTradeAssets(tx, {
         leagueId: proposal.leagueId,
         tradeId: proposal.id,
+        ...(seasonTrade ? { seasonTrade } : {}),
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         ...(multiTeam ? { additionalRosterIds: participantRosterIds.slice(2) } : {}),

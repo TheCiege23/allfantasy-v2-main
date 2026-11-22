@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver';
 import type { PowerRankingsOutput } from '@/lib/league-power-rankings/types';
 
-export interface AICommentaryProps {
+interface AICommentaryProps {
   leagueId: string;
   leagueName: string;
   season: string;

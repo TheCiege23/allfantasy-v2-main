@@ -14,6 +14,7 @@ import { listAdviceForUser, type ChimmyAdvice } from '@/lib/chimmy-advice/advice
 import { AF_TIP_SURFACE, isChimmyAdvice } from '@/lib/chimmy-advice/adviceSurfaces'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
 import { chimmyTrackRecordFor, type TrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
+import { ledgerRecordFor, type LedgerRecordView } from '@/lib/chimmy-outcomes/ledgerRecord'
 import { addAdviceKey, startSitAdviceKey } from '@/lib/chimmy-advice/adviceKeys'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { composePlayerIdentities } from './playerIdentityCompose'
@@ -197,6 +198,11 @@ export type DecisionReceiptsData = {
    * rows below. From the outcome snapshot (rebuilt every few hours). Absent = none graded yet.
    */
   chimmyRecord?: TrackRecordLine
+  /**
+   * AllFantasy's own calls — My Team's bench check, the waiver panel's #1 pickup, the trade grades —
+   * graded by the same snapshot (`lib/chimmy-outcomes/ledgerRecord.ts`). Absent = none graded yet.
+   */
+  afRecord?: LedgerRecordView
   /** Chimmy's recent start/sit advice. Absent = none, or advice is unavailable (table not applied). */
   chimmy?: ChimmyReceipt[]
   /**
@@ -1263,7 +1269,10 @@ export async function getDecisionReceipts(args: {
     readAdviceLearningSnapshot(),
   ])
   const chimmyRecord = chimmyTrackRecordFor(snapshot, args.userId)?.you ?? null
-  if (!trades && !waivers && !lineups && !autocoach && !chimmy && !chimmyRecord) return null
+  const afRecord = ledgerRecordFor(snapshot?.ledger, args.userId)
+  // The platform-wide lines ride along on a card that has something of yours; on their own they are not a receipt.
+  const afRecordYours = Boolean(afRecord?.bench?.you || afRecord?.pickups?.you)
+  if (!trades && !waivers && !lineups && !autocoach && !chimmy && !chimmyRecord && !afRecordYours) return null
   return {
     trades: trades?.trades ?? [],
     tooEarly: trades?.tooEarly ?? 0,
@@ -1283,6 +1292,7 @@ export async function getDecisionReceipts(args: {
         }
       : {}),
     ...(chimmyRecord ? { chimmyRecord } : {}),
+    ...(afRecord ? { afRecord } : {}),
     ...(chimmy?.afTips ? { afTips: chimmy.afTips } : {}),
     ...(chimmy
       ? {

@@ -1,5 +1,8 @@
 import { defineMessages } from '@/lib/i18n/messages'
+import { ordinal } from '@/lib/core-app/outlookCopy'
+import { ordinalEs } from '@/lib/core-app/outlookSpanish'
 import type { Zone } from '@/lib/core-app/standingsModel'
+import type { RoomGridColumn } from '@/lib/core-app/scoutRoomGrid'
 
 /**
  * Scout, the first room of the War Room (components/core-app/screens/Scout.tsx): the manager cards,
@@ -96,13 +99,54 @@ export const scoutScreenMessages = defineMessages({
     dynastyPicksLabel: 'Dynasty picks',
 
     // Scout
-    blurb: 'Where every manager in this league stands, and how they have played lately.',
+    blurb: 'Who you’re up against, what to fix before lock, and who to trade with.',
     blurbWeek: (week: number, seasonYear: number) => ` Week ${week} of ${seasonYear}.`,
     everyLeaguePlan: "Every league's game plan",
     standingsThroughWeek: 'Standings through week',
     seasonFinal: ' — final',
     noStandingsYet: 'No standings yet',
+    /** Under the manager cards, which show their first SCOUT_CARDS_PREVIEW (Scout). */
+    showAllManagers: (n: number) => `Show all ${n} managers`,
+    showFewerManagers: 'Show fewer managers',
     edgeLockWhat: 'Every manager’s trade and waiver record',
+    eyebrow: 'War Room',
+    /** 2026-11-14: the league moves to the eyebrow, and the h1 says something. */
+    eyebrowLeague: (league: string) => `War Room · ${league}`,
+    /**
+     * The headline (2026-11-14). The h1 was "Scout · ‹league›", which says where you are and nothing
+     * else. Now it says who you play and where you both stand — the two facts the page opens on.
+     */
+    headVs: (opp: string, oppSeed: number | null, oppRecord: string | null, youSeed: number | null, teams: number) =>
+      `This week: ${opp}${oppSeed != null && oppRecord ? `, ${ordinal(oppSeed)} at ${oppRecord}` : ''}.${
+        youSeed != null && teams > 0 ? ` You’re ${ordinal(youSeed)} of ${teams}.` : ''
+      }`,
+    headStanding: (league: string, youSeed: number, teams: number) => `You’re ${ordinal(youSeed)} of ${teams} in ${league}`,
+    /** Everything that is information rather than a move, folded (2026-11-14). */
+    moreTitle: 'More about this league',
+    moreHint: 'the table, the road ahead, the race, FAAB, how this league is won, next season',
+    managersTitle: 'Every manager in this league',
+
+    // RoomGrid
+    roomGridTitle: 'The room at a glance',
+    roomGridSub: (outOf: number) => `Each team's rank in this league, column by column. 1st of ${outOf} is best.`,
+    roomGridTeam: 'Team',
+    roomGridColumn: (c: RoomGridColumn): string =>
+      ({ seed: 'Seed', power: 'Power', pointsFor: 'Points for', form: 'Last 5' })[c],
+    roomGridColumnLong: (c: RoomGridColumn): string =>
+      ({ seed: 'the standings', power: 'power rank', pointsFor: 'points for', form: 'wins in the last five' })[c],
+    roomGridStronger: 'Stronger',
+    roomGridWeaker: 'Weaker',
+    roomGridLegendAria: 'Shading: darker is a better rank',
+    ordinal: (n: number): string => {
+      const tens = n % 100
+      if (tens >= 11 && tens <= 13) return `${n}th`
+      return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`
+    },
+    roomGridOf: (outOf: number) => `of ${outOf}`,
+    roomGridCellAria: (team: string, ordinal: string, outOf: number, column: string) =>
+      `${team}: ${ordinal} of ${outOf} in ${column}`,
+    yourStrongest: 'Your strongest',
+    yourWeakest: 'Your weakest',
     // The "Sep 21, 2025" day format's locale
     dayLocale: 'en-US',
   },
@@ -190,13 +234,41 @@ export const scoutScreenMessages = defineMessages({
     dynastyPicksLabel: 'Selecciones de dinastía',
 
     // Scout
-    blurb: 'Dónde está cada mánager de esta liga y cómo viene jugando.',
+    blurb: 'Contra quién juegas, qué arreglar antes del cierre y con quién intercambiar.',
     blurbWeek: (week, seasonYear) => ` Semana ${week} de ${seasonYear}.`,
     everyLeaguePlan: 'El plan de juego de cada liga',
     standingsThroughWeek: 'Clasificación hasta la semana',
     seasonFinal: ' (final)',
     noStandingsYet: 'Todavía no hay clasificación',
+    showAllManagers: (n) => `Ver los ${n} mánagers`,
+    showFewerManagers: 'Ver menos mánagers',
     edgeLockWhat: 'El historial de intercambios y reclamos de cada mánager',
+    eyebrow: 'Sala de estrategia',
+    eyebrowLeague: (league) => `Sala de estrategia · ${league}`,
+    headVs: (opp, oppSeed, oppRecord, youSeed, teams) =>
+      `Esta semana: ${opp}${oppSeed != null && oppRecord ? `, ${ordinalEs(oppSeed)} con ${oppRecord}` : ''}.${
+        youSeed != null && teams > 0 ? ` Vas ${ordinalEs(youSeed)} de ${teams}.` : ''
+      }`,
+    headStanding: (league, youSeed, teams) => `Vas ${ordinalEs(youSeed)} de ${teams} en ${league}`,
+    moreTitle: 'Más sobre esta liga',
+    moreHint: 'la tabla, el camino que queda, la carrera, el FAAB, cómo se gana esta liga, la próxima temporada',
+    managersTitle: 'Todos los mánagers de esta liga',
+
+    // RoomGrid
+    roomGridTitle: 'La liga de un vistazo',
+    roomGridSub: (outOf) => `El puesto de cada equipo en esta liga, columna por columna. El 1.º de ${outOf} es el mejor.`,
+    roomGridTeam: 'Equipo',
+    roomGridColumn: (c) => ({ seed: 'Posición', power: 'Poder', pointsFor: 'Puntos a favor', form: 'Últimos 5' })[c],
+    roomGridColumnLong: (c) =>
+      ({ seed: 'la clasificación', power: 'el ranking de poder', pointsFor: 'puntos a favor', form: 'victorias en los últimos cinco' })[c],
+    roomGridStronger: 'Más fuerte',
+    roomGridWeaker: 'Más débil',
+    roomGridLegendAria: 'Sombreado: más oscuro es un mejor puesto',
+    ordinal: (n) => `${n}.º`,
+    roomGridOf: (outOf) => `de ${outOf}`,
+    roomGridCellAria: (team, ordinal, outOf, column) => `${team}: ${ordinal} de ${outOf} en ${column}`,
+    yourStrongest: 'Tu punto más fuerte',
+    yourWeakest: 'Tu punto más débil',
     dayLocale: 'es-US',
   },
 })

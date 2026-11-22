@@ -1,3 +1,4 @@
+import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
@@ -27,18 +28,27 @@ export async function ensureNextRedraftSeasonShell(
   db?: ShellDb,
 ): Promise<NextRedraftSeasonShell | null> {
   const client: ShellDb = db ?? prisma
-  const existing = await client.redraftSeason.findFirst({
-    where: { leagueId, NOT: { id: completedSeasonId } },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, season: true },
-  })
-  if (existing) return existing
-
   const completedSeason = await client.redraftSeason.findUnique({
     where: { id: completedSeasonId },
     select: { sport: true, season: true, totalWeeks: true, playoffStartWeek: true, medianGame: true },
   })
   if (!completedSeason) return null
+
+  /*
+   * 🛑 "SOMETHING NEWER ALREADY EXISTS" MUST MEAN NEWER. This looked for ANY other season of the
+   * league, so it was right exactly once: with a single season on file. The second time a league
+   * rolled over (year two into year three), the "other" season it found was YEAR ONE, and that was
+   * handed back as the next season. No new season was created, the next draft was attached to the
+   * first season, and the league could never start a third year. Found re-walking a dynasty league
+   * through a second offseason (2026-11-19); it applies to a redraft league's third season the same
+   * way. A later season by year is the only thing that counts as "already created".
+   */
+  const existing = await client.redraftSeason.findFirst({
+    where: { leagueId, NOT: { id: completedSeasonId }, season: { gt: completedSeason.season } },
+    orderBy: { season: 'asc' },
+    select: { id: true, season: true },
+  })
+  if (existing) return existing
 
   const league = await client.league.findFirst({
     where: { id: leagueId },
@@ -117,6 +127,7 @@ export async function ensureNextRedraftSeasonShell(
         medianGame: completedSeason.medianGame,
         divisionByRoster: divisions?.byRoster ?? null,
         divisionRivalsTwice: divisions?.rivalsTwice === true,
+        gamesPerWeek: readGamesPerWeek(league.settings),
       },
     )
     for (const s of slots) {

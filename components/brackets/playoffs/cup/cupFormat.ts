@@ -1,37 +1,40 @@
 /** Date and team-colour helpers shared by the NBA Cup cards and matchup sheet. */
 
-export function tipoffLabel(iso: string | null | undefined, opts: { weekday?: "short" | "long"; year?: boolean } = {}): string | null {
+export function tipoffLabel(iso: string | null | undefined, opts: { weekday?: "short" | "long"; year?: boolean; timeZone?: string } = {}): string | null {
   const ms = Date.parse(iso ?? "")
   if (!Number.isFinite(ms)) return null
   const date = new Date(ms)
   const day = new Intl.DateTimeFormat(undefined, {
     weekday: opts.weekday ?? "short", month: opts.weekday === "long" ? "long" : "short", day: "numeric",
-    ...(opts.year ? { year: "numeric" as const } : {}),
+    ...(opts.year ? { year: "numeric" as const } : {}), timeZone: opts.timeZone,
   }).format(date)
-  const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(date)
+  const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone: opts.timeZone }).format(date)
   return `${day} · ${time}`
 }
 
-export function timeOnly(iso: string | null | undefined): string | null {
+export function timeOnly(iso: string | null | undefined, timeZone?: string): string | null {
   const ms = Date.parse(iso ?? "")
   if (!Number.isFinite(ms)) return null
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(ms))
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone }).format(new Date(ms))
 }
 
 /** Local calendar day, for grouping a slate the way the viewer experiences it. */
-export function localDayKey(iso: string | null | undefined): string {
+export function localDayKey(iso: string | null | undefined, timeZone?: string): string {
   const ms = Date.parse(iso ?? "")
   if (!Number.isFinite(ms)) return "tba"
   const d = new Date(ms)
+  if (timeZone === "UTC") return d.toISOString().slice(0, 10)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-export function dayHeading(key: string, now = new Date()): string {
+export function dayHeading(key: string, now = new Date(), timeZone?: string, relative = true): string {
   if (key === "tba") return "Date to be announced"
   const [y, m, d] = key.split("-").map(Number)
-  const date = new Date(y, m - 1, d)
-  const label = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(date)
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const utc = timeZone === "UTC"
+  const date = utc ? new Date(Date.UTC(y, m - 1, d)) : new Date(y, m - 1, d)
+  const label = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone }).format(date)
+  if (!relative) return label
+  const today = utc ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) : new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const diff = Math.round((date.getTime() - today.getTime()) / 86_400_000)
   if (diff === 0) return `Today · ${label}`
   if (diff === 1) return `Tomorrow · ${label}`
@@ -58,3 +61,4 @@ export function teamTint(hex: string | null | undefined): { tint: string; edge: 
     edge: `color-mix(in srgb, ${hex} 55%, #06070f)`,
   }
 }
+

@@ -12,6 +12,8 @@ import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/
 import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
 import { runTradeCalibrationPass, type TradeCalibrationPassResult } from '@/lib/trade-engine/calibrationPass'
 import { runAnnualRenewalReminderPass, type RenewalReminderPassResult } from '@/lib/billing/annualRenewalReminders'
+import { runProWeekEndingReminderPass, type ProWeekReminderPassResult } from '@/lib/referral/proWeekReminders'
+import { runRetentionPasses, type RetentionPassResult } from '@/lib/billing/retentionPasses'
 import {
   runRelationshipRefreshPass,
   type RelationshipRefreshPassResult,
@@ -162,6 +164,27 @@ export async function GET(request: NextRequest) {
     }))
 
   /*
+   * "Your free week of AF Pro ends tomorrow" for referral weeks (lib/referral/proWeekReminders) — same
+   * reason to ride here, same shape: small, after the heartbeat, one notice per week keyed on the grant.
+   */
+  const proWeekReminders: ProWeekReminderPassResult | { ran: false; reason: string } =
+    await runProWeekEndingReminderPass().catch((error) => ({
+      ran: false as const,
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+    }))
+
+  /*
+   * Retention (lib/billing/retentionPasses): the day-before "card still failing" notice, the
+   * trial-ending email two days before the first charge, and the win-back note three days after a
+   * cancellation. Same shape: small, after the heartbeat, one notice per case keyed on the row and date.
+   */
+  const retention: RetentionPassResult | { ran: false; reason: string } =
+    await runRetentionPasses().catch((error) => ({
+      ran: false as const,
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+    }))
+
+  /*
    * The nightly trade agent rides here (design step 9, 2026-09-27) because `cron-schedule.json` is at
    * its 60-job ceiling and docs/crons.md says to extend an existing handler first. It runs AFTER the
    * heartbeat above, so it can never delay or fail the reap, and a failure is reported beside the
@@ -285,6 +308,8 @@ export async function GET(request: NextRequest) {
     privateRelay,
     playBilling,
     renewalReminders,
+    proWeekReminders,
+    retention,
     tradeAgent,
     tradeLearning,
     tradeCalibration,

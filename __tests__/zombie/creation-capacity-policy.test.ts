@@ -22,7 +22,8 @@ describe('Zombie manager capacity and season planning', () => {
     expect(getTeamCountOptions(sport, 'zombie')).toEqual(counts)
     expect(getZombieTeamCountOptionsForSport(sport)).toEqual(counts)
     expect(counts[0]).toBe(4)
-    expect(counts.at(-1)).toBe(sport === 'NFL' ? 20 : sport === 'SOCCER' ? 40 : 32)
+    // NBA and MLB stop at their real leagues' 30 teams (lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS).
+    expect(counts.at(-1)).toBe(sport === 'NFL' ? 20 : sport === 'SOCCER' ? 40 : sport === 'NBA' || sport === 'MLB' ? 30 : 32)
     expect(getZombieCreationProfile(sport)).toMatchObject({ scoringPeriods: periods, suggestedManagers: suggested })
     for (const teamCount of counts) {
       const result = validateCreatePayload({ concept: 'zombie', sport, scoringPreset, teamCount,

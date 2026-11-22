@@ -138,6 +138,85 @@ function replay(input: { zombieLeagueId: string; week: CorrectionWeekInput; choi
     itemEvents: { policy: 'beta_2025', complete: true, ...loot, revivedRosterIds } }
 }
 
+/** Compare two scores for the same projected slate. Manager choices stay pending. */
+export function compareBeta2025TradeSlate(input: {
+  zombieLeagueId: string
+  before: CorrectionWeekInput
+  afterMatches: ItemWeekMatchup[]
+  afterItems: ReplayItem[]
+}) {
+  return compareTradeSlates(input, input.before.snapshot)
+}
+
+function compareTradeSlates(input: {
+  zombieLeagueId: string
+  before: CorrectionWeekInput
+  afterMatches: ItemWeekMatchup[]
+  afterItems: ReplayItem[]
+}, afterOpening: Snapshot) {
+  const { before, afterMatches } = input
+  const scheduleKey = (matches: ItemWeekMatchup[]) => matches
+    .map(({ matchupId, homeRosterId, awayRosterId }) => JSON.stringify([matchupId, homeRosterId, awayRosterId]))
+    .sort().join('\n')
+  if (scheduleKey(before.matches) !== scheduleKey(afterMatches)) {
+    throw new Error('Trade scenarios must use the same matchup slate.')
+  }
+  const rosterIds = new Set(before.snapshot.teams.map(team => team.rosterId))
+  const scheduled = before.matches.flatMap(match => [match.homeRosterId, match.awayRosterId])
+  if (scheduled.length === 0 || scheduled.length !== rosterIds.size ||
+      new Set(scheduled).size !== scheduled.length || scheduled.some(id => !rosterIds.has(id)) ||
+      new Set(before.matches.map(match => match.matchupId)).size !== before.matches.length) {
+    throw new Error('Projected settlement requires one matchup per team and unique matchup ids.')
+  }
+  if ([...before.matches, ...afterMatches].some(match =>
+    !Number.isFinite(match.homeBaseScore) || !Number.isFinite(match.awayBaseScore))) {
+    throw new Error('Projected settlement requires finite base scores for both teams.')
+  }
+  if (!(Date.parse(before.settledAt) < Date.parse(before.deadlineAt))) {
+    throw new Error('Projected settlement must precede the manager choice deadline.')
+  }
+  const project = (week: CorrectionWeekInput) => replay({
+    zombieLeagueId: input.zombieLeagueId, week: { ...week, preserveBonus: false },
+    choices: [], catalog: [], fallbackWhispererUser: '', now: week.settledAt, original: false,
+  })
+  return {
+    before: project(before),
+    after: project({ ...before, matches: afterMatches, snapshot: { ...afterOpening, items: input.afterItems } }),
+  }
+}
+
+/** Continue each projected scenario with its own ledger, roles and inventory. */
+export function compareBeta2025TradeWeeks(input: {
+  zombieLeagueId: string
+  opening: Snapshot
+  afterItems: ReplayItem[]
+  weeks: ReadonlyArray<Omit<CorrectionWeekInput, 'snapshot'> & { afterMatches: ItemWeekMatchup[] }>
+}) {
+  if (!input.weeks.length || input.weeks.length > 18) throw new Error('Forecast requires one to eighteen weekly slates.')
+  const results: Array<{ before: ReplayWeek; after: ReplayWeek }> = []
+  const carry = (week: ReplayWeek): Snapshot => ({
+    ...week.snapshot, teams: week.teams, items: week.items, whisperer: week.whisperer,
+    winnings: { policy: 'beta_2025', openingByRoster: week.totals },
+  })
+  let before = input.opening
+  let after = { ...input.opening, items: input.afterItems }
+  for (const week of input.weeks) {
+    const prior = results.at(-1)
+    if (prior && week.week !== prior.before.week + 1) throw new Error('Forecast weeks must be consecutive.')
+    if (prior && [...prior.before.choices, ...prior.after.choices].some(choice => choice.status === 'pending')) {
+      throw new Error('An unresolved manager choice prevents projecting the next week.')
+    }
+    const paired = compareTradeSlates({
+      zombieLeagueId: input.zombieLeagueId, before: { ...week, snapshot: before },
+      afterMatches: week.afterMatches, afterItems: after.items,
+    }, after)
+    results.push(paired)
+    before = carry(paired.before)
+    after = carry(paired.after)
+  }
+  return results
+}
+
 /** Pure, bounded replay of the affected settled range; unsupported intervening actions are explicit holds. */
 export function planBetaCorrection(input: { zombieLeagueId: string; weeks: CorrectionWeekInput[]; choices: RecordedChoice[]; catalog: ReplayItem[]; fallbackWhispererUser: string; now: string }): CorrectionPlan {
   const plan: CorrectionPlan = { policy: 'beta_2025', blockers: [], weeks: [], original: [], summary: [] }

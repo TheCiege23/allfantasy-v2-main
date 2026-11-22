@@ -27,24 +27,32 @@ export const finderSearchMessages = defineMessages({
 /** The search box (searchBoxCopy). */
 export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
   en: {
-    searchLabel: 'Search any player',
+    // A player or his team (2026-11-13 guide): "Bills" / "BUF" lists the club's players.
+    searchLabel: 'Search a player or team',
+    sportLabel: 'Sport',
+    allSports: 'All sports',
+    soccer: 'Soccer',
     compareLabel: 'Compare with another player',
     searchButton: 'Search',
     suggestions: 'Suggestions',
     playersToCompare: 'Players to compare',
     noTeam: 'no team on file',
-    noteSignedIn: 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.',
-    noteSignedOut: 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups.',
+    // No platform list: it named Yahoo, which no one can connect yet (provider-ui-config).
+    noteSignedIn: 'Searches every league you have connected at once.',
+    noteSignedOut: 'One search covers every league you connect. Connect a league to see your own slots and matchups.',
   },
   es: {
-    searchLabel: 'Buscar cualquier jugador',
+    searchLabel: 'Busca un jugador o un equipo',
+    sportLabel: 'Deporte',
+    allSports: 'Todos los deportes',
+    soccer: 'Fútbol',
     compareLabel: 'Comparar con otro jugador',
     searchButton: 'Buscar',
     suggestions: 'Sugerencias',
     playersToCompare: 'Jugadores para comparar',
     noTeam: 'sin equipo registrado',
-    noteSignedIn: 'Busca a la vez en todas las plataformas que conectaste: Sleeper, ESPN y Yahoo.',
-    noteSignedOut: 'Una sola búsqueda cubre Sleeper, ESPN y Yahoo a la vez. Conecta una liga para ver tus propios puestos y enfrentamientos.',
+    noteSignedIn: 'Busca a la vez en todas las ligas que conectaste.',
+    noteSignedOut: 'Una sola búsqueda cubre todas las ligas que conectes. Conecta una liga para ver tus propios puestos y enfrentamientos.',
   },
 })
 

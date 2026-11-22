@@ -10,6 +10,7 @@
  * bracket, a FAAB meter needs both the budget and the balance.
  */
 import type { RedraftSportTheme } from './redraftIdentity'
+import { decidedTitleWinnerRosterId } from '@/lib/playoff-runtime/titleWinner'
 
 /* ── Position chips ─────────────────────────────────────────────────────────────────────────────── */
 
@@ -19,7 +20,7 @@ import type { RedraftSportTheme } from './redraftIdentity'
  * (NHL), `SF` a small forward (NBA) or a superflex slot (NFL), `DEF` a defence (NFL) or a defender
  * (soccer). redraft-native-screens.css maps each value to an existing /core token.
  */
-export type RedraftPosTone = 'red' | 'green' | 'blue' | 'amber' | 'violet' | 'slate' | 'flex' | 'bench' | 'ir'
+type RedraftPosTone = 'red' | 'green' | 'blue' | 'amber' | 'violet' | 'slate' | 'flex' | 'bench' | 'ir'
 
 const COMMON: Record<string, RedraftPosTone> = { BN: 'bench', BENCH: 'bench', TX: 'bench', TAXI: 'bench', IR: 'ir', IL: 'ir', RES: 'ir' }
 
@@ -190,7 +191,7 @@ export function tradeCardState(status: string | null | undefined): { label: stri
 
 /* ── Standings & playoffs ──────────────────────────────────────────────────────────────────────── */
 
-export type PlayoffRaceStatus = 'champion' | 'clinched' | 'eliminated'
+type PlayoffRaceStatus = 'champion' | 'clinched' | 'eliminated'
 
 /**
  * Clinched / eliminated are only claimed once the bracket is GENERATED: until then the playoff runtime's
@@ -198,12 +199,22 @@ export type PlayoffRaceStatus = 'champion' | 'clinched' | 'eliminated'
  * line right now — neither is a mathematical result, so nothing is shown before generation.
  */
 export function playoffRaceStatus(
-  runtime: { bracket?: { generated?: boolean; championRosterId?: string | null } | null; seeds?: ReadonlyArray<{ rosterId: string }> | null } | null | undefined,
+  runtime: {
+    bracket?: {
+      generated?: boolean
+      championRosterId?: string | null
+      rounds?: ReadonlyArray<{ matchups: ReadonlyArray<{ winnerRosterId: string | null; nextMatchupId?: string | null; status?: string | null }> }> | null
+    } | null
+    seeds?: ReadonlyArray<{ rosterId: string }> | null
+  } | null | undefined,
   rosterId: string,
 ): PlayoffRaceStatus | null {
   const b = runtime?.bracket
   if (!b?.generated) return null
-  if (b.championRosterId && b.championRosterId === rosterId) return 'champion'
+  // `championRosterId` is only set when the season is finalized. The title game is decided before that,
+  // so its winner reads "Champion" as soon as the game has one.
+  const champion = b.championRosterId || (b.rounds?.length ? decidedTitleWinnerRosterId({ rounds: b.rounds }) : null)
+  if (champion && champion === rosterId) return 'champion'
   const seeded = new Set((runtime?.seeds ?? []).map(s => s.rosterId))
   if (!seeded.size) return null
   return seeded.has(rosterId) ? 'clinched' : 'eliminated'
@@ -226,8 +237,8 @@ type RuntimeMatchup = {
 }
 type RuntimeRound = { roundId: string; roundNumber: number; roundName: string; status?: string | null; matchups: RuntimeMatchup[] }
 
-export type BracketSlot = { rosterId: string | null; name: string | null; seed: number | null; score: number | null; won: boolean }
-export type BracketGame = { id: string; home: BracketSlot; away: BracketSlot | null; bye: boolean; state: 'final' | 'live' | 'scheduled'; viewer: boolean }
+type BracketSlot = { rosterId: string | null; name: string | null; seed: number | null; score: number | null; won: boolean }
+type BracketGame = { id: string; home: BracketSlot; away: BracketSlot | null; bye: boolean; state: 'final' | 'live' | 'scheduled'; viewer: boolean }
 export type BracketColumn = { id: string; name: string; games: BracketGame[] }
 
 /**

@@ -7,6 +7,7 @@ import { processLeagueWaiversJob } from "@/lib/automation/jobs/waivers/processLe
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { isRedraftLeagueMovesLocked } from "@/lib/redraft/tradeMoveLock"
 import { runSGAutomaticChopNight } from "@/lib/survivor-guillotine/live"
+import { runSGScoreRefresh } from '@/lib/survivor-guillotine/scoringService'
 import { runSGDueAuctions, runSGSelectionDeadlines } from "@/lib/survivor-guillotine/operations"
 
 export const runtime = "nodejs"
@@ -204,6 +205,7 @@ export async function GET(request: Request) {
    */
   // Release chopped rosters before this heartbeat processes claims. One league's unresolved
   // score/tie is reported separately and cannot stop waivers for other leagues.
+  await runSGScoreRefresh(10).catch(error => console.error('[cron/waivers] Survivor Guilly scoring pending:', error instanceof Error ? error.message : 'Scoring unavailable'))
   const auctions = await runSGDueAuctions(new Date(), 10).catch(error => ({
     scanned: 0, due: 0, results: [{ leagueId: '', status: 'failed',
       error: error instanceof Error ? error.message : 'Auction sweep failed' }],

@@ -1,5 +1,7 @@
 import { act, cleanup, render, renderHook, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { renderToString } from "react-dom/server"
+import { hydrateRoot } from "react-dom/client"
 import final from "../../contracts/espn/fixtures/scoreboard.NBA.20251216.json"
 import scheduled from "../../contracts/espn/fixtures/scoreboard.NBA.20261106.json"
 import { cupPointsLeaders, nbaCupGroupStandings } from "@/lib/playoffs/nbaCupProgress"
@@ -154,5 +156,23 @@ describe("public results and live refresh", () => {
     expect(screen.getAllByText("Cup group record: 1–0").length).toBeGreaterThan(0)
     expect(screen.getByRole("status")).toHaveTextContent("Live feed delayed")
     expect(screen.getByLabelText("Follow a team's qualification path")).toBeInTheDocument()
+  })
+  it("hydrates the sync time when server and browser use different time zones", async () => {
+    const props = { series: view().series, season: 2026, syncedAt: "2026-11-03T15:31:36Z" }
+    const clock = vi.spyOn(Date.prototype, "toLocaleTimeString").mockReturnValue("3:31:36 PM")
+    const html = renderToString(<NbaCupTournamentPanel {...props} />)
+    expect(html).toContain("Scores have been synced.")
+    clock.mockReturnValue("10:31:36 AM")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    container.innerHTML = html
+    const recoverableError = vi.fn()
+    let root: ReturnType<typeof hydrateRoot>
+    await act(async () => { root = hydrateRoot(container, <NbaCupTournamentPanel {...props} />, { onRecoverableError: recoverableError }) })
+    expect(recoverableError).not.toHaveBeenCalled()
+    expect(container.textContent).toContain("Last verified sync: 10:31:36 AM")
+    await act(async () => root!.unmount())
+    container.remove()
+    clock.mockRestore()
   })
 })

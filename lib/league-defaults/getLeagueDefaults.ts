@@ -13,6 +13,7 @@ import {
   type RedraftDefaultContract,
 } from '@/lib/league-concepts/redraftDefaults'
 import { getBestBallDefaultContract } from '@/lib/league-concepts/bestBallDefaults'
+import { bestBallTemplateSeats } from '@/lib/league-defaults/bestBallTemplateRounds'
 import {
   buildDailyRedraftSettingsSnapshot,
   getDailyRedraftDefaultContract,
@@ -29,7 +30,7 @@ import {
   type DevyDefaultContract,
 } from '@/lib/league-concepts/devyDefaults'
 
-export type LeagueFoundationDefaultsInput = {
+type LeagueFoundationDefaultsInput = {
   sport: LeagueSport | string
   format: string
   draftType: string
@@ -37,7 +38,7 @@ export type LeagueFoundationDefaultsInput = {
   scoringPreset?: string | null
 }
 
-export type LeagueFoundationDefaults = {
+type LeagueFoundationDefaults = {
   sport: LeagueSport
   format: LeagueFormatId
   draftType: string
@@ -263,7 +264,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const survivorContract = format === 'survivor' ? getSurvivorDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount }) : null
   const survivorSnapshot = survivorContract ? buildSurvivorSettingsSnapshot({ sport, draftType: input.draftType, scoringPresetId: survivorContract.scoring_preset_id, teamCount: input.managerCount }) : null
   const redraftContract =
-    format === 'redraft'
+    (format === 'redraft' || format === 'pirate')
       ? getRedraftDefaultContract({
           sport,
           draftType: input.draftType,
@@ -364,7 +365,11 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
    */
   const bestBallRounds =
     format === 'best_ball'
-      ? getBestBallDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount })?.rounds ?? null
+      ? getBestBallDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount })?.rounds ??
+        // NBA / NHL / MLB have no best ball contract: size the draft from the best ball roster
+        // template those leagues are given (starters + bench, never IL / NA / taxi).
+        bestBallTemplateSeats(sport)?.rounds ??
+        null
       : null
   const rounds = numericOr(canonicalDraftSettings?.rounds ?? bestBallRounds ?? resolution.draftDefaults.rounds_default, engineDraftType === 'auction' ? 15 : 15)
   const timerSeconds = numericOr(canonicalDraftSettings?.timerSeconds ?? resolution.draftDefaults.timer_seconds_default, 90)

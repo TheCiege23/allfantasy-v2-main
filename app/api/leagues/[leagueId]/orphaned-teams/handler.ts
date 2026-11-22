@@ -2,10 +2,10 @@
  * GET: head commissioner or co-commissioner — orphan team summary + dispersal draft eligibility.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { buildAssetPoolFromRosters } from '@/lib/dispersal-draft/assetPoolBuilder'
 import { DispersalDraftEngine } from '@/lib/dispersal-draft/DispersalDraftEngine'
@@ -34,8 +34,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leagueId: stri
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-    const role = await getLeagueRole(leagueId, userId)
-    if (role !== 'commissioner' && role !== 'co_commissioner') {
+    if (!(await canCommissionerAct(leagueId, userId, 'view'))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

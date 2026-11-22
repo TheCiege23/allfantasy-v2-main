@@ -260,7 +260,7 @@ interface SleeperDraftSummaryRaw {
   slot_to_roster_id?: Record<string, string>
 }
 
-export interface SleeperFetchOptions {
+interface SleeperFetchOptions {
   maxMatchupWeeks?: number
   maxTransactionWeeks?: number
   maxPreviousSeasons?: number
@@ -286,25 +286,30 @@ const DEFAULTS: SleeperFetchOptions = {
   maxPreviousSeasons: 10,
 }
 
-export async function fetchLeagueDraftPicks(
+async function fetchLeagueDraftPicks(
   leagueId: string,
   season?: string,
-  fetchDraftPicks: (
+  fetchDraftPicks?: (
     draftId: string,
-  ) => Promise<NonNullable<SleeperImportPayload['draftPicks']>> = (draftId) =>
-    fetchSleeperJson<NonNullable<SleeperImportPayload['draftPicks']>>(
-      `${SLEEPER_BASE}/draft/${draftId}/picks`,
-    ).then((rows) => rows ?? []),
+  ) => Promise<NonNullable<SleeperImportPayload['draftPicks']>>,
+  observation?: {
+    onDrafts: (drafts: SleeperDraftSummaryRaw[]) => void
+    context: SleeperFetchContext
+  },
 ): Promise<NonNullable<SleeperImportPayload['draftPicks']>> {
   const drafts =
-    (await fetchSleeperJson<SleeperDraftSummaryRaw[]>(`${SLEEPER_BASE}/league/${leagueId}/drafts`)) ?? []
+    (await fetchSleeperJson<SleeperDraftSummaryRaw[]>(`${SLEEPER_BASE}/league/${leagueId}/drafts`, observation?.context)) ?? []
+  observation?.onDrafts(drafts)
 
   return fetchSleeperDraftPickGroups({
     draftIds: drafts
       .map((draft) => draft?.draft_id?.trim())
       .filter((id): id is string => Boolean(id)),
     season,
-    fetchDraftPicks,
+    fetchDraftPicks: fetchDraftPicks ?? ((draftId) =>
+      fetchSleeperJson<NonNullable<SleeperImportPayload['draftPicks']>>(
+        `${SLEEPER_BASE}/draft/${draftId}/picks`, observation?.context,
+      ).then((rows) => rows ?? [])),
   })
 }
 
@@ -356,11 +361,12 @@ export async function fetchSleeperLeagueForImport(
    * who won the title and who lost it: the standings this payload also carries are a
    * wins/points sort, and ranking them made the regular-season leader "champion".
    */
+  let drafts: SleeperDraftSummaryRaw[] | undefined
   const seasonComplete = String(league.status ?? '').toLowerCase() === 'complete'
   const [users, rosters, currentDraftPicks, tradedPicksRaw, winnersBracketRaw] = await Promise.all([
     fetchSleeperJson<SleeperImportPayload['users']>(`${SLEEPER_BASE}/league/${cleanId}/users`, ctx('league users')),
     fetchSleeperJson<SleeperImportPayload['rosters']>(`${SLEEPER_BASE}/league/${cleanId}/rosters`, ctx('league rosters')),
-    fetchLeagueDraftPicks(cleanId, league.season),
+    fetchLeagueDraftPicks(cleanId, league.season, undefined, { onDrafts: (rows) => { drafts = rows }, context: ctx('drafts') }),
     // Block F — future traded draft picks (`/league/{id}/traded_picks`). Empty [] is
     // a legitimate result (no picks currently traded), NOT a warning. The resilient
     // fetcher records a warning only on 5xx/timeout after retries.
@@ -498,6 +504,7 @@ export async function fetchSleeperLeagueForImport(
     matchupsByWeek,
     transactions,
     draftPicks,
+    drafts,
     // Block F — pass through the raw traded_picks response. Null-safety: the
     // resilient fetcher returns null on unrecoverable failures; treat that as
     // "no traded picks known" so downstream code never explodes.

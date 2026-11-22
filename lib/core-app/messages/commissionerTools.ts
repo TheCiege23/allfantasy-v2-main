@@ -33,6 +33,13 @@ export const commissionerToolsMessages = defineMessages({
     healthUnownedDetail: (preview: string) => `No owner: ${preview}.`,
     healthQuietDetail: (preview: string) =>
       `No trade, waiver claim or roster move in 14 days: ${preview}. Quiet isn’t the same as gone — check in before replacing anyone.`,
+    /* The graded record of this warning (2026-11-20) — the same bands Chimmy's health decision uses. */
+    healthQuietRecordHeldUp: (stayed: number, graded: number) =>
+      `This warning has held up: ${stayed} of ${graded} managers AllFantasy flagged this way still had no moves two weeks later.`,
+    healthQuietRecordMixed: (stayed: number, graded: number) =>
+      `${stayed} of ${graded} managers AllFantasy flagged this way still had no moves two weeks later — message them before replacing anyone.`,
+    healthQuietRecordLow: (stayed: number, graded: number) =>
+      `Most managers flagged this way came back on their own: only ${stayed} of ${graded} still had no moves two weeks later. Check in before acting.`,
     healthLineupsLabel: 'Missing lineups',
     healthLineupsUnknowable: (platform: string) =>
       `${platform} imports don't say whether a blank lineup is empty or just not reported, so lineups aren't checked here.`,
@@ -101,6 +108,10 @@ export const commissionerToolsMessages = defineMessages({
     signalsTradesTitle: (n: number) => `${plural(n, 'trade')} awaiting your review`,
     signalsTradesDetail: 'Both managers agreed. The trade does not go through until a commissioner approves or vetoes it.',
     signalsTradesAction: 'Review trades',
+    signalsTradeGapsTitle: (n: number, pct: number) => `${plural(n, 'recent trade')} with a value gap of ${pct}% or more`,
+    signalsTradeGapsDetail: (days: number) =>
+      `Completed in the last ${days} days. A gap is what the values said on the day, not a finding. See each one against what similar trades cost.`,
+    signalsTradeGapsAction: 'Look at the trades',
     signalsWaiversTitle: (n: number) => `${plural(n, 'waiver claim')} waiting over a week`,
     signalsWaiversDetail: 'These claims should have been decided by a waiver run by now. Run waivers to process them.',
     signalsWaiversAction: 'Open waivers',
@@ -134,6 +145,7 @@ export const commissionerToolsMessages = defineMessages({
     recipesUnavailableNflOnly: 'Game-day timing is only known for NFL leagues today.',
     recipesUnavailableMflLineups: 'MFL imports can’t tell an empty lineup from an unreported one.',
     recipesUnavailableFantraxLineups: 'Fantrax imports can’t tell an empty lineup from an unreported one.',
+    recipesUnavailableBestBall: 'Best ball lineups set themselves, so there is nothing to remind anyone to set.',
     recipesUnavailableWeeklyRecap: 'Weekly recaps require a Sleeper week feed or finalized AllFantasy matchups.',
     // ── calendar.ts ──
     calendarWeek: (week: number) => `Week ${week}`,
@@ -198,6 +210,12 @@ export const commissionerToolsMessages = defineMessages({
     healthUnownedDetail: (preview) => `Sin dueño: ${preview}.`,
     healthQuietDetail: (preview) =>
       `Sin intercambios, reclamos ni cambios de plantilla en 14 días: ${preview}. Estar tranquilo no es lo mismo que haberse ido: habla con ellos antes de reemplazar a nadie.`,
+    healthQuietRecordHeldUp: (stayed, graded) =>
+      `Este aviso se ha cumplido: ${stayed} de ${graded} mánagers que AllFantasy marcó así seguían sin movimientos dos semanas después.`,
+    healthQuietRecordMixed: (stayed, graded) =>
+      `${stayed} de ${graded} mánagers que AllFantasy marcó así seguían sin movimientos dos semanas después: escríbeles antes de reemplazar a nadie.`,
+    healthQuietRecordLow: (stayed, graded) =>
+      `La mayoría de los mánagers marcados así volvieron por su cuenta: solo ${stayed} de ${graded} seguían sin movimientos dos semanas después. Habla con ellos antes de actuar.`,
     healthLineupsLabel: 'Alineaciones incompletas',
     healthLineupsUnknowable: (platform) =>
       `Las importaciones de ${platform} no indican si una alineación en blanco está vacía o simplemente no se reportó, así que aquí no se revisan las alineaciones.`,
@@ -280,6 +298,10 @@ export const commissionerToolsMessages = defineMessages({
     signalsTradesTitle: (n) => `${plural(n, 'intercambio espera', 'intercambios esperan')} tu revisión`,
     signalsTradesDetail: 'Ambos mánagers aceptaron. El intercambio no se hace efectivo hasta que un comisionado lo apruebe o lo vete.',
     signalsTradesAction: 'Revisar intercambios',
+    signalsTradeGapsTitle: (n, pct) => `${plural(n, 'intercambio reciente', 'intercambios recientes')} con una diferencia de valor del ${pct}% o más`,
+    signalsTradeGapsDetail: (days) =>
+      `Completados en los últimos ${days} días. La diferencia es lo que decían los valores ese día, no una conclusión. Compara cada uno con lo que costaron intercambios similares.`,
+    signalsTradeGapsAction: 'Ver los intercambios',
     signalsWaiversTitle: (n) => `${plural(n, 'reclamo lleva', 'reclamos llevan')} más de una semana esperando`,
     signalsWaiversDetail: 'Estos reclamos ya deberían haberse resuelto en un procesamiento de reclamos. Procésalos para resolverlos.',
     signalsWaiversAction: 'Abrir agentes libres',
@@ -313,6 +335,7 @@ export const commissionerToolsMessages = defineMessages({
     recipesUnavailableNflOnly: 'Por ahora solo se conoce el horario de los días de partido en las ligas de la NFL.',
     recipesUnavailableMflLineups: 'Las importaciones de MFL no distinguen una alineación vacía de una no reportada.',
     recipesUnavailableFantraxLineups: 'Las importaciones de Fantrax no distinguen una alineación vacía de una no reportada.',
+    recipesUnavailableBestBall: 'En best ball la alineación se arma sola, así que no hay nada que recordarle a nadie.',
     recipesUnavailableWeeklyRecap: 'Los resúmenes semanales necesitan los datos semanales de Sleeper o enfrentamientos finalizados de AllFantasy.',
     // ── calendar.ts ──
     calendarWeek: (week) => `Semana ${week}`,

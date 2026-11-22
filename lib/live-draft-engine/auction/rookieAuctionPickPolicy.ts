@@ -2,7 +2,7 @@ import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 
 export type RookieAuctionPickPolicy = 'block' | 'budget' | 'nominations'
 export type RookieAuctionTrade = { round: number; originalRosterId: string; newRosterId: string }
-export type RookieAuctionPlan = {
+type RookieAuctionPlan = {
   policy: RookieAuctionPickPolicy
   budgets: Record<string, number>
   nominationOrder: SlotOrderEntry[]

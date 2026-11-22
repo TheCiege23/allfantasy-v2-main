@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { championshipTotal, rankBrackets, scoreAndPotential } from "@/lib/playoffs/playoffCompetition"
 import type { PlayoffSport } from "@/lib/playoffs/types"
 import { eligibleNbaCupPicks } from "@/lib/playoffs/nbaCupTournament"
+import RefreshBracketStandings from "@/components/brackets/RefreshBracketStandings"
 
 export const dynamic = "force-dynamic"
 
@@ -19,7 +20,7 @@ export default async function UniversalBracketStandings(props: {
     select: {
       id: true, name: true, tiebreakerTotalScore: true, finalizedAt: true,
       user: { select: { displayName: true, username: true } },
-      picks: { select: { seriesId: true, pickTeamName: true } },
+      picks: { select: { seriesId: true, pickTeamName: true, confirmedAt: true } },
       challenge: {
         select: { id: true, name: true, config: true, series: {
           select: { id: true, round: true, startsAt: true, winnerTeamName: true, homeTeamName: true,
@@ -30,7 +31,7 @@ export default async function UniversalBracketStandings(props: {
   }) as Array<{
     id: string; name: string; tiebreakerTotalScore: number | null; finalizedAt: Date | null
     user: { displayName: string | null; username: string | null }
-    picks: Array<{ seriesId: string; pickTeamName: string }>
+    picks: Array<{ seriesId: string; pickTeamName: string; confirmedAt: Date | null }>
     challenge: { id: string; name: string; config: { visibility?: string } | null; series: any[] }
   }>
   const completedFinal = entries.map((entry) => championshipTotal(entry.challenge.series)).find((total) => total != null) ?? null
@@ -47,6 +48,7 @@ export default async function UniversalBracketStandings(props: {
   const title = sport === "ncaaf" ? "College Football Playoff" : sport === "nfl" ? "NFL Playoffs" : "NBA Cup"
 
   return <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
+    <RefreshBracketStandings />
     <div className="mx-auto max-w-6xl">
       <Link href="/brackets" className="text-sm font-semibold text-teal-300">← Brackets</Link>
       <div className="mt-7 flex flex-wrap items-end justify-between gap-4">

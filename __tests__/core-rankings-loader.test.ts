@@ -44,6 +44,7 @@ const state = {
   legacy: [] as LegacyRow[],
   cache: new Map<string, unknown>(),
   failProfiles: false,
+  identities: [] as Array<{ userId: string }>,
   upserts: [] as Array<{ key: string; data: unknown }>,
   rankWrites: [] as Array<{ userId: string; xpTotal: bigint; xpLevel: number }>,
 }
@@ -61,6 +62,9 @@ vi.mock('@/lib/prisma', () => ({
       return state.profiles
     }),
     league: { findMany: vi.fn(async () => []) },
+    platformIdentity: { findMany: vi.fn(async () => state.identities) },
+    guillotineSurvivalLog: { findMany: vi.fn(async () => []) },
+    survivorSeasonSnapshot: { findMany: vi.fn(async () => []) },
     // The daily snapshot's level refresh writes through `calculateAndSaveRank`.
     userProfile: {
       upsert: vi.fn(async (args: { where: { userId: string }; update: { xpTotal: bigint; xpLevel: number } }) => {
@@ -152,6 +156,7 @@ beforeEach(() => {
   vi.resetModules()
   n = 0
   state.failProfiles = false
+  state.identities = []
   state.upserts = []
   state.rankWrites = []
   state.cache = new Map()
@@ -325,5 +330,23 @@ describe('recordText — the league board record', () => {
     expect(recordText({ wins: 7, losses: 6, ties: 0 })).toBe('7-6')
     // A `leagueStandingsSummary` row cached before `ties` existed.
     expect(recordText({ wins: 7, losses: 6 })).toBe('7-6')
+  })
+})
+
+describe('manager comparison by linked platform username', () => {
+  it('resolves a linked username and applies the selected scoring scope independently', async () => {
+    state.identities = [{ userId: 'u2' }]
+    const { getCompareData } = await import('@/lib/core-app/rankings')
+    const result = await getCompareData('u1', '@bobs-sleeper-name', { lookup: 'sleeper', compareScope: 'platform' })
+    expect(result).toMatchObject({ ok: true, data: { filtersLabel: 'Sleeper', them: { handle: 'bob', leagueSeasons: 5 } } })
+    const global = await getCompareData('u1', 'bobs-sleeper-name', { lookup: 'sleeper', compareScope: 'all', platform: 'sleeper' })
+    expect(global).toMatchObject({ ok: true, data: { filtersLabel: 'All leagues', them: { handle: 'bob' } } })
+  })
+
+  it('declines ambiguous platform usernames', async () => {
+    state.identities = [{ userId: 'u2' }, { userId: 'u3' }]
+    const { getCompareData } = await import('@/lib/core-app/rankings')
+    const result = await getCompareData('u1', 'same-display-name', { lookup: 'espn', compareScope: 'all' })
+    expect(result).toMatchObject({ ok: false, reason: 'not-found' })
   })
 })

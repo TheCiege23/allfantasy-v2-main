@@ -3,7 +3,7 @@
 import React from 'react'
 import { CheckCircle2 } from 'lucide-react'
 
-export interface ActionPlanCardProps {
+interface ActionPlanCardProps {
   /** Suggested next action */
   suggestedNextAction: string
   /** Optional alternate path */

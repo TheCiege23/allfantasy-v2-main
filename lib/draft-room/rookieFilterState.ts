@@ -25,7 +25,7 @@ const ROOKIE_FILTER_STATES: ReadonlySet<string> = new Set<RookieFilterState>([
 /** Set by the pool resolver from stored season stats (`seasonStatsRookieStatus.ts`), MLB/NBA/NHL only. */
 export type EntryRookieVerdict = 'rookie' | 'not_rookie' | 'unknown'
 
-export type RookieFilterEntryLike = { isRookie?: boolean | null; rookieVerdict?: EntryRookieVerdict | null }
+type RookieFilterEntryLike = { isRookie?: boolean | null; rookieVerdict?: EntryRookieVerdict | null }
 
 /**
  * True when the pool carries three-state verdicts. Then an entry WITHOUT a rookie flag is

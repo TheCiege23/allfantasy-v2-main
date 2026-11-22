@@ -55,7 +55,7 @@ export function dash34FixedText(english: string): string | null {
   return DASH34_FIXED_ES[english] ?? null
 }
 
-export type FirstLockText = { kickoffLabel: string; headline: string; openLabel: string }
+type FirstLockText = { kickoffLabel: string; headline: string; openLabel: string }
 
 /** "NFL · Pretemporada · Semana 3", "Steelers en Bills", "Revisar Mi liga" — or null without parts. */
 export function firstLockText(lock: FirstLock): FirstLockText | null {

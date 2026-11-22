@@ -175,7 +175,9 @@ export function useWebPushSubscription(vapidPublicKey: string | null | undefined
         body: JSON.stringify({
           endpoint: json.endpoint,
           keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-          userAgent: navigator.userAgent,
+          userAgent: navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1
+            ? `${navigator.userAgent} Tablet`
+            : navigator.userAgent,
         }),
       })
       if (!res.ok) {

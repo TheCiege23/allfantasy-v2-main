@@ -28,7 +28,7 @@ import '@/components/core-app/af-dash-triage.css'
 export type TriageSlot = 'starter' | 'bench' | 'ir' | 'taxi'
 
 /** Questionable starters the card may add after the ruled-out ones. */
-export const QUESTIONABLE_LIMIT = 2
+const QUESTIONABLE_LIMIT = 2
 
 type TriageLeague = {
   id: string

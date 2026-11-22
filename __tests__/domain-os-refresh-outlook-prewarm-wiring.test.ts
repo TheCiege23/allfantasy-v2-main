@@ -39,6 +39,8 @@ describe('domain-os-refresh → Season Outlook pre-compute wiring', () => {
     expect(src).toMatch(/from '@\/lib\/core-app\/seasonOutlookPrewarm'/)
     const prewarm = readFileSync(path.join(process.cwd(), 'lib/core-app/seasonOutlookPrewarm.ts'), 'utf8')
     const imports = [...prewarm.matchAll(/^import (?:type )?[^'";]*? from '([^']+)'/gm)].map((m) => m[1]).sort()
-    expect(imports).toEqual(['./seasonOutlook', './seasonOutlookSims', '@/lib/prisma'])
+    // The odds-history writer (2026-11-06) files each run it stores: Postgres and arithmetic only — it
+    // imports @/lib/prisma, @/lib/prisma/schema-drift, ./outlookSim and ./weeklyCapabilities, nothing else.
+    expect(imports).toEqual(['./seasonOutlook', './seasonOutlookOddsHistory', './seasonOutlookSims', '@/lib/prisma'])
   })
 })

@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueTier, type GuideMatchup, type GuideTier } from '@/lib/core-app/myLeaguesGuide'
 import { attachLeagueHubs } from './attachLeagueHubs'
 import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import { attachLeagueAudience } from './attachLeagueAudience'
@@ -6,6 +7,7 @@ import type { LeagueAudience } from '@/lib/league-privacy/leagueAudience'
 import type { LeagueHub } from './leagueHubGroups'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { prisma } from '@/lib/prisma'
 import { getDash34Data, type Dash34LeagueRow } from './dash34'
 import { getRailMatchups } from './railMatchups'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
@@ -70,7 +72,7 @@ export type MyLeaguesHistoryRow = {
   season: string | null
 }
 
-export type MyLeaguesTier = 'needs' | 'playing' | 'quiet'
+export type MyLeaguesTier = GuideTier
 
 export type MyLeaguesLeague = Dash34League & {
   hub?: LeagueHub
@@ -78,10 +80,17 @@ export type MyLeaguesLeague = Dash34League & {
   /** Real `League.isDynasty` — drives the Dynasty chip, which the handoff counts. */
   isDynasty: boolean
   isCommissioner: boolean
+  leagueType?: string | null
+  viewerWins?: number | null
+  viewerLosses?: number | null
+  viewerTies?: number | null
+  viewerPlayoffOdds?: number | null
   /** The single most specific blocking cause, already phrased by the 34a chip builder. */
   reason: string | null
   /** Public or private for a league made here; null for a league on another platform. */
   audience?: LeagueAudience | null
+  /** This week's game as parts, so the screen phrases it; null when nothing is on file. */
+  matchup?: GuideMatchup | null
 }
 
 export type MyLeaguesData = {
@@ -95,6 +104,8 @@ export type MyLeaguesData = {
     needs: number
     playing: number
     quiet: number
+    /** Waiting on a draft that has not started (2026-11-14). Optional: older callers predate it. */
+    predraft?: number
     commissioner: number
     drafting: number
     dynasty: number
@@ -109,6 +120,10 @@ export type MyLeaguesData = {
 
 type RawRow = Dash34LeagueRow & {
   season?: number | string | null
+  viewerTeamExternalId?: string | null
+  viewerWins?: number | null
+  viewerLosses?: number | null
+  viewerTies?: number | null
   /** Set by exactly one producer — the AF Legacy board. The live/history discriminator. */
   isLegacyBoardItem?: boolean | null
 }
@@ -120,28 +135,18 @@ function seasonOf(row: RawRow): string | null {
 }
 
 /**
- * The tier a league belongs to.
+ * The tier a league belongs to — `leagueTier` in myLeaguesGuide.ts (2026-11-14).
  *
  * ⚠ THE HANDOFF'S MIDDLE TIER IS "PLAYING NOW" AND IT IS NOT A LIVE-SCORE TIER
  * HERE, BECAUSE THERE ARE NO LIVE SCORES. What survives of that idea is
  * "in season, roster on file, nothing blocking" — a real state, distinct from
- * both "needs you" and "quiet", and the tier header says which of the two claims
- * it is making. Folding it into "quiet" would have been the easier lie: it would
- * report 50 leagues as needing nothing when half of them are mid-season.
+ * both "needs you" and "quiet".
+ *
+ * ⚠ AND "NEEDS YOU" USED TO MEAN "ANY WARN CHIP", WHICH PUT 70 OF 82 LEAGUES IN IT.
+ * A hurt bench player and a draft that has not started are not things to do today;
+ * the guide module keeps them out and gives pre-draft leagues their own group.
  */
-function tierOf(l: Dash34League): MyLeaguesTier {
-  const chips = l.chips ?? []
-  const has = (label: string) => chips.some((c) => c.label === label)
-
-  // Anything the 34a ranker treats as a call to action.
-  if (l.priority === 'urgent' || l.priority === 'draft') return 'needs'
-  if (chips.some((c) => c.tone === 'bad' || c.tone === 'warn')) return 'needs'
-
-  // In season with a roster read, nothing blocking.
-  if (has('SEASON OVER')) return 'quiet'
-  if (l.matchupNote === 'No roster imported yet') return 'quiet'
-  return 'playing'
-}
+const tierOf = (l: Dash34League): MyLeaguesTier => leagueTier(l)
 
 /**
  * The specific cause, never a generic "action needed" — the handoff's copy
@@ -182,10 +187,24 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
   const played = rows.filter((r) => r.isLegacyBoardItem !== true)
   const legacy = rows.filter((r) => r.isLegacyBoardItem === true)
 
-  const [dash, matchups] = await Promise.all([
+  const forecastIds = [...new Set(played
+    .filter((row) => row.viewerTeamExternalId)
+    .map((row) => String(row.platformLeagueId || row.id)))]
+
+  const [dash, matchups, forecastRows] = await Promise.all([
     getDash34Data(userId, played as Dash34LeagueRow[], now).catch(() => null),
     getRailMatchups(userId, played).catch(() => null),
+    forecastIds.length
+      ? prisma.seasonForecastSnapshot.findMany({
+          where: { leagueId: { in: forecastIds } },
+          distinct: ['leagueId'],
+          orderBy: [{ leagueId: 'asc' }, { season: 'desc' }, { week: 'desc' }],
+          select: { leagueId: true, season: true, teamForecasts: true },
+        }).catch(() => [])
+      : Promise.resolve([]),
   ])
+
+  const forecastByLeagueId = new Map(forecastRows.map((row) => [row.leagueId, row]))
 
   const rowById = new Map<string, RawRow>()
   for (const r of played) rowById.set(r.id, r)
@@ -199,14 +218,37 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
   const leagues: MyLeaguesLeague[] = ranked.map((l) => {
     const row = rowById.get(l.id)
     const matchup = matchups?.byLeague[l.id]
+    const forecast = row ? forecastByLeagueId.get(String(row.platformLeagueId || row.id)) : null
+    const teamForecast = forecast && Number(row?.season) === forecast.season && Array.isArray(forecast.teamForecasts)
+      ? forecast.teamForecasts.find((item) => item && typeof item === 'object' &&
+          String((item as { teamId?: unknown }).teamId) === row?.viewerTeamExternalId)
+      : null
+    const rawOdds = teamForecast && typeof teamForecast === 'object'
+      ? (teamForecast as { playoffProbability?: unknown }).playoffProbability : null
     return {
       ...l,
       matchupNote: matchup
         ? `Week ${matchup.week} · ${matchup.yourTeam ?? 'Your team'} ${matchup.scored ? matchup.yourScore.toFixed(1) : ''}${matchup.unpaired ? ' · league scoreboard' : ` vs ${matchup.opponentTeam ?? 'Opponent'} ${matchup.scored ? matchup.opponentScore.toFixed(1) : ''}`}`
         : l.matchupNote,
+      matchup: matchup
+        ? {
+            week: matchup.week,
+            scored: Boolean(matchup.scored),
+            yourScore: Number(matchup.yourScore ?? 0),
+            opponentScore: Number(matchup.opponentScore ?? 0),
+            opponent: matchup.opponentTeam ?? null,
+            unpaired: Boolean(matchup.unpaired),
+          }
+        : null,
       tier: tierOf(l),
       isDynasty: Boolean(row?.isDynasty),
       isCommissioner: Boolean(row?.isCommissioner),
+      leagueType: row?.leagueType ?? null,
+      viewerWins: row?.viewerWins ?? null,
+      viewerLosses: row?.viewerLosses ?? null,
+      viewerTies: row?.viewerTies ?? null,
+      viewerPlayoffOdds: typeof rawOdds === 'number' && Number.isFinite(rawOdds) && rawOdds >= 0 && rawOdds <= 100
+        ? rawOdds : null,
       reason: reasonOf(l),
     }
   })
@@ -230,6 +272,7 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
     needs: leagues.filter((l) => l.tier === 'needs').length,
     playing: leagues.filter((l) => l.tier === 'playing').length,
     quiet: leagues.filter((l) => l.tier === 'quiet').length,
+    predraft: leagues.filter((l) => l.tier === 'predraft').length,
     commissioner: leagues.filter((l) => l.isCommissioner).length,
     drafting: leagues.filter((l) => l.priority === 'draft' || (l.chips ?? []).some((c) => c.label === 'PRE DRAFT')).length,
     dynasty: leagues.filter((l) => l.isDynasty).length,

@@ -111,6 +111,7 @@ const FORMAT_CAPABILITIES: Readonly<Record<LeagueFormatId, readonly Commissioner
   keeper: ['roster.keeper_carryover'],
   best_ball: ['lineup.best_ball'],
   guillotine: ['elimination.guillotine', 'rewards.faab'],
+  pirate: ['governance.configurable_rules'],
   survivor: ['survivor.tribes', 'phase.state_machine'],
   tournament: ['advancement.tournament', 'phase.state_machine'],
   devy: ['roster.dynasty_carryover', 'roster.college_assets'],
@@ -205,21 +206,3 @@ export function composeCapabilities(input: {
   return sortCapabilities(out)
 }
 
-/** Capabilities a format implies on its own. Exported for tests and for template validation. */
-export function capabilitiesForFormat(formatId: LeagueFormatId): CommissionerCapabilityId[] {
-  return sortCapabilities(FORMAT_CAPABILITIES[formatId] ?? [])
-}
-
-/** Capabilities a catalog concept implies beyond its base format. */
-export function capabilitiesForConcept(conceptId: string): CommissionerCapabilityId[] {
-  return sortCapabilities(CONCEPT_CAPABILITIES[conceptId] ?? [])
-}
-
-/** True when the league has any capability in a domain, e.g. `hasCapabilityDomain(caps, 'powers')`. */
-export function hasCapabilityDomain(
-  capabilityIds: readonly CommissionerCapabilityId[],
-  domain: string,
-): boolean {
-  const prefix = `${domain}.`
-  return capabilityIds.some((id) => id.startsWith(prefix))
-}

@@ -21,16 +21,16 @@ import type { PlayoffSeriesView, PlayoffTemplateSeries } from "./types"
  * lives in `syncNflPlayoffs.ts`.
  */
 
-export type NflConference = "afc" | "nfc"
-export const NFL_ROUNDS = ["nfl_wild_card", "nfl_divisional", "nfl_conference", "nfl_super_bowl"] as const
+type NflConference = "afc" | "nfc"
+const NFL_ROUNDS = ["nfl_wild_card", "nfl_divisional", "nfl_conference", "nfl_super_bowl"] as const
 
 /** Placeholder names for divisional slots the reseeding has not resolved. Never "official". */
-export const nflLowestSeedLeft = (conf: NflConference) => `${conf.toUpperCase()} Lowest Seed Left`
-export const nflWildCardWinner = (conf: NflConference) => `${conf.toUpperCase()} Wild Card Winner`
+const nflLowestSeedLeft = (conf: NflConference) => `${conf.toUpperCase()} Lowest Seed Left`
+const nflWildCardWinner = (conf: NflConference) => `${conf.toUpperCase()} Wild Card Winner`
 export const NFL_PLACEHOLDER = /^(?:AFC|NFC) (?:Lowest Seed Left|Wild Card Winner)$/i
 
 /** The unseeded slot name, `AFC2` … `NFC7`, which seeding later replaces with a club. */
-export const nflSeedSlot = (conf: NflConference, seed: number) => `${conf.toUpperCase()}${seed}`
+const nflSeedSlot = (conf: NflConference, seed: number) => `${conf.toUpperCase()}${seed}`
 
 const TEST_TEAMS: Record<NflConference, string[]> = {
   afc: ["Denver Broncos", "New England Patriots", "Jacksonville Jaguars", "Pittsburgh Steelers", "Houston Texans", "Buffalo Bills", "Los Angeles Chargers"],
@@ -87,7 +87,7 @@ export function buildNflTemplate(isTestMode: boolean): PlayoffTemplateSeries[] {
 
 type SeriesLike = Pick<PlayoffSeriesView, "id" | "round" | "conference" | "seriesNumber" | "homeSeed" | "awaySeed" | "homeTeamName" | "awayTeamName">
 
-export type NflDivisionalMatchup = { homeTeamName: string; awayTeamName: string; homeSeed: number; awaySeed: number }
+type NflDivisionalMatchup = { homeTeamName: string; awayTeamName: string; homeSeed: number; awaySeed: number }
 
 /**
  * The two divisional games of each conference, given who won each Wild Card
@@ -142,7 +142,7 @@ export function nflLockRows<T extends { round?: string | null }>(series: T[]): T
 
 // ── ESPN postseason scoreboard ───────────────────────────────────────────────
 
-export type NflRound = (typeof NFL_ROUNDS)[number]
+type NflRound = (typeof NFL_ROUNDS)[number]
 
 export type NflPlayoffGame = {
   eventId: string

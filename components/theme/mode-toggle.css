@@ -1,0 +1,46 @@
+/* The four-option display-mode picker (ModeToggle variant="picker"). /core tokens, with plain
+   fallbacks so it still reads anywhere else it is placed. */
+.af-mode-picker {
+  display: grid;
+  /* Two by two: four in a row clipped "AF Legacy" to "AF Le…" inside the 300px account menu. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px solid var(--line2, rgba(127, 127, 127, 0.3));
+  background: var(--surface2, transparent);
+}
+.af-mode-picker .af-mode-picker-option {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text2, inherit);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.af-mode-picker .af-mode-picker-option:hover { color: var(--text, inherit); }
+.af-mode-picker .af-mode-picker-option[aria-checked='true'] {
+  background: var(--accent-soft, rgba(14, 110, 122, 0.12));
+  border-color: var(--accent-line, rgba(14, 110, 122, 0.4));
+  color: var(--accent, inherit);
+}
+.af-mode-picker .af-mode-picker-option:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
+/* In the /core account menus the picker takes its own line above the language chip. */
+.af-account-row > .af-mode-picker,
+.af-data-menu-display-row > .af-mode-picker { flex: 1 1 100%; }
+@media (max-width: 720px) {
+  /* A thumb target on phones. */
+  .af-mode-picker .af-mode-picker-option { min-height: 44px; }
+}

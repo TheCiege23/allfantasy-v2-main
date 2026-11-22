@@ -65,6 +65,9 @@ export function freeAgentText(language: string): string {
 
 export type SearchBoxCopy = {
   searchLabel: string
+  sportLabel: string
+  allSports: string
+  soccer: string
   compareLabel: string
   searchButton: string
   suggestions: string

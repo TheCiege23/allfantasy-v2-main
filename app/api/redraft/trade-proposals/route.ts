@@ -1,8 +1,11 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
+import { readSeasonTradePolicy, SeasonTradeError, seasonTradeOfferExpiry } from '@/lib/tournament/seasonTradePolicy'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { postDraftRosterMoveRefusal } from '@/server/services/postDraftRosterLockService'
 import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
@@ -16,6 +19,7 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { createZombieNativeItemGrader } from '@/lib/decision-os/trade/zombieNativeItemGrader'
 import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
@@ -24,7 +28,6 @@ import { toTradeCard, type TradeCard } from '@/lib/decision-os/trade/tradeCardAd
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { createTradeOsLoaders } from '@/lib/decision-os/trade-os'
-import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { safeDisplayName } from '@/lib/chat-notifications/displayName'
 import {
   MULTI_TEAM_CAP_LEAGUE_REFUSAL,
@@ -179,6 +182,8 @@ export async function GET(req: NextRequest) {
   // Built only when some proposal has assets to grade — a list with nothing to price reads no chart.
   let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
   const grader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+  let zombieItemGraderPromise: ReturnType<typeof createZombieNativeItemGrader> | null = null
+  const zombieItemGrader = () => (zombieItemGraderPromise ??= createZombieNativeItemGrader(leagueId))
   const graded = await Promise.all(
     proposals.map(async (p) => {
       const assets = Array.isArray(p.assets) ? p.assets : []
@@ -193,13 +198,15 @@ export async function GET(req: NextRequest) {
       const give = gradeInputsFromRedraftAssets(assets.filter((a) => a.fromRosterId === p.proposerRosterId))
       const get = gradeInputsFromRedraftAssets(assets.filter((a) => a.toRosterId === p.proposerRosterId))
       const grade = assets.some(a => a.assetType === 'zombie_item')
-        ? { graded: false as const, reason: 'Zombie items require a rules-based review; player-only grades do not price them.', basis: null }
+        ? await zombieItemGrader().then(g => g.grade(p)).catch(() => ({ graded: false as const, reason: 'Zombie item values could not be loaded just now.', basis: null }))
         : assets.length === 0
         ? { graded: false as const, reason: 'This proposal has no assets on record.', basis: null }
         : await Promise.resolve()
             .then(async () => gradeDeal(await grader(), { give, get, viewerSide: false }))
             .catch(() => ({ graded: false as const, reason: 'This trade could not be graded just now.', basis: null }))
-      const receiptId = await receiptIdForGrade({
+      const hasZombieItems = assets.some(a => a.assetType === 'zombie_item')
+      // The generic receipt asset union has no item kind. Do not save these item lines as players.
+      const receiptId = hasZombieItems ? null : await receiptIdForGrade({
         surface: 'redraft-trade-list',
         leagueId,
         userId,
@@ -212,10 +219,17 @@ export async function GET(req: NextRequest) {
       return {
         ...p,
         tradeGrade: {
-          grade: grade.graded ? grade.letter : null,
-          partnerGrade: grade.graded ? grade.partnerLetter : null,
-          gradeWithheld: grade.graded ? null : grade.reason,
+          grade: hasZombieItems ? null : grade.graded ? grade.letter : null,
+          partnerGrade: hasZombieItems ? null : grade.graded ? grade.partnerLetter : null,
+          gradeWithheld: hasZombieItems && grade.graded
+            ? 'The future scoring estimate does not yet include infection, revival, loot, or cash payout outcomes.'
+            : grade.graded ? null : grade.reason,
           receiptId,
+          ...(hasZombieItems ? {
+            gradeScope: 'zombie_future_scoring' as const,
+            giveValue: grade.graded ? grade.giveValue : null,
+            getValue: grade.graded ? grade.getValue : null,
+          } : {}),
         },
       }
     }),
@@ -272,7 +286,7 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const [season, proposer, receiver] = await Promise.all([
-    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } }),
+    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, include: { league: { select: { leagueVariant: true } } } }),
     prisma.redraftRoster.findFirst({ where: { id: proposerRosterId, seasonId, leagueId } }),
     prisma.redraftRoster.findFirst({ where: { id: receiverRosterId, seasonId, leagueId } }),
   ])
@@ -291,7 +305,7 @@ export async function POST(req: NextRequest) {
   if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
-  // Chimmy autopilot (AF Commissioner): a team nobody is running does not take trade offers.
+  // Chimmy autopilot (AF Pro / AF Supreme): a team nobody is running does not take trade offers.
   // In a multi-team trade that holds for every team the offer is made to.
   const { isOwnerOnAutopilot } = await import('@/lib/inactive-manager/inactiveManagerService')
   for (const party of [receiver, ...additionalRosters]) {
@@ -392,7 +406,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const created = await prisma.$transaction(async (tx: any) => {
+  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    let tournamentExpiry = expiresAt
+    if (season.league?.leagueVariant === 'season_tournament') {
+      const policy = await readSeasonTradePolicy(tx, leagueId, true)
+      if (!policy || policy.seasonId !== seasonId || multiTeam || assets.some(asset => asset.assetType !== 'player' && asset.assetType !== 'faab')) {
+        throw new SeasonTradeError('This tournament accepts player and FAAB trades between two teams in its active stage.')
+      }
+      tournamentExpiry = seasonTradeOfferExpiry(policy, expiresAt, new Date())
+    }
     const proposal = await tx.redraftTradeProposal.create({
       data: {
         id: crypto.randomUUID(),
@@ -404,7 +426,7 @@ export async function POST(req: NextRequest) {
         vetoMode,
         vetoThreshold,
         reason: body.reason?.trim() || null,
-        expiresAt,
+        expiresAt: tournamentExpiry,
       },
     })
 
@@ -420,7 +442,7 @@ export async function POST(req: NextRequest) {
         pickSeason: asset.pickSeason,
         pickRound: asset.pickRound,
         pickNumber: asset.pickNumber,
-        metadata: asset.metadata,
+        metadata: toPrismaJsonInput(asset.metadata),
       })),
     })
 
@@ -428,7 +450,13 @@ export async function POST(req: NextRequest) {
       where: { id: proposal.id },
       include: { assets: true, votes: true, decision: true },
     })
+  }).catch(error => {
+    if (error instanceof SeasonTradeError) return { seasonTradeError: error.message }
+    throw error
   })
+  if (created && 'seasonTradeError' in created) {
+    return NextResponse.json({ error: created.seasonTradeError }, { status: 409 })
+  }
 
   // T2: capture the immutable deterministic value snapshot at proposal time. Best-effort — a
   // valuation issue must never block trade creation, but it is expected to succeed.
@@ -557,29 +585,15 @@ export async function POST(req: NextRequest) {
       const liveResult = await runTradeShadowForProposal(shadowArgs, tradeOsLoaders)
       if (liveResult.ran && liveResult.result) {
         const { decision } = liveResult.result
-        // Attach a saved three-brain analysis, if this user has one for this league. Same seam
-        // #545 mounted on the waiver surface: evidence -> analysis -> recommendation only pays
-        // off if the generated analysis reaches somebody, and until now exactly one of the four
-        // live surfaces read it.
-        //
-        // Costs one indexed count when there is nothing to show, which is every request while
-        // AI spend is disabled. It cannot throw, and `aiAuthorityPolicy` resolves this decision
-        // type to explanation_only (fail-closed for anything unlisted), so it can change the
-        // explanation string and nothing else -- the verdict, actions and rule verdicts are
-        // returned untouched.
-        const attached = await attachSavedAnalysis({
-          decision,
-          leagueId,
-          userId,
-          tool: 'manager_intelligence',
-        })
+        // The saved three-brain analysis was retired 2026-11-19 (re-score build item 9): nothing produced one,
+        // so this read one indexed count per request to find nothing.
         decisionOs = {
           decisionId: decision.decision_id,
-          card: toTradeCard(attached.decision),
+          card: toTradeCard(decision),
           completeness: decision.data_completeness,
           uncertaintySources: decision.uncertainty_sources,
         }
-        emitLiveTelemetry('trade.value', { enriched: true, ai_explained: attached.enriched, ai_reason: attached.reason, latency_ms: Date.now() - liveStart, leagueId }, decision.decision_id)
+        emitLiveTelemetry('trade.value', { enriched: true, latency_ms: Date.now() - liveStart, leagueId }, decision.decision_id)
       } else {
         emitLiveTelemetry('trade.value', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, leagueId })
       }

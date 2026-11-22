@@ -2,6 +2,8 @@
 
 import posthog from 'posthog-js'
 import { ChimmyAnalysisPreview } from '@/components/chimmy/ChimmyAnalysisPreview'
+import { BracketEvidenceCard } from '@/components/chimmy/BracketEvidenceCard'
+import { readBracketEvidence, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { readDeepAnalysisPreview, type DeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
@@ -31,6 +33,8 @@ import {
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import { readReadyScenario, type ReadyChimmyScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { readFollowUps } from '@/lib/chimmy/followUps'
+import { ChimmyPortfolioCard } from '@/components/chimmy/ChimmyPortfolioCard'
+import { readPortfolioState, readPortfolioEvidence, type PortfolioEvidence } from '@/lib/chimmy/portfolio/types'
 import { drawerFeedbackSurface, type ChimmyFeedbackValue } from '@/lib/chimmy-chat/feedback-events'
 import { questionEntry } from '@/lib/chimmy-context/telemetry/questionEntry'
 import {
@@ -48,16 +52,19 @@ import '@/components/core-app/af-comms.css'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
+import ChimmyMusicCard from '@/components/chimmy/ChimmyMusicCard'
+import { readMusicCard, type MusicCard } from '@/lib/chimmy/musicCards'
 import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
 import {
   newerAnswers,
   readAnswerPolish,
   readChimmyFaabCard,
   readChimmyVerdict,
+  readProUpsell,
   type ChimmyFaabCard,
   type ChimmyVerdict,
 } from '@/lib/chimmy/answerPolish'
-import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyVerdictChip } from './ChimmyAnswerPolish'
+import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyPastChatsChip, ChimmyProUpsell, ChimmyVerdictChip } from './ChimmyAnswerPolish'
 
 /**
  * Chimmy's private chat — ONE component, shown in two places:
@@ -180,6 +187,7 @@ type ChatTurn = {
    * arrives with every answer and used to be discarded.
    */
   evidence?: ChimmyEvidence | null
+  bracketEvidence?: BracketEvidence | null
   /** A trade, add/drop or start/sit before/after, computed from the league's rosters. Only a resolved one arrives. */
   scenario?: ReadyChimmyScenario | null
   /** Advice this answer put on file — renders "Did it / Not doing it", and keeps the vote. */
@@ -193,6 +201,8 @@ type ChatTurn = {
   /** Brought in from another scope's conversation when the scope changed. */
   carried?: boolean
   /** What to ask next, from the server. Tapping fills the composer; it never sends. */
+  portfolio?: PortfolioEvidence | null
+  portfolioState?: import("@/lib/chimmy/portfolio/types").PortfolioState | null
   followUps?: string[] | null
   /** What this answer did to the plan's included answers, when the caller's plan includes Chimmy. */
   plan?: ChimmyPlanAllowanceView | null
@@ -210,6 +220,8 @@ type ChatTurn = {
    * A card changes nothing until the user taps Confirm on it; see lib/chimmy/actions/confirmAction.ts.
    */
   actionCards?: ChimmyActionCardData[] | null
+  /** "Play some hype music": a music card from `meta.musicCard`. It plays only when the user taps it. */
+  musicCard?: MusicCard | null
   /** The engine's call — HOLD / BID / START … — from `meta`, never from the text. See answerPolish.ts. */
   verdict?: ChimmyVerdict | null
   /** The structured `get_faab_bid_plan` result, rendered as a card. */
@@ -221,6 +233,10 @@ type ChatTurn = {
    * sessionStorage) so an earlier answer can be marked "Newer answer below" by a later one.
    */
   answerKeys?: string[] | null
+  /** AF Pro tools a free answer needed and was refused — the "Get AF Pro" button. Re-read at render. */
+  proUpsell?: string[] | null
+  /** The answer quoted the user's earlier chats (`recall_past_chats`) — the "From your past chats" chip. */
+  recalledPastChats?: boolean | null
 }
 
 function scenarioFollowUps(scenario: ReadyChimmyScenario | null): string[] | null {
@@ -243,6 +259,7 @@ function carryable(turns: ChatTurn[], fromThread: string): ChatTurn[] {
     id: t.id.startsWith('carried:') ? t.id : `carried:${fromThread}:${t.id}`,
     role: t.role,
     text: t.text,
+    portfolioState: readPortfolioState(t.portfolio?.state ?? t.portfolioState),
     carried: true,
   }))
 }
@@ -448,10 +465,12 @@ type ChimmyEnvelope = {
     tokenSpend?: { tokenCost?: number }
     confidencePct?: number
     dataSources?: string[]
+    bracketEvidence?: unknown
     sourceLinks?: { label: string; href: string }[]
     staleness?: { staleMinutes?: number | null; warning?: unknown }
     syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
     /** Validated by `readFollowUps` before anything renders it. */
+    portfolio?: unknown
     followUps?: unknown
     /** The tools a tool-loop answer used, in order. Validated by `readToolsUsed`. */
     toolsUsed?: unknown
@@ -518,7 +537,7 @@ function newAnswerId(): string {
  * children "may be duplicated and/or omitted", and the report was exactly that: the question
  * appeared twice (owner, 2026-09-25).
  */
-export function newTurnId(role: 'you' | 'chimmy'): string {
+function newTurnId(role: 'you' | 'chimmy'): string {
   return `${role}-${newAnswerId()}`
 }
 
@@ -785,6 +804,8 @@ export function ChimmyPanel({
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
           if (attached) form.append('image', attached)
           if (scopeId) form.append('leagueId', scopeId)
+          const priorPortfolio = [...turns].reverse().map(t => readPortfolioState(readPortfolioEvidence(t.portfolio)?.state ?? t.portfolioState)).find(Boolean)
+          if (priorPortfolio) form.append('portfolioState', JSON.stringify(priorPortfolio))
           if (!publicMode && connectedMembers.length > 1) {
             form.append('connectedLeagueIds', JSON.stringify(includedLeagueIds))
           }
@@ -806,7 +827,7 @@ export function ChimmyPanel({
             JSON.stringify(
               turns.slice(-6).map((t) => ({
                 role: t.role === 'chimmy' ? 'assistant' : 'user',
-                content: t.text,
+                content: t.text.slice(0, 4000),
               })),
             ),
           )
@@ -1025,6 +1046,8 @@ export function ChimmyPanel({
             connectedScope: payload.meta?.connectedFranchise ?? null,
             players: payload.meta?.players ?? null,
             evidence: readEvidence(payload),
+            portfolio: readPortfolioEvidence(payload.meta?.portfolio),
+            bracketEvidence: readBracketEvidence(payload.meta?.bracketEvidence),
             /*
              * Only a well-formed, resolved scenario is kept. The route never sends anything else,
              * but a card that renders a half-shaped object would print "undefined" into a number
@@ -1039,9 +1062,12 @@ export function ChimmyPanel({
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
             actionCards: readActionCards(payload.meta),
+            musicCard: readMusicCard(payload.meta),
             verdict: polish.verdict,
             faabPlan: polish.faabPlan,
             answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
+            proUpsell: polish.proUpsell.length ? polish.proUpsell : null,
+            recalledPastChats: polish.recalledPastChats || null,
             gif: payload.meta?.gif ?? null,
           },
         ])
@@ -1128,8 +1154,8 @@ export function ChimmyPanel({
    * this week's win probability — rather than questions any chatbot would take.
    */
   const quickPrompts = scope
-    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'Find me a trade that fills my weakest spot']
-    : ['Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
+    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'How are my brackets doing?', 'Find me a trade that fills my weakest spot']
+    : ['How are my brackets doing?', 'Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
 
   /* Follow-up chips render under the newest answer only; older ones would be stale suggestions. */
   const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
@@ -1230,7 +1256,7 @@ export function ChimmyPanel({
             <Sparkles className="af-cm-welcome-icon" size={28} aria-hidden />
             <p className="af-cm-empty-t">Nothing asked yet.</p>
             <p className="af-cm-empty-b">
-              Opening this costs nothing. The first question is yours.
+              Ask about a bracket, a matchup, or a fantasy league. Opening this costs nothing.
             </p>
             <div className="af-cm-quick">
               {quickPrompts.map((q) => (
@@ -1267,8 +1293,13 @@ export function ChimmyPanel({
               ) : null}
               {/* Re-read at render: a turn restored from sessionStorage is not re-validated on the way in. */}
               {t.role === 'chimmy' && readChimmyVerdict(t.verdict) ? <ChimmyVerdictChip verdict={readChimmyVerdict(t.verdict)!} /> : null}
+              {t.role === 'chimmy' && t.recalledPastChats === true ? <ChimmyPastChatsChip /> : null}
               {t.role === 'chimmy' && readChimmyFaabCard(t.faabPlan) ? <ChimmyFaabBidCard card={readChimmyFaabCard(t.faabPlan)!} /> : null}
 
+              {t.role === 'chimmy' && readPortfolioEvidence(t.portfolio) ? <ChimmyPortfolioCard evidence={readPortfolioEvidence(t.portfolio)!} onEvidenceChange={portfolio => setTurns(all => all.map(x => x.id === t.id ? { ...x, portfolio } : x))} onAsk={(prompt, state) => {
+                setTurns(all => all.map(x => x.id === t.id && x.portfolio ? { ...x, portfolio: { ...x.portfolio, state } } : x))
+                setDraft(prompt)
+              }} /> : null}
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' && readDeepAnalysisPreview(t.analysisPreview) ? (
                 <ChimmyAnalysisPreview preview={readDeepAnalysisPreview(t.analysisPreview)!} busy={busy}
@@ -1282,6 +1313,7 @@ export function ChimmyPanel({
                 <>
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
                   {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
+                  {readProUpsell(t.proUpsell).length > 0 ? <ChimmyProUpsell tools={readProUpsell(t.proUpsell)} /> : null}
                   <ChimmyCopyActions text={t.text} />
                 </>
               ) : (
@@ -1356,11 +1388,13 @@ export function ChimmyPanel({
               {t.role === 'chimmy' && t.evidence ? (
                 <ChimmyEvidenceBlock evidence={t.evidence} />
               ) : null}
+              {t.role === 'chimmy' && t.bracketEvidence ? <BracketEvidenceCard evidence={t.bracketEvidence} /> : null}
 
 
               {t.role === 'chimmy' && t.actionCards?.length
                 ? t.actionCards.map((card) => <ChimmyActionCard key={card.actionId} card={card} />)
                 : null}
+              {t.role === 'chimmy' && t.musicCard ? <ChimmyMusicCard card={t.musicCard} /> : null}
 
               {t.role === 'chimmy' && t.advice ? (
                 <ChimmyAdviceFollow

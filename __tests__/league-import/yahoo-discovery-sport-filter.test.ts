@@ -22,7 +22,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock }))
 
 vi.mock('@/lib/league-import/provider-ui-config', async (orig) => ({
   ...(await orig<object>()),

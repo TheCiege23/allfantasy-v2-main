@@ -68,4 +68,3 @@ export function PredictionLeaderboard({ leagueId }: { leagueId: string }) {
   )
 }
 
-export default PredictionLeaderboard

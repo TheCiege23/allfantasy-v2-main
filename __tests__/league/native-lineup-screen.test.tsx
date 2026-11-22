@@ -333,7 +333,6 @@ describe('NativeLineupScreen', () => {
     expect(ids(saves(calls)[0].roster.bench)).toEqual(['rb2', 'rb3'])
   })
 })
-
 describe('NativeLineupScreen — tap to swap', () => {
   const routes = (r = roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)])) => ({
     '/api/league/roster': r,
@@ -342,7 +341,13 @@ describe('NativeLineupScreen — tap to swap', () => {
     '/settings': {},
     '/api/leagues/roster/save': { ok: true },
   })
-  const tapOn = (name: string) => fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }))
+  // The slot badge starts (or cancels) a move; once one is waiting, a tap on any row finishes it.
+  const tapOn = (name: string) => {
+    const waiting = document.querySelector('[data-testid="lineup-slot-tap"][aria-pressed="true"]')
+    const own = screen.queryByRole('button', { name: `Cancel moving ${name}.` })
+    if (waiting && !own) return fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name},`) }))
+    return fireEvent.click(own ?? screen.getByRole('button', { name: new RegExp(`^Move ${name}\\.`) }))
+  }
   const saves = (calls: Array<{ url: string; init?: RequestInit }>) =>
     calls.filter((c) => c.url === '/api/leagues/roster/save').map((c) => JSON.parse(String(c.init!.body)) as { roster: Record<string, Array<{ id: string }>> })
 

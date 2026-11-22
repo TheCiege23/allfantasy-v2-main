@@ -18,8 +18,8 @@ import { assignNflSlots, orientToSlot, parseNflPlayoffScoreboard, type NflPlayof
  */
 
 const dayKey = (date: Date) => date.toISOString().slice(0, 10).replace(/-/g, "")
-export const nflPlayoffsCacheKey = (season: number) => `BRACKET:nfl:automatic:${season}`
-export type NflPlayoffsSnapshot = { games: NflPlayoffGame[]; checkedDates: Record<string, string>; cursor: number; syncedAt: string }
+const nflPlayoffsCacheKey = (season: number) => `BRACKET:nfl:automatic:${season}`
+type NflPlayoffsSnapshot = { games: NflPlayoffGame[]; checkedDates: Record<string, string>; cursor: number; syncedAt: string }
 
 /**
  * The postseason window, in the calendar year AFTER the season starts:
@@ -27,7 +27,7 @@ export type NflPlayoffsSnapshot = { games: NflPlayoffGame[]; checkedDates: Recor
  * second Sunday of February. Generous at both ends; a day with no games costs
  * one empty request.
  */
-export function nflPostseasonDays(season: number): string[] {
+function nflPostseasonDays(season: number): string[] {
   const days: string[] = []
   for (let d = new Date(Date.UTC(season + 1, 0, 6)); d <= new Date(Date.UTC(season + 1, 1, 20)); d.setUTCDate(d.getUTCDate() + 1)) {
     days.push(dayKey(d))
@@ -36,7 +36,7 @@ export function nflPostseasonDays(season: number): string[] {
 }
 
 /** True from New Year's Day to a week after the latest possible Super Bowl. Outside it, no provider call. */
-export function nflPostseasonWindowOpen(season: number, now = new Date()): boolean {
+function nflPostseasonWindowOpen(season: number, now = new Date()): boolean {
   return now.getTime() >= Date.UTC(season + 1, 0, 1) && now.getTime() <= Date.UTC(season + 1, 1, 27)
 }
 
@@ -125,7 +125,8 @@ export async function syncNflPlayoffs(input: { season: number; apply: boolean; n
   // Seed placeholders first (and migrate any pick of them), so the rows written below match.
   const seeding = field.isFinal && ids.length ? await applyPlayoffSeedsToChallenges(ids) : null
 
-  return prisma.$transaction(async (tx) => {
+  const alertDecisions: Array<{ challengeId: string; seriesId: string; seriesName: string; beforeWinner: string | null; winner: string }> = []
+  const result = await prisma.$transaction(async (tx) => {
     const [lock] = await tx.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext(${nflPlayoffsCacheKey(input.season)})) AS acquired`
     if (!lock?.acquired) return { applied: false, skipped: "sync_already_running", failures, outcomes: [] }
     const row = await tx.sportsDataCache.findUnique({ where: { cacheKey: nflPlayoffsCacheKey(input.season) }, select: { data: true } })
@@ -154,6 +155,20 @@ export async function syncNflPlayoffs(input: { season: number; apply: boolean; n
     }
     const { rows, rejected } = nflSeriesRows(games, field.seeds)
     if (ids.length && rows.length) {
+      const finals = previous?.games.length ? rows.filter((row) => row.winnerTeamName) : []
+      const existing = finals.length ? await tx.playoffBracketSeries.findMany({
+        where: { challengeId: { in: ids }, seriesNumber: { in: finals.map((row) => row.seriesNumber) } },
+        select: { id: true, challengeId: true, seriesNumber: true, winnerTeamName: true,
+          homeTeamName: true, awayTeamName: true },
+      }) : []
+      const finalByNumber = new Map(finals.map((row) => [row.seriesNumber, row]))
+      for (const series of existing) {
+        const next = finalByNumber.get(series.seriesNumber)
+        if (!next?.winnerTeamName || next.winnerTeamName === series.winnerTeamName) continue
+        alertDecisions.push({ challengeId: series.challengeId, seriesId: series.id,
+          seriesName: `${next.homeTeamName ?? series.homeTeamName} vs ${next.awayTeamName ?? series.awayTeamName}`,
+          beforeWinner: series.winnerTeamName, winner: next.winnerTeamName })
+      }
       for (const update of rows) {
         await tx.playoffBracketSeries.updateMany({ where: { challengeId: { in: ids }, seriesNumber: update.seriesNumber }, data: { ...update, lastSyncedAt: now } })
       }
@@ -166,4 +181,21 @@ export async function syncNflPlayoffs(input: { season: number; apply: boolean; n
       warnings: field.warnings, failures, outcomes: [],
     }
   }, { timeout: 55000, maxWait: 5000 })
+  if (result.applied && alertDecisions.length) {
+    try {
+      const { emitPlayoffDecisionAlerts, settleBracketAlertBatch } = await import('@/lib/chimmy/bracketChangeAlerts')
+      const byChallenge = new Map<string, typeof alertDecisions>()
+      for (const decision of alertDecisions) {
+        const decisions = byChallenge.get(decision.challengeId) ?? []
+        decisions.push(decision)
+        byChallenge.set(decision.challengeId, decisions)
+      }
+      const failed = await settleBracketAlertBatch([...byChallenge], ([challengeId, decisions]) =>
+        emitPlayoffDecisionAlerts({ challengeId, decisions }))
+      if (failed) console.warn('[NFL playoffs] bracket change alerts failed', { failed })
+    } catch (error) {
+      console.warn('[NFL playoffs] bracket change alerts unavailable', error)
+    }
+  }
+  return result
 }

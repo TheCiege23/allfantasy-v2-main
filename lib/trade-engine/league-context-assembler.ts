@@ -4,7 +4,7 @@ import { pricePlayer, type ValuationContext } from '../hybrid-valuation'
 import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '../player-analytics'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
-import { buildManagerProfile, type ManagerTendencyProfile } from './manager-tendency-engine'
+import { type ManagerTendencyProfile } from './manager-tendency-engine'
 import {
   computeNeedsSurplus,
   computeStarterStrengthIndex,
@@ -435,7 +435,6 @@ export async function buildLeagueDecisionContext(
       age: fc?.age ?? undefined,
     }
     const classified = classifyCornerstone(asset, leagueSettingsObj, DEFAULT_THRESHOLDS)
-
 
     return {
       name: name.trim(),

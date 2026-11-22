@@ -8,6 +8,7 @@ import { readTradeAlertsEnabled } from "@/lib/integrity/tradeAlerts"
 import { resolveFlagManagers } from "@/lib/integrity/flagManagers"
 import { buildIntegrityAlertCopy, type IntegrityAlertCopy } from "@/lib/integrity/alertCopy"
 import { getBaseUrl } from "@/lib/get-base-url"
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 /** The flag itself, not just the page — the page scrolls to it and highlights it. */
 export function integrityFlagHref(leagueId: string, flagId: string): string {
@@ -78,7 +79,10 @@ export async function notifyCommissionerOfFlag(flagId: string): Promise<void> {
     url: `${getBaseUrl()}${integrityFlagHref(flag.leagueId, flag.id)}`,
   })
 
-  const sent = await sendIntegrityNotification(flag.league.userId, flag.leagueId, flag.id, flagType, copy, severity)
+  // The owner — or, for a system-owned league, its PROVEN commissioner. With none, nobody to tell.
+  const recipient = await leagueCommissionerAccountId(flag.leagueId, flag.league.userId)
+  if (!recipient) return
+  const sent = await sendIntegrityNotification(recipient, flag.leagueId, flag.id, flagType, copy, severity)
   // Unsent stays unmarked: notifiedAt then records only alerts that were actually sent.
   if (!sent) return
 

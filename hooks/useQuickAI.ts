@@ -19,7 +19,7 @@ export function useQuickAI() {
         setError(null)
       } catch (err) {
         if (!mounted) return
-        setError(err instanceof Error ? err.message : 'Failed to load quick AI prompts')
+        setError(err instanceof Error ? err.message : 'Failed to load quick Chimmy prompts')
       } finally {
         if (mounted) setLoading(false)
       }

@@ -84,7 +84,7 @@ describe('the dispatcher, end to end', () => {
       timezone: 'UTC',
       notificationPreferences,
     }
-    await dispatchNotification({ userIds: ['u-1'], category: category as never, type: 't', title: 'League update', severity: 'high', leagueId })
+    await dispatchNotification({ userIds: ['u-1'], category: category as never, type: 'draft_on_the_clock', title: 'League update', severity: 'high', leagueId })
   }
 
   it('consent does not allow non-league injury texts', async () => {

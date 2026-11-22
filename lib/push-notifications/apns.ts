@@ -33,7 +33,7 @@ export function apnsCollapseId(tag: string): string {
 
 export const IOS_ENDPOINT_PREFIX = "apns:"
 
-export type ApnsPayload = {
+type ApnsPayload = {
   title: string
   body?: string
   href?: string
@@ -45,7 +45,7 @@ export type ApnsPayload = {
   imageUrl?: string | null
 }
 
-export type ApnsResult = { ok: true } | { ok: false; expired: boolean; error: string }
+type ApnsResult = { ok: true } | { ok: false; expired: boolean; error: string }
 
 type ApnsConfig = { keyId: string; teamId: string; privateKey: string; topic: string; host: string }
 

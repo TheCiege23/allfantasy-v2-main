@@ -1,12 +1,14 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { resolveGuardianIntervention, getGuardianStats } from '@/lib/analytics/decision-guardian'
+import { prisma } from '@/lib/prisma'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 const resolveSchema = z.object({
   action: z.literal('resolve'),
-  interventionId: z.string().uuid(),
+  interventionId: z.guid(),
   userDecision: z.enum(['proceed', 'cancel']),
   overrideReason: z.string().max(500).optional(),
 })
@@ -20,8 +22,14 @@ const statsSchema = z.object({
 const requestSchema = z.discriminatedUnion('action', [resolveSchema, statsSchema])
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/decision-guardian/override", tool: "LegacyDecisionGuardianOverride" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse()
+  /*
+   * Was `requireAuthOrOrigin` alone — it passes an anonymous caller with a matching `Origin`
+   * header — so anyone could resolve anyone's intervention by id and read anyone's guardian
+   * stats by naming them. The origin check stays as CSRF protection; identity now comes from
+   * the shared legacy gate, and `GuardianIntervention.userId` is the Sleeper username the
+   * evaluate route logged it under.
+   */
+  if (!validateRequestOrigin(req)) return forbiddenResponse('Invalid request origin')
 
   try {
     const body = await req.json()
@@ -35,6 +43,16 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/decision-guardian/over
     }
 
     if (parsed.data.action === 'resolve') {
+      const gate = await requireLegacySleeperIdentity(req, { allowGuest: true })
+      if (!gate.ok) return gate.response
+      const owned = await prisma.guardianIntervention.findUnique({
+        where: { id: parsed.data.interventionId },
+        select: { userId: true },
+      })
+      if (!owned || owned.userId.trim().toLowerCase() !== gate.identity.sleeperUsername.toLowerCase()) {
+        // Someone else's intervention reads exactly like a missing one.
+        return NextResponse.json({ error: 'Intervention not found' }, { status: 404 })
+      }
       const result = await resolveGuardianIntervention(
         parsed.data.interventionId,
         parsed.data.userDecision,
@@ -52,7 +70,12 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/decision-guardian/over
     }
 
     if (parsed.data.action === 'stats') {
-      const stats = await getGuardianStats(parsed.data.userId, parsed.data.leagueId)
+      const gate = await requireLegacySleeperIdentity(req, {
+        allowGuest: true,
+        requestedUsername: parsed.data.userId,
+      })
+      if (!gate.ok) return gate.response
+      const stats = await getGuardianStats(gate.identity.sleeperUsername, parsed.data.leagueId)
       return NextResponse.json({ success: true, stats })
     }
 

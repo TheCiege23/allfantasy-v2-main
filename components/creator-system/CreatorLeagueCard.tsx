@@ -5,7 +5,7 @@ import { Lock, Share2, Trophy, Users } from 'lucide-react'
 import type { CreatorLeagueDto } from '@/lib/creator-system/types'
 import { trackDiscoveryJoinClick } from '@/lib/discovery-analytics/client'
 
-export interface CreatorLeagueCardProps {
+interface CreatorLeagueCardProps {
   league: CreatorLeagueDto
   onShare?: (league: CreatorLeagueDto, url: string) => void
   showJoinButton?: boolean

@@ -64,7 +64,7 @@ describe('League Settings — redraft hooks', () => {
     const html = home(view)
     expect(html).toContain('data-rd-settings="true"')
     expect(html).toContain('data-rd-sport="nba"')
-    expect(html).toMatch(/data-testid="lsh-section-waivers-trades" data-rd-stage="now"/)
+    expect(html).toMatch(/data-testid="lsh-section-trades" data-rd-stage="now"/)
     expect(html).toMatch(/data-testid="lsh-section-draft" data-rd-stage="done"/)
     expect(html).toMatch(/data-testid="lsh-section-playoffs" data-rd-stage="next"/)
     expect(html).toContain('Weeks 1–18 · trade deadline Wk 16')

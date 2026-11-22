@@ -20,6 +20,7 @@ import {
   type RolloverHousekeepingResult,
 } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { readLiveRookieOrderSettings } from '@/lib/rookie-order/liveRookieOrderService'
+import { automaticRookieOrderMethod } from '@/lib/rookie-order/automaticRookieOrder'
 import { readDuesTracker } from '@/lib/core-app/commissioner/health'
 import { readTaxiMaxYears } from '@/lib/taxi/taxiMaxYears'
 import { readPayoutsView } from '@/lib/payouts/payoutService'
@@ -86,7 +87,7 @@ export async function readDynastyRolloverView(
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
-      name: true, settings: true, lifecycleMetadata: true,
+      name: true, userId: true, settings: true, lifecycleMetadata: true,
       taxiSlots: true, taxiAllowNonRookies: true, taxiYearsLimit: true,
       teams: { select: { id: true } },
     },
@@ -124,16 +125,21 @@ export async function readDynastyRolloverView(
   const live = readLiveRookieOrderSettings(league.settings)
   const finalOrderSaved = Boolean(live.finalOrder && live.finalOrder.basedOnSeason === outgoing.season)
   const method = dynastyConfig?.rookiePickOrderMethod ?? 'max_pf'
+  // Worst record first unless the league switched it off or chose lowest max PF on the plan.
+  const automatic = await automaticRookieOrderMethod(
+    { userId: league.userId ?? null, settings: league.settings },
+    { configMethod: method },
+  ).catch(() => 'reverse_standings' as const)
   const source: RookieOrderSource =
     method === 'weighted_lottery'
       ? 'lottery'
       : live.enabled && finalOrderSaved
         ? 'live_order'
-        : method === 'commissioner'
-          ? 'commissioner'
-          : method === 'reverse_standings'
+        : automatic === 'max_pf'
+          ? 'max_pf'
+          : automatic === 'reverse_standings'
             ? 'standings'
-            : 'max_pf'
+            : 'commissioner'
 
   // Taxi: what the start will move, or — once it has run — what it moved.
   let toBench = 0

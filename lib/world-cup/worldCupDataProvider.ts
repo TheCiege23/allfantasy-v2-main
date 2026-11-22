@@ -80,7 +80,7 @@ export type WorldCupProviderGroupStanding = {
   raw?: unknown
 }
 
-export type WorldCupProviderSquadPlayer = {
+type WorldCupProviderSquadPlayer = {
   providerPlayerId: string
   name: string
   shortName?: string | null

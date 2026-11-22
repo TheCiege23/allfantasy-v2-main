@@ -16,7 +16,7 @@
 export type FinalResult = 'won' | 'lost' | 'out'
 
 /** The Finals tile, from counted career rows. */
-export type FinalsSummary = {
+type FinalsSummary = {
   /** Title games played — titles plus finals lost. Null when no counted season has a bracket to read. */
   finals: number | null
   won: number

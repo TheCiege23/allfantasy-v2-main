@@ -8,7 +8,6 @@ import {
   isMonetizationComplianceError,
 } from "@/lib/monetization/compliance-guardrails"
 
-const PRESET_AMOUNTS = [300, 500, 1000]
 const MIN_AMOUNT = 100
 const MAX_AMOUNT = 50000
 
@@ -20,14 +19,18 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const amountCents = Number(body.amountCents)
+    /*
+     * Stripe takes whole cents only: a fractional amount (150.5) used to reach it, be refused,
+     * and come back as a 500. Rounded once here so the check below and the charge agree.
+     */
+    const amountCents = Math.round(Number(body?.amountCents))
     assertNoLeagueSettlementIntent("donation", {
       route: "/api/bracket/donate",
       type: "donation",
       amountCents: String(amountCents),
     })
 
-    if (!amountCents || amountCents < MIN_AMOUNT || amountCents > MAX_AMOUNT) {
+    if (!Number.isFinite(amountCents) || amountCents < MIN_AMOUNT || amountCents > MAX_AMOUNT) {
       return NextResponse.json(
         { error: `Amount must be between $${MIN_AMOUNT / 100} and $${MAX_AMOUNT / 100}` },
         { status: 400 }
@@ -55,7 +58,14 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       success_url: `${baseUrl}/brackets?donation=success`,
       cancel_url: `${baseUrl}/brackets?donation=cancelled`,
+      /*
+       * `purchase_type` is the key the Stripe webhook routes on (resolveCheckoutPurchaseType).
+       * With only `type`, every bracket donation was logged as "missing purchaseType metadata";
+       * "donation" is one of the webhook's known no-grant types. `type` stays for anything
+       * already reading it.
+       */
       metadata: {
+        purchase_type: "donation",
         type: "donation",
         userId: session.user.id,
         amountCents: String(amountCents),

@@ -19,6 +19,9 @@ const m = vi.hoisted(() => ({
     redraftRoster: { findMany: vi.fn(), count: vi.fn() },
     redraftPlayoffBracket: { findUnique: vi.fn() },
     leagueDues: { findMany: vi.fn() },
+    survivorPlayer: { findMany: vi.fn() },
+    jurySession: { findUnique: vi.fn() },
+    juryVote: { findMany: vi.fn() },
   },
 }))
 const lang = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
@@ -181,6 +184,10 @@ describe('the league view', () => {
     m.prisma.redraftPlayoffBracket.findUnique.mockResolvedValue(null)
     m.prisma.leagueDues.findMany.mockResolvedValue([{ amountPaidCents: 5_000, status: 'paid' }, { amountPaidCents: 0, status: 'pending' }])
     m.sides.mockResolvedValue({ ok: true, native: true, totals: [{ rosterId: 'C', prizeCents: 2_000 }] })
+    // Not a Survivor league unless a test says so.
+    m.prisma.survivorPlayer.findMany.mockResolvedValue([])
+    m.prisma.jurySession.findUnique.mockResolvedValue(null)
+    m.prisma.juryVote.findMany.mockResolvedValue([])
   })
 
   it('a member: pot from the entry fee, 14 weeks of prizes set aside, places by current standings — no dues', async () => {
@@ -208,6 +215,46 @@ describe('the league view', () => {
     expect(v.result!.final).toBe(true)
     expect(v.result!.places.map((p) => p.rosterId)).toEqual(['D', 'C'])
     expect(v.result!.teams.find((t) => t.rosterId === 'C')!.totalCents).toBe(1_800 + 2_000)
+  })
+
+  describe('a Survivor league (no bracket: the jury picks the winner)', () => {
+    // Seed order is B, A, C, D. The Sole Survivor is D — last on the points table.
+    const players = [
+      { userId: 'ua', redraftRosterId: 'A', eliminatedWeek: 9, isFinalist: false },
+      { userId: 'ub', redraftRosterId: 'B', eliminatedWeek: 4, isFinalist: false },
+      { userId: 'uc', redraftRosterId: 'C', eliminatedWeek: null, isFinalist: true },
+      { userId: 'ud', redraftRosterId: 'D', eliminatedWeek: null, isFinalist: true },
+    ]
+    beforeEach(() => {
+      m.prisma.survivorPlayer.findMany.mockResolvedValue(players)
+    })
+
+    it('once the winner is revealed: winner first, then the runner-up, then the voted-out latest-first — final', async () => {
+      m.prisma.jurySession.findUnique.mockResolvedValue({ id: 'j1', status: 'winner_revealed', winnerId: 'ud', finalistUserIds: ['uc', 'ud'] })
+      m.prisma.juryVote.findMany.mockResolvedValue([{ finalistUserId: 'ud' }, { finalistUserId: 'ud' }, { finalistUserId: 'uc' }])
+      const v = await readPayoutsView('L', 'u1')
+      if (!v.ok) throw new Error('expected ok')
+      expect(v.result!.final).toBe(true)
+      expect(v.result!.places.map((p) => [p.place, p.rosterId])).toEqual([[1, 'D'], [2, 'C']])
+    })
+
+    it('before the reveal: never final, the jury votes are not read, still-in players ahead of the voted-out', async () => {
+      m.prisma.jurySession.findUnique.mockResolvedValue({ id: 'j1', status: 'voting_open', winnerId: null, finalistUserIds: ['uc', 'ud'] })
+      const v = await readPayoutsView('L', 'u1')
+      if (!v.ok) throw new Error('expected ok')
+      expect(v.result!.final).toBe(false)
+      expect(m.prisma.juryVote.findMany).not.toHaveBeenCalled()
+      // C and D are still in (seed 3 then 4); A went out in week 9, B in week 4.
+      expect(v.result!.places.map((p) => p.rosterId)).toEqual(['C', 'D'])
+    })
+
+    it('a bracket the league never uses does not override the jury', async () => {
+      m.prisma.redraftPlayoffBracket.findUnique.mockResolvedValue({ status: 'complete', structure: { finalStandings: [{ finish: 1, rosterId: 'B' }] } })
+      m.prisma.jurySession.findUnique.mockResolvedValue({ id: 'j1', status: 'winner_revealed', winnerId: 'ud', finalistUserIds: ['uc', 'ud'] })
+      const v = await readPayoutsView('L', 'u1')
+      if (!v.ok) throw new Error('expected ok')
+      expect(v.result!.places[0].rosterId).toBe('D')
+    })
   })
 
   it('not a member: refused; not a league AllFantasy runs: nothing to calculate', async () => {

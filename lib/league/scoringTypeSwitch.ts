@@ -23,7 +23,7 @@ import { ruleSnapshotFromLeague } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
-export type ScoringTypeSwitchResult =
+type ScoringTypeSwitchResult =
   | {
       ok: true
       changed: boolean
@@ -36,7 +36,7 @@ export type ScoringTypeSwitchResult =
   | { ok: false; status: number; code: string; error: string }
 
 /** The league's current season and the last week with any final result in it (0 when none). */
-export async function findLastFinalWeek(
+async function findLastFinalWeek(
   leagueId: string,
   leagueSeason: number | null,
 ): Promise<{ season: number | null; seasonId: string | null; lastFinalWeek: number; currentWeek: number | null }> {

@@ -56,10 +56,12 @@ function fbPreset(
       !ctx.idpSelected &&
       [
         'redraft',
+        'pirate',
         'dynasty',
         'keeper',
         'best_ball',
         'guillotine',
+        'survivor_guillotine',
         'survivor',
         'tournament',
         'devy',

@@ -25,6 +25,9 @@ import {
   resolveLeagueConcept,
 } from '@/lib/league/leagueConceptOptions'
 
+import { isC2CVariant } from '@/lib/c2c/campusLineup'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+
 export type LeagueTypeBasis = {
   /** The concept the grade used — `keeper`, `dynasty`, `zombie`… */
   type: string
@@ -67,9 +70,13 @@ function labelFor(type: string): string {
 export function leagueTypeBasis(args: {
   settings: unknown
   leagueType: string | null | undefined
+  leagueVariant?: string | null
   platform?: string | null
 }): LeagueTypeBasis {
   const platform = platformLabel(args.platform)
+  if (isNativePlatform(args.platform) && isC2CVariant(args.leagueVariant)) {
+    return { type: 'c2c', label: labelFor('c2c'), source: 'confirmed', platform }
+  }
   const confirmed = readConfirmedLeagueConcept(args.settings)
   if (confirmed) return { type: confirmed, label: labelFor(confirmed), source: 'confirmed', platform }
 

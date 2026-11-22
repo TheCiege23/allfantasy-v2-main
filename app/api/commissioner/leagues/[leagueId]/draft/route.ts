@@ -1,9 +1,9 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { rosterConfigurationIncompleteBody } from '@/lib/league/roster-configuration-gate-error'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getLeagueDrafts, getDraftPicks } from '@/lib/sleeper-client'
 
 /** GET: Draft state from platform (Sleeper). Read-only; use for live draft display. */
@@ -13,11 +13,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({
     where: { id: params.leagueId },
@@ -68,11 +65,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const action = String(body?.action || '').toLowerCase()

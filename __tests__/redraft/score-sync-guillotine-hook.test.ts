@@ -12,7 +12,9 @@ const m = vi.hoisted(() => ({
   housekeeping: vi.fn(),
   playoff: vi.fn(),
   standings: vi.fn(),
+  pirateCapture: vi.fn(),
   chopZone: vi.fn(),
+  correction: vi.fn(),
 }))
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
@@ -56,8 +58,15 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
 }))
 vi.mock('@/lib/redraft/scoreSyncBatch', () => ({ rotatingBatch: <T,>(xs: T[]) => xs, SCORE_SYNC_BATCH: 50 }))
 vi.mock('@/lib/bestball/nativeTournament', () => ({ runNativeTournamentWeek: m.tournament }))
+vi.mock('@/lib/pirate/service', () => ({
+  seedPirateClaims: vi.fn(async () => 0),
+  queuePirateProtectionReminders: vi.fn(async () => undefined),
+  maintainPirateClaims: vi.fn(async () => ({ considered: 0, transferred: 0, failed: 0 })),
+}))
+vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: m.pirateCapture }))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
 vi.mock('@/lib/guillotine/chopAlerts', () => ({ sendChopZoneWarningsForSeason: m.chopZone }))
+vi.mock('@/lib/guillotine/statCorrectionHandler', () => ({ checkGuillotineStatCorrectionsForSeason: m.correction }))
 vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 vi.mock('@/lib/playoff-runtime/playoffRoundScoring', () => ({ scoreActivePlayoffRound: m.playoff }))
 
@@ -76,6 +85,8 @@ beforeEach(() => {
     return { seasonId, outcome: 'not_guillotine' }
   })
   m.housekeeping.mockResolvedValue({ leaguesChecked: 0, announcementsPosted: 0, errors: [] })
+  m.pirateCapture.mockResolvedValue(0)
+  m.correction.mockResolvedValue({ outcome: 'no_baseline' })
 })
 
 describe('score-sync — native guillotine', () => {
@@ -120,6 +131,27 @@ describe('score-sync — native guillotine', () => {
     const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
     expect(m.chopZone).toHaveBeenCalledTimes(3)
     expect(body.result.redraft).toMatchObject({ guillotineFailed: 0, guillotineOutcomes: { waiting: 3, chop_zone_warning_failed: 3 } })
+  })
+})
+
+describe('score-sync — Guilly stat corrections after a chop', () => {
+  it('re-checks a guillotine season’s chopped weeks with the stat sync, never a non-guillotine one', async () => {
+    m.correction.mockImplementation(async (seasonId: string) => ({ outcome: seasonId === 's-guillotine' ? 'applied' : 'throttled' }))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    // s-broken threw in the chop pass and s-plain is not guillotine: only s-guillotine is checked.
+    expect(m.correction.mock.calls.map((c) => c[0])).toEqual(['s-guillotine'])
+    const deps = m.correction.mock.calls[0][1] as { syncWeekStats: (a: { seasonId: string; week: number }) => Promise<void> }
+    expect(typeof deps.syncWeekStats).toBe('function')
+    expect(body.result.redraft).toMatchObject({ statCorrectionOutcomes: { guilly_applied: 1 } })
+  })
+
+  it('a correction pass that throws is counted and never stops the chop accounting', async () => {
+    m.correction.mockRejectedValue(new Error('db blip'))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    expect(body.result.redraft).toMatchObject({ guillotineChops: 1, guillotineFailed: 1 })
+    expect(Number(body.result.redraft.statCorrectionFailed)).toBeGreaterThanOrEqual(1)
   })
 })
 
@@ -174,7 +206,7 @@ describe('score-sync — a season in its playoffs', () => {
 
   it('includes playoff seasons in the sweep', async () => {
     await GET(new Request('http://localhost/api/redraft/score-sync'))
-    expect(m.seasons.mock.calls[0][0].where.AND[0].status.in).toContain('playoffs')
+    expect(m.seasons.mock.calls.find((call) => call[0].select.status)?.[0].where.AND[0].status.in).toContain('playoffs')
   })
 
   it('scores the bracket with the calendar week, and skips the regular-season steps for that season', async () => {
@@ -232,7 +264,7 @@ describe('score-sync — completed tournament recovery', () => {
     expect(resolveSeasonWeekForRedraftSeason).not.toHaveBeenCalled()
     expect(syncPlayerWeeklyScoresForRedraftSeason).not.toHaveBeenCalled()
     expect(body.result.redraft.tournamentOutcomes).toEqual({ complete: 1 })
-    const scope = m.seasons.mock.calls[0][0].where
+    const scope = m.seasons.mock.calls.find((call) => call[0].select.status)?.[0].where
     expect(JSON.stringify(scope)).toContain('contestStructure')
     expect(JSON.stringify(scope)).toContain('completed')
   })
@@ -242,5 +274,20 @@ describe('score-sync — completed tournament recovery', () => {
     const body = await (await GET(new Request('http://localhost/api/redraft/score-sync'))).json()
     expect(body.result.redraft.tournamentFailed).toBe(1)
     expect(body.summary.status).toBe('partial')
+  })
+})
+
+describe('score-sync — Pirate lock evidence', () => {
+  it('captures every Pirate season before slow bridges, even outside the scoring batch', async () => {
+    m.seasons.mockImplementation(async ({ select }) => select.status ? [] : [{ id: 'pirate-season', leagueId: 'pirate', season: 2026,
+      league: { leagueType: 'pirate', leagueVariant: 'pirate' } }])
+    m.pirateCapture.mockResolvedValue(2)
+    const body = await (await GET(new Request('http://localhost/api/redraft/score-sync'))).json()
+    expect(m.pirateCapture.mock.calls.map((call) => call[0])).toEqual([
+      { leagueId: 'pirate', seasonId: 'pirate-season', season: 2026, week: 4 },
+      { leagueId: 'pirate', seasonId: 'pirate-season', season: 2026, week: 5 },
+    ])
+    expect(m.pirateCapture.mock.invocationCallOrder[0]).toBeLessThan(m.housekeeping.mock.invocationCallOrder[0])
+    expect(body.result.pirateEvidence).toEqual({ considered: 1, captured: 4, failed: 0 })
   })
 })

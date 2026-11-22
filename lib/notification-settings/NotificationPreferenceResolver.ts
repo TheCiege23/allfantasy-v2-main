@@ -21,6 +21,30 @@ const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   push: true,
 }
 
+const PUSH_AND_IN_APP_ONLY = new Set<NotificationCategoryId>(["direct_messages", "chat_mentions", "league_chat"])
+
+const PUSH_DEFAULT_OFF = new Set<NotificationCategoryId>([
+  "live_game_alerts", "followed_team_scores", "matchup_results", "waiver_processing", "ai_alerts", "autocoach",
+])
+
+/**
+ * Which devices push may reach. Each is ON unless the person switched it off.
+ *
+ * 🛑 DESKTOP WAS OFF UNLESS SWITCHED ON, AND THAT DROPPED EVERY DESKTOP "ALLOW" (fixed 2026-11-15).
+ * The sign-in sheet asks desktop browsers for permission and saves the subscription, but `desktop`
+ * defaulted to false and nothing ever flipped it, so `sendPushToUser` filtered every desktop
+ * subscription out: a person who said yes on their laptop got nothing unless they also found the
+ * "Desktop browser push" toggle in Settings. Push only ever reaches a browser that granted permission,
+ * so on-by-default cannot buzz anyone who did not ask; an explicit `false` is still honoured.
+ */
+export function resolvePushDevices(saved: NotificationPreferences | null | undefined) {
+  return { mobile: saved?.pushDevices?.mobile !== false, desktop: saved?.pushDevices?.desktop !== false }
+}
+
+export function isPushAndInAppOnly(id: NotificationCategoryId): boolean {
+  return PUSH_AND_IN_APP_ONLY.has(id)
+}
+
 /** An opt-in category's default: off everywhere until the user turns it on. */
 const OPT_IN_CHANNEL: NotificationChannelPrefs = {
   enabled: false,
@@ -43,10 +67,13 @@ export function getDefaultCategoryPreferences(
   opts: { smsConsented?: boolean } = {},
 ): NotificationChannelPrefs {
   if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) return { ...OPT_IN_CHANNEL }
+  // Additional provider alerts are opt-in; native AF defaults stay unchanged.
+  if (id.startsWith("imported_")) return { ...DEFAULT_CHANNEL, enabled: false, email: false }
   return {
     ...DEFAULT_CHANNEL,
-    email: !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id),
-    sms: Boolean(opts.smsConsented) && SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS.includes(id),
+    push: !PUSH_DEFAULT_OFF.has(id),
+    email: !isPushAndInAppOnly(id) && !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id),
+    sms: !isPushAndInAppOnly(id) && Boolean(opts.smsConsented) && SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS.includes(id),
   }
 }
 
@@ -73,7 +100,7 @@ export function getDefaultNotificationPreferences(opts: { smsConsented?: boolean
   for (const id of NOTIFICATION_CATEGORY_IDS) {
     categories[id] = getDefaultCategoryPreferences(id, opts)
   }
-  return { globalEnabled: true, categories }
+  return { globalEnabled: true, categories, pushDevices: resolvePushDevices(null) }
 }
 
 /**
@@ -97,6 +124,7 @@ export function resolveNotificationPreferences(
   const defaults = getDefaultNotificationPreferences({ smsConsented: hasLiveSmsConsentRecord(saved) })
   // Preserved on BOTH return paths — the early return dropped them too.
   const passthrough: Partial<NotificationPreferences> = {
+    pushDevices: resolvePushDevices(saved),
     ...(saved?.quietHours !== undefined && { quietHours: saved.quietHours }),
     ...(saved?.leagues !== undefined && { leagues: saved.leagues }),
     // The live game alert level (liveAlertLevel.ts). Dropping it here would show every saved level as the default.
@@ -112,8 +140,8 @@ export function resolveNotificationPreferences(
       categories[id] = {
         enabled: s.enabled ?? defaults.categories?.[id]?.enabled ?? true,
         inApp,
-        email: s.email ?? defaults.categories?.[id]?.email ?? true,
-        sms: s.sms ?? defaults.categories?.[id]?.sms ?? false,
+        email: !isPushAndInAppOnly(id) && (s.email ?? defaults.categories?.[id]?.email ?? true),
+        sms: !isPushAndInAppOnly(id) && (s.sms ?? defaults.categories?.[id]?.sms ?? false),
         /*
          * ⚠ ABSENT PUSH FOLLOWS THIS ROW'S inApp, NOT THE DEFAULT. Push had no switch before
          * 2026-09-14 and simply followed in-app, so a row saved with in-app off has been
@@ -166,5 +194,6 @@ export function getNotificationPreferencesFingerprint(
     .filter((x): x is string => x !== null)
     .sort()
   // Absent and the default are the same state, so print the resolved level.
-  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}|${quiet}|L:${leagues.join(";")}|lv:${readLiveAlertLevel(resolved)}|pn:${readPlayerNewsLevel(resolved)}`
+  const devices = resolvePushDevices(resolved)
+  return `${resolved.globalEnabled !== false ? "1" : "0"}|devices:${Number(devices.mobile)}${Number(devices.desktop)}|${categories.join("|")}|${quiet}|L:${leagues.join(";")}|lv:${readLiveAlertLevel(resolved)}|pn:${readPlayerNewsLevel(resolved)}`
 }

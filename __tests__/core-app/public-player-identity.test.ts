@@ -23,7 +23,7 @@ describe('resolvePublicPlayer', () => {
       { externalId: 'sleeper:5864', source: 'sleeper', sleeperId: '5864', sport: 'NFL', name: 'Byron Murphy', position: 'CB', team: 'Minnesota Vikings', fetchedAt: at('2026-10-10T12:06:58Z') },
     ])
     const resolved = await resolvePublicPlayer('NFL', '5864')
-    expect(resolved).toEqual({ playerReference: 'NFL:sleeper:5864', name: 'Byron Murphy', sport: 'NFL', sleeperId: '5864' })
+    expect(resolved).toEqual({ playerReference: 'NFL~sleeper:sleeper:5864', name: 'Byron Murphy', sport: 'NFL', sleeperId: '5864', source: 'sleeper', externalId: 'sleeper:5864' })
     expect(db.sportsPlayer.findMany.mock.calls[0][0].select).toMatchObject({ source: true })
   })
 
@@ -34,7 +34,7 @@ describe('resolvePublicPlayer', () => {
     ])
     const resolved = await resolvePublicPlayer('NFL', '11304')
     expect(resolved?.name).toBe('E.J. Jenkins')
-    expect(resolved?.playerReference).toBe('NFL:sleeper:11304')
+    expect(resolved?.playerReference).toBe('NFL~sleeper:sleeper:11304')
   })
 
   it('returns null when no row carries the id', async () => {

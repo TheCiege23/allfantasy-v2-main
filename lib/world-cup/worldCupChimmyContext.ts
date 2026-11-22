@@ -15,11 +15,9 @@ import {
   type ChimmyRosterDigestRow,
 } from "./worldCupRosterService"
 
-export type { ChimmyRosterDigestRow }
-
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type ChimmyLiveDataStatus = "live" | "fixture_only" | "unavailable"
+type ChimmyLiveDataStatus = "live" | "fixture_only" | "unavailable"
 
 export type ChimmyMatchSummary = {
   matchId: string
@@ -41,7 +39,7 @@ export type ChimmyMatchSummary = {
   lastSyncedAt: string | null
 }
 
-export type ChimmyGroupPickRow = {
+type ChimmyGroupPickRow = {
   rank: number
   teamName: string
   groupKey: string
@@ -59,14 +57,14 @@ export type ChimmyKnockoutPickRow = {
   pointsAwarded: number
 }
 
-export type ChimmyThirdPlacePickRow = {
+type ChimmyThirdPlacePickRow = {
   groupName: string
   teamName: string
   isCorrect: boolean | null
   pointsAwarded: number
 }
 
-export type ChimmyUserEntry = {
+type ChimmyUserEntry = {
   entryId: string
   entryName: string
   championPick: string | null
@@ -82,7 +80,7 @@ export type ChimmyUserEntry = {
   thirdPlacePicks?: ChimmyThirdPlacePickRow[]
 }
 
-export type ChimmyGroupStandingRow = {
+type ChimmyGroupStandingRow = {
   groupName: string
   teamName: string
   rank: number | null

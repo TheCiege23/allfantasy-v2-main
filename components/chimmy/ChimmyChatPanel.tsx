@@ -28,8 +28,6 @@ export default function ChimmyChatPanel({
   compact: compactProp,
   ...shellProps
 }: ChimmyChatPanelProps) {
-  const compact = variant !== 'inline' || compactProp
-
   useEffect(() => {
     if (variant === 'drawer' && open && typeof document !== 'undefined') {
       document.body.style.overflow = 'hidden'

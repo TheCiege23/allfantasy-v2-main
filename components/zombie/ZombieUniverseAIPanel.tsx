@@ -22,7 +22,7 @@ const TYPE_LABELS: Record<ZombieUniverseAIType, string> = {
   commissioner_anomaly_summary: 'Commissioner anomaly summary',
 }
 
-export interface ZombieUniverseAIPanelProps {
+interface ZombieUniverseAIPanelProps {
   universeId: string
 }
 
@@ -76,13 +76,13 @@ export function ZombieUniverseAIPanel({ universeId }: ZombieUniverseAIPanelProps
       <section className="rounded-2xl border border-rose-500/30 bg-rose-950/10 p-4 sm:p-6">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-rose-200">
           <Sparkles className="h-5 w-5" />
-          Universe AI
+          Universe Chimmy
         </h2>
         <p className="mb-4 text-sm text-white/70">
-          Promotion/relegation outlook, level storylines, and league health. Requires zombie AI entitlement.
+          Promotion/relegation outlook, level storylines, and league health. Requires zombie Chimmy entitlement.
         </p>
 
-        <FeatureGate featureId="zombie_ai" featureNameOverride="Zombie Universe AI" className="mb-3">
+        <FeatureGate featureId="zombie_ai" featureNameOverride="Zombie Universe Chimmy" className="mb-3">
           <>
             <div className="mb-4">
               <label className="mb-2 block text-xs text-white/50">Topic</label>
@@ -131,7 +131,7 @@ export function ZombieUniverseAIPanel({ universeId }: ZombieUniverseAIPanelProps
 
         {result && (
           <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/50">AI narrative</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/50">Chimmy narrative</h3>
             <p className="whitespace-pre-wrap text-sm text-white/80">{result}</p>
           </div>
         )}

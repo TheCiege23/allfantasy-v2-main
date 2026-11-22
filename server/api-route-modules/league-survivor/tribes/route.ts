@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 /**
  * POST: Create Survivor tribes (commissioner only). PROMPT 349 QA.
@@ -8,7 +9,6 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { createTribes, getTribesWithMembers, setTribeName } from '@/lib/survivor/SurvivorTribeService'
 import { bootstrapTribeChatMembers } from '@/lib/survivor/SurvivorChatMembershipService'
@@ -40,7 +40,7 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isSurvivor = await isSurvivorLeague(leagueId)
@@ -115,7 +115,7 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>

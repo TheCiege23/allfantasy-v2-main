@@ -46,7 +46,7 @@ import type { TenantRole } from './roles'
 /** The prefix that marks a synthetic API actor. */
 export const API_ACTOR_PREFIX = 'apikey:'
 
-export type VerifiedKeyIdentity = {
+type VerifiedKeyIdentity = {
   readonly tenantId: string
   readonly keyId: string
   readonly label: string

@@ -9,7 +9,8 @@ import { isRealLeague, EXCLUDED_VARIANTS } from '@/lib/leagues/leagueListFilter'
 import { resolveLeagueListSeasonYear } from '@/lib/leagues/resolveLeagueListSeasonYear'
 import type { ActivityLeagueEntry } from '@/lib/activity/types'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
-import { isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
+import { IMPORT_VIEWERS_KEY } from '@/lib/league/importViewers'
+import { IMPORT_CO_COMMISSIONERS_KEY, isTournamentCoCommissioner, TOURNAMENT_CO_COMMISSIONERS_KEY } from '@/lib/league/tournamentCoCommissioners'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { tombstoneLookupKey } from '@/lib/league-delete/leagueTombstones'
 import { labelSameNamedLeagues } from '@/lib/dashboard/labelSameNamedLeagues'
@@ -97,11 +98,15 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
                 { userId },
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
-                { rosters: { some: { platformUserId: userId } } },
+                { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
                 { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and one who joined an already-imported league as its commissioner, with no team in it.
+                { settings: { path: [IMPORT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and a league mate with no team who joined it as a viewer (lib/league/importViewers.ts).
+                { settings: { path: [IMPORT_VIEWERS_KEY], array_contains: [userId] } },
               ],
             },
             { OR: [{ leagueVariant: null }, { leagueVariant: { notIn: VARIANT_NOT_IN } }] },
@@ -559,11 +564,15 @@ export async function getDashboardLeagueListForUser(
                 { userId },
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
-                { rosters: { some: { platformUserId: userId } } },
+                { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
                 { id: { in: coOwnedLeagueIds } },
                 // A co-commissioner granted by the tournament that created the league runs it without a
                 // team (lib/league/tournamentCoCommissioners.ts); `assertLeagueMember` admits them too.
                 { settings: { path: [TOURNAMENT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and one who joined an already-imported league as its commissioner, with no team in it.
+                { settings: { path: [IMPORT_CO_COMMISSIONERS_KEY], array_contains: [userId] } },
+                // …and a league mate with no team who joined it as a viewer (lib/league/importViewers.ts).
+                { settings: { path: [IMPORT_VIEWERS_KEY], array_contains: [userId] } },
               ],
             },
             {
@@ -627,7 +636,10 @@ export async function getDashboardLeagueListForUser(
           },
           teams: {
             where: { claimedByUserId: userId },
-            select: { isCommissioner: true, isCoCommissioner: true, role: true, teamName: true },
+            select: {
+              isCommissioner: true, isCoCommissioner: true, role: true, teamName: true,
+              externalId: true, wins: true, losses: true, ties: true,
+            },
           },
           rosters:
             opts?.rosterDetail === 'count'
@@ -827,6 +839,11 @@ export async function getDashboardLeagueListForUser(
       viewerOwnsRow: String(leagueRowOwnerId ?? '') === userId,
       /* The viewer's own team here, so two copies of one league (two teams in it) can be told apart. */
       viewerTeamName: typeof myTeam?.teamName === 'string' ? myTeam.teamName : null,
+      viewerTeamExternalId: typeof myTeam?.externalId === 'string' ? myTeam.externalId : null,
+      // A 0-0-0 row can be an unpopulated import. Keep it unknown until a result exists.
+      viewerWins: myTeam && myTeam.wins + myTeam.losses + myTeam.ties > 0 ? myTeam.wins : null,
+      viewerLosses: myTeam && myTeam.wins + myTeam.losses + myTeam.ties > 0 ? myTeam.losses : null,
+      viewerTies: myTeam && myTeam.wins + myTeam.losses + myTeam.ties > 0 ? myTeam.ties : null,
       /*
        * Whether that route can take this league off the viewer's list: their own copy, or an
        * imported league someone else imported (tombstoned for them alone, filtered above). A

@@ -30,6 +30,11 @@ export interface DraftWorld {
   rosterPickCount: number
   /** Picks before this roster is up again, when the board says; 0 when on the clock. */
   picksUntilTurn: number | null
+  /**
+   * The overall pick the ranking is for, when it is NOT the pick on the clock: the roster's own next turn, before
+   * the draft or while another team picks (`planForOwnPick.ts`). Null when the ranking is for the pick being made.
+   */
+  plannedOverall: number | null
 }
 
 export interface DraftWorldInput {
@@ -40,6 +45,8 @@ export interface DraftWorldInput {
   rosterId: string
   /** From the room's own board math; omitted when the caller does not know it. */
   picksUntilTurn?: number | null
+  /** The roster's next turn, when the ranking was planned for it; omitted otherwise. */
+  plannedOverall?: number | null
 }
 
 export function resolveDraftWorld(input: DraftWorldInput): DraftWorld {
@@ -61,5 +68,6 @@ export function resolveDraftWorld(input: DraftWorldInput): DraftWorld {
     existingPicks,
     rosterPickCount: existingPicks.filter((p) => p.rosterId === rosterId).length,
     picksUntilTurn: onClockRosterId === rosterId ? 0 : input.picksUntilTurn ?? null,
+    plannedOverall: onClockRosterId === rosterId ? null : input.plannedOverall ?? null,
   }
 }

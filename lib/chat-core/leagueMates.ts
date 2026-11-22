@@ -23,7 +23,7 @@ import { getBlockedEitherWayUserIds } from '@/lib/moderation/BlockUserService'
  * never the address. Postgres only — no provider is called from here.
  */
 
-export type LeagueMate = {
+type LeagueMate = {
   id: string
   displayName: string
   username: string
@@ -33,14 +33,14 @@ export type LeagueMate = {
 }
 
 /** How many people one answer carries. The picker shows a short list, not a directory. */
-export const LEAGUE_MATES_LIMIT = 20
+const LEAGUE_MATES_LIMIT = 20
 /** Upper bound on the rows read before ranking — a guard against a pathological league count. */
 const CANDIDATE_READ_CAP = 500
 const QUERY_MAX = 64
 const UNNAMED_LEAGUE = 'Unnamed league'
 
 /** Trimmed, a leading `@` dropped (people type handles), capped. Empty means "everyone". */
-export function normalizeLeagueMateQuery(raw: string | null | undefined): string {
+function normalizeLeagueMateQuery(raw: string | null | undefined): string {
   return String(raw ?? '')
     .trim()
     .replace(/^@+/, '')

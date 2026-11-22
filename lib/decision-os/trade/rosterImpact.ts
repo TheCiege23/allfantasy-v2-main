@@ -71,7 +71,7 @@ export const DEFAULT_SLOT_ELIGIBILITY: SlotEligibility = {
 /** Slots that hold nobody and must never consume a player. */
 const NON_STARTING_SLOTS = new Set(['BN', 'BE', 'BENCH', 'IR', 'TAXI'])
 
-export type LineupFill = {
+type LineupFill = {
   points: number
   starterIds: string[]
   /** Slots left empty because no eligible player remained. */
@@ -214,7 +214,7 @@ function optimalSlotAssignment(players: readonly ImpactPlayer[], slots: readonly
  * `rostered*` answers "how many do I have", `bench*` answers "how many are spare after the lineup
  * is set". A trade can move either without the other, so both ship.
  */
-export type DepthRow = {
+type DepthRow = {
   position: string
   rosteredBefore: number
   rosteredAfter: number
@@ -225,7 +225,7 @@ export type DepthRow = {
   delta: number
 }
 
-export type ReplacementRow = {
+type ReplacementRow = {
   position: string
   /** Best non-starting player at this position — what an injury actually falls back to. */
   before: number | null

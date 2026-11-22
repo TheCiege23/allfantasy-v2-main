@@ -100,9 +100,29 @@ beforeEach(() => {
   leagueChatMessageCreate.mockResolvedValue({})
   sendNotificationEmail.mockResolvedValue({ ok: true })
   sendPushToUser.mockResolvedValue([{ ok: true }])
+  settingsProfile.mockResolvedValue({ notificationPreferences: null, timezone: 'UTC' })
 })
 
 describe('notification outbox relay', () => {
+  it('honors muted Pirate push and in-app preferences', async () => {
+    settingsProfile.mockResolvedValue({ notificationPreferences: {
+      categories: { league_announcements: { enabled: true, inApp: false, push: false, email: true, sms: false } },
+    }, timezone: 'UTC' })
+    stageRows([row({ channel: 'push', eventType: 'pirate_claim_created',
+      metadata: { notificationCategory: 'league_announcements' } })])
+    const push = await relayNotificationOutbox()
+    expect(push.skipped).toBe(1)
+    expect(sendPushToUser).not.toHaveBeenCalled()
+
+    vi.clearAllMocks()
+    outboxUpdateMany.mockResolvedValue({ count: 1 })
+    stageRows([row({ channel: 'in_app', eventType: 'pirate_protection_reminder',
+      metadata: { notificationCategory: 'league_announcements' } })])
+    const inApp = await relayNotificationOutbox()
+    expect(inApp.skipped).toBe(1)
+    expect(platformNotificationCreate).not.toHaveBeenCalled()
+  })
+
   it('drops a queued bracket alert after its pool opt-in is withdrawn', async () => {
     settingsProfile.mockResolvedValue({ notificationPreferences: { bracketCoach: { pool: { enabled: false } } } })
     stageRows([row({ channel: 'push', eventType: 'bracket_personal_update', metadata: { notificationCategory: 'bracket_updates', challengeId: 'pool', bracketAlertKinds: ['missing'], spoilerSafe: true } })])

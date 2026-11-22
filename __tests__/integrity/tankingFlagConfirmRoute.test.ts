@@ -13,6 +13,8 @@ vi.mock('@/lib/subscription/requireEntitlement', () => ({ requireEntitlement: vi
 vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: vi.fn(async () => undefined) }))
 vi.mock('@/lib/prisma', () => ({ prisma: { integrityFlag: { findFirst: m.findFirst, updateMany: m.updateMany } } }))
 vi.mock('@/lib/integrity/tankingPenaltyService', () => ({ onTankingFlagConfirmed: m.confirmed }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PATCH } from '@/app/api/leagues/[leagueId]/integrity/flags/[flagId]/route'
 

@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import "./legal-page.css"
 
 // The stamps (and the versions users agree to) live in lib/legal/legalVersions — see there.
-import { legalLastUpdated, LEGAL_LAST_UPDATED_BY_PAGE, type LegalPageKey } from "@/lib/legal/legalVersions"
+import { legalLastUpdated } from "@/lib/legal/legalVersions"
 
 /**
  * The one shell every legal route renders through — handoff 17a's build note
@@ -84,11 +84,6 @@ export default function LegalPageShell({
  * same job.
  */
 
-/** Two-up (or n-up) row of bordered sub-boxes, e.g. 2.1 beside 2.2. */
-export function LegalGrid({ children }: { children: ReactNode }) {
-  return <div className="af-legal-grid">{children}</div>
-}
-
 export function LegalBox({ eyebrow, children }: { eyebrow?: string; children: ReactNode }) {
   return (
     <div className="af-legal-box">
@@ -132,23 +127,4 @@ export function LegalCallout({
   )
 }
 
-/** The scannable policy grid — 17b. Each cell links to its full clause. */
-export function LegalPolicyGrid({
-  items,
-}: {
-  items: { name: string; summary: string; href: string }[]
-}) {
-  return (
-    <div className="af-legal-policies">
-      {items.map((item) => (
-        <a key={item.name} href={item.href} className="af-legal-policy">
-          <span className="af-legal-policy-name">{item.name}</span>
-          <span className="af-legal-policy-sub">{item.summary}</span>
-        </a>
-      ))}
-    </div>
-  )
-}
-
-export { legalLastUpdated, LEGAL_LAST_UPDATED_BY_PAGE }
-export type { LegalPageKey }
+export { legalLastUpdated }

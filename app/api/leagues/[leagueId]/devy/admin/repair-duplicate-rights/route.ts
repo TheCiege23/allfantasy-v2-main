@@ -2,11 +2,11 @@
  * PROMPT 3: Commissioner — repair duplicate rights conflict (audit and flag; resolution manual or via override).
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isDevyLeague, appendDevyLifecycleEvent } from '@/lib/devy'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isDevy = await isDevyLeague(leagueId)

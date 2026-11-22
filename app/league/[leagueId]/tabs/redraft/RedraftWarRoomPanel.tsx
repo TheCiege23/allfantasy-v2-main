@@ -133,7 +133,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
     try {
       const res = await askRedraftWarRoom(leagueId, q)
       if (res.aiUnavailable) {
-        setAskNote('AI is temporarily unavailable — showing grounded facts only.')
+        setAskNote('Chimmy is temporarily unavailable — showing grounded facts only.')
         setAnswer(null)
       } else {
         setAnswer(res.answer)

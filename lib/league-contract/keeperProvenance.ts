@@ -26,7 +26,7 @@
 /** Current provenance schema version. Bump when the shape changes. */
 export const KEEPER_PROVENANCE_VERSION = 1 as const
 
-export type KeeperProvenanceSource =
+type KeeperProvenanceSource =
   /** The provider's own league-type signal (Sleeper `settings.type`). */
   | 'provider'
   /** A commissioner submitted a keeper field in a settings save. */
@@ -34,7 +34,7 @@ export type KeeperProvenanceSource =
   /** An AllFantasy league was created with an explicit keeper concept. */
   | 'creation'
 
-export type KeeperProvenance = {
+type KeeperProvenance = {
   version: number
   source: KeeperProvenanceSource
   /**
@@ -135,7 +135,7 @@ export function buildKeeperProvenance(input: {
 }
 
 /** The keeper fields a commissioner save can carry. Submitting any is evidence. */
-export const COMMISSIONER_KEEPER_KEYS: readonly string[] = [
+const COMMISSIONER_KEEPER_KEYS: readonly string[] = [
   'keeperCount',
   'keeperCostSystem',
   'keeperMaxYears',

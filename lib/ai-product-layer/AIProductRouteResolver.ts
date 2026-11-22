@@ -139,10 +139,10 @@ export const AI_HUB_HREF = '/ai';
  */
 export function getStandaloneAIRoutes(context?: AIProductContext): AIProductRoute[] {
   return [
-    { href: appendAIProductContextToHref(AI_HUB_HREF, context), label: 'AI Hub', featureType: 'ai_hub' },
+    { href: appendAIProductContextToHref(AI_HUB_HREF, context), label: 'Chimmy Hub', featureType: 'ai_hub' },
     { href: getChimmyChatHref(context), label: 'Chimmy Chat', featureType: 'chimmy_chat' },
     { href: appendAIProductContextToHref('/chimmy', context), label: 'Meet Chimmy', featureType: 'chimmy_landing' },
-    { href: appendAIProductContextToHref('/waiver-ai', context), label: 'Waiver AI', featureType: 'waiver_ai' },
+    { href: appendAIProductContextToHref('/waiver-ai', context), label: 'Waiver Chimmy', featureType: 'waiver_ai' },
     { href: appendAIProductContextToHref('/social-clips', context), label: 'Social clips', featureType: 'social_clips' },
     { href: appendAIProductContextToHref('/clips', context), label: 'Clips', featureType: 'clips' },
     { href: appendAIProductContextToHref('/tools-hub', context), label: 'Tools Hub', featureType: 'tools_hub' },

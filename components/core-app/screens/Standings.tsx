@@ -7,11 +7,13 @@ import { formatRecord, type BoardTeam, type StandingsBoard, type Zone } from '@/
 import { DEFAULT_STANDINGS_VIEW, type StandingsViewState } from '@/lib/core-app/standingsView'
 import {
   StandingsBoardView,
-  Move,
   eliminationStatusOf,
   type EliminationZones,
 } from '@/components/core-app/standings/StandingsBoardView'
+import { EmptyState, PageHeader, StatStrip, type StatMovement } from '@/components/core-app/primitives'
 import '@/components/core-app/af-standings.css'
+import '@/components/core-app/af-empty-state.css'
+// The redraft overrides load last, after every stylesheet of this screen's own.
 import '@/components/core-app/af-core-redraft-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
@@ -25,9 +27,32 @@ import type { LineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import type { DraftOrderPreview } from '@/lib/core-app/standingsDraftOrder'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
-import { messagesFor } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsScreenMessages } from '@/lib/core-app/messages/standingsScreen'
+import { standingsGuideMessages } from '@/lib/core-app/messages/standingsGuide'
+import { standingsHeadline } from '@/lib/core-app/standingsGuide'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/standings/af-standings-guide.css'
+import { DynastyStandingsHistory } from '@/components/core-app/screens/DynastyStandingsHistory'
+import type { DynastyStandingsHistory as DynastyHistory } from '@/lib/core-app/dynastyStandingsHistory'
+
+/* The "More detail" fold's note — what is inside, in a few words (2026-11-20). */
+const standingsMoreDetailMessages = defineMessages({
+  en: {
+    yourSeason: 'Your season so far',
+    recordBook: 'Franchise record book',
+    pastSeasons: 'Past seasons',
+    howToRead: 'How projected records are worked out',
+  },
+  es: {
+    yourSeason: 'Tu temporada hasta ahora',
+    recordBook: 'Libro de récords de la franquicia',
+    pastSeasons: 'Temporadas pasadas',
+    howToRead: 'Cómo se calculan los récords proyectados',
+  },
+})
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -49,8 +74,9 @@ import { standingsScreenMessages } from '@/lib/core-app/messages/standingsScreen
 /**
  * How old the board is, when it came from the summary cache.
  *
- * ⚠ OPTIONAL BECAUSE THE ROLLOUT MAKES IT OPTIONAL. `sports-os.screen-summaries` is at 10%, so most
- * readers still take the direct read, which has no envelope and nothing to label. `null` renders no
+ * ⚠ OPTIONAL BECAUSE THE ROLLOUT MAKES IT OPTIONAL. `sports-os.screen-summaries` is at 100% by
+ * default but can be pulled back by env (lib/sports-os/rolloutConfig.ts), and a reader outside it
+ * takes the direct read, which has no envelope and nothing to label. `null` renders no
  * chip at all — never a chip reading "unknown", which would claim the data is of uncertain age when
  * it was in fact just computed.
  */
@@ -82,6 +108,12 @@ export type StandingsProps = {
    * The table then reads Safe / On the bubble / Eliminated — such a league has no playoffs.
    */
   elimination?: EliminationZones | null
+  /**
+   * Dynasty history — the rafters and every franchise's all-time record across the seasons on file
+   * (`loadDynastyStandingsHistory`). Passed ONLY for a dynasty league (`coreShellDynasty`, the shell
+   * stamp's rule); absent for every other league, which then renders exactly as before.
+   */
+  dynasty?: DynastyHistory | null
 }
 
 function n1(v: number): string {
@@ -112,21 +144,16 @@ function zoneLine(t: BoardTeam, elimination: EliminationZones | null): string {
   return ZONE_WORD[t.zone]
 }
 
-function lineText(t: BoardTeam, field: number, language: string): string {
-  if (t.gamesBack == null) return 'no head-to-head games'
-  /*
-   * Zero games back is three different places. "On the playoff line" was printed for all of them,
-   * including a 0-1 team sitting 14th of 14 behind seven other 0-1 teams — true by record, and read by
-   * its manager as "I'm in".
-   */
-  if (t.gamesBack === 0) {
-    if (t.seed === field) return 'holding the last playoff spot'
-    return t.seed < field ? 'level with the last playoff spot' : 'level with the last playoff spot, out on the tiebreak'
-  }
-  const m = messagesFor(standingsScreenMessages, language)
-  const abs = Math.abs(t.gamesBack)
-  const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${m.gamesUnit(abs)}`
-  return t.gamesBack < 0 ? m.gamesClearOfLine(games) : m.gamesBehindLine(games)
+/**
+ * A tile's place movement, for StatStrip: drawn as ▲2 / ▼1, read as "up 2 places" — the same words
+ * the board's own Move marker reads. Nothing for no change, or for the first final week (no prior
+ * position, which is not "no change").
+ */
+function moveOf(value: number | null | undefined, copy: (english: string) => string): StatMovement | undefined {
+  if (value == null || value === 0) return undefined
+  const up = value > 0
+  const abs = Math.abs(value)
+  return { direction: up ? 'up' : 'down', amount: abs, label: `${copy(up ? 'up' : 'down')} ${abs} ${copy(abs === 1 ? 'place' : 'places')}` }
 }
 
 /** The magic numbers, as one sentence about you. */
@@ -155,6 +182,8 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
   /* The reader's language (2026-10-05): a head-to-head league's stakes panel was English in Spanish mode. */
   const language = useOptionalLanguage().language
   const m = useMessages(standingsScreenMessages)
+  // Not `g`: the rooting list below maps each game as `g`, which hid these messages (2026-11-13).
+  const guide = useMessages(standingsGuideMessages)
   const you = odds?.you && odds.you.rosterId === me.rosterId ? odds.you : null
   const stakes = you ? (odds?.stakes ?? null) : null
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
@@ -189,11 +218,10 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
       {showPath ? <p className="af-st-stakes-path">{pathSentence(me, language)}</p> : null}
       {you && !settled ? <p className="af-st-stakes-why">{seasonOutlookSentence(you.whatDecidesIt, language)}</p> : null}
 
-      {me.next?.inProgress ? (
-        <p className="af-st-stakes-note">
-          {m.stakesInProgress(me.next.week, me.next.opponentName)}
-        </p>
-      ) : null}
+      {/*
+        2026-11-14: the "week N is still being played" note lives once, above the table
+        (StandingsBoardView). It used to be said here too, two sentences apart.
+      */}
 
       {stakes ? (
         <div className="af-st-stakes-grid">
@@ -245,9 +273,12 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
                           {nameOf(other.id, other.name)}
                           {otherSeed != null ? <span className="af-num af-st-stakes-seed"> #{otherSeed}</span> : null}
                         </span>
+                        {/*
+                          "75% vs 68%" read as a scoreline (2026-11-13 guide). Your odds, said as what
+                          they are: if the team you root for wins, and if it does not.
+                        */}
                         <span className="af-st-stakes-delta af-num">
-                          {formatOdds(hi)} <span aria-hidden>vs</span>
-                          <span className="af-sr">{m.rootForYouAgainst}</span> {formatOdds(lo)}
+                          {formatOdds(hi)} {guide.ifTheyWin} · {formatOdds(lo)} {guide.ifNot}
                         </span>
                       </li>
                     )
@@ -268,6 +299,9 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
           {m.stakesBasis}
         </p>
       ) : null}
+      <p className="af-stg-teach">
+        <b>{guide.why}</b> {guide.stakesTeach}
+      </p>
     </section>
   )
 }
@@ -381,6 +415,11 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
+/** The board is refused only because no week has been scored or synced yet — it will fill in on its own. */
+export function standingsWaitForScores(reason: string): boolean {
+  return /\b(scored|synced)\b/i.test(reason)
+}
+
 export function Standings({
   data,
   freshness,
@@ -390,6 +429,7 @@ export function Standings({
   efficiency = null,
   draftOrder = null,
   elimination = null,
+  dynasty = null,
 }: StandingsProps) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -406,17 +446,28 @@ export function Standings({
   if (!data.available) {
     return (
       <div className="af-st">
-        <header className="af-st-head">
-          <p className="af-label af-st-eyebrow">{data.leagueName}</p>
-          <h1 className="af-display af-st-title">{copy('Standings')}</h1>
-          {chip}
-        </header>
-        <div className="af-st-blocked">
-          <span className="af-st-blocked-mark af-num" aria-hidden>
-            —
-          </span>
-          <p className="af-st-blocked-body">{copy(data.reason)}</p>
-        </div>
+        <PageHeader
+          className="af-st-head"
+          eyebrowClassName="af-st-eyebrow"
+          titleClassName="af-st-title"
+          eyebrow={data.leagueName}
+          title={copy('Standings')}
+          actions={chip}
+        />
+        {/*
+          A titled "nothing yet" card. The loader's reason is already a full explanation, but on its
+          own — lowercase, beside a dash — it read as a fault. When the board is only waiting for a
+          scored week, say that it will fill in, and when.
+        */}
+        <EmptyState
+          testId="standings-empty"
+          mark="—"
+          title={m.emptyTitle}
+          body={copy(data.reason)}
+          hint={standingsWaitForScores(data.reason) ? m.emptyHintScores : null}
+        />
+        {/* An offseason dynasty league is exactly when its history matters most. */}
+        {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}
         {/* The live board cannot be drawn, but the imported seasons still can. */}
         <SeasonHistory rows={data.history} />
       </div>
@@ -426,76 +477,130 @@ export function Standings({
   const { league, season, week, seasonComplete, trend, recent, projection, history, board } = data
   const me = board.teams.find((t) => t.isYou) ?? null
   const n = board.teams.length
-  const P = board.rules.platformLabel
+  /*
+   * 2026-11-13 guide: the title said only "Standings". It now says where you stand and whether you are
+   * in a playoff spot, with Season Outlook's odds — the answer people open the page for.
+   */
+  const g = useMessages(standingsGuideMessages)
+  const md = useMessages(standingsMoreDetailMessages)
+  const myOdds = me && odds?.you && odds.you.rosterId === me.rosterId ? odds.you.playoffPct : null
+  const head = standingsHeadline({
+    me,
+    teamCount: n,
+    playoffTeams: Math.min(board.rules.playoffTeams, n),
+    elimination: elimination != null,
+    oddsPct: myOdds == null ? null : Math.round(Math.max(0, Math.min(100, myOdds))),
+  })
+  const headline =
+    head.kind === 'unknown'
+      ? g.headUnknown
+      : head.kind === 'place'
+        ? g.headPlace(head.seed, head.of)
+        : head.kind === 'clinched'
+          ? g.headClinched(head.seed, head.of, head.bye)
+          : head.kind === 'eliminated'
+            ? g.headEliminated(head.seed, head.of)
+            : head.kind === 'in'
+              ? g.headIn(head.seed, head.of, head.odds, head.bubble)
+              : g.headOut(head.seed, head.of, head.gamesBack, head.odds, head.bubble)
 
   return (
     <div className="af-st">
-      <header className="af-st-head">
-        <p className="af-label af-st-eyebrow">{league.name}</p>
-        <h1 className="af-display af-st-title">{copy('Standings')}</h1>
-        <p className="af-st-sub">
-          {m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek })}
-        </p>
-        {chip}
-        <div className="af-st-share">
-          {/*
-            The IMAGE is shared, never the URL: the card route is auth-gated to league members, so a link
-            would open nothing for anyone else.
-          */}
-          <ShareMomentButton
-            url={`/api/share/rivalry-card?kind=standings&leagueId=${encodeURIComponent(league.id)}`}
-            filename={`standings-${season}-week-${board.throughWeek}.png`}
-            title={`${league.name} standings`}
-            label={copy('Share standings')}
-          />
-        </div>
-      </header>
+      <PageHeader
+        className="af-st-head"
+        eyebrowClassName="af-st-eyebrow"
+        titleClassName="af-st-title"
+        subClassName="af-st-sub"
+        actionsClassName="af-st-headactions"
+        eyebrow={g.eyebrow(league.name)}
+        title={headline}
+        sub={g.intro({ headToHead: board.hasHeadToHead, seasonComplete, week, throughWeek: board.throughWeek ?? null })}
+        actions={
+          <>
+            {chip}
+            <div className="af-st-share">
+              {/*
+                The IMAGE is shared, never the URL: the card route is auth-gated to league members, so a link
+                would open nothing for anyone else.
+              */}
+              <ShareMomentButton
+                url={`/api/share/rivalry-card?kind=standings&leagueId=${encodeURIComponent(league.id)}`}
+                filename={`standings-${season}-week-${board.throughWeek}.png`}
+                title={`${league.name} standings`}
+                label={copy('Share standings')}
+              />
+            </div>
+          </>
+        }
+      />
 
       {me ? (
-        <div className="af-st-tiles">
-          <div className="af-st-tile">
-            <span className="af-label">{copy('Table position')}</span>
-            <span className="af-st-tile-row">
-              <span className="af-st-tile-v af-num">{m.seedPlace(me.seed, ordinal(me.seed))}</span>
-              {/* Null movement is the first final week — no prior position, which is not "no change". */}
-              {me.seedMove != null && me.seedMove !== 0 ? <Move value={me.seedMove} /> : null}
-            </span>
-            <span className="af-st-tile-s">
-              {copy('of')} {n}
-              {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
-            </span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">{copy('Record')}</span>
-            <span className="af-st-tile-v af-num">{board.hasHeadToHead ? formatRecord(me.record) : '—'}</span>
-            <span className="af-st-tile-s">{copy(lineText(me, Math.min(board.rules.playoffTeams, n), language))}</span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">
-              {copy('AF Power')} <TopicTip topic="afPowerScore" />
-            </span>
-            <span className="af-st-tile-row">
-              <span className="af-st-tile-v af-num" data-tone="accent">
-                {ordinal(me.powerRank)}
-              </span>
-              {me.powerMove != null && me.powerMove !== 0 ? <Move value={me.powerMove} /> : null}
-            </span>
-            <span className="af-st-tile-s af-num">
-              {copy('score')} {me.powerScore.toFixed(1)} · {copy('all-play')} {formatRecord(me.allPlay)}
-            </span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">{copy('Points for')}</span>
-            <span className="af-st-tile-v af-num">{pts1(me.pointsFor)}</span>
-            <span className="af-st-tile-s">
-              {me.average != null ? `${n1(me.average)} ${copy('a week')} · ` : ''}
-              {m.pfRankInLeague(me.pfRank, ordinal(me.pfRank))}
-            </span>
-          </div>
-        </div>
+        <StatStrip
+          className="af-st-tiles"
+          items={[
+            /*
+             * An elimination league's headline is the place alone ("You're 12th of 14") — there is no
+             * playoff line — so its tile keeps the week's status ("on the bubble this week"), which nothing
+             * else on the page says.
+             */
+            ...(elimination
+              ? [
+                  {
+                    key: 'seed',
+                    className: 'af-st-tile',
+                    label: copy('Table position'),
+                    value: m.seedPlace(me.seed, ordinal(me.seed)),
+                    movement: moveOf(me.seedMove, copy),
+                    sub: (
+                      <>
+                        {copy('of')} {n}
+                        {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
+                      </>
+                    ),
+                  },
+                ]
+              : []),
+            /*
+             * 2026-11-14: no "Table position" tile — the headline says "You're 12th of 14, 3 games out of the
+             * playoffs", so the tile said 12th, of 14 and the games back a second time. The record keeps its
+             * tile without a sub-line for the same reason.
+             */
+            {
+              key: 'record',
+              className: 'af-st-tile',
+              label: copy('Record'),
+              value: board.hasHeadToHead ? formatRecord(me.record) : '—',
+              /* Null movement is the first final week — no prior position, which is not "no change". */
+              movement: moveOf(me.seedMove, copy),
+            },
+            {
+              key: 'power',
+              className: 'af-st-tile',
+              label: (
+                <>
+                  {copy('AF Power')} <TopicTip topic="afPowerScore" />
+                </>
+              ),
+              value: ordinal(me.powerRank),
+              tone: 'accent',
+              movement: moveOf(me.powerMove, copy),
+              /* "score 37.0 · all-play 40-77" was two terms a reader had to look up; this is what all-play means. */
+              sub: <span className="af-num">{g.allPlay(formatRecord(me.allPlay))}</span>,
+            },
+            {
+              key: 'pf',
+              className: 'af-st-tile',
+              label: copy('Points for'),
+              value: pts1(me.pointsFor),
+              sub: (
+                <>
+                  {me.average != null ? `${n1(me.average)} ${copy('a week')} · ` : ''}
+                  {m.pfRankInLeague(me.pfRank, ordinal(me.pfRank))}
+                </>
+              ),
+            },
+          ]}
+        />
       ) : (
         <div className="af-st-noteam">
           {copy('We cannot tell which team in this league is yours, so there are no tiles about you. The full table is still below.')}
@@ -508,11 +613,37 @@ export function Standings({
 
       {draftOrder ? <DraftOrderSection order={draftOrder} /> : null}
 
+      {/*
+        ── More detail (2026-11-20) ─────────────────────────────────────
+        ONE shared fold (MoreDetail.tsx) at the bottom of the page, replacing the two "dig deeper" folds
+        and taking the two things that sat loose under them: past seasons and the note about projected
+        records. The page answers "where do I stand"; everything in here is the detail behind it.
+
+        Inside, in order:
+        - Your season so far (2026-11-13 guide): this week's projected lineups (Week and Matchup carry
+          those) and your own season numbers. Wrapper keeps `standings-your-season`.
+        - The franchise record book (2026-11-14): thirty franchises of history under this season's table
+          pushed everything below it out of reach. Wrapper keeps `standings-record-book`. Offseason (the
+          empty-board branch above) it is still drawn in the open, not in here.
+        - Past seasons, then the projected-records note.
+        Closed by default, as both old folds were. Nothing removed, only moved.
+      */}
+      {lineups || me || dynasty || history.length > 0 || (board.hasHeadToHead && !elimination) ? (
+      <MoreDetail
+        className="af-stg-deeper"
+        testId="standings-more"
+        note={[
+          lineups || me ? md.yourSeason : null,
+          dynasty ? md.recordBook : null,
+          history.length > 0 ? md.pastSeasons : null,
+        ].filter(Boolean).join(' · ') || md.howToRead}
+      >
+      {lineups || me ? (
+      <div className="af-stg-deeper-part" data-testid="standings-your-season">
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />
       ) : null}
 
-      {/* ── Your season ─────────────────────────────────────────────── */}
       {me ? (
         <>
           <section className="af-st-section">
@@ -591,12 +722,27 @@ export function Standings({
           </div>
         </>
       ) : null}
+      </div>
+      ) : null}
 
-      <p className="af-st-foot">
-        {copy('Projected records on this page are a model’s expectation.')} {' '}
-        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
-      </p>
+      {dynasty ? (
+        <div className="af-stg-deeper-part" data-testid="standings-record-book">
+          <h2 className="af-label af-st-seclabel">{g.recordBook(Math.max(1, dynasty.recordSeasons.length))}</h2>
+          <DynastyStandingsHistory history={dynasty} />
+        </div>
+      ) : null}
+
       <SeasonHistory rows={history} />
+
+      {/* About projected records and playoff odds: a points-only or elimination league has neither. */}
+      {board.hasHeadToHead && !elimination ? (
+        <p className="af-st-foot">
+          {copy('Projected records on this page are a model’s expectation.')} {' '}
+          <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
+        </p>
+      ) : null}
+      </MoreDetail>
+      ) : null}
     </div>
   )
 }

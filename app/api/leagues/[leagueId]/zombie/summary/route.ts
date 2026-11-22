@@ -23,6 +23,7 @@ import { getWeeklyBoardData } from '@/lib/zombie/ZombieWeeklyBoardService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
 import { getAmbushBalance } from '@/lib/zombie/ZombieAmbushEngine'
 import { prisma } from '@/lib/prisma'
+import { importedZombieNote } from '@/lib/zombie/importedZombieNote'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import {
   redactStatusEntries,
@@ -60,7 +61,12 @@ export async function GET(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const isZombie = await isZombieLeague(leagueId)
-  if (!isZombie) return NextResponse.json({ error: 'Not a zombie league' }, { status: 404 })
+  if (!isZombie) {
+    // A league played as Zombie on another platform has no outbreak records here: say so, calmly.
+    const imported = importedZombieNote(await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, leagueVariant: true } }))
+    if (imported) return NextResponse.json({ importedNote: imported })
+    return NextResponse.json({ error: 'Not a zombie league' }, { status: 404 })
+  }
 
   const [config, statuses, whispererId, league, rosters, myRosterId, teams] = await Promise.all([
     getZombieLeagueConfig(leagueId),

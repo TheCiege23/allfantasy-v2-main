@@ -18,9 +18,9 @@ import 'server-only'
  */
 import { CertifiedLineupIntegrationService, type PlayerRef, type CertifiedScheduleDescription } from './lineupIntegration'
 
-export type { PlayerRef, CertifiedScheduleDescription }
+export type { CertifiedScheduleDescription }
 
-export const DECLARED_TRADE_LOCK_POLICY = 'individual_game_time (declared in resolveLeagueTradeSettings; not enforced by the trade engine)'
+const DECLARED_TRADE_LOCK_POLICY = 'individual_game_time (declared in resolveLeagueTradeSettings; not enforced by the trade engine)'
 
 export type TradeSafety = {
   block: boolean

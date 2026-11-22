@@ -1,11 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import {
-  MessageCircle, Send, X, Image as ImageIcon,
-  Smile, BarChart3, Reply, ChevronDown,
-  Search, Loader2
-} from "lucide-react"
+import { MessageCircle, Send, X, Image as ImageIcon, Smile, BarChart3, Reply, Search, Loader2 } from "lucide-react"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { fetchGifs, gifSearchPlaceholder, type GifProvider } from "@/lib/rich-message/gifSearchClient"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"

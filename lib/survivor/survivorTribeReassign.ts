@@ -6,7 +6,7 @@ import { provisionSurvivorChats } from './survivorTribeChatProvisioning'
 import { createSurvivorChatMessage } from './survivorChatBridge'
 import { getTribesWithMembers } from './SurvivorTribeService'
 
-export type ReassignTribeMemberOutcome =
+type ReassignTribeMemberOutcome =
   | { ok: true; userId: string; fromTribeId: string | null; toTribeId: string; tribes: Awaited<ReturnType<typeof getTribesWithMembers>> }
   | { ok: false; status: 403 | 404 | 409; error: string }
 

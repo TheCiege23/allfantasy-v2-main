@@ -1,0 +1,97 @@
+/*
+ * The manager card (ManagerRecordSheet.tsx). The /core bottom-sheet shape the Trade Center's asset
+ * sheet uses (af-trade-center.css .af-tc-sheet), at the same layer: 1100, below the player card
+ * (1200) and above the shell's floating chrome.
+ */
+.af-mr-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(4, 5, 10, 0.72);
+}
+.af-mr-sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line2);
+  border-radius: var(--af-radius-card, 16px) var(--af-radius-card, 16px) 0 0;
+  background: var(--surface);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.35);
+}
+.af-mr-grip {
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 2px auto 10px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-mr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.af-mr-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.af-mr-close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.af-mr-basis {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.af-mr-section {
+  padding: 10px 0;
+  border-top: 1px solid var(--line2);
+}
+.af-mr-section h3 {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-mr-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.af-mr-section li {
+  margin: 4px 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.af-mr-reason,
+.af-mr-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.af-mr-open {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}

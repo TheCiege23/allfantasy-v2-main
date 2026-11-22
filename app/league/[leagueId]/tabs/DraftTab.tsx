@@ -1,5 +1,7 @@
 'use client'
 
+import { buildAIChatHref } from '@/lib/chimmy-chat/AIContextRouter'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
 import { countClaimedSeats, leagueJoinUrl } from '@/lib/league/league-invite-link'
@@ -13,7 +15,6 @@ import { LeagueRecentActivity } from '@/app/league/[leagueId]/components/LeagueR
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { StandingsPresentation } from '@/app/league/[leagueId]/league-dashboard-types'
 import { getDraftIdFromSettings, getSleeperLikeBundle } from '@/app/league/[leagueId]/components/league-settings-modal-utils'
-import { IDPDraftFilters } from '@/app/idp/components/IDPDraftFilters'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { openDraftFromEmbeddedLeague } from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo } from '@/lib/league/ncaaf-beta-guard'
@@ -24,7 +25,7 @@ import { RedraftDraftBoard } from '@/components/league/native/redraft/RedraftDra
 import { RedraftDraftGrades } from '@/components/league/native/redraft/RedraftDraftGrades'
 import '@/components/league/native/redraft-home.css'
 
-export type DraftTabProps = {
+type DraftTabProps = {
   league: UserLeague
   teams: UserLeagueTeam[]
   isOwner: boolean
@@ -492,6 +493,17 @@ export function DraftTab({
 
   return (
     <div className={`${isLeagueHome ? 'space-y-4' : 'space-y-4 p-5'}${redraft ? ' rdh-draft' : ''}`}>
+      <Link
+        className="inline-block rounded-lg border border-white/20 px-3 py-2 text-sm text-white"
+        href={buildAIChatHref({
+          leagueId: league.id,
+          source: 'draft_tool',
+          insightType: 'draft',
+          prompt: 'Who should I draft next in this league? Use the current draft board, my roster, and league scoring. Give me a backup pick.',
+        })}
+      >
+        Ask Chimmy who to draft
+      </Link>
       {ncaafBetaInfo ? <NcaafBetaDataBanner info={ncaafBetaInfo} /> : null}
       {/*
         ⚠ UNMOUNTED DELIBERATELY — THIS RENDERED A FABRICATED BOARD TO PEOPLE MID-DRAFT.

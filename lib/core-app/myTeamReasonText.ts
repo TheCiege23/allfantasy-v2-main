@@ -18,6 +18,8 @@ import { matchupReasonText } from './matchupReasonText'
  * client-safe.
  */
 const EXACT_ES: Record<string, string> = {
+  'Your Fantrax scoring rules are saved. No college basketball projections are available for this lineup, so the bench check is unavailable.':
+    'Las reglas de puntuación de Fantrax están guardadas. No hay proyecciones de baloncesto universitario para esta alineación, por lo que no está disponible la revisión de suplentes.',
   'This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.':
     'Esta plaza titular estaba vacía al revisarla. Confirma la alineación actual, la elegibilidad, los bloqueos y AutoSubs en tu plataforma.',
   'not requested for alert evaluation': 'no se solicitó para evaluar alertas',

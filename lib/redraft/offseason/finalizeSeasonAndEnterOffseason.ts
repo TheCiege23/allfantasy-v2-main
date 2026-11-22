@@ -38,6 +38,7 @@ import { triggerKeeperOffseason } from '@/lib/keeper/offseasonEngine'
 import { enterRedraftOffseason } from './RedraftOffseasonService'
 import { isDynastyFamilyLeague } from './carryDynastyRosters'
 import { ensureDynastyNextSeason } from './startDynastyNewSeason'
+import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 
 export type FinalizeSeasonResult =
   | {
@@ -67,7 +68,8 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   tiebreakerRosterId?: string
 }): Promise<FinalizeSeasonResult> {
   const leagueScoring=await prisma.league.findUnique({where:{id:input.leagueId},select:{settings:true,leagueType:true,isDynasty:true,sport:true}})
-  const isRoto=(leagueScoring?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto'
+  // A best ball league with no playoffs ends like roto: its regular-season leader is the champion.
+  const isRoto=(leagueScoring?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(leagueScoring)
   const result = isRoto ? await finalizeRotoSeason(input.seasonId,input.actorUserId,input.tiebreakerRosterId) : await finalizeNflRedraftPlayoffRuntimeSeason({
     seasonId: input.seasonId,
     actorUserId: input.actorUserId,

@@ -1,0 +1,67 @@
+{
+  "tag": "pirate-stage-8713bebb",
+  "databaseHost": "ep-winter-salad-ad34lce8-pooler.c-2.us-east-1.aws.neon.tech",
+  "runAt": "2026-10-27T17:20:35.637Z",
+  "results": [
+    {
+      "sport": "NFL",
+      "leagueId": "d785e376-9fc2-4318-af78-47123b0e9056",
+      "protectionsLocked": 2,
+      "claimsCreated": 2,
+      "counterSettled": true,
+      "unansweredAutoTransferred": true,
+      "overflowGraceRecorded": true,
+      "correctedStealReversed": true,
+      "correctedWinnerClaimCreated": true,
+      "selectionExpired": true,
+      "repeatedCorrectionRecovered": true,
+      "playoffClaimCreated": true,
+      "playoffCorrectionRecovered": true
+    },
+    {
+      "sport": "NBA",
+      "leagueId": "3d640ddb-ca8b-4d1b-9d22-141f5de69670",
+      "protectionsLocked": 2,
+      "claimsCreated": 2,
+      "counterSettled": true,
+      "unansweredAutoTransferred": true,
+      "overflowGraceRecorded": true,
+      "correctedStealReversed": true,
+      "correctedWinnerClaimCreated": true,
+      "selectionExpired": true,
+      "repeatedCorrectionRecovered": true,
+      "playoffClaimCreated": true,
+      "playoffCorrectionRecovered": true
+    },
+    {
+      "sport": "MLB",
+      "leagueId": "cad21618-663b-43af-b2a6-94a326d262bb",
+      "protectionsLocked": 2,
+      "claimsCreated": 2,
+      "counterSettled": true,
+      "unansweredAutoTransferred": true,
+      "overflowGraceRecorded": true,
+      "correctedStealReversed": true,
+      "correctedWinnerClaimCreated": true,
+      "selectionExpired": true,
+      "repeatedCorrectionRecovered": true,
+      "playoffClaimCreated": true,
+      "playoffCorrectionRecovered": true
+    },
+    {
+      "sport": "NHL",
+      "leagueId": "a82c6112-fab2-439a-83e7-3fd2548d8ff9",
+      "protectionsLocked": 2,
+      "claimsCreated": 2,
+      "counterSettled": true,
+      "unansweredAutoTransferred": true,
+      "overflowGraceRecorded": true,
+      "correctedStealReversed": true,
+      "correctedWinnerClaimCreated": true,
+      "selectionExpired": true,
+      "repeatedCorrectionRecovered": true,
+      "playoffClaimCreated": true,
+      "playoffCorrectionRecovered": true
+    }
+  ]
+}

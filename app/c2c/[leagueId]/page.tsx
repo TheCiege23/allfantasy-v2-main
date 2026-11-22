@@ -57,11 +57,12 @@ export default async function C2CLeagueHubPage(props: { params: Promise<{ league
   return (
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">
       <div className="mx-auto max-w-5xl space-y-6">
-        <header className="flex items-start gap-4 rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a1228] to-[#040915] p-6">
+        {/* Wraps on a phone: the dashboard link drops under the title rather than squeezing it to ~110px. */}
+        <header className="flex flex-wrap items-start gap-4 rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a1228] to-[#040915] p-6">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-500/30 bg-sky-500/10 text-sky-200">
             <GraduationCap className="h-8 w-8" />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1 basis-[220px]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
               Campus to Canton
             </p>

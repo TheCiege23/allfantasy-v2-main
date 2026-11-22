@@ -83,7 +83,7 @@ const {
     roster: {
       count: vi.fn(async ({ where }: any) =>
         store.rosters.filter(
-          (r) => r.leagueId === where.leagueId && r.platformUserId === where.platformUserId
+          (r) => r.leagueId === where.leagueId && (where.OR ?? [where]).some((w: any) => w.platformUserId != null && r.platformUserId === w.platformUserId)
         ).length
       ),
     },
@@ -133,6 +133,11 @@ const {
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+// These tests exercise the route for a user who HAS the plan; the gate itself is covered in
+// __tests__/monetization/gate-free-paid-features.test.ts.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: vi.fn(async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null })),
+}))
 vi.mock('@/lib/telemetry/usage', () => ({
   withApiUsage: () => (handler: any) => handler,
   logUsageEvent: logUsageEventMock,

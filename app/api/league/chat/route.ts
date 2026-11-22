@@ -442,12 +442,23 @@ export async function POST(req: NextRequest) {
       select: { userId: true },
     })
     const announcerId = leagueRow?.userId ?? userId
+    /*
+     * "Share with league" (2026-11-16): only a GENERAL Chimmy answer may be shared. A Survivor vote, an
+     * idol or token play, or a Survivor host reply is a secret game move — never shareable. The link to
+     * the question lets the share post both. lib/league-chat/shareChimmyAnswer.ts checks both keys.
+     */
+    const shareable = !sgReply && !voteResult?.handled && !survivorAsk && Boolean(replyText?.trim())
     const privateChimmyMsg = await createLeagueChatMessage(leagueId, announcerId, replyText, {
       type: 'system',
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      metadata: { isSystem: true, chimmyPrivateReply: true, ...(decision ? { decision } : {}) },
+      metadata: {
+        isSystem: true,
+        chimmyPrivateReply: true,
+        ...(decision ? { decision } : {}),
+        ...(shareable ? { chimmyShareable: true, questionMessageId: privateUserMsg.id } : {}),
+      },
     })
 
     return NextResponse.json({
@@ -572,7 +583,7 @@ export async function POST(req: NextRequest) {
   })
 
   /*
-   * "New message in your league chat" — bell/push/email/text for members who turned the League chat
+   * "New message in your league chat" — bell and push for members who turned the League chat
    * messages category on (it is OFF by default on every channel). Fire-and-forget, after the save.
    * A Big Brother side room is narrower than the league, so only its main room is announced.
    */
@@ -604,8 +615,9 @@ export async function POST(req: NextRequest) {
         title: '@all in league chat',
         body: `${senderName} mentioned everyone in the league chat.`,
         severity: 'low',
-        actionHref: `/league/${encodeURIComponent(leagueId)}`,
+        actionHref: `/league/${encodeURIComponent(leagueId)}?openChat=league&message=${encodeURIComponent(created.id)}`,
         actionLabel: 'Open chat',
+        skipChannels: { email: true, sms: true },
         meta: { leagueId, messageId: created.id },
         dedupePrefix: `at_all:${created.id}`,
       })

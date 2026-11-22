@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { namedRosterId, resolveAuctionActor } from '@/lib/live-draft-engine/auction/multiTeamAuction'
 import { nominatePlayer } from '@/lib/live-draft-engine/auction/AuctionEngine'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { rosterConfigurationIncompleteBody } from '@/lib/league/roster-configuration-gate-error'
@@ -27,10 +28,15 @@ export async function POST(
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const rosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  if (!rosterId) return NextResponse.json({ error: 'No roster for this league' }, { status: 403 })
-
   const body = await req.json().catch(() => ({}))
+  // A manager with several teams nominates for the team named, else their team whose turn it is
+  // (lib/live-draft-engine/auction/multiTeamAuction.ts).
+  const actor = await resolveAuctionActor({ leagueId, userId, purpose: 'nominate', requestedRosterId: namedRosterId(req, body) })
+  if (!actor.ok) {
+    return NextResponse.json({ error: actor.error, code: actor.code, ...(actor.code === 'TEAM_REQUIRED' ? { rosterIds: actor.rosterIds } : {}) }, { status: actor.status })
+  }
+  const rosterId = actor.rosterId
+
   const playerName = body.playerName ?? body.player_name
   const position = body.position ?? ''
   if (!playerName) return NextResponse.json({ error: 'playerName required' }, { status: 400 })

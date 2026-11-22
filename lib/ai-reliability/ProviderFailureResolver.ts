@@ -2,9 +2,9 @@
  * Resolves provider failure state and user-facing message (Prompt 127).
  */
 
-import type { ProviderResultMeta, ProviderStatus } from './types';
+import type { ProviderResultMeta } from './types';
 
-export interface ProviderFailureState {
+interface ProviderFailureState {
   allFailed: boolean;
   someFailed: boolean;
   fallbackUsed: boolean;
@@ -27,9 +27,9 @@ export function resolveProviderFailure(providerResults: ProviderResultMeta[]): P
 
   let message: string;
   if (allFailed) {
-    message = 'AI analysis is temporarily unavailable. You can still see deterministic (data-only) results below.';
+    message = 'Chimmy analysis is temporarily unavailable. You can still see deterministic (data-only) results below.';
   } else if (fallbackUsed) {
-    message = `Some AI providers didn't respond; results are based on ${ok.map((r) => r.provider).join(' and ')}.`;
+    message = `Some Chimmy providers didn't respond; results are based on ${ok.map((r) => r.provider).join(' and ')}.`;
   } else {
     message = '';
   }
@@ -43,9 +43,3 @@ export function resolveProviderFailure(providerResults: ProviderResultMeta[]): P
   };
 }
 
-export function providerStatusFromError(error: unknown): ProviderStatus {
-  const str = String(error ?? '').toLowerCase();
-  if (str.includes('timeout') || str.includes('timed out')) return 'timeout';
-  if (str.includes('invalid') || str.includes('parse') || str.includes('schema')) return 'invalid_response';
-  return 'failed';
-}

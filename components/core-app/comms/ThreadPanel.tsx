@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
+import { Bell, BellOff, Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
 import { TypingNote } from './TypingNote'
 import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
@@ -47,7 +47,7 @@ import { PeoplePicker } from './PeoplePicker'
  * out of date.
  */
 
-export type PlatformThread = {
+type PlatformThread = {
   id: string
   threadType: string
   title: string
@@ -747,8 +747,10 @@ export function ThreadPanel({
               onClick={() => void toggleMute()}
               aria-pressed={Boolean(openThread.isMuted)}
               title={openThread.isMuted ? 'Muted — tap to unmute' : 'Mute this conversation'}
+              aria-label={openThread.isMuted ? 'Unmute this conversation' : 'Mute this conversation'}
             >
-              {openThread.isMuted ? '🔕' : '🔔'}
+              {/* Line icons, not 🔔/🔕 emoji: the emoji rendered as a bright yellow bell beside line-icon search. */}
+              {openThread.isMuted ? <BellOff size={17} aria-hidden /> : <Bell size={17} aria-hidden />}
             </button>
             <button
               type="button"
@@ -982,8 +984,6 @@ export function ThreadPanel({
 
   return (
     <div className="af-cm-panel">
-      <div className="af-cm-privacy">{privacy}</div>
-
       <PeoplePicker
         kind={kind}
         busy={busy}
@@ -1011,6 +1011,15 @@ export function ThreadPanel({
           threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}
         {error ? <p className="af-cm-error">{error}</p> : null}
+      </div>
+
+      {/*
+        Contracts 2 and 3, in full, every time the list opens — as quiet fine print under the
+        conversations rather than a box above them (2026-11-01: "it looks crowded"). Same words.
+      */}
+      <div className="af-cm-privacy af-cm-privacy-foot">
+        <Lock size={12} aria-hidden />
+        {privacy}
       </div>
     </div>
   )

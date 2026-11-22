@@ -27,6 +27,7 @@ describe('tradeValueSourceOf — the evidence behind one priced asset', () => {
     [{ source: 'idp-flat-baseline' }, { position: 'LB' }, 'position_baseline'],
     [{ source: 'curve' }, { position: 'PICK' }, 'pick_curve'],
     [{ source: 'unknown' }, { position: 'C', dataSource: 'rolling' }, 'sports_db'],
+    [{ source: 'unknown' }, { position: 'WR', dataSource: 'zombie-player-vorp' }, 'zombie_points'],
   ] as const)('%j on %j → %s', (priced, line, want) => {
     expect(tradeValueSourceOf(priced, line)).toBe(want)
   })

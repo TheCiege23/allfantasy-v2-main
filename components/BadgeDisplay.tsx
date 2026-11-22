@@ -79,7 +79,7 @@ export default function BadgeDisplay({ username }: { username: string }) {
       {badges.length === 0 && (
         <div className="text-center py-4">
           <p className="text-white/40 text-sm">No badges earned yet</p>
-          <p className="text-white/30 text-xs mt-1">Use AI tools to unlock achievements</p>
+          <p className="text-white/30 text-xs mt-1">Use Chimmy tools to unlock achievements</p>
         </div>
       )}
 

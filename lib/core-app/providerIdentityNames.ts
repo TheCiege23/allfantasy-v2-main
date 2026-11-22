@@ -56,6 +56,7 @@ export async function lookupProviderIdentityNames(
   platform: string,
   sport: string,
   ids: string[],
+  fantraxSnapshotId?: string | null,
 ): Promise<Map<string, ProviderIdentityName>> {
   const out = new Map<string, ProviderIdentityName>()
   const provider = platform.trim().toLowerCase()
@@ -82,5 +83,19 @@ export async function lookupProviderIdentityNames(
     if (!name || out.has(r.providerPlayerId)) continue
     out.set(r.providerPlayerId, { name })
   }
+  if (provider === 'fantrax' && fantraxSnapshotId && ids.some((id) => !out.has(id))) {
+    const snapshot = await prisma.fantraxLeague.findUnique({
+      where: { id: fantraxSnapshotId },
+      select: { roster: true },
+    }).catch(() => null)
+    const wanted = new Set(ids)
+    for (const player of Array.isArray(snapshot?.roster) ? snapshot.roster : []) {
+      if (!player || typeof player !== 'object' || Array.isArray(player)) continue
+      const { fantraxId, name } = player
+      if (typeof fantraxId !== 'string' || !wanted.has(fantraxId) || out.has(fantraxId)) continue
+      if (typeof name === 'string' && name.trim()) out.set(fantraxId, { name: name.trim() })
+    }
+  }
+
   return out
 }

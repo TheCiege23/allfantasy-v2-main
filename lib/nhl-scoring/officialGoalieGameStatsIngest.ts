@@ -62,7 +62,7 @@ async function officialDay(date: string, now: Date, deadlineAt: number,
   return { rows, cacheHit: false }
 }
 
-export type OfficialNhlGoalieReport = { requestedDates: number; selectedDates: string[];
+type OfficialNhlGoalieReport = { requestedDates: number; selectedDates: string[];
   deferredDates: string[]; cacheHits: number; fetchedDates: number; matched: number;
   alreadyPresent: number; wouldWrite: number; written: number; corrected: number;
   stale: number; missing: number; ambiguous: number; conflicting: number; errors: string[] }

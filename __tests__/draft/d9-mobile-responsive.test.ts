@@ -66,8 +66,10 @@ describe('DraftBoard — board grid min-w-max (Commit 24)', () => {
     expect(boardSrc).toMatch(/data-testid="draft-board-grid"/)
   })
 
-  it('header row is sticky top-0 (mobile wrapper must not break sticky header)', () => {
-    expect(boardSrc).toMatch(/sticky top-0/)
+  // `position: sticky` never worked here: the header sits inside the board's sideways scroller,
+  // which becomes its sticky container and never scrolls vertically. useStickyBoardHeader pins it.
+  it('header row is pinned while scrolling (mobile wrapper must not break it)', () => {
+    expect(boardSrc).toMatch(/useStickyBoardHeader\(teamGridRef, teamHeaderRef/)
   })
 })
 
@@ -161,9 +163,9 @@ describe('AutopickMeToggle — compact spacing preserved (Commit 24)', () => {
 // 8. Mobile sticky bar — tightened padding (Commit 24)
 // ---------------------------------------------------------------------------
 
-describe('DraftRoomPageClient — mobile sticky bar compact (Commit 24)', () => {
-  it('sticky bar uses space-y-1 py-1.5 (tightened from space-y-1.5 py-2)', () => {
-    expect(pageSrc).toMatch(/space-y-1 px-2\.5 py-1\.5 text-xs.*data-testid="draft-mobile-sticky-bar"/)
+describe('DraftRoomPageClient — mobile sticky bar compact (Commit 24, restyled 2026-11-02)', () => {
+  it('sticky bar is the redesign clock bar (compact padding lives in af-draft-room.css)', () => {
+    expect(pageSrc).toMatch(/className="af-core af-dr af-dr-clockbar".*data-testid="draft-mobile-sticky-bar"/)
   })
 
   it('old space-y-1.5 py-2 combo is gone from the sticky bar', () => {

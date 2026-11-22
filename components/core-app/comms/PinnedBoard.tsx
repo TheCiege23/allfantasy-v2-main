@@ -71,4 +71,3 @@ export function PinnedBoard({
   )
 }
 
-export default PinnedBoard

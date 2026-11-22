@@ -51,10 +51,22 @@ import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
  * Every step checks `shouldStop` (the invocation's shared run budget) before starting the next
  * unit of work, so a slow night cannot run the tick past its cron interval.
  *
- * NBA, NHL and MLB run by default; an explicit off value issues no query at all.
+ * Every sport in `DAILY_LIVE_SPORTS` runs by default (NBA, NHL, MLB, and the write-only college
+ * sports NCAAF and NCAAB); an explicit off value issues no query at all.
+ *
+ * ⚠ THE WORKER'S OWN `DAILY_SPORT_LIVE_SCORING` DECIDES THIS, NOT THE WEB SERVICE'S. On 2026-11-22
+ * the worker held an explicit three-sport list while the web service said `all`, and college points
+ * stayed blank until the worker's copy was set to `all`. Read the cron metadata `dailyLiveEnabled`.
  */
 
-export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB'] as const
+/*
+ * NCAAF joined 2026-11-21 for the C2C / Devy roster page's live college points. It is polled and
+ * written like the others, but NOT rescored: NCAAF redraft scoring reads the CFBD rows, and the
+ * roster page reads these rows itself (lib/league/collegePro/collegePoints.ts). College football is
+ * on the SECOND Rolling Insights account, which `riFetchRows` already iterates.
+ */
+// NCAAB joined 2026-11-21 for the basketball C2C roster page (lib/league/collegePro/dailyPoints.ts), write-only like NCAAF.
+export const DAILY_LIVE_SPORTS = ['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'] as const
 export type DailyLiveSport = (typeof DAILY_LIVE_SPORTS)[number]
 
 /** Persisted per-(sport, Eastern date) poll state lives under this `sports_data_cache` key prefix. */
@@ -74,6 +86,8 @@ export const MAX_GAME_LENGTH_MS: Record<DailyLiveSport, number> = {
   MLB: 5 * 3_600_000, // extra innings and rain delays
   NBA: 3.25 * 3_600_000,
   NHL: 3.5 * 3_600_000, // overtime + shootout
+  NCAAF: 4.5 * 3_600_000, // college games run long: clock rules, overtime periods, weather delays
+  NCAAB: 3 * 3_600_000, // two halves, media timeouts, overtime
 }
 
 /** Most seasons one pass will rescore per sport; the 5-minute score-sync still reconciles every one. */
@@ -81,7 +95,7 @@ export const DAILY_LIVE_MAX_SEASONS_PER_SPORT = 25
 
 /**
  * The flag. Unset / empty → all supported sports. Explicit `0` / `false` / `off` → nothing enabled.
- * `1` / `true` / `on` / `all` → NBA, NHL and MLB. Otherwise a comma list of those three.
+ * `1` / `true` / `on` / `all` → every sport in `DAILY_LIVE_SPORTS`. Otherwise a comma list of them.
  */
 export function resolveDailyLiveSports(env: Record<string, string | undefined> = process.env): DailyLiveSport[] {
   const raw = env.DAILY_SPORT_LIVE_SCORING?.trim().toLowerCase() ?? ''
@@ -400,12 +414,16 @@ export async function runDailySportLiveTick(opts: {
   return result
 }
 
+/** Sports whose live rows feed a reader directly and have no redraft rescore here. */
+const WRITE_ONLY_LIVE_SPORTS: ReadonlySet<DailyLiveSport> = new Set(['NCAAF', 'NCAAB'])
+
 async function rescoreSport(
   sport: DailyLiveSport,
   now: Date,
   shouldStop: () => boolean,
   result: DailyLiveTickResult,
 ): Promise<void> {
+  if (WRITE_ONLY_LIVE_SPORTS.has(sport)) return
   let seasons: Array<{ id: string; status: string }>
   try {
     seasons = await prisma.redraftSeason.findMany({

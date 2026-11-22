@@ -11,7 +11,7 @@
  *
  * Pure.
  */
-export type WelcomeBackInput = {
+type WelcomeBackInput = {
   since: Date
   endedAt: Date
   lineupChanges: Array<{ at: Date; message: string }>

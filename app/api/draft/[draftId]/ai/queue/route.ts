@@ -23,7 +23,7 @@ export async function GET(
     const lookahead = await worker.runLookahead(draftId, teamId, picksAhead)
     return NextResponse.json({ ok: true, recommendation, lookahead })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to load AI queue'
+    const message = error instanceof Error ? error.message : 'Unable to load Chimmy queue'
     const status =
       message === 'Unauthorized' ? 401 :
       message === 'Forbidden' ? 403 :

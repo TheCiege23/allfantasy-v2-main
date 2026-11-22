@@ -53,8 +53,8 @@ const rowValue = (id: string) => within(screen.getByTestId(`lsh-row-${id}`)).get
 
 function renderHome(i: BuildSettingsHomeInput, renderSubPage = vi.fn((id: string) => ({ title: `Edit ${id}`, content: <p>editor for {id}</p> }))) {
   const sections = buildLeagueSettingsHome(i)
-  render(<LeagueSettingsHome leagueName={i.league.name} sections={sections} canEdit={i.canEdit} renderSubPage={renderSubPage as never} />)
-  return { renderSubPage }
+  const view = render(<LeagueSettingsHome leagueName={i.league.name} sections={sections} canEdit={i.canEdit} renderSubPage={renderSubPage as never} />)
+  return { renderSubPage, ...view }
 }
 
 describe('formatters', () => {
@@ -71,7 +71,7 @@ describe('formatters', () => {
 describe('LeagueSettingsHome — list', () => {
   it('renders every section with the current values', () => {
     renderHome(input())
-    for (const id of ['general', 'roster-scoring', 'draft', 'waivers-trades', 'guillotine', 'members', 'commissioner']) {
+    for (const id of ['general', 'roster-scoring', 'draft', 'trades', 'guillotine', 'members', 'commissioner']) {
       expect(screen.getByTestId(`lsh-section-${id}`)).toBeTruthy()
     }
     expect(rowValue('name')).toBe('The Ciege NBA Guilly')
@@ -90,6 +90,22 @@ describe('LeagueSettingsHome — list', () => {
     expect(screen.getByTestId('lsh-copy-invite')).toBeTruthy()
   })
 
+  it('lists Waivers in General beside Format, and Dues & payouts as its own commissioner row', () => {
+    renderHome(input())
+    const general = screen.getByTestId('lsh-section-general')
+    expect([...general.querySelectorAll('[data-testid^="lsh-row-"]')].map((r) => r.getAttribute('data-testid'))).toEqual([
+      'lsh-row-name',
+      'lsh-row-teams',
+      'lsh-row-format',
+      'lsh-row-waivers',
+      // An NBA league can be a copy league since 2026-11-19 (lib/league/copyLeagueTeamTables.ts).
+      'lsh-row-af-options',
+    ])
+    expect(rowValue('af-options')).toBe('Copy league')
+    expect(screen.getByTestId('lsh-section-trades').querySelector('[data-testid="lsh-row-waivers"]')).toBeNull()
+    expect(screen.getByTestId('lsh-section-commissioner').querySelector('[data-testid="lsh-row-dues"]')).toBeTruthy()
+  })
+
   it('🛑 guillotine section only for Guilly leagues; playoffs hidden for guillotine', () => {
     renderHome(input())
     expect(screen.queryByTestId('lsh-section-guillotine')).toBeTruthy()
@@ -101,6 +117,24 @@ describe('LeagueSettingsHome — list', () => {
     expect(screen.queryByTestId('lsh-section-guillotine')).toBeNull()
     expect(screen.getByTestId('lsh-section-playoffs')).toBeTruthy()
     expect(rowValue('playoffs')).toBe('6 teams · starts Wk 15')
+  })
+
+  it('puts Pirate rules in commissioner settings and keeps them visible to members', () => {
+    const pirate = input(
+      { formatLabel: 'Pirate League', guillotine: null },
+      { leagueType: 'pirate', leagueVariant: 'pirate', guillotineMode: false,
+        settings: { conceptRules: { extensions: { pirate: { protectionLimit: 3, selectionHours: 24, claimHours: 24, overflowGraceHours: 24, playoffClaims: true } } } } },
+    )
+    const view = renderHome(pirate)
+    expect(screen.getByTestId('lsh-section-pirate')).toBeTruthy()
+    expect(rowValue('pirate-rules')).toBe('3 protected · 24h to choose · 24h to respond')
+    expect(rowValue('pirate-playoffs')).toBe('On')
+    fireEvent.click(screen.getByTestId('lsh-row-pirate-rules'))
+    expect(view.renderSubPage).toHaveBeenCalledWith('pirate-rules')
+    view.unmount()
+    renderHome({ ...pirate, canEdit: false })
+    expect(screen.getByTestId('lsh-section-pirate')).toBeTruthy()
+    expect(screen.getByTestId('lsh-row-pirate-rules').getAttribute('data-readonly')).toBe('true')
   })
 
   it('🛑 members see the same values read-only: no editors, no commissioner tools', () => {

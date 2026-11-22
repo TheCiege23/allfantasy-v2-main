@@ -29,6 +29,24 @@ import { explainPlayerValue } from '@/lib/trade-value/valueEngine'
 
 const SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAABB', 'SOCCER'])
 
+/**
+ * 🛑 THE ENGINE IS FOOTBALL-CALIBRATED, SO ONLY FOOTBALL IS DERIVED HERE (2026-11-16). For a daily sport
+ * the input was a per-game projection times an NFL 17-week horizon, put through NFL scarcity and the NFL
+ * value curve — a confident-looking derivation of a number that means nothing (an NBA census measured
+ * the outputs saturating near 10000). A daily-sport value is the league's own: an NBA league in scope is
+ * explained from its value board by the executor (lib/chimmy/sportBoardValue.ts) before this runs.
+ */
+const ENGINE_SPORTS = new Set(['NFL', 'NCAAF'])
+
+function notDerivedHere(sport: string): string {
+  return [
+    `NO DERIVATION FOR ${sport} HERE: the AllFantasy 0–10000 value engine is calibrated for football, and an ${sport}`,
+    "player's value is his league's own (points or category score over the best free agent, for the games left).",
+    `Do NOT give a derivation or a number from general knowledge. If the user is in an ${sport} league, the value can be`,
+    'read in that league (get_player_value); otherwise say we do not derive a general-market value for this sport.',
+  ].join(' ')
+}
+
 function notFound(asked: string): string {
   return [
     `NOTHING TO EXPLAIN FOR "${asked}" — no projection and no published value matched that name.`,
@@ -52,6 +70,7 @@ export async function buildExplainValueContext(args: {
   if (!SPORTS.has(sport)) {
     return `"${sport}" is not a sport AllFantasy values. Say so; do not explain a number for it.`
   }
+  if (!ENGINE_SPORTS.has(sport)) return notDerivedHere(sport)
 
   const target = normalizePlayerName(asked)
   if (!target) return notFound(asked)

@@ -6,6 +6,7 @@
  */
 
 import Link from 'next/link'
+import { buildAIChatHref } from '@/lib/chimmy-chat/AIContextRouter'
 import { useParams } from 'next/navigation'
 import { ConstitutionBuilder } from '@/components/constitution/ConstitutionBuilder'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -20,6 +21,14 @@ export default function LeagueConstitutionPage() {
         {t('league.common.backToLeague')}
       </Link>
       <h1 className="mt-4 text-xl font-semibold">{t('league.constitution.title')}</h1>
+      {leagueId && (
+        <Link
+          className="mt-3 inline-block rounded-lg border border-white/20 px-3 py-2 text-sm"
+          href={buildAIChatHref({ leagueId, prompt: 'Explain my league rules. Compare the published constitution with our league settings and call out any differences.' })}
+        >
+          Ask Chimmy about league rules
+        </Link>
+      )}
       <div className="mt-4">{leagueId && <ConstitutionBuilder leagueId={leagueId} />}</div>
     </main>
   )

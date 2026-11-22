@@ -9,18 +9,18 @@
  */
 import type { SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 
-export const SURVIVOR_AI_HOST_USER_IDS: readonly string[] = ['survivor-ai-host', 'survivor-host-chimmy']
+const SURVIVOR_AI_HOST_USER_IDS: readonly string[] = ['survivor-ai-host', 'survivor-host-chimmy']
 /** Open alliances one castaway may have created at once. */
-export const SURVIVOR_ALLIANCES_PER_CASTAWAY = 5
-export const SURVIVOR_ALLIANCE_NAME_MAX = 40
+const SURVIVOR_ALLIANCES_PER_CASTAWAY = 5
+const SURVIVOR_ALLIANCE_NAME_MAX = 40
 
-export interface AllianceCastaway {
+interface AllianceCastaway {
   userId: string
   playerState: string
   tribeId: string | null
 }
 
-export interface AllianceRequestInput {
+interface AllianceRequestInput {
   settings: Pick<SurvivorGovernanceSettings, 'alliancesEnabled' | 'allianceMaxSize' | 'allianceSameTribeOnly'>
   creator: AllianceCastaway | null
   /** The castaways the creator named (not including the creator). */

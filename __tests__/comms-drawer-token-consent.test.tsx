@@ -59,6 +59,14 @@ function openDrawer() {
   fireEvent.submit(input.closest('form')!)
 }
 
+/*
+ * The first render of the whole drawer in a fresh test file is a cold mount — every panel, the
+ * composer and its stylesheet — and on a busy machine that alone can outlast testing-library's
+ * default 1s `waitFor`. Measured 2026-11-05: the same case passed 10/10 once warm and timed out on
+ * roughly 1 run in 3 when it was first in the file. The answer is still awaited; it just gets time.
+ */
+const COLD_MOUNT = { timeout: 5000 }
+
 const chimmyPosts = (fetchMock: ReturnType<typeof vi.fn>) =>
   fetchMock.mock.calls.filter(([url]) => String(url) === '/api/chat/chimmy')
 
@@ -85,7 +93,7 @@ describe('chat bubble Chimmy — token consent', () => {
 
     openDrawer()
 
-    await waitFor(() => expect(screen.getByText('Start him.')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Start him.')).toBeTruthy(), COLD_MOUNT)
     expect(confirmTokenSpendMock).toHaveBeenCalledWith('ai_chimmy_chat_message')
 
     const posts = chimmyPosts(fetchMock)
@@ -100,7 +108,7 @@ describe('chat bubble Chimmy — token consent', () => {
 
     openDrawer()
 
-    await waitFor(() => expect(screen.getByText(/No tokens were spent/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/No tokens were spent/)).toBeTruthy(), COLD_MOUNT)
     expect(chimmyPosts(fetchMock)).toHaveLength(1)
     expect((screen.getByLabelText('Message') as HTMLInputElement).value).toBe(QUESTION)
   })
@@ -111,7 +119,7 @@ describe('chat bubble Chimmy — token consent', () => {
 
     openDrawer()
 
-    await waitFor(() => expect(screen.getByText(/out of tokens/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/out of tokens/)).toBeTruthy(), COLD_MOUNT)
     expect(chimmyPosts(fetchMock)).toHaveLength(1)
   })
 })

@@ -1,3 +1,4 @@
+import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -16,8 +17,6 @@ import {
   normalizeDraftedNameSet,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine/queue-utils'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -25,6 +24,9 @@ import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './l
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
 import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
+import type { RookieDraftRoom } from './draftHqRookieRoom'
+import { loadRookieDraftRoom } from './draftHqRookieRoomLoad'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
 /**
  * Draft HQ — "before the draft: your picks, the lottery, the board settings and
@@ -227,10 +229,14 @@ export type DraftHqData = {
   queue: SectionState<PreparedQueue>
   preparation?: DraftPreparationData
   keepers: SectionState<KeeperList>
+  /**
+   * A dynasty league's draft room — the rookie draft band, its board, your picks and taxi room
+   * (draftHqRookieRoom.ts). Absent for every other league, so their Draft HQ is unchanged.
+   */
+  rookieRoom?: RookieDraftRoom | null
 }
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
-
 
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
@@ -328,7 +334,7 @@ async function loadPreparedQueue(sessionId: string, userId: string): Promise<Sec
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const row = await prisma.draftQueue.findUnique({
-    where: { sessionId_userId: { sessionId, userId } },
+    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
     select: { order: true },
   })
   const order = row?.order
@@ -760,9 +766,11 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
 
   /* AllFantasy's own projection for every player on the board — one read. */
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: boardLeague?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: boardLeague?.settings,
+    sport: boardLeague?.sport,
   })
 
   const teamCount = teams.length
@@ -898,9 +906,11 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     league?.sport,
   )
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: league?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: league?.settings,
+    sport: league?.sport,
   })
 
   return {
@@ -1004,7 +1014,7 @@ export async function getDraftHqData(
     /* Session and slots genuinely do not exist — this app is not running a draft here,
        and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
-    const [madePicks, board, grades, keepers] = await Promise.all([
+    const [madePicks, board, grades, keepers, rookieRoom] = await Promise.all([
       loadImportedDraftPicks(lc).catch(() => none),
       loadCompletedDraftBoard(lc).catch(() => none),
       loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(() => none),
@@ -1012,6 +1022,12 @@ export async function getDraftHqData(
         available: false as const,
         reason: 'keepers could not be read for this league right now',
       })),
+      // Dynasty only — no other league reads its claimed team here.
+      usesDynastyBackground(league)
+        ? lc.claimedTeam()
+            .then((claimedTeam) => loadRookieDraftRoom({ league, userId, claimedTeam, session: null }))
+            .catch(() => null)
+        : Promise.resolve(null),
     ])
     // A queue belongs to a draft AllFantasy runs; with none there is nothing to queue for.
     const queue = {
@@ -1045,7 +1061,7 @@ export async function getDraftHqData(
         }
       : none
 
-    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers, preparation: unavailablePreparation('Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.') }
+    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers, ...(rookieRoom ? { rookieRoom } : {}), preparation: unavailablePreparation('Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.') }
   }
 
   const myTeam = await lc.claimedTeam()
@@ -1155,9 +1171,11 @@ export async function getDraftHqData(
     league.sport,
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
   const madeAfs = await loadDraftAfProjections({
+    leagueId,
     platform: league.platform,
     playerIds: made.map((p) => p.playerId),
     leagueSettings: league.settings,
+    sport: league.sport,
   })
 
   const madePicks: SectionState<MadePick[]> =
@@ -1208,6 +1226,25 @@ export async function getDraftHqData(
   )
   const keepers = keepersFromSession(session, myRosterIds)
 
-  const preparation = await getDraftPreparationData(league, session, userId, mySlotEntry?.rosterId ?? myTeam?.externalId ?? undefined).catch(() => unavailablePreparation('Draft preparation could not be loaded. Retry this page.', 'error'))
-  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers, preparation }
+  const [preparation, rookieRoom] = await Promise.all([
+    getDraftPreparationData(league, session, userId, mySlotEntry?.rosterId ?? myTeam?.externalId ?? undefined).catch(() => unavailablePreparation('Draft preparation could not be loaded. Retry this page.', 'error')),
+    loadRookieDraftRoom({
+      league,
+      userId,
+      claimedTeam: myTeam,
+      session: {
+        status: session.status,
+        draftType: session.draftType,
+        rounds: session.rounds,
+        teamCount: session.teamCount,
+        thirdRoundReversal: Boolean(session.thirdRoundReversal),
+        modeLabel: session.draftModeLabel ?? null,
+        slotOrder,
+        tradedPicks,
+        myRosterId: mySlotEntry?.rosterId != null ? String(mySlotEntry.rosterId) : null,
+      },
+      syncNote: pickSlots.available ? pickSlots.data.note : null,
+    }).catch(() => null),
+  ])
+  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers, preparation, ...(rookieRoom ? { rookieRoom } : {}) }
 }

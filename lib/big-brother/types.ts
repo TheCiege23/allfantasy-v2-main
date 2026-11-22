@@ -6,19 +6,6 @@
 
 import type { LeagueSport } from '@prisma/client'
 
-/** Phase of the weekly eviction cycle (legacy / display). */
-export type BigBrotherPhase =
-  | 'hoh_challenge'
-  | 'nomination'
-  | 'veto_draw'
-  | 'veto_challenge'
-  | 'veto_decision'
-  | 'replacement_nominee'
-  | 'eviction_vote'
-  | 'eviction'
-  | 'jury_transition'
-  | 'finale'
-
 /** Week state machine phases (deterministic automation). PROMPT 3. */
 export type BigBrotherWeekPhase =
   | 'HOH_OPEN'
@@ -96,27 +83,6 @@ export interface BigBrotherConfig {
   premiumEngineSpec?: unknown | null
 }
 
-/** Cycle row for a single week. */
-export interface BigBrotherCycleRow {
-  id: string
-  leagueId: string
-  configId: string
-  week: number
-  hohRosterId: string | null
-  nominee1RosterId: string | null
-  nominee2RosterId: string | null
-  vetoWinnerRosterId: string | null
-  vetoParticipantRosterIds: string[] | null
-  vetoUsed: boolean
-  vetoSavedRosterId: string | null
-  replacementNomineeRosterId: string | null
-  evictedRosterId: string | null
-  voteDeadlineAt: Date | null
-  voteOpenedAt: Date | null
-  closedAt: Date | null
-  tieBreakSeasonPoints: Record<string, number> | null
-}
-
 /** Eviction vote tally result. */
 export interface BigBrotherVoteTally {
   cycleId: string
@@ -136,8 +102,3 @@ export interface BigBrotherEvictionResult {
   juryEnrolled: boolean
 }
 
-/** Tie-break mode for eviction (when vote count is tied). PROMPT 5. */
-export type EvictionTieBreakMode = 'hoh_vote' | 'random' | 'season_points' | 'commissioner'
-
-/** Challenge resolution mode: deterministic only. AI may theme/narrate; outcome is never AI-decided. */
-export type ChallengeResolutionMode = 'score_based' | 'seeded_random' | 'hybrid'

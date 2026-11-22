@@ -4,11 +4,8 @@
 
 import { getLoginRedirectUrl } from "./ProtectedRouteResolver"
 
-/** Default fallback when user is not authenticated (login with callback to requested path). */
-export const DEFAULT_UNAUTHENTICATED_FALLBACK = "/login"
-
 /** Default fallback when user is authenticated but not admin (e.g. tried to open /admin). */
-export const DEFAULT_UNAUTHORIZED_FALLBACK = "/dashboard"
+const DEFAULT_UNAUTHORIZED_FALLBACK = "/dashboard"
 
 /**
  * Resolve where to send the user when access is denied.

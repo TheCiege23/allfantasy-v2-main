@@ -8,7 +8,6 @@ import { summarizeMatchupTeamInput } from '@/lib/simulation-engine/Deterministic
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import type { MatchupLineupSlotSummary } from '@/lib/simulation-engine/types';
 import {
-  getPlayerPageHref,
   getRankingsToolHref,
   getTradeAnalyzerHref,
   getWaiverToolHref,
@@ -306,7 +305,6 @@ function buildCoachSummary(snapshot: CoachEngineSnapshot): string {
 
 function buildRosterStrengths(snapshot: CoachEngineSnapshot): string[] {
   const strongestRef = getReferenceSlot(snapshot.peerSummary, snapshot.strongestSlot.slotId);
-  const swingRef = getReferenceSlot(snapshot.peerSummary, snapshot.swingSlot.slotId);
   const floorRatio =
     snapshot.bestFloorSlot.floor / Math.max(1, snapshot.bestFloorSlot.adjustedProjection);
 
@@ -321,7 +319,6 @@ function buildRosterStrengths(snapshot: CoachEngineSnapshot): string[] {
 
 function buildRosterWeaknesses(snapshot: CoachEngineSnapshot): string[] {
   const weakestRef = getReferenceSlot(snapshot.peerSummary, snapshot.weakestSlot.slotId);
-  const secondRef = getReferenceSlot(snapshot.peerSummary, snapshot.secondaryWeakestSlot.slotId);
 
   return [
     `${snapshot.weakestSlot.slotLabel} is the thinnest starter spot right now at ${snapshot.weakestSlot.adjustedProjection.toFixed(1)} adjusted points, trailing baseline by ${Math.abs(
@@ -363,9 +360,12 @@ function buildWaiverOpportunities(snapshot: CoachEngineSnapshot): WaiverOpportun
       position: slot.slotLabel,
       priority: index === 0 ? 'high' : 'medium',
       reason: `${slot.slotLabel} is the softest weekly room on the roster, so add a ${template.focus} profile that can cover a ${slot.floor.toFixed(1)} downside band without forcing a panic trade.`,
-      playerHref: getPlayerPageHref(playerName, {
+      // `playerName` is an ARCHETYPE ("Pocket Tempo QB"), not a person, so there is no player page to
+      // open. It linked /player-comparison (a landing page that ignored it); it now opens the waiver
+      // tool on that slot, exactly as this coach's own "Open Waiver AI" action does (2026-11-12).
+      playerHref: getWaiverToolHref(snapshot.leagueId, {
         sport: snapshot.sport,
-        source: 'coach-mode',
+        focus: slot.slotLabel,
       }),
     };
   });
@@ -591,7 +591,7 @@ export async function buildDeterministicCoachEvaluation(
     {
       id: 'waiver',
       type: 'waiver',
-      label: 'Open Waiver AI',
+      label: 'Open Waiver Chimmy',
       summary: `${snapshot.waiverStrategy.summary} Start with ${waiverOpportunities[0]?.position ?? snapshot.weakestSlot.slotLabel}.`,
       priority: waiverOpportunities[0]?.priority ?? 'high',
       toolHref: getWaiverToolHref(snapshot.leagueId, {

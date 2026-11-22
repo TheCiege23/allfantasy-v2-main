@@ -133,7 +133,7 @@ export default function DecisionGuardianModal({
   const hasAcceptanceData = typeof evaluation.acceptancePct === "number"
   const modeConfig = evaluation.mode ? MODE_CONFIG[evaluation.mode] : null
 
-  const displayTitle = evaluation.title || evaluation.headline || "AI Decision Check"
+  const displayTitle = evaluation.title || evaluation.headline || "Chimmy Decision Check"
   const displayBody = evaluation.body || evaluation.aiRecommendation || "Review the risk factors before confirming."
 
   const cancelLabel = evaluation.recommendedActionLabel || (actionType === "trade" ? "Adjust Trade" : "Revise Decision")
@@ -307,7 +307,7 @@ export default function DecisionGuardianModal({
 
             <div className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/5">
               <div className="flex items-center gap-2 flex-1">
-                <div className="text-[11px] uppercase tracking-wider text-white/40 w-16">AI</div>
+                <div className="text-[11px] uppercase tracking-wider text-white/40 w-16">Chimmy</div>
                 <ArrowRight className="h-3 w-3 text-white/20" />
                 <div className="text-sm text-white/80">{evaluation.aiRecommendation}</div>
               </div>
@@ -425,7 +425,7 @@ export default function DecisionGuardianModal({
           </div>
 
           <div className="mt-3 text-center text-[11px] text-white/25">
-            AI Decision Guardian — Override decisions are logged for learning
+            Chimmy Decision Guardian — Override decisions are logged for learning
           </div>
         </div>
       </div>

@@ -16,6 +16,7 @@ import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineup
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { planBestLineup, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
+import { isRuledOut } from '@/lib/core-app/injuryStatus'
 import type { LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
 import type { WorkspaceTaskCandidate } from '@/lib/commissioner-workspace/taskSources'
 import {
@@ -232,6 +233,8 @@ export type EliminatedLineupRunResult = {
   leagues: number
   teams: number
   filled: number
+  /** Teams whose best lineup AllFantasy set under the `optimize` rule. */
+  optimized: number
   notified: number
   skipped: Record<string, number>
   failures: { leagueId: string; rosterId?: string; error: string }[]
@@ -249,7 +252,7 @@ const noticePrefix = (leagueId: string, rosterId: string, season: number, week: 
  */
 export async function runEliminatedLineupMinimums(opts?: { limit?: number; deadline?: number }): Promise<EliminatedLineupRunResult> {
   const deadline = opts?.deadline ?? Date.now() + 25_000
-  const result: EliminatedLineupRunResult = { leagues: 0, teams: 0, filled: 0, notified: 0, skipped: {}, failures: [] }
+  const result: EliminatedLineupRunResult = { leagues: 0, teams: 0, filled: 0, optimized: 0, notified: 0, skipped: {}, failures: [] }
   const skip = (reason: string) => (result.skipped[reason] = (result.skipped[reason] ?? 0) + 1)
   const ids = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM leagues
@@ -295,6 +298,19 @@ export async function runEliminatedLineupMinimums(opts?: { limit?: number; deadl
           }
           const locked = new Set(lock.lockedPlayerIds)
           let shortfall = lineupShortfall({ starters: checkStarters(team.starters, state.slots.length, players, locked), week: state.week, standard: rule.standard })
+
+          /*
+           * Anti-tanking: the best lineup, not just a legal one, whether or not the minimum is met — an
+           * eliminated team starting a full but deliberately weak lineup is the case this exists for.
+           * Never for a team inactive-manager mode already runs, and never moving a locked player.
+           */
+          if (rule.optimize && !managed[team.rosterId]) {
+            const optimized = await optimizeLineup(league, team, state, players, locked, rule.standard)
+            if (optimized) {
+              result.optimized += 1
+              shortfall = optimized
+            }
+          }
           if (meetsMinimum(shortfall)) continue
 
           // Inactive manager mode already sets this team's best lineup every hour; never fight it.
@@ -361,6 +377,80 @@ async function fillShortSlots(
     },
   })
   return saved.ok ? after : null
+}
+
+/**
+ * Set the team's best lineup from projections, holding only the players whose games have started. Saved
+ * only when it changes something; the manager is told once that week. Returns the lineup's shortfall
+ * after the save, or null when nothing was saved — including when projections are too thin to call a
+ * lineup "best" (`planBestLineup` refuses rather than guessing).
+ */
+async function optimizeLineup(
+  league: LeagueRow,
+  team: TeamLineup,
+  state: LeagueState,
+  players: PlayerFacts,
+  locked: ReadonlySet<string>,
+  standard: LineupStandard,
+): Promise<LineupShortfall | null> {
+  const plan = planBestLineup({
+    slots: state.slots,
+    playerData: team.playerData,
+    players,
+    isLocked: (id) => locked.has(id),
+    // A player who cannot play this week is worth nothing to the lineup, whatever his projection says.
+    onBye: (id) => players[id]?.byeWeek === state.week || isRuledOut(players[id]?.injuryStatus ?? null),
+  })
+  if (plan.kind !== 'set' || plan.changes.length === 0) return null
+  const nextStarters = buildLineupListsFromPlayerData(plan.nextPlayerData, state.slots.length).starters.filter(Boolean)
+  const after = lineupShortfall({ starters: checkStarters(nextStarters, state.slots.length, players, locked), week: state.week, standard })
+
+  const pd = team.playerData && typeof team.playerData === 'object' ? (team.playerData as Record<string, unknown>) : {}
+  const name = (id: string | null) => (id ? players[id]?.name ?? id : 'empty')
+  const summary = plan.changes.map((c) => `${c.slot} ${name(c.out)} → ${name(c.in)}`).join('; ')
+  const saved = await persistRosterLineupWithEngine({
+    leagueId: league.id,
+    rosterId: team.rosterId,
+    actorUserId: team.ownerUserId,
+    expectedOwnerUserId: team.ownerUserId,
+    season: league.season,
+    week: state.week,
+    source: 'system',
+    nextPlayerData: plan.nextPlayerData,
+    // A manager who saves at the same moment wins: the write is refused if the starters moved under us.
+    ...(Array.isArray(pd.starters) ? { expectedStarters: pd.starters.map(String) } : {}),
+    automationAudit: {
+      id: `eliminated-lineup-optimize:${JSON.stringify([league.id, team.rosterId, league.season, state.week, Date.now()])}`,
+      action: 'eliminated_lineup.optimized',
+      message: `League rule for eliminated teams: AllFantasy set ${team.teamName}'s best lineup: ${summary}.`,
+      metadata: { season: league.season, week: state.week, changes: plan.changes },
+    },
+  })
+  if (!saved.ok) return null
+  await notifyOptimized(league, team, state.week, summary).catch((e) => console.warn('[eliminated-lineups] optimize notice failed', e))
+  return after
+}
+
+/** Once per team per week: the manager hears that the league set their lineup, and what moved. */
+async function notifyOptimized(league: LeagueRow, team: TeamLineup, week: number, summary: string): Promise<void> {
+  const prefix = `eliminated-lineup-optimized:${league.id}:${team.rosterId}:${league.season}:${week}`
+  const sent = await prisma.platformNotification.findFirst({ where: { sourceKey: `${prefix}:${team.ownerUserId}` }, select: { id: true } })
+  if (sent) return
+  const { dispatchNotification } = await import('@/lib/notifications/NotificationDispatcher')
+  const leagueName = league.name ?? 'your league'
+  await dispatchNotification({
+    userIds: [team.ownerUserId],
+    category: 'league_announcements',
+    type: 'eliminated_lineup_optimized',
+    title: `Your week ${week} lineup was set for you`,
+    body: `${leagueName} sets the best lineup for teams out of the playoff race. Changes: ${summary}. It is set again each hour until kickoff, so changes you make may be replaced.`,
+    actionHref: `/core/my-team?league=${encodeURIComponent(league.id)}`,
+    actionLabel: 'View lineup',
+    leagueId: league.id,
+    severity: 'low',
+    dedupePrefix: prefix,
+    meta: { week, season: league.season, rosterId: team.rosterId },
+  })
 }
 
 async function notifyManager(league: LeagueRow, team: TeamLineup, week: number, shortfall: LineupShortfall, players: PlayerFacts): Promise<boolean> {

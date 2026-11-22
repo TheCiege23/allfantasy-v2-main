@@ -45,23 +45,55 @@ support_matrix:
       status: probed
       captured: 2026-10-31
       fixtures: [fixtures/scoreboard.NBA.20261106.json, fixtures/scoreboard.NBA.20251209.json, fixtures/scoreboard.NBA.20251213.json, fixtures/scoreboard.NBA.20251216.json]
+    teams: { status: probed_full, fixture: fixtures/teams.NBA.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+  NHL:
+    sport_path: hockey/nhl
+    teams: { status: probed_full, fixture: fixtures/teams.NHL.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+  MLB:
+    sport_path: baseball/mlb
+    teams: { status: probed_full, fixture: fixtures/teams.MLB.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    fantasy_league: { status: probed, fixture: fixtures/fantasy-league.MLB.2026.json, captured: 2026-10-03, see: fantasy_mlb }
   NCAAB:
     sport_path: basketball/mens-college-basketball
     teams: { status: probed, fixture: fixtures/teams.NCAAB.json }
     roster: { status: probed, fixtures: [fixtures/roster.NCAAB.team150.json, fixtures/roster.NCAAB.team2057.json, fixtures/roster.NCAAB.team2441.json] }
+    summary: { status: probed_full_box, fixture: fixtures/summary.NCAAB.event401825532.json, captured: 2026-11-03 }
+    scoreboard: { status: probed_full_day, fixture: fixtures/scoreboard.NCAAB.20260221.json, captured: 2026-11-03 }
+    # Owner authorized one recapture with full arrays retained for semantic verification.
+    # A historic scoreboard response alone does not certify future-day or postseason completeness.
   NFL:
     sport_path: football/nfl
     summary: { status: probed, fixture: fixtures/summary.NFL.event401873011.json, captured: 2026-10-25 }
+    teams: { status: probed_full, fixture: fixtures/teams.NFL.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
     scoreboard:
       status: probed
       captured: 2026-11-01
       fixtures: [fixtures/scoreboard.NFL.20260110.json, fixtures/scoreboard.NFL.20260117.json, fixtures/scoreboard.NFL.20260125.json, fixtures/scoreboard.NFL.20260208.json]
+    fantasy_league: { status: probed, fixture: fixtures/fantasy-league.NFL.2026.json, captured: 2026-11-08, see: fantasy_nfl }
+    fantasy_communication: { status: http_401_without_cookies, captured: 2026-11-08, see: fantasy_nfl.communication }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
 # ============================================================================
 endpoints:
 
+  ncaab_scoreboard:
+    method: GET
+    path: /basketball/mens-college-basketball/scoreboard
+    query: { dates: YYYYMMDD, groups: 50, limit: 1000 }
+    measured_2026_10_31: { requested_date: '20260221', http_status: 200, events_before_trim: 148, target_event: '401825532', full_body_bytes: 5819232 }
+    fixture: fixtures/scoreboard.NCAAB.20260221.json
+    recaptured_2026_11_03: { events: 148, target_event: '401825532', full_fixture: true }
+    caveat: A historical 148-event response does not establish that an empty or future slate is complete.
+
+  ncaab_summary:
+    method: GET
+    path: /basketball/mens-college-basketball/summary
+    query: { event: '401825532' }
+    measured_2026_10_31: { http_status: 200, teams_before_trim: 2, athlete_rows_before_trim: [14, 15], full_body_bytes: 690705 }
+    fixture: fixtures/summary.NCAAB.event401825532.json
+    recaptured_2026_11_03: { teams: 2, athlete_rows: [14, 15], player_points_totals: [94, 95], full_fixture: true }
+    caveat: One complete historic box does not establish coverage for every game or season.
   nba_scoreboard:
     method: GET
     path: /basketball/nba/scoreboard
@@ -101,6 +133,22 @@ endpoints:
       team_count: 362        # Division I; every one isActive=true, every one has logos (14 each)
       league: { abbreviation: NCAAM, season: { year: 2027, displayName: "2026-27" } }
       full_body_bytes: 3239022   # committed fixture is a key-union trim (53/53 key paths kept)
+    measured_2026_11_19:
+      # NBA, NHL and MLB, for the copy-league team tables (lib/league/copyLeagueTeamTables.ts, which
+      # __tests__/league/copy-league-team-tables.test.ts pins to these captures). Committed UNTRIMMED: the
+      # point is the complete team list, and a key-union trim would drop teams.
+      NBA: { http_status: 200, team_count: 30, inactive: 0, all_star: 0, logos_per_team: 16, league: { abbreviation: NBA, season: { year: 2027, displayName: "2026-27" } }, fixture_bytes: 304533 }
+      NHL: { http_status: 200, team_count: 32, inactive: 0, all_star: 0, logos_per_team: 16, league: { abbreviation: NHL, season: { year: 2027, displayName: "2026-27" } }, fixture_bytes: 324944 }
+      MLB: { http_status: 200, team_count: 30, inactive: 0, all_star: 0, logos_per_team: 16, league: { abbreviation: MLB, season: { year: 2026, displayName: "2026" } }, fixture_bytes: 304519 }
+      NFL: { http_status: 200, team_count: 32, inactive: 0, all_star: 0, logos_per_team: 17, league: { abbreviation: NFL, season: { year: 2026, displayName: "2026" } }, fixture_bytes: 336706, note: "captured for the copy-league dark crests; Washington is WSH/wsh.png" }
+      default_logo: "logos[] entry whose rel has 'default' and not 'dark': https://a.espncdn.com/i/teamlogos/<sport>/500/<abbreviation lower-case>.png for every one of the 92 teams"
+      dark_logo: "logos[] entry whose rel is ['full','dark'] (not the scoreboard one): the default crest's path with /500/ -> /500-dark/, for all 124 teams in the four captures. Used where the surface is always dark (components/league-settings/CopyLeaguePanel.tsx)."
+      codes_worth_knowing:
+        - "NHL Utah is UTAH (Utah Mammoth); there is no ARI. NBA Utah is also UTAH (Utah Jazz)."
+        - "MLB White Sox are CHW and their crest is chw.png. Rolling Insights spells them CWS; lib/sport-teams/SportTeamMetadataRegistry.ts keeps CWS as the code and, since 2026-11-19, builds chw.png."
+        - "MLB Athletics are ATH, displayName 'Athletics' with no city; Arizona is ARI (Rolling Insights: AZ)."
+        - "NBA uses ESPN's short codes: GS, NY, NO, SA, UTAH, WSH."
+      cross_check: "Every MLB displayName equals the 30 names in contracts/rolling-insights/fixtures/schedule-season.MLB.json."
     envelope: >
       { sports: [ { leagues: [ { abbreviation, season, teams: [ { team: {...} } ] } ] } ] }
     fields:
@@ -209,3 +257,44 @@ fantasy_mlb:
     - Scoring items include reverse flags; raw settings must be preserved.
     - This custom 20-category league includes pitching qualifications and slot stat limits; do not silently convert it to native points.
     - Current-season only. Private cookie access, activity communication and prior seasons have not been live-verified.
+
+# Public fantasy FOOTBALL contract captured 2026-11-08 (owner-chosen league, read without cookies).
+fantasy_nfl:
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  query: view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mMatchupScore&view=mStandings&view=mDraftDetail&view=mTransactions2
+  captured_season: 2026
+  captured_at_week: 9            # status.currentMatchupPeriod; finalScoringPeriod 17
+  http_status: 200
+  full_body_bytes: {pretty: 17889072, compact: 6589424}
+  full_counts: {members: 10, teams: 10, roster_entries: 163, draft_picks: 160, schedule_entries: 70, matchup_periods: 14, transactions: 8, scoring_items: 46}
+  fixture: fixtures/fantasy-league.NFL.2026.json
+  fixture_bytes: 2414526
+  sanitization: >
+    scripts/redact-fantasy.mjs, run by probe.sh before the file is reported written: synthetic member
+    ids (fixture-manager-N, every SWID remapped across the whole document), names, team
+    names/locations/nicknames/abbrevs/logos, league name and id (123456); refuses to write if any
+    original value survives.
+  trim: Key-union-preserving trimmer (contracts/fleaflicker/scripts/trim-fixture.mjs, 3345 key paths before and after); teams/entries/scoringItems/members/eligibleSlots/picks/schedule kept in full. JSON compacted afterwards.
+  scoring_type: H2H_POINTS
+  lineup_slots_used: {0: QB, 2: RB, 4: WR, 6: TE, 16: D/ST, 17: K, 20: BE, 21: IR, 23: FLEX}
+  positions_seen: {1: QB, 2: RB, 3: WR, 4: TE, 5: K, 16: D/ST}
+  fields:
+    members[]: { note: "🛑 READ WITHOUT COOKIES, A MEMBER IS ONLY {id, notificationSettings} — no displayName/firstName/lastName. Owner names fall back to the team name (EspnLeagueFetchService resolveEspnOwners), by design." }
+    teams[].rankCalculatedFinal / rankFinal: { type: integer, note: "🛑 0 for EVERY team until the season ends. 0 is a number: `??` takes it. Treat <= 0 as 'not ranked yet'." }
+    teams[].playoffSeed: { type: integer, note: "The CURRENT standing, 1..size, already ordered by the league tiebreak (settings.scheduleSettings.playoffSeedingRule = TOTAL_POINTS_SCORED here)." }
+    teams[].currentProjectedRank: { type: integer, note: "A PROJECTION of the final finish (currentSimulationResults), not the standing: seed 8 projected 9, seed 9 projected 8." }
+    teams[].record: { note: "overall / home / away / division, each {wins, losses, ties, percentage, pointsFor, pointsAgainst, gamesBack, streakType, streakLength}. Only overall is imported; pointsFor/pointsAgainst are 0 in the split records." }
+    teams[].playoffClinchType: { example: UNKNOWN }
+    schedule[].winner: { values: [HOME, AWAY, UNDECIDED], note: "🛑 UNDECIDED (future or in progress) carries totalPoints 0 on both sides. Never derive a result from those points." }
+    schedule[].playoffTierType: { values_seen: [NONE], note: "Regular season only at week 9; playoff matchups are not in the schedule yet." }
+    draftDetail.picks[]: { keys: [autoDraftTypeId, bidAmount, id, keeper, lineupSlotId, memberId, nominatingTeamId, overallPickNumber, playerId, reservedForKeeper, roundId, roundPickNumber, teamId, tradeLocked], note: "A pick carries only playerId; a drafted-then-dropped player (17 of 160 here) has no name/position anywhere in this response." }
+    transactions[]: { types_seen: {ROSTER/EXECUTED: 7, FREEAGENT/EXECUTED: 1}, note: "mTransactions2 here returned only 8 recent moves and no trade." }
+    settings.draftSettings.keeperCount: { example: 0 }
+  communication:
+    path: /seasons/{season}/segments/0/leagues/{league_id}/communication/?view=kona_league_communication
+    http_status: 401
+    body_type: AUTH_COMMUNICATION_NOT_VISIBLE
+    note: The activity feed needs a signed-in ESPN account even for a PUBLIC league. Not captured.
+  notes:
+    - Public read only. A private league, prior seasons, keepers, IDP, EDR and trades are not in this capture (GAPS.md).

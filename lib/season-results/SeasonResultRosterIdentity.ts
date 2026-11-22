@@ -1,4 +1,4 @@
-export interface SeasonResultRosterLookupRow {
+interface SeasonResultRosterLookupRow {
   id: string
   leagueId: string
   playerData?: unknown
@@ -8,18 +8,18 @@ export interface SeasonResultManagerLookupRow extends SeasonResultRosterLookupRo
   platformUserId?: string | null
 }
 
-export interface ResolvedSeasonResultRosterIds {
+interface ResolvedSeasonResultRosterIds {
   leagueIds: string[]
   rosterIds: string[]
   rosterIdsByLeague: Map<string, string[]>
 }
 
-export interface LeagueScopedRosterIdFilter {
+interface LeagueScopedRosterIdFilter {
   leagueId: string
   rosterId: { in: string[] }
 }
 
-export interface BasicSeasonResultAliasRow {
+interface BasicSeasonResultAliasRow {
   leagueId: string
   season: string
   wins?: number | null

@@ -1,3 +1,6 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
+import { assertNotOwnTeamTrade } from '@/lib/league-trade-engine/ownTeamTrade'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
 /**
  * AF league trade orchestration — create, accept, reject, counter, veto, commissioner, process.
@@ -45,10 +48,13 @@ import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/rec
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
+import { isPirateLeague } from '@/lib/pirate/rules'
 import { storedVetoRule, vetoVotesNeeded } from './vetoRule'
 import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -160,7 +166,7 @@ async function notifyProposerOfDecision(input: {
 }
 
 /** The part of a trade decision a notice can state for one side. */
-export type NoticeGrade = { grade: string | null; valueGiven: number | null; valueReceived: number | null }
+export type NoticeGrade = { grade: string | null; valueGiven: number | null; valueReceived: number | null; divisionImpactSummary?: string }
 
 /**
  * THE grade, in a trade notice's words (2026-09-27). PURE.
@@ -178,6 +184,7 @@ export function gradeNoticeLine(
   d: NoticeGrade | null | undefined,
   when: 'offer' | 'sent',
 ): { titleSuffix: string; bodyLine: string } | null {
+  if (d?.divisionImpactSummary) return { titleSuffix: '', bodyLine: d.divisionImpactSummary }
   if (!d?.grade || !['A', 'B', 'C', 'D', 'F'].includes(d.grade)) return null
   const values =
     d.valueGiven != null && d.valueReceived != null
@@ -545,12 +552,14 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   const receiver = participants.find((r) => r.id === input.receiverRosterId) ?? null
   if (!proposer || !receiver) throw new Error('Roster not found')
   if (participants.length !== participantRosterIds.length) throw new Error('Every trade participant must belong to this league')
-  const proposerOwnsRoster = proposer.platformUserId === input.proposedByUserId
+  const proposerOwnsRoster = isRosterManagedBy(proposer, input.proposedByUserId)
     || (await managedPlatformIds(input.leagueId, input.proposedByUserId)).has(proposer.platformUserId)
     || await isAcceptedCoOwnerForRoster(input.leagueId, proposer.id, input.proposedByUserId)
   if (!proposerOwnsRoster) {
     throw new Error('Proposer must own the proposing roster')
   }
+  // One manager, several teams: no moving players between them (lib/league-trade-engine/ownTeamTrade.ts).
+  await assertNotOwnTeamTrade(input.proposedByUserId, participants)
 
   const rosterTxGate = await assertRosterTransactionsAllowed({
     leagueId: input.leagueId,
@@ -589,6 +598,11 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   })
   // The code rides on the error so the route can return it (e.g. `future_picks_not_allowed_in_redraft`).
   if (!v.ok) throw new CodedTradeError(v.code, v.message)
+  if (isPirateLeague(league)) await assertPirateTradeAllowed(input.leagueId, input.assets.map((asset) => ({
+    fromRosterId: asset.fromRosterId,
+    assetType: asset.itemType,
+    playerId: asset.itemType === 'player' ? asset.itemReference : null,
+  })))
   // Conditional and protected picks (./pickTerms.ts): checked against the league, stored in the shape
   // the settlement reads. An offer without terms is returned as it came.
   const offerAssets = await checkOfferPickTerms(input.leagueId, input.assets)
@@ -837,6 +851,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
    * ("countered — the new offer is below"), then posts the new one, in that order.
    */
   const counteredParentId = parent?.id ?? null
+  // The proposer can opt out of the offer card ("Send direct message" off in the trade window).
+  // A countered parent's card is still closed, so that thread never shows a stale live offer.
+  const sendOfferDm = (input.metadata as Record<string, unknown> | undefined)?.sendDirectMessage !== false
   syncTradeDm('offer', async ([dm, sources]) => {
     if (counteredParentId) {
       await dm
@@ -848,6 +865,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         })
         .catch(() => null)
     }
+    if (!sendOfferDm) return
     await dm.postTradeOfferToDm({
       source: 'native',
       tradeId: trade.id,
@@ -877,7 +895,7 @@ export async function acceptAfLeagueTrade(input: {
     ...trade.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
   ])]
   const participants = await prisma.roster.findMany({ where: { id: { in: participantRosterIds }, leagueId: input.leagueId } })
-  let acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && r.platformUserId === input.userId)
+  let acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && isRosterManagedBy(r, input.userId))
   if (!acceptingRoster) {
     const acceptingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
     acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && acceptingIdentityIds.has(r.platformUserId))
@@ -944,7 +962,6 @@ export async function acceptAfLeagueTrade(input: {
   })
   if (!life.ok) throw lifecycleGateThrowable(life.err)
 
-  const settings = resolveLeagueTradeSettings(league)
   // "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): a trade the collusion check flags now,
   // before it executes, goes to commissioner review whatever the league's review mode.
   // Survivor "hold it for the commissioner" (the trade-rule check could not run) takes the same route.
@@ -1181,6 +1198,10 @@ export async function finalizeAfLeagueTradeProcessing(input: {
     metadata: (i.metadata as Record<string, unknown>) ?? {},
   }))
 
+  // An unlinked team (a league drafted before draft finalization linked every team) would skip the
+  // season-roster move inside the transaction below — the traded player kept scoring for his old team.
+  await ensureSeasonRosterLinksBeforeMove(trade.leagueId)
+
   await prisma.$transaction(async (tx) => {
     // 🛑 CLAIM FIRST, AND CONDITIONALLY. This was a bare `update({ where: { id } })` sitting
     // AFTER the asset move, so it processed unconditionally: two concurrent finalizers each read
@@ -1203,6 +1224,11 @@ export async function finalizeAfLeagueTradeProcessing(input: {
     // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. `applyTradeAssetsInTransaction` overwrites
     // `playerData` and `faabRemaining` on both rosters, so inside this transaction these rows stop
     // being "before" the moment it runs. After the claim, so only the race winner captures.
+    if (isPirateLeague(league)) await assertPirateTradeAllowed(trade.leagueId, assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId,
+      assetType: asset.itemType,
+      playerId: asset.itemType === 'player' ? asset.itemReference : null,
+    })), tx)
     const beforeState = await captureGenericRosterState(tx, participantRosterIds)
     const salaryEvidence = await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
@@ -1496,7 +1522,7 @@ export async function expireAfLeagueTradeAtDeadline(input: {
     })
     const raw = rosters
       .map((r) => r.platformUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !isSeatPlaceholderUserId(id))
     const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
     if (userIds.length > 0) {
       const { ingest, tradeEvent } = await import('@/lib/notification-engine')
@@ -1533,7 +1559,7 @@ export async function castAfTradeVetoVote(input: {
   const vr = await prisma.roster.findFirst({
     where: { id: input.voterRosterId, leagueId: input.leagueId },
   })
-  if (!vr || (vr.platformUserId !== input.userId && !await isAcceptedCoOwnerForRoster(input.leagueId, vr.id, input.userId))) throw new Error('Invalid voter roster')
+  if (!vr || (!isRosterManagedBy(vr, input.userId) && !await isAcceptedCoOwnerForRoster(input.leagueId, vr.id, input.userId))) throw new Error('Invalid voter roster')
   const tradeMetadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
     ? trade.metadata as Record<string, unknown>
     : {}
@@ -1595,7 +1621,7 @@ async function notifyTradePartiesOfVeto(input: { leagueId: string; tradeId: stri
     })
     const raw = rosters
       .map((r) => r.platformUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !isSeatPlaceholderUserId(id))
     const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
     if (userIds.length === 0) return
     const { ingest, tradeEvent } = await import('@/lib/notification-engine')

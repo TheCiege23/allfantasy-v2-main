@@ -11,6 +11,7 @@ import {
   type SleeperSportState,
 } from '@/lib/api-cache/SleeperCacheLayer'
 import { triggerAlertFromScreenRead } from '@/lib/trade-intel/screenTradeAlerts'
+import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 
 /**
  * Pending Sleeper trades, scanned for ONE league.
@@ -104,7 +105,7 @@ export interface PendingProviderTrade {
 
 type SleeperRosterRow = { roster_id?: number; owner_id?: string }
 type SleeperUserRow = { user_id: string; display_name?: string; metadata?: { team_name?: string } }
-type SleeperPlayerRow = {
+export type SleeperPlayerRow = {
   full_name?: string
   first_name?: string
   last_name?: string
@@ -162,6 +163,22 @@ async function recentTransactionWeeks(sport: string | null | undefined): Promise
 
 function ordinal(round: number): string {
   return round === 1 ? 'st' : round === 2 ? 'nd' : round === 3 ? 'rd' : 'th'
+}
+
+export async function loadSleeperTradePlayers(
+  sport: string | null | undefined,
+  trades: ReadonlyArray<Partial<Pick<SleeperTransaction, 'adds' | 'drops'>>>,
+): Promise<Record<string, SleeperPlayerRow>> {
+  const sportKey = String(sport ?? 'NFL').toUpperCase()
+  if (sportKey === 'NFL') return (await getAllPlayers().catch(() => ({}))) as Record<string, SleeperPlayerRow>
+
+  const ids = trades.flatMap(tx => [...Object.keys(tx.adds ?? {}), ...Object.keys(tx.drops ?? {})])
+  const players = await resolveSleeperRosterPlayers(ids, sportKey).catch(() => new Map())
+  return Object.fromEntries([...players].map(([id, player]) => [id, {
+    full_name: player.name,
+    position: player.position ?? undefined,
+    team: player.team ?? undefined,
+  }]))
 }
 
 function playerName(row: SleeperPlayerRow | undefined, fallbackId: string): string {
@@ -391,11 +408,6 @@ export async function scanPendingSleeperTrades(args: {
         .map((u) => [u.user_id, u]),
     )
 
-    const players: Record<string, SleeperPlayerRow> =
-      String(args.sport ?? 'NFL').toUpperCase() === 'NFL'
-        ? ((await getAllPlayers().catch(() => ({}))) as Record<string, SleeperPlayerRow>)
-        : {}
-
     const weeks = args.weeks ?? Array.from({ length: 18 }, (_, i) => i + 1)
     const seen = new Set<string>()
     const out: PendingProviderTrade[] = []
@@ -445,6 +457,9 @@ export async function scanPendingSleeperTrades(args: {
         }),
       )
     }
+
+    const tradeRows = fetched.flatMap(rows => (rows ?? []).filter(tx => tx.type === 'trade' && tx.roster_ids?.includes(userRosterId)))
+    const players = await loadSleeperTradePlayers(args.sport, tradeRows)
 
     for (let i = 0; i < weeks.length; i += 1) {
       const transactions = fetched[i]

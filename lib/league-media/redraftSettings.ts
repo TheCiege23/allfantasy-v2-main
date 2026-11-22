@@ -1,8 +1,8 @@
 /**
  * Redraft identity for the League Settings page (wave-2 A5, 2026-10-31): "how your season works".
  *
- * The page's sections already run in season order (General → Roster & scoring → Draft → Waivers &
- * trades → Playoffs → Members → Commissioner tools). For a native redraft league this module adds the
+ * The page's sections already run in season order (General → Roster & scoring → Draft → Trades →
+ * Playoffs → Members → Commissioner tools). For a native redraft league this module adds the
  * two things the approved mock layers on top of that list, both derived from data the page already
  * holds — nothing here fetches, and nothing is invented:
  *
@@ -24,8 +24,8 @@ import { resolveRedraftIdentity, type RedraftIdentityLeague, type RedraftSportTh
 import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 
-export type RedraftSettingsPhase = 'Setup' | 'Draft' | 'Regular season' | 'Playoffs' | 'Offseason'
-export type RedraftSettingsStage = 'done' | 'now' | 'next'
+type RedraftSettingsPhase = 'Setup' | 'Draft' | 'Regular season' | 'Playoffs' | 'Offseason'
+type RedraftSettingsStage = 'done' | 'now' | 'next'
 
 /** The four points of a redraft season a setting belongs to, in order. */
 type SeasonPoint = 'before' | 'draft' | 'season' | 'playoffs'
@@ -37,7 +37,7 @@ const SECTION_POINT: Record<string, SeasonPoint> = {
   general: 'before',
   'roster-scoring': 'before',
   draft: 'draft',
-  'waivers-trades': 'season',
+  trades: 'season',
   playoffs: 'playoffs',
 }
 
@@ -98,7 +98,7 @@ export type RedraftSettingsLeague = RedraftIdentityLeague & {
   settings?: unknown
 }
 
-export type RedraftSettingsSection = { when: string; stage?: RedraftSettingsStage }
+type RedraftSettingsSection = { when: string; stage?: RedraftSettingsStage }
 
 export type RedraftSettingsView = {
   sport: RedraftSportTheme

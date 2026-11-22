@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   resyncImportedLeague: vi.fn(),
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser, requireAgeConfirmedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/core-app/resyncableLeagues', () => ({ collectResyncCandidates: h.collectResyncCandidates }))
 vi.mock('@/lib/import-os/collector', () => ({
   manualRefreshConnectedSleeperLeague: h.manualRefreshConnectedSleeperLeague,

@@ -32,11 +32,11 @@ export function exposureOf(leagues: number, of: number): Exposure | null {
 
 // ── Form ─────────────────────────────────────────────────────────────────────────────────────────
 /** Real games needed before a hot/cold call is made. */
-export const MIN_FORM_GAMES = 3
+const MIN_FORM_GAMES = 3
 /** Games the sparkline shows, newest last. */
-export const SPARK_GAMES = 6
+const SPARK_GAMES = 6
 /** Recent average this far above / below the season average is hot / cold. */
-export const FORM_BAND = 0.2
+const FORM_BAND = 0.2
 
 export type Form = {
   /** Points per game, oldest first — the sparkline. */

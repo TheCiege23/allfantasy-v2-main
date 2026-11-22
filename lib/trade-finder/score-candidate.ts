@@ -14,7 +14,7 @@ function sum(arr: Array<{ value?: number }>) {
   return (arr ?? []).reduce((acc, a) => acc + (a.value ?? 0), 0);
 }
 
-export type FairnessLabel =
+type FairnessLabel =
   | "FAIR"
   | "FAIR_UPSIDE_SKEWED"
   | "FAIR_DOWNSIDE_SKEWED"

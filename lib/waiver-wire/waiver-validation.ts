@@ -58,11 +58,11 @@ export async function assertWeeklyDropLimit(
   leagueId: string,
   rosterId: string,
   maxDropsPerWeek: number | null | undefined,
-  opts?: { excludeClaimId?: string },
+  opts?: { excludeClaimId?: string; additionalDrops?: number },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (maxDropsPerWeek == null || maxDropsPerWeek <= 0) return { ok: true }
   const n = await countWeeklyDropActions(leagueId, rosterId, opts)
-  if (n >= maxDropsPerWeek) {
+  if (n + Math.max(0, opts?.additionalDrops ?? 0) >= maxDropsPerWeek) {
     return {
       ok: false,
       message: `Weekly drop limit reached (${maxDropsPerWeek} max).`,

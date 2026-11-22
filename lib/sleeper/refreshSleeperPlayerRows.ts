@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getPlayersBySport } from '@/lib/sleeper-client'
 import { teamDisplayNameForSport } from '@/lib/team-abbrev'
 import { parseBirthday } from '@/lib/player-identity/birthdayRules'
+import { isSleeperPlaceholderName } from '@/lib/sleeper/placeholderPlayers'
 
 /**
  * Keep the Sleeper-sourced `SportsPlayer` rows current, without deleting any.
@@ -118,7 +119,7 @@ function fullName(p: FeedPlayer): string {
  * enrichment must not fail the run that populated the roster.
  */
 export async function refreshSleeperPlayerRows(args: {
-  sport?: 'NFL'
+  sport?: 'NFL' | 'NBA'
   /** How many players to touch this run. Keeps one unit small. */
   limit?: number
   /** Checked BETWEEN batches, never inside one. */
@@ -148,6 +149,11 @@ export async function refreshSleeperPlayerRows(args: {
   for (const [key, p] of Object.entries(feed)) {
     const id = String(p?.player_id ?? key ?? '').trim()
     if (!id || !fullName(p)) continue
+    /*
+     * Sleeper's retired-duplicate and voided ids ("Duplicate Player", "Player Invalid") are not
+     * players. Treated as off the feed: never created, and a row we hold is never renamed to one.
+     */
+    if (isSleeperPlaceholderName(fullName(p))) continue
     byId.set(id, p)
   }
   if (byId.size === 0) return { ...empty, feedUnavailable: true }
@@ -258,7 +264,7 @@ export async function refreshSleeperPlayerRows(args: {
             height: p.height?.trim() || null,
             weight: p.weight?.trim() || null,
             college: p.college?.trim() || null,
-            imageUrl: `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`,
+            imageUrl: `https://sleepercdn.com/content/${sport.toLowerCase()}/players/thumb/${id}.jpg`,
             sleeperId: id,
             status: p.status?.trim() || null,
             dob: sleeperBirthday(p) ?? null,

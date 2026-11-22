@@ -22,7 +22,7 @@ import { cupGameDetails } from "./nbaCupProgress"
 
 export type CupLeader = { name: string; points: number }
 
-export type CupGameDetail = {
+type CupGameDetail = {
   detail: string | null
   period: number | null
   clock: string | null
@@ -84,7 +84,7 @@ export function cupTeamCode(name: string, fromFeed?: string | null): string {
   return nbaCupLogoCode(name) ?? fromFeed ?? name.split(/\s+/).pop()?.slice(0, 3).toUpperCase() ?? name
 }
 
-export type CupGameState = "live" | "final" | "scheduled"
+type CupGameState = "live" | "final" | "scheduled"
 
 export function cupGameState(series: Pick<PlayoffSeriesView, "status" | "winnerTeamName">): CupGameState {
   if (series.status === "final" || series.winnerTeamName) return "final"
@@ -120,9 +120,9 @@ export function cupGameProgress(series: PlayoffSeriesView): number {
 
 // ── standings ───────────────────────────────────────────────────────────────
 
-export type CupResultDot = "W" | "L" | "live" | "todo"
+type CupResultDot = "W" | "L" | "live" | "todo"
 
-export type CupStatus =
+type CupStatus =
   | "won_group" | "clinched_group" | "controls_path" | "needs_help"
   | "wild_card_only" | "wild_card" | "awaiting" | "eliminated"
   | "schedule_pending" | "tiebreak_pending" | "qualified"
@@ -153,7 +153,7 @@ export type CupGroup = {
   complete: boolean
 }
 
-export type CupSeedSlot = { seed: number; team: string; how: string; confirmed: boolean }
+type CupSeedSlot = { seed: number; team: string; how: string; confirmed: boolean }
 
 const STATUS_LABEL: Record<CupStatus, string> = {
   won_group: "Won group",
@@ -206,13 +206,13 @@ function rank(teams: string[], tally: Map<string, Tally>, games: PlayoffSeriesVi
   return ordered
 }
 
-function shortDate(iso: string | null): string {
+function shortDate(iso: string | null, timeZone?: string): string {
   const ms = Date.parse(iso ?? "")
   if (!Number.isFinite(ms)) return "date TBA"
-  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(new Date(ms))
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone }).format(new Date(ms))
 }
 
-export function buildNbaCupGroups(series: PlayoffSeriesView[]): CupGroup[] {
+export function buildNbaCupGroups(series: PlayoffSeriesView[], timeZone?: string): CupGroup[] {
   const games = series.filter(isGroupGame).slice().sort(byStart)
   const parent = new Map<string, string>()
   const find = (x: string): string => {
@@ -301,7 +301,7 @@ export function buildNbaCupGroups(series: PlayoffSeriesView[]): CupGroup[] {
         return {
           team: name, conference: conf, wins: me.wins, losses: me.losses, pointsFor: me.pf, pointsAgainst: me.pa,
           pointDiff: me.pf - me.pa, remaining: scheduleComplete ? left.length : Math.max(0, 4 - me.wins - me.losses), results, status, statusLabel: STATUS_LABEL[status],
-          path: pathLine(status, nextGame), live, nextGame,
+          path: pathLine(status, nextGame, timeZone), live, nextGame,
         }
       })
       groups.push({ id: `${conf}-${index + 1}`, label: `${conf === "east" ? "East" : "West"} Group ${index + 1}`, conference: conf, teams: rows, scheduleComplete, complete })
@@ -342,8 +342,8 @@ export function cupConferenceComplete(groups: CupGroup[], conference: "east" | "
     new Set(own.flatMap((group) => group.teams.map((team) => team.team))).size === 15
 }
 
-function pathLine(status: CupStatus, next: CupTeamRow["nextGame"]): string {
-  const nextText = next ? ` Next: ${next.home ? "vs" : "at"} ${next.opponent}, ${shortDate(next.startsAt)}.` : ""
+function pathLine(status: CupStatus, next: CupTeamRow["nextGame"], timeZone?: string): string {
+  const nextText = next ? ` Next: ${next.home ? "vs" : "at"} ${next.opponent}, ${shortDate(next.startsAt, timeZone)}.` : ""
   switch (status) {
     case "schedule_pending": return `The full group schedule is still syncing. Qualification is not confirmed.${nextText}`
     case "tiebreak_pending": return "Qualification awaits verified tiebreaks or the confirmed quarterfinal field."
@@ -394,3 +394,4 @@ export function projectedQuarterfinalSeeds(groups: CupGroup[], conference: "east
 export function groupForTeam(groups: CupGroup[], team: string): CupGroup | null {
   return groups.find((g) => g.teams.some((t) => t.team === team)) ?? null
 }
+

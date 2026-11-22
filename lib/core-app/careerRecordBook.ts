@@ -17,7 +17,7 @@ import { recordLine, type CareerRow } from './careerModel'
  * returns fewer records rather than a record holding a zero.
  */
 
-export type CareerRecordSection = 'scoring' | 'streaks' | 'seasons' | 'trades' | 'drafts' | 'rivalries'
+type CareerRecordSection = 'scoring' | 'streaks' | 'seasons' | 'trades' | 'drafts' | 'rivalries'
 
 export const RECORD_SECTIONS: Array<{ key: CareerRecordSection; label: string }> = [
   { key: 'scoring', label: 'Scoring' },
@@ -97,7 +97,7 @@ function fmt(n: number): string {
   return n.toFixed(1)
 }
 
-export function rivalRecord(r: Pick<CareerRival, 'wins' | 'losses' | 'ties'>): string {
+function rivalRecord(r: Pick<CareerRival, 'wins' | 'losses' | 'ties'>): string {
   return `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`
 }
 
@@ -240,7 +240,7 @@ export function buildRivals(games: CareerGame[]): CareerRival[] {
 }
 
 /** Most-played, best and toughest — best and toughest need `RIVAL_MIN_MEETINGS`. */
-export function rivalryRecords(rivals: CareerRival[]): CareerRecord[] {
+function rivalryRecords(rivals: CareerRival[]): CareerRecord[] {
   const out: CareerRecord[] = []
   if (rivals.length === 0) return out
   const most = rivals[0]
@@ -419,7 +419,7 @@ export type GradedTradeFact = {
   partner: string
 }
 
-export type TradeCountFact = { season: number; leagueKey: string | null; count: number; maxAssets: number }
+type TradeCountFact = { season: number; leagueKey: string | null; count: number; maxAssets: number }
 
 export function tradeRecords(counts: TradeCountFact[], graded: GradedTradeFact[]): CareerRecord[] {
   const out: CareerRecord[] = []

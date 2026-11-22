@@ -40,7 +40,7 @@ export function SurvivorTokenHistoryStrip() {
   return (
     <WarRoomPanel
       title="Recent AF Token activity"
-      subtitle="Spends and grants tied to your account — including Survivor AI metered runs."
+      subtitle="Spends and grants tied to your account — including Survivor Chimmy metered runs."
     >
       <div className="mb-3 flex items-center gap-2 text-[11px] text-white/45">
         <History className="h-3.5 w-3.5" aria-hidden />

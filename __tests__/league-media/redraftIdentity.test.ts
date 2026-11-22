@@ -74,6 +74,7 @@ describe('isNativeRedraftLeague / resolveRedraftIdentity', () => {
     ['guillotine variant on a redraft type', { leagueVariant: 'guillotine' }],
     ['survivor variant', { leagueVariant: 'survivor' }],
     ['zombie variant', { leagueVariant: 'zombie' }],
+    ['pirate variant', { leagueVariant: 'pirate' }],
     ['big brother variant', { leagueVariant: 'big_brother' }],
     ['best ball variant', { leagueVariant: 'bestball' }],
     ['keeper variant', { leagueVariant: 'keeper' }],

@@ -31,19 +31,23 @@ export function ScreenLoadError({
   screen,
   retryHref,
   language = 'en',
+  headingLevel = 1,
 }: {
   screen: string
   retryHref: string
   /** Server-rendered, so it cannot read the client provider; page.tsx passes the cookie's language. */
   language?: string
+  /** 2 when the card fills one section of a page that already has its h1 (the streamed Trades history). */
+  headingLevel?: 1 | 2
 }) {
   const m = messagesFor(screenLoadErrorMessages, language)
   const name = coreUiCopy(screen, language)
+  const Heading = headingLevel === 2 ? 'h2' : 'h1'
   return (
     <div className="af-card" role="alert" style={{ padding: 24, maxWidth: 720 }}>
-      <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+      <Heading className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
         {m.title(name)}
-      </h1>
+      </Heading>
       <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
         {m.body}
       </p>

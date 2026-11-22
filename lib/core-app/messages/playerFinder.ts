@@ -113,14 +113,20 @@ export const playerFinderMessages = defineMessages({
     movesStandardScoring: 'standard scoring',
     movesReadOnly:
       "Lineup and IR moves are priced under each league's own scoring; claims are standard scoring. AllFantasy only reads your leagues — the change happens on the platform.",
+    movesLeagueClaimsReadOnly:
+      "Lineup moves and these claims use each league's own scoring. AllFantasy only reads your leagues — make the change on the platform.",
 
     // GameDayTriage
     triageTitle: 'Game day · your flagged starters',
+    /** Under Game day and Your shares, which show their first FINDER_LIST_PREVIEW rows. */
+    listShowAll: (n: number) => `Show all ${n}`,
+    listShowFewer: 'Show fewer',
     triageWeek: (week: number) => `week ${week}`,
     triageThisWeek: 'this week',
     triageRead: (read: number, count: number) => `${read} of ${count} ${count === 1 ? 'lineup' : 'lineups'} read`,
     triageBestBall: (n: number) => ` · ${n} best ball skipped`,
     triageUnsupported: (n: number) => ` · ${n} on a platform we can't read yet`,
+    triageUnidentified: (n: number) => ` · ${n} ${n === 1 ? 'starter' : 'starters'} we couldn't identify`,
     triageNotRead: (n: number) =>
       `${n} ${n === 1 ? 'league was' : 'leagues were'} not read — more than this list checks at once. Search a player to see every league he is in.`,
     triageClear: (weekLabel: string) => `No flagged starters across your lineups ${weekLabel}. Search any player above.`,
@@ -218,14 +224,19 @@ export const playerFinderMessages = defineMessages({
     movesStandardScoring: 'puntuación estándar',
     movesReadOnly:
       'Los movimientos de alineación y de IR se calculan con la puntuación propia de cada liga; los reclamos, con la puntuación estándar. AllFantasy solo lee tus ligas: el cambio se hace en la plataforma.',
+    movesLeagueClaimsReadOnly:
+      'Los movimientos de alineación y estos reclamos usan la puntuación de cada liga. AllFantasy solo lee tus ligas: haz el cambio en la plataforma.',
 
     // GameDayTriage
     triageTitle: 'Día de partido · tus titulares señalados',
+    listShowAll: (n) => `Ver los ${n}`,
+    listShowFewer: 'Ver menos',
     triageWeek: (week) => `semana ${week}`,
     triageThisWeek: 'esta semana',
     triageRead: (read, count) => `${read} de ${count} ${count === 1 ? 'alineación leída' : 'alineaciones leídas'}`,
     triageBestBall: (n) => ` · ${n} best ball ${n === 1 ? 'omitida' : 'omitidas'}`,
     triageUnsupported: (n) => ` · ${n} en una plataforma que todavía no podemos leer`,
+    triageUnidentified: (n) => ` · ${n} ${n === 1 ? 'titular' : 'titulares'} que no pudimos identificar`,
     triageNotRead: (n) =>
       `${n} ${n === 1 ? 'liga no se leyó' : 'ligas no se leyeron'}: son más de las que esta lista revisa a la vez. Busca un jugador para ver todas las ligas en las que está.`,
     triageClear: (weekLabel) => `No hay titulares señalados en tus alineaciones (${weekLabel}). Busca cualquier jugador arriba.`,

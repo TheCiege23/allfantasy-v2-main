@@ -15,9 +15,9 @@
 
 export const REVEAL_STEP_MS = 2500
 
-export type RevealPacing = 'one_at_a_time' | 'all_at_once' | 'commissioner'
+type RevealPacing = 'one_at_a_time' | 'all_at_once' | 'commissioner'
 
-export type RevealStepStatus =
+type RevealStepStatus =
   | 'counts'
   | 'late_does_not_count'
   | 'forfeited_by_shot'
@@ -56,7 +56,7 @@ export interface GatedReveal {
   tiePhase: string | null
 }
 
-export interface RevealGateInput {
+interface RevealGateInput {
   isRevealed: boolean
   revealStartsAt: Date | string | null | undefined
   revealStep?: number | null

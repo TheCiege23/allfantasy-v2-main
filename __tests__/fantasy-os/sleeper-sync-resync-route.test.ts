@@ -15,7 +15,7 @@ const h = vi.hoisted(() => ({
   resyncImportedLeague: vi.fn(),
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser, requireAgeConfirmedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/league-import/ImportProviderResolver', () => ({ resolveProvider: h.resolveProvider }))
 vi.mock('@/lib/league-import/provider-ui-config', () => ({ isImportProviderAvailable: h.isImportProviderAvailable }))
 vi.mock('@/lib/league-import/resyncImportUtility', () => ({ resyncImportedLeague: h.resyncImportedLeague }))

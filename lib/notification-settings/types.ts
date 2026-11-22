@@ -29,6 +29,10 @@ export type NotificationCategoryId =
   | "career_milestones"
   | "breaking_news"
   | "live_game_alerts"
+  | "imported_scoring"
+  | "imported_lineup"
+  | "imported_trade"
+  | "imported_draft"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -64,6 +68,7 @@ export interface LeagueNotificationOverride {
 
 export interface NotificationPreferences {
   globalEnabled?: boolean
+  pushDevices?: { mobile?: boolean; desktop?: boolean }
   categories?: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>>
   /**
    * Quiet hours, evaluated in the user's timezone by `lib/notifications/quietHours.ts`.
@@ -124,7 +129,16 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "career_milestones",
   "breaking_news",
   "live_game_alerts",
+  "imported_scoring",
+  "imported_lineup",
+  "imported_trade",
+  "imported_draft",
 ]
+
+/** Imported activity has independent controls; it must not enable native AF alerts. */
+export const IMPORTED_NOTIFICATION_CATEGORY_IDS = [
+  "imported_scoring", "imported_lineup", "imported_trade", "imported_draft",
+] as const satisfies readonly NotificationCategoryId[]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
   // Chimmy's two weekly messages: the waiver check on Tuesday (lib/chimmy-alerts/waiverCheck.ts) and
@@ -140,7 +154,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   chat_mentions: "Chat mentions",
   league_announcements: "League announcements & @all",
   bracket_updates: "Bracket updates",
-  ai_alerts: "AI alerts",
+  ai_alerts: "Chimmy alerts",
   league_drama: "League drama / storylines",
   commissioner_alerts: "Commissioner alerts",
   system_account: "System & account alerts",
@@ -148,7 +162,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   performance_alerts: "Scoring plays & big plays",
   lineup_alerts: "Starting lineup alerts",
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
-  draft_intel_alerts: "Draft intelligence (AI queue, Chimmy DMs, recap)",
+  draft_intel_alerts: "Draft intelligence (Chimmy queue, Chimmy DMs, recap)",
   autocoach: "Chimmy AutoCoach lineup swaps",
   // Players followed from the ☆ on any player card (2026-09-14) — injuries and big news about
   // them, including players on none of your rosters. Its own switch so a follow can stay in the
@@ -180,6 +194,10 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // big playoff checkpoints (halftime, 7th inning, end of a period, final) for the sports you play.
   // Teams you follow get every moment under "Teams you follow — scores" instead.
   live_game_alerts: "Live game moments — close games, OT & playoff updates",
+  imported_scoring: "Imported league scoring",
+  imported_lineup: "Imported league lineup changes",
+  imported_trade: "Imported league completed trades",
+  imported_draft: "Imported league draft activity",
 }
 
 /**
@@ -205,8 +223,22 @@ export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[]
  * Categories whose EMAIL channel starts off (in-app and push stay on). A live game moment is stale
  * by the time an inbox is read — "close game, 2:00 left" an hour later is noise, and a busy NBA
  * night is a dozen of them. The person can still switch email on.
+ *
+ * 🛑 EMAIL IS THE CHANNEL THAT REACHES PEOPLE (2026-11-15). Measured 2026-10-25: 2–3 of ~45 notified
+ * users could take a push, so an alert with email off reaches the bell and nothing else. Two came OFF
+ * this list because they are rare, personal and acted on:
+ *   - `lineup_alerts` — "your starter is out", sent only when a starter of YOURS is ruled out;
+ *   - `trade_proposals` — a leaguemate's offer waiting on you.
+ * `lineup_reminders` stays here: it also carries the daily NBA/NHL waiver tip and the best-ball depth
+ * check, which would be an email a day. Its weekly lineup check — once a week, only when there is a
+ * fix to make — emails by default on its own (lib/notifications/channelPolicy.ts `emailsByDefaultForEvent`).
+ * A row the user saved with an explicit `email` value keeps it; this only changes the DEFAULT.
  */
-export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = ["live_game_alerts"]
+export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = [
+  "live_game_alerts", "followed_team_scores", "followed_players", "followed_teams",
+  "breaking_news", "performance_alerts", "lineup_reminders",
+  "ai_alerts", "autocoach", "league_drama", "waiver_processing",
+]
 
 /**
  * Categories whose SMS channel defaults ON once the user has agreed to texts (owner's call,
@@ -220,7 +252,6 @@ export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] =
  * A row the user saved with an explicit `sms` value keeps it; this only changes the DEFAULT.
  */
 export const SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS: readonly NotificationCategoryId[] = [
-  "lineup_reminders",
   "lineup_alerts",
   "injury_alerts",
   "followed_players",

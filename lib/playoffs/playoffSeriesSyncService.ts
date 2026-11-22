@@ -14,7 +14,7 @@ import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
 import { isSingleGameSeries } from "./singleGame"
 import type { PlayoffSport } from "./types"
 
-export type PlayoffSeriesSyncGame = {
+type PlayoffSeriesSyncGame = {
   gameId?: string | null
   homeTeam: string
   awayTeam: string
@@ -77,7 +77,7 @@ type ProviderSeriesGroup = {
   games: PlayoffSeriesSyncGame[]
 }
 
-export type PlayoffSeriesSyncProvider = (input: {
+type PlayoffSeriesSyncProvider = (input: {
   sport: PlayoffSport
   seasonYear: number
   providerPreference?: PlayoffSeriesSyncProviderPreference
@@ -89,7 +89,7 @@ export type PlayoffSeriesSyncProvider = (input: {
   diagnostics?: PlayoffSyncDiagnostics
 }>
 
-export type PlayoffSeriesScheduleSupplementProvider = (input: {
+type PlayoffSeriesScheduleSupplementProvider = (input: {
   sport: PlayoffSport
   seasonYear: number
 }) => Promise<{
@@ -98,7 +98,7 @@ export type PlayoffSeriesScheduleSupplementProvider = (input: {
   warnings?: string[]
 }>
 
-export type PlayoffSeriesFinalScoreSupplementProvider = (input: {
+type PlayoffSeriesFinalScoreSupplementProvider = (input: {
   sport: PlayoffSport
   seasonYear: number
   dates: string[]
@@ -181,7 +181,7 @@ type SlotAssignmentWarning = {
   slot?: number | null
 }
 
-export type PlayoffSyncDiagnostics = {
+type PlayoffSyncDiagnostics = {
   seasonYear: number
   challengeSeasonYear: number
   selectedProviderSeason: number | null
@@ -230,7 +230,7 @@ export type PlayoffSyncDiagnostics = {
   noMatchReason?: string | null
 }
 
-export type SyncPlayoffChallengeSeriesResult = {
+type SyncPlayoffChallengeSeriesResult = {
   ok: boolean
   challengeId: string
   sport: PlayoffSport
@@ -253,7 +253,7 @@ export type SyncPlayoffChallengeSeriesResult = {
   diagnostics: PlayoffSyncDiagnostics
 }
 
-export type RefreshPlayoffScheduleMetadataResult = {
+type RefreshPlayoffScheduleMetadataResult = {
   ok: boolean
   challengeId: string
   sport: PlayoffSport
@@ -1816,6 +1816,7 @@ export async function syncPlayoffChallengeSeries(input: {
   const updatedSeriesExamples: UpdatedSeriesDiagnostic[] = []
   const resultPersistenceExamples: ResultPersistenceDiagnostic[] = []
   const officialWinnerBySeriesId = new Map<string, string>()
+  const decidedSeries: Array<{ seriesId: string; seriesName: string; beforeWinner: string | null; winner: string }> = []
 
   for (const series of challenge.series) {
     const replacementGroup = templateReplacementGroups.get(series.id) ?? null
@@ -1894,7 +1895,7 @@ export async function syncPlayoffChallengeSeries(input: {
       }
     }
     if (teamsScheduleOnly && aggregate.winnerTeamName) {
-      diagnostics.resultsOnlyStrippedWinners = mode === "results_only"
+      diagnostics.resultsOnlyStrippedWinners = false
     }
     if (resultPersistenceExamples.length < 8 && (resultsOnly || providerCompleted)) {
       resultPersistenceExamples.push({
@@ -1938,6 +1939,11 @@ export async function syncPlayoffChallengeSeries(input: {
         lastSyncedAt: new Date(),
       },
     })
+    if (nextWinnerTeamName && nextWinnerTeamName !== series.winnerTeamName && mode !== 'autofill_results') {
+      decidedSeries.push({ seriesId: series.id,
+        seriesName: `${nextHomeTeamName} vs ${nextAwayTeamName}`,
+        beforeWinner: series.winnerTeamName ?? null, winner: nextWinnerTeamName })
+    }
     seriesUpdated += 1
     if (updatedSeriesExamples.length < 8) {
       updatedSeriesExamples.push({
@@ -2027,6 +2033,15 @@ export async function syncPlayoffChallengeSeries(input: {
   }
   if (trueUnmatchedGames.length > 0) {
     warnings.push(`${trueUnmatchedGames.length} provider games did not match playoff series.`)
+  }
+
+  if (decidedSeries.length) {
+    try {
+      const { emitPlayoffDecisionAlerts } = await import('@/lib/chimmy/bracketChangeAlerts')
+      await emitPlayoffDecisionAlerts({ challengeId: challenge.id, decisions: decidedSeries })
+    } catch (error) {
+      console.warn('[playoff sync] change alerts unavailable', error)
+    }
   }
 
   return {

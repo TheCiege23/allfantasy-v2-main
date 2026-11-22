@@ -11,6 +11,7 @@ import {
   sendTestNotification,
   describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
+  IMPORTED_NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_CATEGORY_LABEL_KEYS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
@@ -18,6 +19,7 @@ import {
   type NotificationPreferences,
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
+import { isPushAndInAppOnly, resolvePushDevices } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { tOr } from "@/lib/i18n/tInterpolate"
 import { buildResetNotificationPreferences } from "@/lib/notification-settings/resetNotificationPreferences"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
@@ -60,6 +62,8 @@ const VISIBLE_CATEGORY_IDS = NOTIFICATION_CATEGORY_IDS.filter((id) => !HIDDEN_CA
  * league chat message on their phone.
  */
 const BULK_CATEGORY_IDS = VISIBLE_CATEGORY_IDS.filter((id) => !OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id))
+
+const BULK_EMAIL_CATEGORY_IDS = BULK_CATEGORY_IDS.filter((id) => !isPushAndInAppOnly(id))
 
 export function NotificationsSettingsSection({
   profile,
@@ -176,7 +180,7 @@ export function NotificationsSettingsSection({
     setTestResultTone(null)
     setPrefs((prev) => {
       const categories = { ...prev.categories }
-      for (const id of BULK_CATEGORY_IDS) {
+      for (const id of BULK_EMAIL_CATEGORY_IDS) {
         categories[id] = { ...(categories[id] ?? getDefaultCategoryPreferences(id)), email }
       }
       return { ...prev, categories }
@@ -201,7 +205,7 @@ export function NotificationsSettingsSection({
     })
   }
 
-  const allEmailOn = BULK_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
+  const allEmailOn = BULK_EMAIL_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
   const allPushOn = BULK_CATEGORY_IDS.every((id) => {
     const c = prefs.categories?.[id]
     return (c?.push ?? c?.inApp) === true
@@ -630,6 +634,16 @@ export function NotificationsSettingsSection({
         <p className="text-sm font-medium text-[var(--text)]">
           {t("settings.notifications.pushTitle")}
         </p>
+        {(['mobile', 'desktop'] as const).map((device) => (
+          <label key={device} className="flex items-center justify-between gap-3 text-sm">
+            <span>{device === 'mobile' ? 'Phone and tablet push' : 'Desktop browser push'}</span>
+            <input type="checkbox" role="switch" checked={resolvePushDevices(prefs)[device]} onChange={(event) => {
+              const enabled = event.target.checked
+              setDirty(true)
+              setPrefs((current) => ({ ...current, pushDevices: { ...resolvePushDevices(current), [device]: enabled } }))
+            }} />
+          </label>
+        ))}
         <EnableWebPushCard />
         <IosAppPushCard />
         <p className="text-xs text-[var(--muted)]">{t("settings.notifications.pushHint")}</p>
@@ -713,7 +727,7 @@ export function NotificationsSettingsSection({
           </p>
         ) : null}
         <ul className="space-y-2">
-          {VISIBLE_CATEGORY_IDS.map((categoryId) => (
+          {VISIBLE_CATEGORY_IDS.filter((id) => !id.startsWith("imported_")).map((categoryId) => (
             <li key={categoryId}>
               <NotificationCategoryRenderer
                 categoryId={categoryId}
@@ -747,6 +761,28 @@ export function NotificationsSettingsSection({
           ))}
         </ul>
       </div>
+
+      <section aria-labelledby="imported-league-alerts-title" className="space-y-2" data-testid="imported-league-alerts">
+        <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.importedTitle")}</h3>
+        <p className="text-xs text-[var(--muted)]">
+          {t("settings.notifications.importedHint")}
+        </p>
+        <ul className="space-y-2">
+          {IMPORTED_NOTIFICATION_CATEGORY_IDS.map((categoryId) => (
+            <li key={categoryId}>
+              <NotificationCategoryRenderer
+                categoryId={categoryId}
+                prefs={prefs.categories?.[categoryId] ?? { enabled: false, inApp: true, push: true, email: false, sms: false }}
+                deliveryAvailability={deliveryAvailability}
+                expanded={expandedCategory === categoryId}
+                onToggleExpand={() => setExpandedCategory((c) => c === categoryId ? null : categoryId)}
+                onToggleEnabled={(enabled) => updateCategory(categoryId, { enabled })}
+                onToggleChannel={(channel, value) => updateCategory(categoryId, { [channel]: value })}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {remoteUpdatePending && (
         <div className="rounded-xl border border-[var(--accent-cyan)] bg-[color-mix(in_srgb,var(--accent-cyan)_12%,transparent)] px-3 py-2 text-sm text-[var(--text)]">

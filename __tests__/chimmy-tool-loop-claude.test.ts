@@ -43,6 +43,7 @@ import {
   runChimmyToolLoop,
 } from '@/lib/chimmy/tools/chimmyToolLoop'
 import { CHIMMY_TOOL_SPECS } from '@/lib/chimmy/tools/chimmyTools'
+import { CHIMMY_DEPTH, PRO_ONLY_CHIMMY_TOOLS } from '@/lib/chimmy/chimmyDepth'
 
 const CTX = { leagueId: 'l1', userId: 'u1' }
 
@@ -77,6 +78,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('ANTHROPIC_API_KEY', 'test-anthropic-key')
   vi.stubEnv('XAI_API_KEY', 'test-xai-key')
+  vi.stubEnv('OPENAI_API_KEY', '')
+  vi.stubEnv('AI_INTEGRATIONS_OPENAI_API_KEY', '')
+  vi.stubEnv('DEEPSEEK_API_KEY', '')
   vi.stubEnv('CHIMMY_TOOL_LOOP_PROVIDER', '')
   vi.stubEnv('CHIMMY_CLAUDE_MODEL', '')
   h.execute.mockResolvedValue('Leaders: 1. Josh Allen — 2')
@@ -166,10 +170,12 @@ describe('runChimmyToolLoop on Claude', () => {
     await runChimmyToolLoop({ ...base, styleLine: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
 
     const [params] = h.anthropicCreate.mock.calls[0]
-    expect(params.system).toHaveLength(4)
+    // instructions, clock, style, the plan's depth line, the request focus
+    expect(params.system).toHaveLength(5)
     expect(params.system[0]).toMatchObject({ text: 'You are Chimmy.', cache_control: { type: 'ephemeral' } })
     expect(params.system[2]).toEqual({ type: 'text', text: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
     expect(params.system[0].text).not.toContain('PERSONALIZATION')
+    expect(params.system[3].text).toMatch(/^PLAN: this user is on the free plan/)
   })
 
   it('lets CHIMMY_CLAUDE_MODEL choose the model', async () => {
@@ -358,5 +364,57 @@ describe('the Claude tool loop meters every request', () => {
     await settle()
     const rows = logUsageEvent.mock.calls.map((c) => (c as unknown as [Record<string, any>])[0])
     expect(rows.map((r) => [r.ok, r.meta.outputTokens])).toEqual([[true, 8000], [false, null]])
+  })
+})
+
+/*
+ * AF Pro depth (lib/chimmy/chimmyDepth.ts, 2026-11-16). A free answer is byte-for-byte the old loop —
+ * same four turns, Pro tools offered only marked AF PRO ONLY (the executor refuses them, and that
+ * refusal is the upgrade button) — and the executor is told the same tier the model was given,
+ * so the offered list and the executor's gate can never disagree.
+ */
+describe('AF Pro depth', () => {
+  it('a free answer sees the Pro tools marked AF Pro only, and keeps the four-turn ceiling', async () => {
+    h.anthropicCreate.mockResolvedValue(wantsTools({ id: 't', name: 'get_league_standings' }))
+    const ctx = { ...CTX } as typeof CTX & { depth?: string }
+
+    expect(await runChimmyToolLoop({ ...base, context: ctx })).toBeNull()
+
+    expect(h.anthropicCreate).toHaveBeenCalledTimes(4)
+    const tools = h.anthropicCreate.mock.calls[0][0].tools as Array<{ name: string; description: string }>
+    for (const n of PRO_ONLY_CHIMMY_TOOLS) expect(tools.find((t) => t.name === n)?.description).toMatch(/^AF PRO ONLY/)
+    expect(tools.find((t) => t.name === 'get_league_standings')?.description).not.toMatch(/AF PRO ONLY/)
+    expect(ctx.depth).toBe('free')
+  })
+
+  it('an AF Pro answer is offered every tool, researches up to seven turns, and the executor sees pro', async () => {
+    h.anthropicCreate.mockResolvedValue(wantsTools({ id: 't', name: 'get_league_standings' }))
+    const ctx = { ...CTX } as typeof CTX & { depth?: string }
+
+    expect(await runChimmyToolLoop({ ...base, context: ctx, depth: CHIMMY_DEPTH.pro })).toBeNull()
+
+    expect(h.anthropicCreate).toHaveBeenCalledTimes(7)
+    expect(h.execute).toHaveBeenCalledTimes(6)
+    const calls = h.anthropicCreate.mock.calls.map((c) => c[0])
+    expect(calls.map((p) => p.tool_choice.type)).toEqual(['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'none'])
+    for (const n of PRO_ONLY_CHIMMY_TOOLS) {
+      expect(calls[0].tools.find((t: any) => t.name === n)?.description).not.toMatch(/AF PRO ONLY/)
+    }
+    expect(calls[0].system.some((b: any) => /^PLAN: this user has AF Pro/.test(b.text))).toBe(true)
+    expect(h.execute.mock.calls[0][2]).toMatchObject({ depth: 'pro' })
+  })
+
+  it('the OpenAI-shaped providers give AF Pro a 2400-token answer and free the old 1200', async () => {
+    vi.stubEnv('CHIMMY_TOOL_LOOP_PROVIDER', 'grok')
+    h.openaiCreate.mockResolvedValue({ model: 'grok', choices: [{ message: { role: 'assistant', content: 'ok' } }], usage: {} })
+
+    await runChimmyToolLoop(base)
+    await runChimmyToolLoop({ ...base, depth: CHIMMY_DEPTH.pro })
+
+    const calls = h.openaiCreate.mock.calls.map((c) => c[0])
+    expect(calls.map((p) => p.max_tokens)).toEqual([1200, 2400])
+    const recall = (p: any) => p.tools.find((t: any) => t.function.name === 'recall_past_chats')?.function.description
+    expect(recall(calls[0])).toMatch(/^AF PRO ONLY/)
+    expect(recall(calls[1])).toMatch(/^AF Pro\. Search/)
   })
 })

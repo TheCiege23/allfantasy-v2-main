@@ -217,7 +217,7 @@ describe('channel policy', () => {
   it('allows SMS only for league operations with league context', () => {
     expect(allowsLeagueSms('draft_alerts', 'league')).toBe(true)
     expect(allowsLeagueSms('draft_alerts')).toBe(false)
-    for (const category of ['injury_alerts', 'lineup_alerts', 'performance_alerts', 'ai_alerts', 'matchup_results'] as const) expect(allowsLeagueSms(category, 'league')).toBe(false)
+    for (const category of ['injury_alerts', 'trade_proposals', 'waiver_processing', 'performance_alerts', 'ai_alerts', 'matchup_results'] as const) expect(allowsLeagueSms(category, 'league')).toBe(false)
   })
 })
 

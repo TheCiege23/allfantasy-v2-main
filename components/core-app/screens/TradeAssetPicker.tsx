@@ -87,8 +87,32 @@ export type PickedAsset =
  * accessible name. Visible text is kept for the deal itself: a league that rosters defenders would
  * otherwise print the same sentence on a third of every roster.
  */
+/**
+ * A pick off a real roster, as the deal builder holds it. ONE mapping for every surface that adds a
+ * roster pick — this picker's list and the dynasty draft-capital panel (DynastyPickCapitalPanel.tsx) —
+ * so a pick cannot be priced one way in one place and proposed another way in the other.
+ */
+export function rosterPickAsset(p: RosterPick, leagueId: string | null | undefined, book: TradePickPreviewBook | null | undefined): Extract<PickedAsset, { kind: 'pick' }> {
+  const value = leagueId
+    ? (p.round == null ? null : readPickPreviewValue({ leagueId, book, year: p.season ?? new Date().getFullYear(), round: p.round }))
+    : p.value
+  const reason = value == null ? p.unpricedReason ?? pricedOnAnalysisReason() : null
+  return {
+    kind: 'pick',
+    year: p.season ?? new Date().getFullYear(),
+    round: p.round ?? 1,
+    label: p.label,
+    // An imported pick's id is for display only; an offer must never reference it.
+    pickId: p.proposable === false ? null : p.pickId,
+    itemType: p.itemType,
+    value,
+    unpricedReason: reason,
+    proposable: p.proposable !== false,
+  }
+}
+
 export function UnpricedValue(props: { reason?: UnpricedReason | null }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy}=useTradeVisualCopy()
 
   const label = props.reason ? `No value: ${props.reason.label}` : 'No value'
   return (
@@ -160,6 +184,40 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
  * component rather than two copies for the same reason `StockMark` is: the same player must not
  * look different in the list and in the deal.
  */
+/**
+ * Position colour, the same assignment the league Trades tab uses for its
+ * trade-block cards, so a WR reads the same colour on every trade surface.
+ */
+const POSITION_TONE: Record<string, string> = {
+  QB: 'qb',
+  RB: 'rb',
+  WR: 'wr',
+  TE: 'te',
+  DL: 'dl',
+  DE: 'dl',
+  DT: 'dl',
+  NT: 'dl',
+  LB: 'lb',
+  DB: 'db',
+  CB: 'db',
+  S: 'db',
+  SS: 'db',
+  FS: 'db',
+  K: 'k',
+  DEF: 'def',
+  DST: 'def',
+}
+export function positionTone(position: string): string {
+  return POSITION_TONE[position.toUpperCase()] ?? 'other'
+}
+
+/** What the headshot circle says when there is no headshot: the position, short enough to fit. */
+export function positionGlyph(position: string | null | undefined, name: string): string {
+  const p = (position ?? '').toUpperCase()
+  if (!p) return name.slice(0, 1)
+  return p.length <= 2 ? p : p.slice(0, 2)
+}
+
 export function RosterPlayerRow(props: {
   player: RosterPlayer
   sport?: string | null
@@ -181,19 +239,20 @@ export function RosterPlayerRow(props: {
       aria-label={copy(props.added ? `${p.name} is already in this trade` : `Add ${p.name}`)}
     >
       {/*
-        A headshot is optional and often absent. The initial keeps row height and alignment
-        identical either way, so a roster does not look ragged.
+        A headshot is optional and often absent. Without one the circle carries the POSITION in its
+        colour rather than the first letter of the name: "B" said nothing a manager could use, and
+        a grey letter beside every row read as unfinished. Row height is identical either way.
       */}
-      <span className="af-tc-headshot" aria-hidden="true">
+      <span className="af-tc-headshot" aria-hidden="true" data-pos={p.position ? positionTone(p.position) : undefined}>
         {p.imageUrl ? (
           <FallbackImg
             src={p.imageUrl}
             alt={copy("")}
             loading="lazy"
-            fallback={<span className="af-tc-headshot-fallback">{copy(p.name.slice(0, 1))}</span>}
+            fallback={<span className="af-tc-headshot-fallback">{copy(positionGlyph(p.position, p.name))}</span>}
           />
         ) : (
-          <span className="af-tc-headshot-fallback">{copy(p.name.slice(0, 1))}</span>
+          <span className="af-tc-headshot-fallback">{copy(positionGlyph(p.position, p.name))}</span>
         )}
       </span>
 
@@ -207,7 +266,7 @@ export function RosterPlayerRow(props: {
           ) : null}
         </span>
         <span className="af-tc-row-sub">
-          {p.position ? <span className="af-tc-pos">{copy(p.position)}</span> : null}
+          {p.position ? <span className="af-tc-pos" data-pos={positionTone(p.position)}>{copy(p.position)}</span> : null}
           {/*
             ⚠ `af-tc-row-team`, NOT `af-tc-team` — the latter is the TEAM CARD in TradeCenter.
             Carrying it here inherited `flex-direction: column`, 14px of padding and a border from
@@ -365,14 +424,6 @@ export function TradeAssetPicker(props: {
    * the displayed value, the disabled state and the submitted amount cannot disagree.
    */
   const effectiveFaab = props.faabAvailable != null ? Math.min(faab, props.faabAvailable) : faab
-
-  /**
-   * Team logo, resolved on the client from the abbreviation.
-   *
-   * Returns null for an unknown team or sport, and the row then shows the abbreviation alone —
-   * which is why the abbreviation is rendered beside the logo rather than replaced by it.
-   */
-  const teamLogoFor = (team: string | null): string | null => teamLogoUrl(team, props.sport)
 
   const search = useCallback(
     async (q: string) => {
@@ -600,30 +651,15 @@ export function TradeAssetPicker(props: {
                     : 'Picks on this roster')}
               </span>
               {(props.rosterPicks ?? []).map((p) => {
-                const value = props.leagueId ? (p.round == null ? null : readPickPreviewValue({
-                  leagueId: props.leagueId, book: props.pickPreviewBook,
-                  year: p.season ?? new Date().getFullYear(), round: p.round,
-                })) : p.value
-                const reason = value == null ? p.unpricedReason ?? pricedOnAnalysisReason() : null
+                const asset = rosterPickAsset(p, props.leagueId, props.pickPreviewBook)
+                const value = asset.value
+                const reason = asset.unpricedReason ?? null
                 return (
                 <button
                   key={p.pickId}
                   type="button"
                   className="af-tc-row af-tc-row--button"
-                  onClick={() =>
-                    props.onPick({
-                      kind: 'pick',
-                      year: p.season ?? new Date().getFullYear(),
-                      round: p.round ?? 1,
-                      label: p.label,
-                      // An imported pick's id is for display only; an offer must never reference it.
-                      pickId: p.proposable === false ? null : p.pickId,
-                      itemType: p.itemType,
-                      value,
-                      unpricedReason: reason,
-                      proposable: p.proposable !== false,
-                    })
-                  }
+                  onClick={() => props.onPick(asset)}
                 >
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{p.label}</span>

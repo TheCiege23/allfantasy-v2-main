@@ -22,7 +22,7 @@ const h = vi.hoisted(() => ({
   applyAttestedCommissioner: vi.fn(async () => ({ teamsUpdated: 1 })),
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser, requireAgeConfirmedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/league-import/commissionerGate', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/league-import/commissionerGate')>()),
   assertImportCommissioner: h.assertImportCommissioner,
@@ -43,6 +43,7 @@ vi.mock('@/lib/league-import/importPersistenceService', () => ({
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: class ImportedLeagueConflictError extends Error {},
   ImportedLeagueTombstonedError: class ImportedLeagueTombstonedError extends Error {},
+  ImportedLeagueAlreadyHereError: class ImportedLeagueAlreadyHereError extends Error {},
 }))
 
 import { POST } from '@/app/api/leagues/import/commit/route'

@@ -206,7 +206,10 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
       data-testid="commissioner-os-actions-summary"
     >
       <div className="af-ch-os-head">
-        <h2 className="af-ch-os-title">Commissioner OS</h2>
+        {/*
+          No "Commissioner OS" heading (2026-11-14): this sits inside the hub's "Commissioner intelligence"
+          fold, whose title already names it, so the two headings said one thing twice.
+        */}
         <div className="af-ch-os-head-actions">
           <button
             type="button"

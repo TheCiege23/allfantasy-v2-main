@@ -6,5 +6,3 @@ export const FEEDBACK_REASONS = [
   { label: 'Other', enum: 'OTHER' },
 ] as const
 
-export type FeedbackReasonLabel = typeof FEEDBACK_REASONS[number]['label']
-export type FeedbackReasonEnum = typeof FEEDBACK_REASONS[number]['enum']

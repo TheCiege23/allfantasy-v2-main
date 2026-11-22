@@ -28,9 +28,9 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * always-on "no waiver decision" line would teach a reader to skim the gap block — the failure
  * R1.6 spent a commit removing.
  *
- * `idpKicker` remains excluded: its own doc comment names it "the one slice that cannot join the
- * concurrent wave" — a serialized second hop with its own cost profile — and turning it on for
- * every player_value question is a real latency decision that deserves its own measurement.
+ * `idpKicker` is not mapped HERE: since 2026-11-16 the chat route requests it on every turn, because its
+ * own exit stops before any query in a league that rosters no IDP or kicker, and it is bounded by the
+ * packet's clock (`IDP_KICKER_DEADLINE_MS` in packet.ts) so the serialized hop can cost only itself.
  *
  * ⚠ REUSES `chimmy-orchestration`'s classifier, not `chimmy-context`'s. Two intent classifiers
  * share the name `classifyChimmyIntent` in this codebase (`lib/chimmy-context/intent/
@@ -51,57 +51,55 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * exists to fix, so it must not be reachable from inside the fix.
  *
  * `Pick` makes a wrong key `TS2344` at the definition site (and enumerates the valid ones);
- * `Required` keeps all four mandatory, so dropping one is `TS2741` rather than a silent `undefined`.
+ * `Required` keeps every one mandatory, so dropping one is `TS2741` rather than a silent `undefined`.
  * Both verified against a planted failure before being relied on.
  */
 type PacketWant = NonNullable<GroundingPacketArgs['want']>
 
-export type IntentDerivedWant = Required<
+type IntentDerivedWant = Required<
   Pick<
     PacketWant,
-    | 'lineupDecision'
     | 'commissionerHealthDecision'
-    | 'psychologyConsistency'
     | 'rosterValueGrade'
     | 'waiverDecision'
+    | 'myTeamLineup'
+    | 'pendingTrades'
+    | 'draftBoard'
+    | 'managerRecords'
   >
 >
 
 export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentDerivedWant {
   return {
     /*
-     * 🛑 ALWAYS FALSE, AND THE MEASUREMENT IS THE WHOLE REASON — 2026-09-07.
-     *
-     * This was `intent === 'start_sit'`, which is the obviously correct mapping and was also the
-     * most expensive line in the packet. Built against a real 13-roster Sleeper league with the
-     * live route's own arguments:
-     *
-     *     general       1,615 ms      waiver     1,004 ms      player_value  643 ms
-     *     start_sit    37,256 ms   (warm; 38,528 ms on a second warm run, 56,729 ms cold)
-     *
-     * The chat route caps the packet at 3s, so start/sit — the most common question in the
-     * product — lost its grounding on EVERY turn. It did not merely fail to help.
-     *
-     * ⚠ THE CEILING IS A `Promise.race`, WHICH ABANDONS THE RESULT WITHOUT CANCELLING THE WORK.
-     * All 37s of reads still complete and are still billed, so requesting this slice made
-     * start/sit strictly worse than not requesting it: same empty prompt section, plus 3s of
-     * user-visible latency and 37s of database work. The route says so in its own words — "a
-     * packet that is routinely late is therefore strictly WORSE than one that is switched off".
-     *
-     * ⚠ THIS IS NOT A JUDGEMENT THAT A LINEUP DECISION IS UNWANTED. It is the one slice whose
-     * cost exceeds the budget it has to fit in. The cost lives in `loadLineupSetInputs` +
-     * `runLineupSetDecision` (see `decisionBridge.ts`), which is the same engine the standing
-     * rule already forbids calling from a page render. Fix the bridge and this mapping comes
-     * back; restoring it first only re-buys the 37s.
-     *
-     * ⚠ KEPT AS AN EXPLICIT `false` RATHER THAN DROPPED FROM THE `Pick` ABOVE. `Required` makes a
-     * missing key `TS2741`, and that guard is what stops the OTHER four being silently lost to a
-     * rename — see the header. Removing the key to express "never" would spend a compiler check
-     * that is protecting unrelated flags.
+     * `lineupDecision` and `psychologyConsistency` USED TO BE MAPPED HERE, both to a hard `false`.
+     * Both slices were deleted from the packet on 2026-11-17: the lineup one cost 37s against a 3s
+     * ceiling and duplicated My Team's `optimizeLineup` (the one start/sit answer, owner decision
+     * 2026-09-29), and the psychology one had no renderer. Manager facts reach Chimmy through the
+     * paid `get_manager_record` tool instead.
      */
-    lineupDecision: false,
     commissionerHealthDecision: intent === 'commissioner',
-    psychologyConsistency: intent === 'manager_psychology',
+    /*
+     * My Team's best lineup, on a lineup question (2026-11-20). The one optimizer the screen runs, read the way the
+     * lineup tool reads it, so a "who should I start" turn has the answer in its packet as well as its tool.
+     */
+    myTeamLineup: intent === 'start_sit',
+    /*
+     * The trades waiting on the asker, graded, on a trade question (2026-11-20). The trade tool reads the same inbox
+     * with the same engine; in the packet, "should I take this offer?" has the offer and its grade without the model
+     * having to think of calling it.
+     */
+    pendingTrades: intent === 'trade',
+    /*
+     * The draft board with Draft OS's pick for the asker, on a draft question (2026-11-20). The same read as the
+     * draft board tool; the route turns it off inside the draft room, which already hands the loop that board.
+     */
+    draftBoard: intent === 'draft',
+    /*
+     * Every leaguemate's record, facts only, on a manager question (2026-11-20) — the manager-record tool's league
+     * summary. Competitive Edge only: the builder checks the plan and a locked plan puts no history in the packet.
+     */
+    managerRecords: intent === 'manager_psychology',
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *
@@ -115,13 +113,13 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * duration. So 4,590 of 4,593 ms does not mean this slice "takes" 4.6s in isolation — it means
      * it is the LAST thing to finish, i.e. it IS the critical path. Nothing else is waited on.
      *
-     * ⚠ AND THE CASE IS GENUINELY WEAKER THAN `lineupDecision`'S ABOVE. That slice was 37s against
-     * a 3s ceiling and was therefore discarded on EVERY turn — removing it cost nothing at all.
+     * ⚠ AND THE CASE IS GENUINELY WEAKER THAN THE OLD `lineupDecision` ONE. That slice was 37s
+     * against a 3s ceiling and was therefore discarded on EVERY turn — removing it cost nothing.
      * This one is ~4.6s: over the ceiling most of the time, but not always. So this is a
      * MITIGATION, not a free win, and it is worth saying which one it is.
      *
      * The reason it still goes: the ceiling discards the WHOLE packet, not the slow slice. Asking
-     * for this trades the other fifteen feeds — values, projections, psychology, portfolio, league
+     * for this trades the other fifteen feeds — values, projections, portfolio, league
      * intelligence, import state — against one roster grade, on the roll of whether the build lands
      * under 3s. That is a bad trade at any hit rate.
      *
@@ -132,8 +130,13 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * already DB-first, so it wants indexing or warming rather than caching) and breaking the
      * `pRules -> pValueFormat -> pMarket` chain. Until that lands, restoring this mapping only
      * re-buys the drop.
+     *
+     * ✅ BACK ON FOR player_value — 2026-11-16 (re-score item 8), BECAUSE THE PACKET NO LONGER WAITS ON IT. The
+     * packet now reads `loadRosterValueGradeSliceCached`: a cached grade (15 min) is served at once, and a miss
+     * starts the compute in the background and returns a "being computed" gap. The 4.6 s above is never on the
+     * critical path again, so the trade described above no longer exists.
      */
-    rosterValueGrade: false,
+    rosterValueGrade: intent === 'player_value',
     /*
      * ✅ STAYS ON, AND THIS LINE IS THE MEASUREMENT — 2026-09-12.
      *

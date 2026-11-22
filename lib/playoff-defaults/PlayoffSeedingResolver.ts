@@ -8,7 +8,7 @@ import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoff
 import type { SportType } from '@/lib/sport-defaults/types'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
 
-export interface PlayoffSeedingConfig {
+interface PlayoffSeedingConfig {
   seeding_rules: string
   tiebreaker_rules: string[]
   bye_rules: string | null

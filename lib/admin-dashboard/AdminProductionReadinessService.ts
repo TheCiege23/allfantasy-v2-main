@@ -1,8 +1,6 @@
 import "server-only"
 
-import fs from "fs"
 import { readVercelCrons as readCronScheduleFromDisk } from "@/lib/production-health/cronRegistry"
-import path from "path"
 import { prisma } from "@/lib/prisma"
 
 export type EnvReadinessSeverity = "critical" | "warning" | "optional"

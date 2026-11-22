@@ -51,7 +51,7 @@ export type LeagueTemplateKey = string
  * behaviour yet, and `ask_first` is the default because a template with no considered posture must
  * not act on its own.
  */
-export type CommissionerAutomationPolicy =
+type CommissionerAutomationPolicy =
   | 'auto_execute'
   | 'execute_and_notify'
   | 'ask_first'
@@ -65,7 +65,7 @@ export type CommissionerAutomationPolicy =
  * only after three elimination weeks), and a linear `nextPhaseId` would have forced the branch into
  * imperative code — which is where a phase machine stops being inspectable.
  */
-export type TemplatePhase = {
+type TemplatePhase = {
   id: string
   label: string
   summary: string
@@ -79,13 +79,13 @@ export type TemplatePhase = {
   terminal?: boolean
 }
 
-export type TemplatePhaseGraph = {
+type TemplatePhaseGraph = {
   initialPhaseId: string
   phases: readonly TemplatePhase[]
 }
 
 /** When a scheduled effect fires. Deterministic — no dates, no clock, no "soon". */
-export type ScheduledEffectTrigger =
+type ScheduledEffectTrigger =
   | { kind: 'week'; week: number }
   | { kind: 'phase_entry'; phaseId: string }
   | { kind: 'phase_exit'; phaseId: string }
@@ -145,7 +145,7 @@ type PolicyBase = {
   notes?: readonly string[]
 }
 
-export type EliminationPolicy = PolicyBase & {
+type EliminationPolicy = PolicyBase & {
   mode: 'lowest_score' | 'vote' | 'bracket' | 'none'
   /** Teams removed per scoring period, by phase id. */
   perPeriodByPhase?: Readonly<Record<string, number>>
@@ -153,12 +153,12 @@ export type EliminationPolicy = PolicyBase & {
   immunityPassesDown: boolean
 }
 
-export type RewardPolicy = PolicyBase & {
+type RewardPolicy = PolicyBase & {
   seasonFaabBudget?: number
   rewardFaabEnabled: boolean
 }
 
-export type PowerPolicy = PolicyBase & {
+type PowerPolicy = PolicyBase & {
   powers: readonly {
     id: string
     label: string
@@ -168,14 +168,14 @@ export type PowerPolicy = PolicyBase & {
   }[]
 }
 
-export type DraftPolicy = PolicyBase & {
+type DraftPolicy = PolicyBase & {
   /** How the order is produced. `custom` means the template's own rule, described in notes. */
   rookieOrder: 'reverse_standings' | 'custom' | 'schoolyard' | 'not_applicable'
   /** An input that stops moving at a point in the season. */
   frozenInput?: { field: string; frozenAt: string }
 }
 
-export type StandingsPolicy = PolicyBase & {
+type StandingsPolicy = PolicyBase & {
   tiers?: readonly { level: number; label: string }[]
   promotionRelegation?: {
     autoRelegateCount: number
@@ -188,11 +188,11 @@ export type StandingsPolicy = PolicyBase & {
   }
 }
 
-export type AdvancementPolicy = PolicyBase & {
+type AdvancementPolicy = PolicyBase & {
   mode: 'tier_playoff' | 'bracket' | 'placement' | 'none'
 }
 
-export type GovernancePolicy = PolicyBase & {
+type GovernancePolicy = PolicyBase & {
   /** Rules the commissioner may change. Empty means the format fixes everything. */
   commissionerConfigurable: readonly string[]
   /** Modules this template will need but which do not exist yet. Named, not implied. */
@@ -205,7 +205,7 @@ export type GovernancePolicy = PolicyBase & {
  * ⚠ THIS IS A CLAIM ABOUT BEHAVIOUR AND IT MUST BE TRUE. `deepLinkable` false means the Hub must
  * not render a "do it on Sleeper" button, because there is no page to send them to.
  */
-export type ExternalPlatformBehavior = {
+type ExternalPlatformBehavior = {
   /** Effects the template can still PREPARE on a read-only league. */
   preparableEffects: readonly RuleEffectType[]
   /** Effects that vanish entirely — no execute, no prepare, no guidance worth showing. */
@@ -267,7 +267,7 @@ export function templateKey(id: LeagueTemplateId | string, version: string): Lea
   return `${id}@${version}`
 }
 
-export type TemplateValidationIssue = { code: string; detail: string }
+type TemplateValidationIssue = { code: string; detail: string }
 
 /**
  * Structural validation of a template definition.

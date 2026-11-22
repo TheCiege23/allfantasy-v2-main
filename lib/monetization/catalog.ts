@@ -15,6 +15,8 @@ export type MonetizationTokenPackSku =
   | "af_tokens_10"
   | "af_tokens_25"
 
+export const STARTER_TOKEN_PACK_SKU = "af_tokens_5" satisfies MonetizationTokenPackSku
+
 export type MonetizationSku = MonetizationSubscriptionSku | MonetizationTokenPackSku
 
 // NOTE: internal plan family "af_war_room" is retained as the stable key; the

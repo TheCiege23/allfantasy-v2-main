@@ -93,7 +93,9 @@ describe('LeagueHome KPI row', () => {
     const kpis = container.querySelector('[data-testid=league-home-kpis]')
     expect(kpis?.getAttribute('aria-label')).toBe('Your season at a glance')
     const tile = (k: string) => text(container.querySelector(`[data-kpi=${k}]`))
-    expect(tile('record')).toBe('Record6-22nd of 4')
+    // The record and the place are the guide's headline now (2026-11-13), so the row does not repeat them.
+    expect(container.querySelector('[data-kpi=record]')).toBeNull()
+    expect(container.querySelector('.af-lho-title')?.textContent).toContain('2nd of 4 · 6-2')
     expect(tile('points-for')).toContain('1012.4')
     expect(tile('points-for')).toContain('+61.5 vs league average')
     expect(tile('faab')).toContain('$64')
@@ -104,7 +106,7 @@ describe('LeagueHome KPI row', () => {
   it('a league with no FAAB and no deadline shows only the tiles it has data for', () => {
     const { data } = homeFixture('nfl', { identity: false })
     const { container } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
-    expect(container.querySelector('[data-kpi=record]')).not.toBeNull()
+    expect(container.querySelector('[data-kpi=points-for]')).not.toBeNull()
     expect(container.querySelector('[data-kpi=faab]')).toBeNull()
     expect(container.querySelector('[data-kpi=trade-deadline]')).toBeNull()
   })

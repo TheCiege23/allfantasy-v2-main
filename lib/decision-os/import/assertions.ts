@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 /**
  * Import OS → the four assertions Decision OS needs to call a league CONCLUSIVE (3.2, D7).
@@ -36,21 +37,20 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 /** The scopes a Sleeper sync fills. Mirrors `SLEEPER_SYNC_SCOPES` — kept as data, not imported,
  *  so this read layer does not drag the collector's server-only graph in behind it. */
 export const IMPORT_SCOPES = ['league_state', 'teams_rosters', 'traded_picks'] as const
-export type ImportScope = (typeof IMPORT_SCOPES)[number]
 
 /** The scopes the five-minute lane fills. Mirrors `ACTIVE_SYNC_SCOPES` in
  *  `lib/import-os/collector/activeSyncLane.ts` — data, not an import, for the same reason as
  *  `IMPORT_SCOPES`; a test pins the two equal. */
 export const ACTIVE_LANE_SCOPES = ['league_state', 'transactions', 'teams_rosters'] as const
 
-export interface ActiveLaneFreshness {
+interface ActiveLaneFreshness {
   /** Certified: advances only when EVERY scope in `scopes` completed on one run (runner-enforced). */
   lastSuccessfulSyncAt: string | null
   staleMs: number | null
   scopes: readonly string[]
 }
 
-export interface ScopeFreshness {
+interface ScopeFreshness {
   scope: string
   /** Completed on the LAST run. Not the same as "ever completed". */
   completedLastRun: boolean
@@ -59,13 +59,18 @@ export interface ScopeFreshness {
   hasCheckpoint: boolean
 }
 
-export type ParityVerdict = 'matched' | 'diverged' | 'unchecked' | 'failed'
+type ParityVerdict = 'matched' | 'diverged' | 'unchecked' | 'failed'
 
 export interface ImportAssertions {
   leagueId: string
   provider: string
   externalLeagueId: string
   season: number
+  /**
+   * The league is hosted on AllFantasy (`isNativePlatform`), so nothing is imported and there is no sync to report.
+   * Optional only so older fixtures still type; the loader always sets it.
+   */
+  native?: boolean
 
   // ── 1. Freshness ──────────────────────────────────────────────────────────────────────────
   /**
@@ -263,6 +268,7 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
     provider,
     externalLeagueId,
     season,
+    native: isNativePlatform(league.platform),
     lastAttemptedSyncAt: state?.lastAttemptedSyncAt?.toISOString() ?? null,
     lastSuccessfulSyncAt: lastSuccess?.toISOString() ?? null,
     staleMs: lastSuccess ? Date.now() - lastSuccess.getTime() : null,

@@ -79,7 +79,7 @@ export const EXPORT_CAPS = {
   tradeComparisons: 30,
 } as const
 
-export const EXPORT_NOT_INCLUDED = [
+const EXPORT_NOT_INCLUDED = [
   "Passwords, sign-in sessions, OAuth tokens, platform API keys and cookies, and push-notification keys — these are credentials, not data about you, so they never leave our servers.",
   "The identity of other people: which account you referred or who referred you, and which staff member applied an admin grant.",
   "Payment-processor identifiers (Stripe and Apple transaction ids). Every payment's status, amount and dates are included.",

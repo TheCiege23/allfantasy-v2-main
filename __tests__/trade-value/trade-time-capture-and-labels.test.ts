@@ -124,6 +124,15 @@ describe('every surface says how a frozen letter was priced — EN and ES', () =
     expect(gradeMoment({ frozenAt: '2026-09-30T15:00:00.000Z', frozenBasis: null })).toBe('when first graded Sep 30')
   })
 
+  it('labels a first-graded Zombie player estimate by its projection basis', () => {
+    const grade = { frozenAt: FROZEN_AT, frozenBasis: 'first_graded' as const,
+      pricedAsOf: '2026-09-30T15:00:00.000Z', tradeAt: TRADE_AT,
+      lines: [{ valueSource: 'zombie_points' }] }
+    expect(gradeMoment(grade)).toContain('(Zombie player and free-agent values)')
+    expect(gradeMoment(gradeMomentOf(grade), 'es')).toContain('(valores Zombie: jugadores y agentes libres)')
+    expect(gradeMomentToSpanish(gradeMoment(grade))).toContain('(valores Zombie: jugadores y agentes libres)')
+  })
+
   it('a live grade', () => {
     expect(gradeMoment(null)).toBe('today')
     expect(gradeMoment({ frozenAt: null }, 'es')).toBe('de hoy')

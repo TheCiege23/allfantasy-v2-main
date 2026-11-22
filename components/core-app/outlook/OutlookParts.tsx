@@ -41,6 +41,7 @@ export function OddsTile({
   range,
   sub,
   tone,
+  icon,
 }: {
   label: string
   value: number
@@ -52,14 +53,32 @@ export function OddsTile({
    * title chance is ordinary, and painting it red would read as a warning it is not.
    */
   tone?: 'status' | 'invert' | 'neutral'
+  /** A small glyph beside the label. Omitted, the tile draws exactly as before. */
+  icon?: OddsIcon
 }) {
   const msg = useOutlookMessages()
   const b = tone === 'neutral' ? 'none' : tone === 'invert' ? band(100 - value) : band(value)
+  /*
+   * 2026-11-14: a range that rounds to the number itself ("<1%", "range <1%") says it twice, so the range
+   * is drawn only when it is a real spread.
+   */
+  const spread = range != null && rangeLabel(range) !== `${pct(value)}%`
   return (
-    <div className="af-olk-odds" data-band={b}>
-      <span className="af-olk-odds-l af-label">{label}</span>
+    <div className="af-olk-odds" data-band={b} data-icon={icon ?? undefined}>
+      {icon ? (
+        <span className="af-olk-odds-head">
+          <span className="af-olk-odds-ic" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d={ODDS_ICON_PATH[icon]} />
+            </svg>
+          </span>
+          <span className="af-olk-odds-l af-label">{label}</span>
+        </span>
+      ) : (
+        <span className="af-olk-odds-l af-label">{label}</span>
+      )}
       <span className="af-olk-odds-v af-num">{pct(value)}%</span>
-      {range ? (
+      {range && spread ? (
         <span className="af-olk-range" role="img" aria-label={`${msg.likelyRange} ${rangeLabel(range)}`}>
           <span className="af-olk-range-track" aria-hidden>
             <span
@@ -77,6 +96,15 @@ export function OddsTile({
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, n))
+
+type OddsIcon = 'playoffs' | 'bye' | 'title' | 'miss'
+
+const ODDS_ICON_PATH: Record<OddsIcon, string> = {
+  playoffs: 'M9 12l2 2 4-4M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7l7-4z',
+  bye: 'M5 12h14M12 5l7 7-7 7',
+  title: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4a3 3 0 003 3M17 6h3a3 3 0 01-3 3',
+  miss: 'M4 5v14h16M8 9l3 3 3-2 5 6',
+}
 
 export function StatusPill({ status }: { status: OutlookTeam['status'] }) {
   const msg = useOutlookMessages()
@@ -117,7 +145,8 @@ export function DriverList({ drivers, limit }: { drivers: OutlookDriver[]; limit
             <div className="af-olk-driver-top">
               <span className="af-olk-driver-l">{say(d.label)}</span>
               <span className="af-olk-driver-v af-num">
-                {d.spread ? `±${Math.abs(d.impact).toFixed(0)}` : signedPts(d.impact, 0)} pts
+                {/* Playoff odds, said as % (2026-11-14) — "pts" read as fantasy points beside "15.4 points a week". */}
+                {d.spread ? `±${Math.abs(d.impact).toFixed(0)}` : signedPts(d.impact, 0)}%
               </span>
             </div>
             <span className="af-olk-diverge" aria-hidden>
@@ -171,11 +200,11 @@ export function MoveList({ moves, leagueHref }: { moves: OutlookMove[]; leagueHr
           </div>
           <div className="af-olk-move-fx">
             <span className="af-olk-move-delta af-num" data-dir={m.playoffDelta >= 0.05 ? 'up' : m.playoffDelta <= -0.05 ? 'down' : 'flat'}>
-              {signedPts(m.playoffDelta)}
+              {signedPts(m.playoffDelta)}%
             </span>
             <span className="af-olk-move-unit">{msg.playoffPts}</span>
             <span className="af-olk-move-sub af-num">
-              {msg.title} {signedPts(m.titleDelta)} · +{m.pointsPerWeek} {msg.ptsPerWeek}
+              {msg.title} {signedPts(m.titleDelta)}% · +{m.pointsPerWeek} {msg.ptsPerWeek}
             </span>
             <Link className="af-olk-move-cta" href={m.href}>
               {m.kind === 'lineup' ? msg.setLineup : msg.openWaivers}
@@ -201,17 +230,22 @@ export function MilestonePanel({ m, playoffTeams }: { m: Milestones; playoffTeam
   return (
     <div className="af-olk-miles">
       <div className="af-olk-miles-tiles">
-        <div className="af-olk-mini">
-          <span className="af-olk-mini-v af-num">{record(m.winsForSafe)}</span>
-          <span className="af-olk-mini-l">{msg.safeIn}</span>
-        </div>
-        <div className="af-olk-mini">
-          <span className="af-olk-mini-v af-num">{record(m.winsForLikely)}</span>
-          <span className="af-olk-mini-l">{msg.likelyIn}</span>
-        </div>
+        {/* 2026-11-14: a goal no final record reaches is left out, never drawn as a bare "—". */}
+        {m.winsForSafe != null ? (
+          <div className="af-olk-mini" data-testid="olk-mile-safe">
+            <span className="af-olk-mini-v af-num">{record(m.winsForSafe)}</span>
+            <span className="af-olk-mini-l">{msg.safeIn}</span>
+          </div>
+        ) : null}
+        {m.winsForLikely != null ? (
+          <div className="af-olk-mini" data-testid="olk-mile-likely">
+            <span className="af-olk-mini-v af-num">{record(m.winsForLikely)}</span>
+            <span className="af-olk-mini-l">{msg.likelyIn}</span>
+          </div>
+        ) : null}
         <div className="af-olk-mini">
           <span className="af-olk-mini-v af-num">
-            {m.cutWinsMedian == null ? '—' : m.cutWinsLow === m.cutWinsHigh ? m.cutWinsMedian : `${m.cutWinsLow}–${m.cutWinsHigh}`}
+            {m.cutWinsMedian == null ? '—' : m.cutWinsLow === m.cutWinsHigh ? m.cutWinsMedian : msg.winsRange(m.cutWinsLow ?? m.cutWinsMedian, m.cutWinsHigh ?? m.cutWinsMedian)}
           </span>
           <span className="af-olk-mini-l">{msg.winsForSeed(seed)}</span>
         </div>

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { planCurrentRosterCfbdLinks, currentCfbdRosterProofStart, verifiedCurrentRosterSchoolAliases } from './currentRosterCfbdLinks'
 import { prisma } from '@/lib/prisma'
 import { getFantraxPlayerIds } from '@/lib/league-import/fantrax/fantraxApi'
-import { planNcaafFantraxIdentityLinks, verifiedFantraxSchoolAliases, currentCfbdSchoolIdentities, type CfbdSchoolFact } from './ncaafFantraxIdentityPlan'
+import { planNcaafFantraxIdentityLinks, verifiedFantraxSchoolAliases, currentCfbdSchoolIdentities, type CfbdSchoolFact, type NcaafRiProof } from './ncaafFantraxIdentityPlan'
 
 /** Scheduled ingestion only. One provider read, one registry read and a guarded batch update. */
 export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh = false) {
@@ -12,7 +12,7 @@ export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh 
   if (!dryRun && !forceRefresh && typeof last === 'string' && Date.now() - Date.parse(last) < 7 * 86400000) return { skipped: 'weekly cadence', updated: 0 }
   const map = await getFantraxPlayerIds('CFB')
   if (!map.ok) throw new Error(map.failure.message)
-  const registryRows = await prisma.playerIdentityMap.findMany({ where: { sport: { in: ['NCAAF','NCAAFB'] } }, select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true, cfbdId: true } })
+  const registryRows = await prisma.playerIdentityMap.findMany({ where: { sport: { in: ['NCAAF','NCAAFB'] } }, select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true, cfbdId: true, rollingInsightsId: true } })
   const schedule = await prisma.sportsGame.findMany({ where: { sport: 'NCAAF', source: 'cfbd', season: new Date().getUTCFullYear(), seasonType: 'regular' }, select: { homeTeam: true, awayTeam: true } })
   const schools = [...new Set(schedule.flatMap(game => [game.homeTeam, game.awayTeam]).filter((team): team is string => Boolean(team)))]
   if (!schools.length) throw new Error('Current CFBD school schedule is unavailable; refusing college identity writes')
@@ -23,11 +23,25 @@ export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh 
   `
   const rows = currentCfbdSchoolIdentities(registryRows, facts, schools)
   const aliases = verifiedFantraxSchoolAliases(Object.values(map.data), rows, facts, schools)
-  const { links, ...coverage } = planNcaafFantraxIdentityLinks(Object.values(map.data), rows, schools, aliases)
+  // Rolling Insights rows prove an RI-only identity (no CFBD id); an RI id carried by two rows proves nothing.
+  const riRows = await prisma.sportsPlayer.findMany({ where: { sport: 'NCAAF', source: 'rolling_insights' }, select: { externalId: true, name: true, team: true, position: true } })
+  const riSeen = new Map<string, number>()
+  for (const r of riRows) riSeen.set(r.externalId, (riSeen.get(r.externalId) ?? 0) + 1)
+  const riProof = new Map<string, NcaafRiProof>()
+  for (const r of riRows) if (riSeen.get(r.externalId) === 1) riProof.set(r.externalId, { name: r.name, team: r.team, position: r.position })
+  const { links, riLinks, ...coverage } = planNcaafFantraxIdentityLinks(Object.values(map.data), rows, schools, aliases, riProof)
   const updated = dryRun || !links.length ? 0 : await prisma.$executeRaw`
     WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(links)}::jsonb) AS l(id text, "fantraxId" text, "cfbdId" text))
     UPDATE "PlayerIdentityMap" p SET "fantraxId"=l."fantraxId", "updatedAt"=NOW(), "lastSyncedAt"=NOW()
     FROM links l WHERE p.id=l.id AND p.sport IN ('NCAAF','NCAAFB') AND p."fantraxId" IS NULL AND p."cfbdId"=l."cfbdId"
+    AND NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" other WHERE other.sport IN ('NCAAF','NCAAFB') AND other."fantraxId"=l."fantraxId")
+  `
+  // RI-only links: the same guard keyed on the RI id, and only while the row still has no CFBD id.
+  const riUpdated = dryRun || !riLinks.length ? 0 : await prisma.$executeRaw`
+    WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(riLinks)}::jsonb) AS l(id text, "fantraxId" text, "rollingInsightsId" text))
+    UPDATE "PlayerIdentityMap" p SET "fantraxId"=l."fantraxId", "updatedAt"=NOW(), "lastSyncedAt"=NOW()
+    FROM links l WHERE p.id=l.id AND p.sport IN ('NCAAF','NCAAFB') AND p."fantraxId" IS NULL AND p."cfbdId" IS NULL
+    AND p."rollingInsightsId"=l."rollingInsightsId"
     AND NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" other WHERE other.sport IN ('NCAAF','NCAAFB') AND other."fantraxId"=l."fantraxId")
   `
   const stateRow = await prisma.sportsDataCache.findUnique({where:{cacheKey:'cfbd-roster-pool:v1'},select:{data:true}})
@@ -44,7 +58,7 @@ export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh 
   for(const [code,schools] of claims)if(schools.size===1)agreedAliases[code]=[...schools][0]!
   const imported = await prisma.redraftRosterPlayer.findMany({where:{droppedAt:null,roster:{is:{season:{is:{season:year,sport:{in:['NCAAF','NCAAFB']},league:{is:{platform:'fantrax'}}}}}}},select:{playerId:true}})
   // Base links attach the Fantrax ID first. Include them in the planner's view even during a dry run.
-  const baseById = new Map(links.map(l=>[l.id,l]))
+  const baseById = new Map([...links, ...riLinks].map(l=>[l.id,l]))
   const nextRows = registryRows.map(r=>baseById.has(r.id)?{...r,fantraxId:baseById.get(r.id)!.fantraxId}:r)
   const rosterPlan = planCurrentRosterCfbdLinks(Object.values(map.data),nextRows,pool,facts,agreedAliases,new Set(imported.map(p=>p.playerId)))
   const rosterUpdated = dryRun ? 0 : await prisma.$transaction(async tx=>{
@@ -61,7 +75,7 @@ export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh 
     }
     return count
   },{timeout:60000,isolationLevel:'Serializable'})
-  const result = { ...coverage, currentRosterProof:currentProof, rosterProposed:rosterPlan.links.length+rosterPlan.sourceLinks.length+rosterPlan.creates.length, rosterUpdated, rosterAmbiguous:rosterPlan.ambiguous, rosterConflicts:rosterPlan.conflicts, schoolAliasesVerified: Object.keys(aliases).length, proposed: links.length, updated, dryRun }
+  const result = { ...coverage, currentRosterProof:currentProof, rosterProposed:rosterPlan.links.length+rosterPlan.sourceLinks.length+rosterPlan.creates.length, rosterUpdated, rosterAmbiguous:rosterPlan.ambiguous, rosterConflicts:rosterPlan.conflicts, schoolAliasesVerified: Object.keys(aliases).length, proposed: links.length, updated, riProposed: riLinks.length, riUpdated, dryRun }
   if (!dryRun) {
     const data = { at: new Date().toISOString(), ...result }
     const expiresAt = new Date(Date.now() + 30 * 86400000)

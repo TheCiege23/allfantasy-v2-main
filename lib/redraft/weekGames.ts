@@ -175,6 +175,7 @@ export async function readWeekGames(
       homeTeam: true,
       awayTeam: true,
       seasonType: true,
+      ...(windowed && ['NBA', 'NHL'].includes(args.sport) ? { raw: true } : {}),
     },
   })) as WeekGameRow[]
 
@@ -196,7 +197,15 @@ export async function readWeekGames(
     : args.seasonType === 'regular'
       ? dropUnlabelledRowsFromAnotherPhase(rawRows)
       : rawRows
-  const selectable: WeekGameRow[] = windowed ? inWindow.map((row) => ({ ...row, week: null })) : inWindow
+  const selectable: WeekGameRow[] = windowed ? inWindow.map((row) => {
+    // The scoreboard keeps abbreviations for cached UI filters. Its original
+    // full names match the RI roster identities used by NBA/NHL lineup locks.
+    const { raw, ...base } = row as WeekGameRow & { raw?: { homeTeamFull?: unknown; awayTeamFull?: unknown } | null }
+    const fullNames = row.source === 'espn_live' && ['NBA', 'NHL'].includes(args.sport)
+    return { ...base, week: null,
+      homeTeam: fullNames && typeof raw?.homeTeamFull === 'string' && raw.homeTeamFull.trim() ? raw.homeTeamFull : row.homeTeam,
+      awayTeam: fullNames && typeof raw?.awayTeamFull === 'string' && raw.awayTeamFull.trim() ? raw.awayTeamFull : row.awayTeam }
+  }) : inWindow
   // A week read wants the whole slate, not the freshest partial one — see `coverageBarIncludesStale`.
   return pickFreshestSourceRows(selectable, (args.now ?? new Date()).getTime(), 'week', { coverageBarIncludesStale: true })
 }

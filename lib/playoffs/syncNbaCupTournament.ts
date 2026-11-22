@@ -16,7 +16,7 @@ const nbaGameDay = (startsAt: string) => new Intl.DateTimeFormat("en-CA", {
  */
 const PUBLISHED_2026 = ["20261030", "20261106", "20261113", "20261120", "20261124", "20261125", "20261127", "20261204", "20261205", "20261208", "20261209", "20261211"]
 
-export function nbaCupDiscoveryDates(season: number, cursor: number, now = new Date()): string[] {
+function nbaCupDiscoveryDates(season: number, cursor: number, now = new Date()): string[] {
   const days: string[] = []
   for (let date = new Date(Date.UTC(season, 9, 1)); date.getUTCFullYear() === season; date.setUTCDate(date.getUTCDate() + 1)) days.push(dayKey(date))
   const rotating = [...days.slice(cursor % days.length), ...days.slice(0, cursor % days.length)]
@@ -40,7 +40,7 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     const age = now.getTime() - Date.parse(checked[date] ?? "")
     return !Number.isFinite(age) || age >= (live ? input.mode === "live" ? 30_000 : 45_000 : date === today || date === yesterday ? 4 * 60_000 : 6 * 3600_000)
   }).slice(0, 4)
-  if (live && !dates.length) return { applied: false, activeGames: liveGames.filter((game) => game.status === "in_progress").length, gamesPublished: previous?.games.length ?? 0, poolsUpdated: 0, failures: [], outcomes: [] }
+  if (live && !dates.length && !previous?.fanout?.eventIds?.length) return { applied: false, activeGames: liveGames.filter((game) => game.status === "in_progress").length, gamesPublished: previous?.games.length ?? 0, poolsUpdated: 0, failures: [], outcomes: [] }
   const responses = await Promise.all(dates.map(async (date) => {
     try {
       const response = await fetch(`${ESPN_SITE_API_BASE}/basketball/nba/scoreboard?dates=${date}&limit=1000`, {
@@ -55,7 +55,8 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
   const failures = responses.filter((row) => row.error).map((row) => ({ date: row.date, error: row.error }))
   if (!input.apply) return { applied: false, gamesDiscovered: responses.flatMap((row) => row.games).length, failures, outcomes: [] }
 
-  return prisma.$transaction(async (tx) => {
+  const alertDecisions: Array<{ challengeId: string; seriesId: string; seriesName: string; beforeWinner: string | null; winner: string }> = []
+  const result = await prisma.$transaction(async (tx) => {
     // A duplicate cron run must not reassign slots or overwrite a newer season snapshot.
     const [lock] = await tx.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext(${nbaCupCacheKey(input.season)})) AS acquired`
     if (!lock?.acquired) return { applied: false, skipped: "sync_already_running", failures, outcomes: [] }
@@ -87,15 +88,47 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     const games = assignNbaCupSlots([...merged.values()], current?.games ?? previous?.games)
     const priorSync = current?.syncedAt ?? previous?.syncedAt ?? ""
     const acceptedResponse = responses.some((row) => !row.error && Date.parse(checkedDates[row.date]) === now.getTime())
-    const data = { games, checkedDates, cursor: live ? current?.cursor ?? previous?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92,
-      syncedAt: acceptedResponse && (!Number.isFinite(Date.parse(priorSync)) || Date.parse(priorSync) <= now.getTime()) ? now.toISOString() : priorSync }
-    const expiresAt = new Date(Date.UTC(input.season + 2, 0, 1))
-    await tx.sportsDataCache.upsert({ where: { cacheKey: nbaCupCacheKey(input.season) }, create: { cacheKey: nbaCupCacheKey(input.season), data: data as any, expiresAt }, update: { data: data as any, expiresAt } })
-    // Rotate large populations through bounded batches, and never alter test pools.
-    const pools = await tx.playoffBracketChallenge.findMany({ where: { sport: "nba_cup", seasonYear: input.season, isTestMode: false }, orderBy: { updatedAt: "asc" }, take: 100, select: { id: true } })
+    // Keep changed events until every league has received them. A later provider
+    // change while a sweep is in progress requires one more pass so leagues
+    // already visited receive the newer snapshot too.
+    const priorFanout = current ? current.fanout ?? null : previous?.fanout ?? null
+    const eventIds = [...new Set([...(priorFanout?.eventIds ?? []), ...changed])]
+    const pending = eventIds.length > 0
+    const sweepCursor = pending ? priorFanout?.cursor ?? null : null
+    const restart = Boolean(priorFanout?.restart || (sweepCursor && changed.size))
+    const where = { sport: "nba_cup", seasonYear: input.season, isTestMode: false,
+      ...(sweepCursor ? { id: { gt: sweepCursor } } : {}) }
+    // Read one extra id to know whether the persisted cursor needs another pass.
+    const candidates = await tx.playoffBracketChallenge.findMany({ where, orderBy: pending ? { id: "asc" } : { updatedAt: "asc" }, take: pending ? 101 : 100, select: { id: true } })
+    const pools = pending ? candidates.slice(0, 100) : candidates
     const ids = pools.map((pool) => pool.id)
-    const rows = nbaCupSeriesRows(live ? games.filter((game) => changed.has(game.eventId)) : games)
+    const pendingSet = new Set(eventIds)
+    const rows = nbaCupSeriesRows(pending ? games.filter((game) => pendingSet.has(game.eventId)) : live ? [] : games)
+    const fanout = !pending ? null : candidates.length > 100
+      ? { eventIds, cursor: pools[pools.length - 1].id, restart }
+      : restart ? { eventIds, cursor: null, restart: false } : null
+    const data = { games, checkedDates, cursor: live ? current?.cursor ?? previous?.cursor ?? 0 : ((current?.cursor ?? 0) + 4) % 92,
+      syncedAt: acceptedResponse && (!Number.isFinite(Date.parse(priorSync)) || Date.parse(priorSync) <= now.getTime()) ? now.toISOString() : priorSync, fanout }
+    const expiresAt = new Date(Date.UTC(input.season + 2, 0, 1))
+    // Cache and per-league writes commit together: a failed batch stays pending.
+    await tx.sportsDataCache.upsert({ where: { cacheKey: nbaCupCacheKey(input.season) }, create: { cacheKey: nbaCupCacheKey(input.season), data: data as any, expiresAt }, update: { data: data as any, expiresAt } })
     if (ids.length && rows.length) {
+      // Capture the persisted winner before this transaction writes verified finals.
+      // Newly created series have no entry pick yet, so they establish the baseline.
+      const finalRows = previous?.games.length ? rows.filter((game) => game.winnerTeamName) : []
+      const existing = finalRows.length ? await tx.playoffBracketSeries.findMany({
+        where: { challengeId: { in: ids }, seriesNumber: { in: finalRows.map((game) => game.seriesNumber) } },
+        select: { id: true, challengeId: true, seriesNumber: true, winnerTeamName: true,
+          homeTeamName: true, awayTeamName: true },
+      }) : []
+      const finalByNumber = new Map(finalRows.map((game) => [game.seriesNumber, game]))
+      for (const series of existing) {
+        const next = finalByNumber.get(series.seriesNumber)
+        if (!next?.winnerTeamName || next.winnerTeamName === series.winnerTeamName) continue
+        alertDecisions.push({ challengeId: series.challengeId, seriesId: series.id,
+          seriesName: `${next.homeTeamName ?? series.homeTeamName} vs ${next.awayTeamName ?? series.awayTeamName}`,
+          beforeWinner: series.winnerTeamName, winner: next.winnerTeamName })
+      }
       await tx.playoffBracketSeries.createMany({ data: pools.flatMap((pool) => rows.filter((game) => game.round === "cup_group_play").map((game) => ({ ...game, challengeId: pool.id, lastSyncedAt: now }))), skipDuplicates: true })
       for (const game of rows) {
         await tx.playoffBracketSeries.updateMany({ where: { challengeId: { in: ids }, seriesNumber: game.seriesNumber }, data: { ...game, lastSyncedAt: now } })
@@ -105,4 +138,21 @@ export async function syncNbaCupTournament(input: { season: number; apply: boole
     return { applied: true, gamesPublished: games.length, poolsUpdated: rows.length ? ids.length : 0, failures, outcomes: [],
       activeGames: games.filter((game) => game.status === "in_progress").length }
   }, { timeout: live ? 8000 : 55000, maxWait: live ? 1000 : 5000 })
+  if (result.applied && alertDecisions.length) {
+    try {
+      const { emitPlayoffDecisionAlerts, settleBracketAlertBatch } = await import("@/lib/chimmy/bracketChangeAlerts")
+      const byChallenge = new Map<string, typeof alertDecisions>()
+      for (const decision of alertDecisions) {
+        const decisions = byChallenge.get(decision.challengeId) ?? []
+        decisions.push(decision)
+        byChallenge.set(decision.challengeId, decisions)
+      }
+      const failed = await settleBracketAlertBatch([...byChallenge], ([challengeId, decisions]) =>
+        emitPlayoffDecisionAlerts({ challengeId, decisions }))
+      if (failed) console.warn("[NBA Cup] bracket change alerts failed", { failed })
+    } catch (error) {
+      console.warn("[NBA Cup] bracket change alerts unavailable", error)
+    }
+  }
+  return result
 }

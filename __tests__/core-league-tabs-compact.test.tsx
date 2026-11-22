@@ -14,7 +14,8 @@ describe('league-first compact league tabs', () => {
       <LeagueTabs leagueId="L 1" leagueName="Sunday Sweat" activeKey="matchup" hasScoredWeek tradeSupported draftSupported compact />,
     )
     const primary = Array.from(container.querySelectorAll('.af-lt-compact-row a')).map((a) => a.textContent)
-    expect(primary).toEqual(['Overview', 'My team', 'Matchup', 'Players', 'Moves'])
+    // Trades, not Moves (2026-11-14): Moves folded into Trades.
+    expect(primary).toEqual(['Overview', 'My team', 'Matchup', 'Players', 'Trades'])
     for (const label of ['Waivers', 'War Room', 'Draft HQ', 'Your week', 'Schedule', 'Standings', 'Outlook']) {
       expect(container.querySelector('.af-lt-more-list')!.textContent).toContain(label)
     }
@@ -74,7 +75,8 @@ describe('league-first compact league tabs', () => {
       <LeagueTabs leagueId="L1" leagueName="Pre-draft" activeKey="home" hasScoredWeek={false} tradeSupported={false} draftSupported compact />,
     )
     const primary = Array.from(container.querySelectorAll('.af-lt-compact-row a')).map((a) => a.textContent)
-    expect(primary).toEqual(['Overview', 'My team', 'Players', 'Moves'])
+    // A league that cannot trade drops Trades too, rather than linking to nothing.
+    expect(primary).toEqual(['Overview', 'My team', 'Players'])
   })
 
   it('keeps the primary workflow consistent when compact is off', () => {

@@ -15,11 +15,3 @@ export type ZombieChimmyIntent =
   | 'query_item_validity'
   | 'query_trade_validity'
 
-export type ZombieChimmyActionPayload = {
-  leagueId: string
-  userId: string
-  intent: ZombieChimmyIntent
-  rawText: string
-  week?: number
-  itemId?: string
-}

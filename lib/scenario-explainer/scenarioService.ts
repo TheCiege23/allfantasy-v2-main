@@ -5,7 +5,7 @@ import { loadOutlookInputs, type LeagueInput } from '@/lib/core-app/seasonOutloo
 import { readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
 import { buildEligibleTeamsWithOdds, selectEligibleTeams, type StandingsRow } from '@/lib/draft-lottery/standingsForLottery'
 import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
-import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
+import { findViewerRosterId, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
 import { seedFromString } from '@/lib/core-app/outlookSim'
 import { chopProfile, firstPickOdds, simulateChop, type PickRuleKind, type RunRow } from './odds'
@@ -56,7 +56,7 @@ const RULE_TEXT: Record<PickRuleKind, string> = {
 export async function readScenarios(leagueId: string, userId: string): Promise<ScenarioExplainer | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, platformLeagueId: true, settings: true, sport: true, leagueType: true },
+    select: { id: true, name: true, platform: true, platformLeagueId: true, settings: true, sport: true, leagueType: true, isDynasty: true },
   })
   if (!league) return null
   if (await isGuillotineLeague(leagueId)) return { kind: 'guillotine', chop: await readChop(leagueId, userId) }
@@ -64,7 +64,7 @@ export async function readScenarios(leagueId: string, userId: string): Promise<S
 }
 
 async function readFirstPick(
-  league: { id: string; name: string | null; platform: string | null; platformLeagueId: string | null; settings: unknown; sport: unknown; leagueType: string | null },
+  league: { id: string; name: string | null; platform: string | null; platformLeagueId: string | null; settings: unknown; sport: unknown; leagueType: string | null; isDynasty?: boolean | null },
   userId: string,
 ): Promise<FirstPickExplainer> {
   const rule = await readDraftOrderRule(league)
@@ -115,7 +115,9 @@ async function readChop(leagueId: string, userId: string): Promise<ChopExplainer
   const config = await getGuillotineConfig(leagueId)
   if (!config) return { supported: false, reason: 'not_found' }
   const [week, myRosterId, chopped, rosters, scores] = await Promise.all([
-    resolveGuillotineCurrentWeek(leagueId, config),
+    // The week being played, not the last one settled: the card said "to survive week 4" during week 5
+    // and left week 4's scores out of every team's average (walked locally 2026-11-20).
+    resolveGuillotineLiveWeek(leagueId, config),
     findViewerRosterId(leagueId, userId).catch(() => null),
     prisma.guillotineRosterState.findMany({ where: { leagueId, choppedAt: { not: null } }, select: { rosterId: true } }),
     prisma.roster.findMany({ where: { leagueId }, select: { id: true } }),

@@ -15,53 +15,6 @@ export type SlimPlayer = {
   years_exp?: number
 }
 
-function parseSlimMap(data: Record<string, unknown>, opts: { nba: boolean }): Record<string, SlimPlayer> {
-  const out: Record<string, SlimPlayer> = {}
-  for (const [playerId, raw] of Object.entries(data)) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
-    const p = raw as Record<string, unknown>
-    const fullName = typeof p.full_name === 'string' ? p.full_name.trim() : ''
-    const fn = typeof p.first_name === 'string' ? p.first_name.trim() : ''
-    const ln = typeof p.last_name === 'string' ? p.last_name.trim() : ''
-    const name =
-      fullName || [fn, ln].filter(Boolean).join(' ').trim() || String(p.player_id ?? playerId)
-    const position = typeof p.position === 'string' ? p.position : ''
-    const teamRaw = typeof p.team === 'string' ? p.team.trim() : ''
-    const team = teamRaw || 'FA'
-    const espnRaw = p.espn_id
-    const espn_id =
-      espnRaw != null && espnRaw !== ''
-        ? typeof espnRaw === 'number'
-          ? String(espnRaw)
-          : String(espnRaw).trim()
-        : undefined
-
-    let nba_id: string | undefined
-    if (opts.nba) {
-      const statsRaw = p.stats_id ?? p.statsId
-      if (statsRaw != null && statsRaw !== '') {
-        nba_id = typeof statsRaw === 'number' ? String(statsRaw) : String(statsRaw).trim()
-      }
-    }
-
-    const yearsRaw = p.years_exp
-    const years_exp =
-      typeof yearsRaw === 'number' && Number.isFinite(yearsRaw) ? yearsRaw : undefined
-
-    const row: SlimPlayer = {
-      id: playerId,
-      name,
-      position,
-      team,
-      ...(espn_id ? { espn_id } : {}),
-      ...(nba_id ? { nba_id } : {}),
-      ...(years_exp !== undefined ? { years_exp } : {}),
-    }
-    out[playerId] = row
-  }
-  return out
-}
-
 function parseSlimMapFromDb(
   rows: Array<{ id: string; name: string; position: string; team: string; stats: unknown; projections: unknown }>,
   opts: { nba: boolean },

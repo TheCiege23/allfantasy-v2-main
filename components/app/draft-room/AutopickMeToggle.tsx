@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** `draft_as_me` (AF Pro): as soon as the manager is on the clock, the queue goes first, then Chimmy picks the way they draft. */
-export type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
+type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
 
 export type ViewerAutopickData = {
   enabled: boolean
@@ -12,7 +12,7 @@ export type ViewerAutopickData = {
   updatedAt: string | null
 }
 
-export type AutopickMeToggleProps = {
+type AutopickMeToggleProps = {
   viewerAutopick: ViewerAutopickData | null | undefined
   leagueId: string
   onUpdate: (updated: ViewerAutopickData) => void
@@ -34,6 +34,29 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
 
   const isProEligible = viewerAutopick?.isProEligible ?? false
 
+  // "Draft like me": where Chimmy learned this manager's style, or why it cannot yet (2026-11-21).
+  const [style, setStyle] = useState<{ ready: boolean; summary: string } | null>(null)
+  const draftingLikeMe = localEnabled && localMode === 'draft_as_me'
+  useEffect(() => {
+    if (!draftingLikeMe) {
+      setStyle(null)
+      return
+    }
+    let cancelled = false
+    Promise.resolve()
+      .then(() => fetch(`/api/leagues/${leagueId}/draft/autopick/me/style`, { cache: 'no-store' }))
+      .then((res) => (res?.ok ? res.json() : null))
+      .then((data: { style?: { ready: boolean; summary: string } } | null) => {
+        if (!cancelled) setStyle(data?.style ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setStyle(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [draftingLikeMe, leagueId])
+
   const save = useCallback(
     async (enabled: boolean, mode: AutopickMode) => {
       setSaving(true)
@@ -54,7 +77,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
           const msg =
             data?.error ??
             (res.status === 403
-              ? 'AF Pro required to enable AI queue auto-pick.'
+              ? 'AF Pro required to enable Chimmy queue auto-pick.'
               : 'Failed to save preference.')
           throw new Error(msg)
         }
@@ -126,7 +149,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             title={isProEligible ? undefined : 'AF Pro required'}
             onClick={() => {
               if (!isProEligible) {
-                setError('AF Pro required to enable AI queue auto-pick.')
+                setError('AF Pro required to enable Chimmy queue auto-pick.')
                 return
               }
               void save(true, 'ai_queue')
@@ -137,7 +160,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
                 : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
             } ${!isProEligible ? 'cursor-not-allowed opacity-45' : ''}`}
           >
-            AI Queue{!isProEligible ? ' (Pro)' : ''}
+            Chimmy Queue{!isProEligible ? ' (Pro)' : ''}
           </button>
           <button
             type="button"
@@ -161,6 +184,15 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             Draft like me{!isProEligible ? ' (Pro)' : ''}
           </button>
         </>
+      ) : null}
+
+      {draftingLikeMe && style ? (
+        <p
+          data-testid="autopick-draft-like-me-summary"
+          className={`basis-full text-[11px] leading-snug ${style.ready ? 'text-white/60' : 'text-amber-200/80'}`}
+        >
+          {style.summary}
+        </p>
       ) : null}
 
       {error ? (

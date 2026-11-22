@@ -2,10 +2,8 @@
  * SportLegacyResolver — sport normalization and display for Legacy Score Engine.
  */
 
-import { isSupportedSport, normalizeToSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
-
-export const LEGACY_SUPPORTED_SPORTS: LeagueSport[] = [...SUPPORTED_SPORTS]
 
 export function normalizeSportForLegacy(sport: string | null | undefined): string {
   return normalizeToSupportedSport(sport)
@@ -15,7 +13,7 @@ export function isSupportedLegacySport(sport: string | null | undefined): sport 
   return isSupportedSport(sport)
 }
 
-export const LEGACY_SPORT_LABELS: Record<string, string> = {
+const LEGACY_SPORT_LABELS: Record<string, string> = {
   NFL: 'NFL',
   NHL: 'NHL',
   NBA: 'NBA',

@@ -131,7 +131,7 @@ async function enqueueSwapNotification(
       userIds: [userId],
       category: 'autocoach',
       type: 'autocoach_swap',
-      title: '⚡ AI Auto Start/Sit Protection',
+      title: '⚡ Chimmy Auto Start/Sit Protection',
       body: `${playerOutName} (${status}) → ${playerInName} · ${leagueName}`,
       severity: 'low',
       leagueId,

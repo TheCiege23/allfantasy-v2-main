@@ -34,8 +34,8 @@ export type NcaafBridgeDb = {
   playerIdentityMap: {
     findMany(args: {
       where: Record<string, unknown>
-      select: { id: true; rollingInsightsId: true; cfbdId: true; fantraxId?: true }
-    }): Promise<Array<{ id: string; rollingInsightsId: string | null; cfbdId: string | null; fantraxId?: string | null }>>
+      select: { id: true; rollingInsightsId: true; cfbdId: true; fantraxId?: true; espnId?: true }
+    }): Promise<Array<{ id: string; rollingInsightsId: string | null; cfbdId: string | null; fantraxId?: string | null; espnId?: string | null }>>
   }
 }
 
@@ -54,11 +54,14 @@ export type NcaafGameLogIdBridge = {
 
 const NUMERIC = /^\d+$/
 
-export async function bridgeNcaafRosterIdsToCfbdIds(db: NcaafBridgeDb, rosterIds: string[], namespace: 'pool' | 'fantrax' = 'pool'): Promise<NcaafGameLogIdBridge> {
-  const ids = [...new Set(rosterIds.filter(Boolean))]
-  const numeric = namespace === 'fantrax' ? [] : ids.filter((id) => NUMERIC.test(id))
+export type NcaafRosterNamespace = 'pool' | 'fantrax' | 'espn'
 
-  const [cfbdPool, byRi, byIdentityId, byFantrax] = await Promise.all([
+export async function bridgeNcaafRosterIdsToCfbdIds(db: NcaafBridgeDb, rosterIds: string[], namespace: NcaafRosterNamespace = 'pool'): Promise<NcaafGameLogIdBridge> {
+  const ids = [...new Set(rosterIds.filter(Boolean))]
+  const numeric = namespace === 'pool' ? ids.filter((id) => NUMERIC.test(id)) : []
+  const providerColumn = namespace === 'pool' ? null : namespace === 'fantrax' ? 'fantraxId' : 'espnId'
+
+  const [cfbdPool, byRi, byIdentityId, byProvider] = await Promise.all([
     numeric.length
       ? db.sportsPlayer.findMany({
           where: { sport: { in: NCAAF_SPORT_KEYS }, source: 'cfbd', externalId: { in: numeric } },
@@ -75,10 +78,10 @@ export async function bridgeNcaafRosterIdsToCfbdIds(db: NcaafBridgeDb, rosterIds
       where: { sport: { in: NCAAF_SPORT_KEYS }, id: { in: ids }, cfbdId: { not: null } },
       select: { id: true, rollingInsightsId: true, cfbdId: true },
     }) : Promise.resolve([]),
-    namespace === 'fantrax'
+    providerColumn
       ? db.playerIdentityMap.findMany({
-          where: { sport: { in: NCAAF_SPORT_KEYS }, fantraxId: { in: ids }, cfbdId: { not: null } },
-          select: { id: true, rollingInsightsId: true, cfbdId: true, fantraxId: true },
+          where: { sport: { in: NCAAF_SPORT_KEYS }, [providerColumn]: { in: ids }, cfbdId: { not: null } },
+          select: { id: true, rollingInsightsId: true, cfbdId: true, [providerColumn]: true },
         })
       : Promise.resolve([]),
   ])
@@ -94,7 +97,10 @@ export async function bridgeNcaafRosterIdsToCfbdIds(db: NcaafBridgeDb, rosterIds
   }
   for (const row of cfbdPool) add(row.externalId, row.externalId, false)
   for (const row of byRi) if (row.rollingInsightsId) add(row.rollingInsightsId, row.cfbdId, true)
-  for (const row of byFantrax) if (row.fantraxId) add(row.fantraxId, row.cfbdId, true)
+  if (providerColumn) for (const row of byProvider) {
+    const id = row[providerColumn]
+    if (id) add(id, row.cfbdId, true)
+  }
   for (const row of byIdentityId) add(row.id, row.cfbdId, true)
 
   const ambiguous = new Set<string>()

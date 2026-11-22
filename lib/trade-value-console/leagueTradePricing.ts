@@ -1,15 +1,23 @@
+import { valueBookFor } from '@/lib/core-app/valueBook'
+import { loadAfNflMarketQuote } from './afLeaguePlayerPrice'
 import 'server-only'
 
 import type { SportsPlayerRecord } from '@prisma/client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
-import { fantasyCalcSettingsForChart } from '@/lib/fantasycalc-profile-capture'
+import { fantasyCalcSettingsForChart, LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
+import { pickShareByOverall, REFERENCE_TEAMS } from '@/lib/pick-curve'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
-import { getFantasyCalcChartDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcChartDbFirst, readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { collapseSamePersonRows } from '@/lib/data/samePersonRows'
+import {
+  providerIdentityColumn,
+  resolveProviderRosterPlayers,
+  type ResolvedProviderPlayer,
+} from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -310,6 +318,25 @@ function extrapolatedLateRound(
   return Math.max(1, Math.round(lastValue * ratio ** (round - last)))
 }
 
+/** Canton prospect proxy for a combined draft, using only rounds present on the stored chart. */
+export function storedRookieSlotValues(chart: LeagueTradeChart, year: number): number[] {
+  const { fcPlayers } = chart
+  const teams = chart.nflCtx.largeLeagueRookiePicks ? REFERENCE_TEAMS : chart.leagueSize
+  if (!Number.isInteger(teams) || teams < 2) return []
+  const rounds = new Set(chartRounds(fcPlayers, year))
+  const board: number[] = []
+  for (let round = 1; rounds.has(round); round++) {
+    for (let slot = 1; slot <= teams; slot++) {
+      const share = (slot - 0.5) / teams
+      const tier = share < 1 / 3 ? 'early' : share < 2 / 3 ? 'mid' : 'late'
+      const quote = chartSlotValue(fcPlayers, year, round, slot) ?? chartRoundValue(fcPlayers, year, round, tier)
+      if (quote == null || !Number.isFinite(quote) || quote <= 0) return board
+      board.push(quote)
+    }
+  }
+  return board
+}
+
 /** The chart's own price for exactly this season and round, or null when it carries no such row. */
 function chartRoundValue(
   fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
@@ -380,11 +407,13 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
  * follow when no evidenced value exists. Nothing is priced as zero: `unpriced` is the signal.
  */
 export async function priceLeagueTradePick(
-  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null; originalRosterId?: string | null },
+  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null; originalRosterId?: string | null; overall?: number },
   args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[]; pickSlots?: PickSlotProjection | null },
 ): Promise<{ priced: PricedAsset; dataSource: string; projection?: string }> {
   const curve = await pricePick({ year: pick.year, round: pick.round, tier: pick.tier ?? null }, args.nflCtx)
-  const projected = pick.tier ? null : projectedLivePick(args.fcPlayers, pick, args.pickSlots ?? null)
+  const teams = args.nflCtx.numTeams ?? REFERENCE_TEAMS
+  const large = args.nflCtx.largeLeagueRookiePicks
+  const projected = large || pick.tier ? null : projectedLivePick(args.fcPlayers, pick, args.pickSlots ?? null)
   if (projected) {
     return {
       priced: repricedAsset(curve, projected.value, 'fantasycalc'),
@@ -392,8 +421,15 @@ export async function priceLeagueTradePick(
       projection: projected.projection,
     }
   }
-  const live = livePickValue(args.fcPlayers, pick.year, pick.round, pick.tier ?? null)
-  if (live != null) return { priced: repricedAsset(curve, live, 'fantasycalc'), dataSource: 'fantasycalc_pick' }
+  const live = large
+    ? largeLeaguePickValue(args.fcPlayers, pick, teams, args.pickSlots ?? null)
+    : livePickValue(args.fcPlayers, pick.year, pick.round, pick.tier ?? null)
+  if (live != null) {
+    return {
+      priced: repricedAsset(curve, live, 'fantasycalc'),
+      dataSource: large ? 'fantasycalc_pick_overall_estimate' : 'fantasycalc_pick',
+    }
+  }
   return {
     priced: {
       ...curve,
@@ -405,6 +441,56 @@ export async function priceLeagueTradePick(
     },
     dataSource: 'no_pick_market',
   }
+}
+
+/** Estimate a large-league pick from its overall position on the same season’s 12-team chart. */
+function largeLeaguePickValue(
+  players: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
+  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null; originalRosterId?: string | null; overall?: number },
+  teams: number,
+  slots: PickSlotProjection | null,
+): number | null {
+  if (pick.overall != null && !Number.isInteger(pick.overall)) return null
+  const before = (pick.round - 1) * teams
+  const projectedSlot = !pick.tier && slots?.draftYear === pick.year && pick.originalRosterId
+    ? slots.slotByTeam?.get(pick.originalRosterId)
+    : undefined
+  const tierFraction = pick.tier === 'early' ? 1 / 6 : pick.tier === 'late' ? 5 / 6 : 1 / 2
+  const overall = pick.overall ?? (before + (projectedSlot ?? (teams * tierFraction + 0.5)))
+  if (!Number.isFinite(overall) || overall <= before || overall > before + teams) return null
+  if (Number.isInteger(overall)) {
+    const round = Math.ceil(overall / REFERENCE_TEAMS)
+    const slot = (overall - 1) % REFERENCE_TEAMS + 1
+    const exact = chartSlotValue(players, pick.year, round, slot)
+    if (exact != null && exact > 0) return exact
+  }
+
+  // Round-average rows describe the midpoint of a 12-team round. Between rows, interpolate
+  // geometrically. Beyond the board, extend the last observed slope in log-rank space. Using rank
+  // keeps the tail decreasing across a 150-pick round instead of giving every late pick a flat floor.
+  const midpoint = (round: number) => (round - 1) * REFERENCE_TEAMS + (REFERENCE_TEAMS + 1) / 2
+  const equivalentRound = (overall - midpoint(1)) / REFERENCE_TEAMS + 1
+  const roundPrice = (round: number) => chartRoundValue(players, pick.year, round, null)
+  if (equivalentRound < 1) {
+    const first = roundPrice(1)
+    return first != null && first > 0 ? first * pickShareByOverall(overall) : null
+  }
+  const [lastRound, previousRound] = chartRounds(players, pick.year)
+  if (lastRound != null && equivalentRound > lastRound) {
+    const last = roundPrice(lastRound)
+    const previous = previousRound == null ? null : roundPrice(previousRound)
+    if (last == null || previous == null || !(previous > last && last > 0) || previousRound == null) return null
+    const rankRatio = midpoint(lastRound) / midpoint(previousRound)
+    const slope = Math.log(last / previous) / Math.log(rankRatio)
+    const estimate = last * (overall / midpoint(lastRound)) ** slope
+    return estimate >= 0.5 ? estimate : null
+  }
+  const lo = Math.floor(equivalentRound)
+  const hi = Math.ceil(equivalentRound)
+  const a = roundPrice(lo)
+  const b = hi === lo ? a : roundPrice(hi)
+  if (a == null || a <= 0 || b == null || b <= 0) return null
+  return a * (Math.min(a, b) / a) ** (equivalentRound - lo)
 }
 
 /*
@@ -585,6 +671,50 @@ async function onePersonNamed(
   return kept.length === 1 ? kept[0]! : null
 }
 
+/**
+ * A non-Sleeper league's roster id (Fantrax, ESPN, Fleaflicker, MFL) as the identity it names, or null.
+ * Sleeper is not handled here: its ids are the records' own keys. Never throws — an identity read that
+ * fails leaves the name search to settle the player, as it did for a typed name.
+ */
+export async function identifyProviderRosterId(
+  id: string,
+  platform: string,
+  sport: string,
+  resolve: typeof resolveProviderRosterPlayers = resolveProviderRosterPlayers,
+): Promise<ResolvedProviderPlayer | null> {
+  if (!providerIdentityColumn(platform)) return null
+  const hits = await resolve(platform, [id], sport).catch(() => null)
+  return hits?.get(id) ?? null
+}
+
+/** One athlete's name in two sources: case, accents, punctuation and spacing aside. */
+function sameAthleteName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) =>
+    String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  const x = norm(a)
+  return x.length > 0 && x === norm(b)
+}
+
+/**
+ * A provider identity standing in for a missing `sports_players` row: enough for the unpriced line
+ * (name, position, team), keyed by the league's own id so the sport grader still reads it.
+ */
+function identityAsRecord(identity: ResolvedProviderPlayer, leagueId: string, sport: SupportedSport): SportsPlayerRecord {
+  return {
+    id: leagueId,
+    sport: identity.sport || sport,
+    name: identity.name,
+    position: identity.position ?? '—',
+    team: identity.team ?? '—',
+    headshotUrl: identity.imageUrl ?? null,
+    headshotUrlLg: null,
+    headshotUrlSm: null,
+    logoUrl: null,
+    injuryStatus: null,
+    dataSource: 'provider_identity',
+  } as unknown as SportsPlayerRecord
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -605,6 +735,14 @@ export async function resolveAssets(
     onAnotherChart?: ReadonlySet<string>
     /** Where each team's next-draft picks are projected to land — see `loadPickSlotProjection`. */
     pickSlots?: PickSlotProjection | null
+    combinedPickQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => Promise<number | null>
+    /**
+     * The league's platform (`fantrax`, `espn`, …). A roster player's `playerId` from such a league is
+     * that platform's own id, read through its `PlayerIdentityMap` column — see `identifyProviderRosterId`.
+     */
+    platform?: string | null
+    /** Injectable for tests; defaults to the real `PlayerIdentityMap` read. */
+    resolveProviderIds?: typeof resolveProviderRosterPlayers
   },
 ): Promise<{
   /** One line per pick priced by its original owner's projected finish ("2027 1st projected early (62%)"). */
@@ -651,7 +789,17 @@ export async function resolveAssets(
       continue
     }
     if (raw.kind === 'pick') {
-      const { priced: p, dataSource, projection } = await priceLeagueTradePick(raw, args)
+      const combined = raw.draftSide === 'combined'
+      const quote = combined ? await args.combinedPickQuote?.(raw) : null
+      const combinedName = `Combined ${raw.year} ${ordinalRound(raw.round)}`
+      const { priced: p, dataSource, projection } = combined
+        ? {
+            priced: quote != null && Number.isFinite(quote) && quote > 0
+              ? { ...repricedAsset(await pricePick({ year: raw.year, round: raw.round, tier: raw.tier ?? null }, args.nflCtx), quote, 'curve'), name: combinedName }
+              : unpricedAsset({ name: combinedName, type: 'pick', reason: noPickMarketUnpricedReason(raw.year, raw.round) }),
+            dataSource: quote != null ? 'c2c_combined_pick' : 'no_pick_market', projection: undefined,
+          }
+        : await priceLeagueTradePick(raw, args)
       if (projection) pickProjections.push(projection)
       priced.push(p)
       lines.push(
@@ -734,15 +882,34 @@ export async function resolveAssets(
       if (!row && knownSleeperId) {
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
-      let pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
-      if (
-        pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
-        isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
-      ) {
-        floorCandidates.push(knownSleeperId)
-        if (args.onAnotherChart?.has(knownSleeperId)) {
-          pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
-          belowFloor.push(displayName)
+      let pa: PricedAsset
+      const afBook = args.nflCtx.afLeagueMarketBook
+      if (afBook) {
+        const id = knownSleeperId
+        const market = await loadAfNflMarketQuote({ book: afBook, sleeperId: id, name: displayName, position,
+          allowNameLookup: !raw.playerId && !raw.providerIdentity }).catch(() => null)
+        const specialty = (id || (!raw.playerId && !raw.providerIdentity)) ? leagueValueForPlayer({
+          name: displayName, identity: { sleeperId: id, position },
+          bySleeperId: args.nflCtx.leagueValueBySleeperId, byNameLower: args.nflCtx.leagueValueByNameLower,
+        }) : null
+        const price = market?.marketValue ?? specialty?.value
+        pa = price == null ? unpricedAsset({ name: displayName, type: 'player', position,
+          reason: { code: 'priced_on_analysis', label: 'AF has no verified league trade price for this player.' } })
+          : { name: displayName, type: 'player', position: position ?? market?.position ?? specialty?.position ?? undefined, value: price,
+              source: market ? 'allfantasy' : specialty?.basis ?? 'allfantasy',
+              ...(market ? { valueAsOf: market.generatedAt.toISOString() } : {}),
+              assetValue: { marketValue: price, impactValue: price, vorpValue: price, volatility: 0 } }
+      } else {
+        pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+        if (
+          pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
+          isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
+        ) {
+          floorCandidates.push(knownSleeperId)
+          if (args.onAnotherChart?.has(knownSleeperId)) {
+            pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
+            belowFloor.push(displayName)
+          }
         }
       }
       const defenderProjection = pa.source === 'idp-vorp' ? leagueValueForPlayer({
@@ -755,13 +922,13 @@ export async function resolveAssets(
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
-      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
+      else if (!afBook && !matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
       const headshot = row?.headshotUrl ?? row?.headshotUrlLg ?? row?.headshotUrlSm ?? null
       const src: TradeConsolePlayerLine['pricedSource'] =
-        pa.source === 'fantasycalc' || pa.source === 'excel'
+        pa.source === 'allfantasy' ? 'allfantasy' : pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
           : pa.source === 'idp-vorp' || pa.source === 'kicker-flat' || pa.source === 'dst-flat'
             ? 'idp_league'
@@ -779,7 +946,7 @@ export async function resolveAssets(
           logoUrl: row?.logoUrl ?? null,
           injuryStatus: row?.injuryStatus ?? null,
           pricedSource: src,
-          dataSource: row?.dataSource ?? 'fantasycalc+rolling',
+          dataSource: afBook ? 'allfantasy' : row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
           ...(defenderProjection ? {
             effectiveProjection: defenderProjection.points,
@@ -792,11 +959,57 @@ export async function resolveAssets(
       continue
     }
 
-    if (!row && !raw.playerId && !raw.providerIdentity && displayName.length >= 2) {
+    /*
+     * 🛑 A NON-SLEEPER ROSTER ID USED TO END HERE AS "COULD NOT RESOLVE" (2026-11-19). The Trade Center
+     * sends a roster player's `playerId` as the league's own id — a Fantrax id in a Fantrax league — and
+     * `getPlayer` keys records by Sleeper-shaped ids, so it missed. The name search below was then
+     * skipped because a `playerId` was present, and an NHL Fantrax trade (Hughes for Montour + Hintz)
+     * was refused before the NHL points grader, which reads Fantrax ids itself, ever ran. The id is
+     * now read through the platform's `PlayerIdentityMap` column (the rule the roster list already
+     * uses to show the names), in this order:
+     *   1. the identity's Rolling Insights (then Sleeper) id → the record keyed by it. Measured on
+     *      production the same day, outside the NFL NO Fantrax-linked identity carries a Sleeper id,
+     *      but the Rolling Insights id reaches a record for NHL 186/196, NBA 298/307, NCAAB 2819/2909.
+     *      The record must carry the identity's NAME: `sports_players` keys Sleeper- and RI-seeded
+     *      rows the same way (`NHL:<number>`), so a bare number is not proof of the person;
+     *   2. the name, narrowed by the identity's position — "Jack Hughes" is two NHL centres (NJD and
+     *      LA), which only step 1 tells apart, and is why it comes first;
+     *   3. the identity itself. It proves the player exists, and every sport grader reads the league's
+     *      own ids, so an unrecordable player is an unpriced line, never "could not resolve".
+     */
+    let identityPosition: string | null = null
+    let identity: ResolvedProviderPlayer | null = null
+    if (!row && !providerSleeperId && !raw.providerIdentity && raw.playerId?.trim() && args.platform) {
+      identity = await identifyProviderRosterId(raw.playerId.trim(), args.platform, args.effectiveSport, args.resolveProviderIds)
+      if (identity) {
+        identityPosition = identity.position
+        displayName = identity.name || displayName
+        for (const key of [identity.rollingInsightsId, identity.sleeperId]) {
+          if (!key || row) continue
+          const keyed = (await getPlayer(key, { sport: args.effectiveSport })) as SportsPlayerRecord | null
+          if (keyed && sameAthleteName(keyed.name, identity.name) && valuePositionsAgree(identity.position, keyed.position)) row = keyed
+        }
+      }
+    }
+    /*
+     * ⚠ A SELECTED ID THAT MISSES IS NEVER REPLACED BY A NAME HIT (`__tests__/values/player-value-identity.test.ts`):
+     * a typed or search-picked id that resolves to nothing must not turn into whichever namesake the name
+     * search returns. The one exception is an id the platform's identity map has already identified —
+     * then the name searched is the IDENTITY's, proven by that id, not a guess.
+     */
+    if (!row && !raw.providerIdentity && (!raw.playerId?.trim() || identity) && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
-      const exact = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      const named = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      /*
+       * The identity's position separates namesakes (two Sebastian Ahos: a C and a D). It only ever
+       * narrows: sources label hockey forwards differently (C / LW / RW / F), so a filter that empties
+       * the list is a labelling disagreement, not evidence, and the unfiltered rows stand.
+       */
+      const byPosition = identityPosition ? named.filter(p => valuePositionsAgree(identityPosition, p.position)) : named
+      const exact = byPosition.length > 0 ? byPosition : named
       row = (exact.length === 1 ? exact[0] : await onePersonNamed(exact, args.effectiveSport)) as SportsPlayerRecord | null
     }
+    if (!row && identity && raw.playerId?.trim()) row = identityAsRecord(identity, raw.playerId.trim(), args.effectiveSport)
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')
       continue
@@ -871,6 +1084,12 @@ export type LeagueTradeChart = {
   isSuperFlex: boolean
   waiverBudget: number
   /**
+   * True only when `waiverBudget` is the league's OWN (an override or the saved league budget), not the $100
+   * stand-in. A completed trade's budget money is priced only then: $5000 of a Fantrax budget read against $100
+   * is "a whole budget" on any league whose real budget is larger, which is a confident wrong letter.
+   */
+  waiverBudgetFromLeague?: boolean
+  /**
    * This league's FAAB state (`loadLeagueFaabState`), or null: FAAB then prices on the linear formula. TODAY's
    * balances and week — so a dated chart (`withDatedMarket`) drops it rather than price a past trade on them.
    */
@@ -895,11 +1114,17 @@ export type LeagueTradeChart = {
  * Resolve the chart for a league and fetch it. Moved verbatim from the console; the console's
  * request overrides (`leagueSize`, `tePremium`, `isSuperFlex`, `waiverBudget`) ride in `overrides`.
  */
+/** Read the league chart from the current stored market without refreshing a provider. */
+export function readStoredLeagueTradeChart(profile: ReturnType<typeof fantasyCalcSettingsForChart>) {
+  return readFantasyCalcValuesFromDb(profile, { allowStale: false })
+}
+
 export async function resolveLeagueTradeChart(args: {
   leagueRow: LoadedTradeLeague | null
   leagueSnapshot: TradeConsoleLeagueSnapshot | null
   leagueNormCtx: NormalizedLeagueContext | null
-  overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number }
+  /** `isDynasty` applies only with no league (the open analyzer's format picker); a league uses its own book. */
+  overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number; isDynasty?: boolean }
   mark?: (name: string) => void
   /**
    * Resolve the league's chart SETTINGS without loading today's market or this league's defender
@@ -912,10 +1137,12 @@ export async function resolveLeagueTradeChart(args: {
   const { leagueRow, leagueSnapshot, leagueNormCtx } = args
   const coverage = leagueRow ? tradeFormatCoverage(leagueRow) : { gaps: [], prohibitedReason: null }
   const input = args.overrides ?? {}
-  const leagueSize =
-    input.leagueSize ??
-    leagueSnapshot?.leagueSize ??
-    12
+  const savedTeamCount = leagueSnapshot?.leagueSize ?? leagueRow?.leagueSize
+  const hasSavedTeamCount = typeof savedTeamCount === 'number' && Number.isInteger(savedTeamCount) && savedTeamCount >= 2
+  const leagueSize = input.leagueSize ?? (hasSavedTeamCount ? savedTeamCount : 12)
+  const valuationGaps = leagueRow && !hasSavedTeamCount
+    ? [...coverage.gaps, `This league has no verified team count. The grade uses ${leagueSize} teams.`]
+    : coverage.gaps
   /*
    * 🛑 THE LEAGUE'S OWN CHART, BY THE SAME RULE EVERY OTHER SURFACE PRICES IT WITH.
    *
@@ -927,7 +1154,7 @@ export async function resolveLeagueTradeChart(args: {
    * those surfaces show. Global mode (no league) keeps the old dynasty default, and says so.
    */
   const marketCtx = leagueRow ? marketContextFor(leagueRow.settings, leagueRow.leagueType, leagueSize) : null
-  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : true
+  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : input.isDynasty ?? true
   const tePremium =
     input.tePremium ??
     leagueSnapshot?.tePremiumHint ??
@@ -943,6 +1170,7 @@ export async function resolveLeagueTradeChart(args: {
     input.waiverBudget ??
     leagueSnapshot?.waiverBudget ??
     100
+  const waiverBudgetFromLeague = [input.waiverBudget, leagueSnapshot?.waiverBudget].some((b) => typeof b === 'number' && Number.isFinite(b) && b > 0)
 
   /*
    * The chart's reception weight is the league's, when the league states one: `scoringFit` measures
@@ -968,12 +1196,23 @@ export async function resolveLeagueTradeChart(args: {
    * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
    * retired, this number has to come back DOWN to 6 h or lower, not up.
    */
-  const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless
+  /*
+   * 🛑 FANTASYCALC IS AN NFL CHART, AND ONLY THE NFL PATH READS IT (`effectiveSport === 'NFL'` in
+   * `resolveAssets`; picks too — `sportHasPickMarket`). An NBA, NHL or MLB league fetched it anyway, and
+   * because a cold profile rethrows when the vendor fails (`getFantasyCalcChartDbFirst`), an unreachable
+   * FantasyCalc failed the whole grader for a sport that never uses it: "This league's values could not
+   * be loaded just now" in place of the sport grader's own answer (Fantrax-scale simulation, 2026-11-07).
+   * A league of unknown sport — the console's global mode — still gets the chart.
+   */
+  const leagueSport = String(leagueRow?.sport ?? leagueSnapshot?.sport ?? '').trim().toUpperCase()
+  const readsNflChart = !leagueSport || leagueSport === 'NFL'
+  const largeLeagueRookiePicks = readsNflChart && chartIsDynasty && leagueSize > LARGE_LEAGUE_PICK_THRESHOLD
+  const marketProfile = fantasyCalcSettingsForChart({ chartIsDynasty, isSuperFlex, leagueSize, pprNfl })
+  const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless || !readsNflChart
     ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
-    : await getFantasyCalcChartDbFirst(
-        fantasyCalcSettingsForChart({ chartIsDynasty, isSuperFlex, leagueSize, pprNfl }),
-        { maxStaleMs: 1000 * 60 * 60 * 2 },
-      )
+    : largeLeagueRookiePicks
+      ? await readStoredLeagueTradeChart(marketProfile)
+      : await getFantasyCalcChartDbFirst(marketProfile, { maxStaleMs: 1000 * 60 * 60 * 2 })
   args.mark?.('fantasycalc')
 
   /*
@@ -982,11 +1221,19 @@ export async function resolveLeagueTradeChart(args: {
    * because the console works in INTERNAL League.id space and Sleeper's roster and
    * settings endpoints do not answer to that id.
    */
-  const leagueValues = leagueRow?.platformLeagueId && !args.marketless
+  /*
+   * Built from the SLEEPER league — its settings, rosters and player index, all read from Sleeper by
+   * `platformLeagueId`. A Fantrax, ESPN or native league's id is not a Sleeper league id, so every grade
+   * there spent a Sleeper call on a league that does not exist (Fantrax-scale simulation: 63 calls across
+   * four leagues). Skipped only when the platform is KNOWN not to be Sleeper.
+   */
+  const platform = String(leagueRow?.platform ?? '').trim().toLowerCase()
+  const sleeperBacked = !platform || platform === 'sleeper'
+  const leagueValues = leagueRow?.platformLeagueId && !args.marketless && sleeperBacked && readsNflChart
     ? await loadLeagueTradeValues({
         prisma,
         platformLeagueId: leagueRow.platformLeagueId,
-        isDynasty: leagueRow.isDynasty ?? true,
+        isDynasty: chartIsDynasty,
       }).catch(() => null)
     : null
 
@@ -994,10 +1241,12 @@ export async function resolveLeagueTradeChart(args: {
   const faabState = args.marketless ? null : await loadLeagueFaabState(leagueRow)
 
   const nflCtx: ValuationContext = {
+    ...(leagueRow && leagueSport === 'NFL' && !args.marketless ? { afLeagueMarketBook: valueBookFor(leagueRow.settings, leagueRow.leagueType) } : {}),
     asOfDate: asOf,
     isSuperFlex,
     fantasyCalcPlayers: fcPlayers,
     numTeams: leagueSize,
+    ...(largeLeagueRookiePicks ? { largeLeagueRookiePicks } : {}),
     ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
     leagueValueBySleeperId: leagueValues?.bySleeperId,
     leagueUnpricedReasonBySleeperId: leagueValues?.unpricedReasonBySleeperId,
@@ -1020,13 +1269,16 @@ export async function resolveLeagueTradeChart(args: {
     tePremium: Boolean(tePremium),
     isSuperFlex,
     waiverBudget,
+    waiverBudgetFromLeague,
     faabState,
     pprNfl,
     fcPlayers,
     fcSyncedAt,
     nflCtx,
     pickSlots,
-    valuationGaps: coverage.gaps,
+    valuationGaps: largeLeagueRookiePicks
+      ? [...valuationGaps, 'Player market values use the stored 12-team chart. Rookie picks are estimated from overall position on that chart.']
+      : valuationGaps,
     rosterSpots: leagueRow ? rosterSpotsFromSettings(leagueRow.settings) : null,
   }
 }
@@ -1068,6 +1320,7 @@ export function withDatedMarket(
       isSuperFlex: chart.nflCtx.isSuperFlex,
       fantasyCalcPlayers: market.players,
       numTeams: chart.nflCtx.numTeams,
+      ...(chart.nflCtx.largeLeagueRookiePicks ? { largeLeagueRookiePicks: true } : {}),
     },
   }
 }

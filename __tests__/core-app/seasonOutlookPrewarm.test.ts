@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   marker: vi.fn(),
   check: vi.fn(),
   compute: vi.fn(),
+  snapshot: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -27,6 +28,11 @@ vi.mock('@/lib/core-app/seasonOutlookSims', () => ({
   writeLeagueSims: h.write,
   computeLeagueSim: h.compute,
   leagueSimHash: (sim: { tag: string }) => `hash-${sim.tag}`,
+}))
+
+vi.mock('@/lib/core-app/seasonOutlookOddsHistory', () => ({
+  snapshotFromRun: (p: { pid: string }, result: unknown) => ({ pid: p.pid, result }),
+  writeOddsSnapshot: h.snapshot,
 }))
 
 import { rerunLiveOutlooks, runOutlookPrewarm } from '@/lib/core-app/seasonOutlookPrewarm'
@@ -60,6 +66,7 @@ beforeEach(() => {
     return new Map([...held].map(([k, v]) => [k, { at: Date.parse(v.checkedAt ?? v.computedAt), marker: false }]))
   })
   h.compute.mockReturnValue({ hash: 'hash-new', iterations: 10_000, computedAt: NOW.toISOString() })
+  h.snapshot.mockResolvedValue({ ok: true, written: 1, pruned: 0 })
 })
 
 describe('runOutlookPrewarm', () => {
@@ -79,6 +86,25 @@ describe('runOutlookPrewarm', () => {
     expect(out).toMatchObject({ candidates: 1, due: 1, computed: 0, unchanged: 1 })
     expect(h.compute).not.toHaveBeenCalled()
     expect(h.write.mock.calls[0][0][0][1].checkedAt).toBeTruthy()
+  })
+
+  it('files the odds history from the same run it stores, computed or confirmed unchanged', async () => {
+    h.groupBy.mockResolvedValue([
+      { leagueId: 'moved', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+      { leagueId: 'same', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+    ])
+    h.read.mockResolvedValue(new Map([['same', stored('hash-same', '2026-09-17T12:00:00Z')]]))
+    const out = await runOutlookPrewarm(NOW)
+    expect(out).toMatchObject({ computed: 1, unchanged: 1, failed: 0 })
+    const filed = h.snapshot.mock.calls.map((c) => c[0] as { pid: string; result: { hash: string } })
+    expect(filed.map((f) => [f.pid, f.result.hash]).sort()).toEqual([['moved', 'hash-new'], ['same', 'hash-same']])
+  })
+
+  it('a failed history write never fails the league', async () => {
+    h.groupBy.mockResolvedValue([{ leagueId: 'moved', _max: { updatedAt: at('2026-09-17T14:00:00Z') } }])
+    h.read.mockResolvedValue(new Map())
+    h.snapshot.mockResolvedValue({ ok: false, written: 0, pruned: 0, reason: 'missing_table' })
+    expect(await runOutlookPrewarm(NOW)).toMatchObject({ computed: 1, failed: 0 })
   })
 
   it('re-runs a league whose inputs changed, at the full count', async () => {

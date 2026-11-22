@@ -13,9 +13,9 @@
  * Pure.
  */
 export const HEADS_UP_MS = 3 * 60 * 60 * 1000
-export const HEADS_UP_CACHE_PREFIX = 'af-heads-up:'
+const HEADS_UP_CACHE_PREFIX = 'af-heads-up:'
 
-export type HeadsUpDecision = 'warn' | 'wait' | 'act'
+type HeadsUpDecision = 'warn' | 'wait' | 'act'
 
 export function headsUpDecision(args: { warnedAt: Date | null; now: Date; gamesUnderway: boolean }): HeadsUpDecision {
   if (args.gamesUnderway) return 'act'

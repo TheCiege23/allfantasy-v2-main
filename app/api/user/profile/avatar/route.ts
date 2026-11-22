@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response
   const userId = auth.userId
 
-  if (!getBlobReadWriteToken()) {
+  if (!getBlobReadWriteToken() && !process.env.UPLOADTHING_TOKEN?.trim()) {
     return NextResponse.json({ error: "Storage not configured" }, { status: 503 })
   }
 

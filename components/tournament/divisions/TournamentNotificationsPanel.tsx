@@ -24,7 +24,7 @@ export function TournamentNotificationsPanel({ view }: { view: HubView }) {
   const moment = MOMENTS.find(m => m.id === selected)!
   const stack = [moment, ...MOMENTS.filter(m => m.id !== selected).slice(0, 2)]
   return (
-    <div className="grid items-start gap-6 xl:grid-cols-[300px_380px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[300px_380px_minmax(0,1fr)]">
       <section aria-labelledby="moments-h">
         <h2 id="moments-h" className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Moments</h2>
         <ul className="space-y-2">

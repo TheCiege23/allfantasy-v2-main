@@ -174,6 +174,10 @@ export type RedraftTradeProposal = {
     partnerGrade: string | null
     gradeWithheld: string | null
     receiptId: string | null
+    /** Zombie item offers: future scoring estimate, not a complete infection/payout grade. */
+    gradeScope?: 'zombie_future_scoring'
+    giveValue?: number | null
+    getValue?: number | null
   }
 }
 

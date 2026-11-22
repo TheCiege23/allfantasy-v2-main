@@ -24,7 +24,7 @@ import { buildTournamentSettingsSnapshot, isTournamentEligibleSport } from '@/li
 import { buildSurvivorSettingsSnapshot, isSurvivorEligibleSport } from '@/lib/league-concepts/survivorDefaults'
 import { buildDevySettingsSnapshot, isFootballDevyDefaultsSport } from '@/lib/league-concepts/devyDefaults'
 
-export const PRESET_ENGINE_VERSION = '1'
+const PRESET_ENGINE_VERSION = '1'
 
 export interface RunPresetEngineInput {
   concept: string
@@ -139,7 +139,7 @@ export function runPresetEngine(input: RunPresetEngineInput): PresetEngineOutput
   })
   // Football redraft (NFL/NCAAF) or the daily-sport redraft preset (NBA/NHL/MLB); null for others.
   const redraftSnapshot =
-    formatId === 'redraft'
+    (formatId === 'redraft' || formatId === 'pirate')
       ? buildRedraftSettingsSnapshot({
           sport,
           draftType: input.draftType,

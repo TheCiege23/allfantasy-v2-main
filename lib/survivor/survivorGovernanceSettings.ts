@@ -13,7 +13,7 @@
  * Times are US Eastern, like every other Survivor deadline (Torch Ceremony, vote close).
  */
 
-export const SURVIVOR_GOVERNANCE_KEY = 'survivorGovernance'
+const SURVIVOR_GOVERNANCE_KEY = 'survivorGovernance'
 
 export const SURVIVOR_GOVERNANCE_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 export type SurvivorGovernanceDay = (typeof SURVIVOR_GOVERNANCE_DAYS)[number]
@@ -26,9 +26,9 @@ export type SurvivorGovernanceDay = (typeof SURVIVOR_GOVERNANCE_DAYS)[number]
  *   in `order` (season points, best first, or a random order). The number of letters used is the
  *   number of tribes, so a pattern can also grow or shrink the tribe count.
  */
-export const SURVIVOR_SWAP_MODES = ['random_shuffle', 'resize', 'return_to_original', 'custom_pattern'] as const
+const SURVIVOR_SWAP_MODES = ['random_shuffle', 'resize', 'return_to_original', 'custom_pattern'] as const
 export type SurvivorSwapMode = (typeof SURVIVOR_SWAP_MODES)[number]
-export const SURVIVOR_SWAP_ORDERS = ['season_points', 'random'] as const
+const SURVIVOR_SWAP_ORDERS = ['season_points', 'random'] as const
 export type SurvivorSwapOrder = (typeof SURVIVOR_SWAP_ORDERS)[number]
 
 export interface SurvivorScheduledSwap {
@@ -43,8 +43,8 @@ export interface SurvivorScheduledSwap {
   order?: SurvivorSwapOrder
 }
 
-export const SURVIVOR_CROSS_TRIBE_TRADE_MODES = ['allowed', 'window', 'banned'] as const
-export type SurvivorCrossTribeTradeMode = (typeof SURVIVOR_CROSS_TRIBE_TRADE_MODES)[number]
+const SURVIVOR_CROSS_TRIBE_TRADE_MODES = ['allowed', 'window', 'banned'] as const
+type SurvivorCrossTribeTradeMode = (typeof SURVIVOR_CROSS_TRIBE_TRADE_MODES)[number]
 
 /**
  * One cross-tribe trade window in `window` mode. It opens when that week's Tribal Council closes
@@ -55,8 +55,8 @@ export type SurvivorCrossTribeTradeMode = (typeof SURVIVOR_CROSS_TRIBE_TRADE_MOD
  * reads as ONE window opened by Tribal Council. Those two keys are kept in step with the FIRST window
  * on every save, so anything still reading them sees the same close it always did.
  */
-export const SURVIVOR_CROSS_TRIBE_WINDOW_OPENERS = ['tribal', 'time'] as const
-export type SurvivorCrossTribeWindowOpener = (typeof SURVIVOR_CROSS_TRIBE_WINDOW_OPENERS)[number]
+const SURVIVOR_CROSS_TRIBE_WINDOW_OPENERS = ['tribal', 'time'] as const
+type SurvivorCrossTribeWindowOpener = (typeof SURVIVOR_CROSS_TRIBE_WINDOW_OPENERS)[number]
 export interface SurvivorCrossTribeWindow {
   opensOn: SurvivorCrossTribeWindowOpener
   /** `time` only. */
@@ -69,11 +69,11 @@ export interface SurvivorCrossTribeWindow {
 export const SURVIVOR_CROSS_TRIBE_WINDOW_MAX = 3
 
 /** What the trade check does when it cannot run (a database read failed). */
-export const SURVIVOR_TRADE_CHECK_FAILURE_MODES = ['allow', 'hold'] as const
-export type SurvivorTradeCheckFailureMode = (typeof SURVIVOR_TRADE_CHECK_FAILURE_MODES)[number]
+const SURVIVOR_TRADE_CHECK_FAILURE_MODES = ['allow', 'hold'] as const
+type SurvivorTradeCheckFailureMode = (typeof SURVIVOR_TRADE_CHECK_FAILURE_MODES)[number]
 
-export const SURVIVOR_TRIBE_SPLITS = ['none', 'rooks_vs_vets'] as const
-export type SurvivorTribeSplit = (typeof SURVIVOR_TRIBE_SPLITS)[number]
+const SURVIVOR_TRIBE_SPLITS = ['none', 'rooks_vs_vets'] as const
+type SurvivorTribeSplit = (typeof SURVIVOR_TRIBE_SPLITS)[number]
 
 export type SurvivorExperience = 'rookie' | 'veteran'
 
@@ -201,7 +201,7 @@ export function readScheduledSwap(value: unknown): SurvivorScheduledSwap | null 
 }
 
 /** Normalise one cross-tribe window; null when it cannot be a valid window. */
-export function readCrossTribeWindow(value: unknown): SurvivorCrossTribeWindow | null {
+function readCrossTribeWindow(value: unknown): SurvivorCrossTribeWindow | null {
   const r = rec(value)
   if (!isDay(r.closeDay) || typeof r.closeTime !== 'string' || !TIME.test(r.closeTime)) return null
   const opensOn = r.opensOn === undefined ? 'tribal' : r.opensOn
@@ -226,7 +226,7 @@ function readCrossTribeWindows(g: Rec, closeDay: SurvivorGovernanceDay, closeTim
  * until the Sunday 1 PM games. Other sports play most days, so a "before the big slate" preset would be
  * invented: they get the single default window only.
  */
-export interface SurvivorCrossTribeWindowPreset {
+interface SurvivorCrossTribeWindowPreset {
   id: 'original_nfl' | 'single_default'
   windows: SurvivorCrossTribeWindow[]
 }
@@ -317,7 +317,7 @@ export function lockedGovernanceKeys(ctx: SurvivorGovernanceContext): SurvivorGo
   return locked
 }
 
-export type GovernancePatchResult =
+type GovernancePatchResult =
   | { ok: true; patch: Partial<SurvivorGovernanceSettings>; next: SurvivorGovernanceSettings }
   | { ok: false; error: string; code: 'invalid' | 'locked' }
 

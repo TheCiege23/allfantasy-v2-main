@@ -5,13 +5,7 @@
  * No UI imports, no side effects.
  */
 
-import type {
-  ColorToken,
-  IconToken,
-  SeverityToken,
-  SeverityDefinition,
-  AnimationToken,
-} from './types'
+import type { ColorToken, IconToken, SeverityToken, SeverityDefinition } from './types'
 
 export const PRESENTATION_VERSION = '7.0.0' as const
 
@@ -53,10 +47,6 @@ export const SEVERITY_DEFINITIONS: Record<SeverityToken, SeverityDefinition> = {
     iconToken: 'check_circle',
     animationToken: 'none',
   },
-}
-
-export function severityDefinition(token: SeverityToken): SeverityDefinition {
-  return SEVERITY_DEFINITIONS[token]
 }
 
 // ── Score → severity ──────────────────────────────────────────────────────────

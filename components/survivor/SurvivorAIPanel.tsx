@@ -72,7 +72,7 @@ function subscriptionFeatureForSurvivorAiType(t: SurvivorAIPanelType): Subscript
   return 'ai_chat'
 }
 
-export interface SurvivorAIPanelProps {
+interface SurvivorAIPanelProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>
@@ -185,7 +185,7 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
           {aiSubFeature === null
             ? 'Intro, scroll, and idol coaching are included for all managers. The game engine still decides votes, idols, and elimination.'
             : aiSubFeature === 'commissioner_ai_narration'
-              ? 'Host narration for commissioners uses Commissioner AI. Co-commissioners can use it too.'
+              ? 'Host narration for commissioners uses Commissioner Chimmy. Co-commissioners can use it too.'
               : 'Strategy helpers use your Chimmy subscription.'}
         </p>
 
@@ -249,7 +249,7 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
         href={`/league/${leagueId}?tab=Intelligence`}
         className="block rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 hover:bg-white/10"
       >
-        Full AI Tools (Intelligence tab) →
+        Full Chimmy Tools (Intelligence tab) →
       </Link>
     </div>
   )

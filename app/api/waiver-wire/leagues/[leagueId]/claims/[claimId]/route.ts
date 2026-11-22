@@ -1,4 +1,4 @@
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -30,10 +30,10 @@ export async function PATCH(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(params.leagueId, userId)
-  const roster = await (prisma as any).roster.findFirst({
-    where: coOwnerRosterId ? { leagueId: params.leagueId, id: coOwnerRosterId } : { leagueId: params.leagueId, platformUserId: userId },
-  })
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(params.leagueId, userId, requestedRosterIdFrom(req))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  const roster = acting.ok ? { id: acting.rosterId } : null
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -64,10 +64,10 @@ export async function DELETE(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(params.leagueId, userId)
-  const roster = await (prisma as any).roster.findFirst({
-    where: coOwnerRosterId ? { leagueId: params.leagueId, id: coOwnerRosterId } : { leagueId: params.leagueId, platformUserId: userId },
-  })
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(params.leagueId, userId, requestedRosterIdFrom(_req))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  const roster = acting.ok ? { id: acting.rosterId } : null
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   try {

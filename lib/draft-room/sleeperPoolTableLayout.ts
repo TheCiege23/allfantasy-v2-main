@@ -50,12 +50,17 @@ function statColumnWidth(def: DraftStatColumnDef, sport: ReturnType<typeof norma
   return Math.min(78, Math.max(44, 36 + def.label.length * 5))
 }
 
-export type SleeperPoolTableLayoutExtras = {
+type SleeperPoolTableLayoutExtras = {
   /**
    * Pick label (e.g. "4.16") for the viewer's next pick. When set, a LEFT @ column follows
    * AF ADP with each player's estimated chance of still being on the board there.
    */
   leftAtPickLabel?: string | null
+  /**
+   * Leave the AF ADP column out. Until AllFantasy has drafts to blend for this pool, every cell is a
+   * dash: a whole column of "—" said nothing and cost 66px of the player table.
+   */
+  hideAfAdp?: boolean
 }
 
 export function buildSleeperPoolTableLayout(
@@ -96,15 +101,20 @@ export function buildSleeperPoolTableLayout(
      * already contains our own drafts, plus imported-league drafts and the market, so showing both
      * would be the same evidence twice. `aiAdp` stays on the row for Chimmy, Intel and sorting.
      */
-    {
-      key: 'afAdp',
-      label: 'AF ADP',
-      width: 66,
-      align: 'right',
-      title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts',
-      statLabel: 'AF ADP',
-    },
   ]
+
+  if (!extras?.hideAfAdp) {
+    base.push(
+      {
+        key: 'afAdp',
+        label: 'AF ADP',
+        width: 66,
+        align: 'right',
+        title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts',
+        statLabel: 'AF ADP',
+      },
+    )
+  }
 
   if (extras?.leftAtPickLabel) {
     base.push({
@@ -141,14 +151,19 @@ export function buildSleeperPoolTableLayout(
       : def.label,
   }))
 
+  /*
+   * Room v2 (2026-11): the actions come FIRST. At the end of a row they sat past every stat column,
+   * so on a laptop or tablet Draft was scrolled off the right edge; the left edge is always on
+   * screen, and the stat columns are what scroll.
+   */
   const actions: SleeperColumnSpec = {
     key: 'actions',
     label: '',
     width: 160,
-    align: 'right',
+    align: 'left',
   }
 
-  const columns = [...base, ...statCols, actions]
+  const columns = [actions, ...base, ...statCols]
   const minWidth = columns.reduce((sum, c) => sum + c.width, 0)
 
   return { columns, statDefs, minWidth, showBye }

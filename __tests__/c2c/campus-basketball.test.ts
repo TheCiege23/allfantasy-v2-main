@@ -144,7 +144,9 @@ describe('basketball campus seats', () => {
 
     const db = { redraftRosterPlayer: { findMany: vi.fn(async () => [{ playerId: 'g1', position: 'PG', playerName: 'G' }, { playerId: 'c1', position: 'C', playerName: 'C' }]) } }
     const league = { id: 'L1', platform: 'af', sport: 'NBA', leagueVariant: 'c2c' }
-    expect(await checkCampusSave(db as never, { league, redraftRosterId: 'R1', before, after: after(['g1', 'c1']) })).toEqual([])
+    expect(await checkCampusSave(db as never, { league, redraftRosterId: 'R1', before, after: after(['g1', 'c1']) })).toEqual([
+      expect.objectContaining({ code: 'campus_ineligible', message: expect.stringContaining('schedule is unavailable') }),
+    ])
 
     expect(campusToggles(['C'], [], [{ id: 'g1', position: 'PG' }, { id: 'c1', position: 'C' }], 'basketball')).toEqual([
       { playerId: 'g1', onCampus: false, canStart: false },

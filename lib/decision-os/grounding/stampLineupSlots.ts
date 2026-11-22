@@ -49,12 +49,12 @@
 import { BENCH_SLOTS, canFillSlot, slotForStarterIndex } from '@/lib/core-app/slotEligibility'
 
 /** The shape this needs from a starter — a subset of `RosterPlayerLite`. */
-export type SlotStampable = {
+type SlotStampable = {
   position: string | null
   slot: string | null
 }
 
-export type SlotStampResult =
+type SlotStampResult =
   /** Every known-position starter fits the slot the zip gave it. `slots[i]` belongs to starter i. */
   | { stamped: true; slots: string[]; corroborated: number; unverifiable: number }
   /** Nothing was stamped. `reason` is written for a human reading a grounding gap. */

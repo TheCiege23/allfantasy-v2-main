@@ -30,7 +30,7 @@ function getOpenAIClient(): OpenAI | null {
   return openai
 }
 
-export interface SalaryCapAIResult {
+interface SalaryCapAIResult {
   explanation: string
   model?: string
 }

@@ -10,9 +10,9 @@ import { dynastyHomeFixture } from './fixture'
  * `active="home"` and LeagueHome — fed fixture data (./fixture.ts). `identity=off` renders the shell
  * without the stamp and Home without the deck, i.e. exactly what an imported dynasty league got before.
  */
-export default function DynastyCoreHomeHarnessClient({ identityOff, sparse }: { identityOff: boolean; sparse: boolean }) {
-  const data = dynastyHomeFixture({ identity: !identityOff, sparse })
-  const league = { id: data.league.id, name: data.league.name, platform: 'sleeper', mark: 'TD', sport: 'NFL' }
+export default function DynastyCoreHomeHarnessClient({ identityOff, sparse, offseason = false }: { identityOff: boolean; sparse: boolean; offseason?: boolean }) {
+  const data = dynastyHomeFixture({ identity: !identityOff, sparse, offseason })
+  const league = { id: data.league.id, name: data.league.name, platform: 'sleeper', mark: 'TD', sport: 'NFL', dynasty: !identityOff }
   const other = { id: 'e2e-dynasty-core-home-2', name: 'Sunday Night Redraft', platform: 'sleeper', mark: 'SN', sport: 'NFL' }
   const dynastyEra = !identityOff && coreShellDynasty({ isDynasty: true, leagueType: 'dynasty', format: 'dynasty' })
   return (

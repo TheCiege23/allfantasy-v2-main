@@ -8,7 +8,7 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import type { UserLeague, LeftChatInitialTab } from '@/app/dashboard/types'
 
-export type ChimmyBubbleProps = {
+type ChimmyBubbleProps = {
   selectedLeague: UserLeague | null
   activeLeagueId?: string | null
   userId: string
@@ -19,6 +19,7 @@ export type ChimmyBubbleProps = {
   commissionerLeagues?: { id: string; name: string; teamCount: number }[]
   zombieChimmyPrefill?: string | null
   initialOpenChat?: LeftChatInitialTab | null
+  chatMessageId?: string | null
 }
 
 export function ChimmyBubble(props: ChimmyBubbleProps) {
@@ -42,8 +43,12 @@ export function ChimmyBubble(props: ChimmyBubbleProps) {
     if (!props.zombieChimmyPrefill) return
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'chimmy', leagueId: props.activeLeagueId ?? undefined, prefill: props.zombieChimmyPrefill } }))
   }, [props.activeLeagueId, props.zombieChimmyPrefill])
-  return <CommsDock leagues={leagues} pageLeagueId={props.activeLeagueId ?? props.selectedLeague?.id ?? null}
+  const leagueId = props.activeLeagueId ?? props.selectedLeague?.id ?? null
+  useEffect(() => {
+    if (props.initialOpenChat !== 'league' || !leagueId) return
+    window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'league', leagueId } }))
+  }, [props.initialOpenChat, leagueId, props.chatMessageId])
+  return <CommsDock leagues={leagues} pageLeagueId={leagueId}
     chimmyTokenCost={getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null} />
 }
 
-export default ChimmyBubble

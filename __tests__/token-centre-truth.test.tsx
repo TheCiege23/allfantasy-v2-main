@@ -12,7 +12,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('@/components/i18n/LanguageProviderClient', async () => {
   const { translations } = await import('@/lib/i18n/translations')
-  return { useLanguage: () => ({ t: (k: string) => translations.en[k] ?? k }) }
+  // useOptionalLanguage: the guide's copy catalog reads the language through it (useMessages).
+  return { useLanguage: () => ({ t: (k: string) => translations.en[k] ?? k }), useOptionalLanguage: () => ({ language: 'en' }) }
 })
 vi.mock('@/hooks/useTokenBalance', () => ({ useTokenBalance: () => ({ balance: 120, loading: false }) }))
 vi.mock('@/hooks/usePostPurchaseSync', () => ({
@@ -93,9 +94,10 @@ describe('/tokens', () => {
     render(<TokenCentreV4 packs={PACKS} />)
     await screen.findByTestId('tokens-buyable-list')
     const not = screen.getByTestId('tokens-not-included').textContent ?? ''
-    expect(not).toContain("What tokens don't buy")
+    // 2026-11-14: one fold, "What tokens don't cover", holds this and what never costs tokens.
+    expect(not).toContain('What tokens don’t cover')
     expect(not).toContain('AF Pro')
-    expect(not).toContain('Survivor and Big Brother AI')
+    expect(not).toContain('Survivor and Big Brother Chimmy')
     expect(document.body.textContent).not.toContain('before you click')
     expect(document.body.textContent).toContain('never expire')
   })
@@ -106,11 +108,12 @@ describe('/tokens', () => {
     expect(screen.getByTestId('tokens-pack-about-af_tokens_25').textContent).toBe('About 150 Chimmy questions')
   })
 
-  it('🛑 recent spend shows what was bought and how much — not a blank name and "0"', async () => {
+  it('🛑 recent activity shows what was bought and how much — not a blank name and "0"', async () => {
     render(<TokenCentreV4 packs={PACKS} />)
     await waitFor(() => expect(document.body.textContent).toContain('Chimmy chat message'))
     expect(document.body.textContent).toContain('-10')
-    expect(document.body.textContent).toContain('Token pack purchase')
+    // 2026-11-14: a purchase says how many tokens it bought, not the ledger's product wording.
+    expect(document.body.textContent).toContain('Bought 250 tokens')
     expect(document.body.textContent).toContain('+250')
   })
 })
@@ -123,7 +126,14 @@ describe('lock cards', () => {
       </FeatureGate>,
     )
     const link = await screen.findByTestId('locked-feature-token-fallback-link')
-    expect(link.getAttribute('href')).toBe('/tokens?ruleCode=ai_trade_analyzer_full_review')
+    const url = new URL(link.getAttribute('href')!, window.location.origin)
+    expect(url.pathname).toBe('/tokens')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      ruleCode: 'ai_trade_analyzer_full_review',
+      offer: 'starter',
+      from: 'token_trade_analyzer',
+      back: '/',
+    })
   })
 
   it('🛑 never offers tokens for a feature nothing will charge', async () => {

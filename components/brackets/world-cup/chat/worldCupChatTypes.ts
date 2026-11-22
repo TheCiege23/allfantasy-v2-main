@@ -6,7 +6,7 @@
 export type WorldCupChatMode = "ai" | "pool" | "dm"
 export type WorldCupComposerPanel = "tools" | "format" | "emoji" | "gif" | "poll" | "image" | "voice" | null
 
-export type WorldCupChatPollOption = {
+type WorldCupChatPollOption = {
   id: string
   label: string
   votes: number
@@ -112,15 +112,6 @@ export type WorldCupDmMessage = {
   body: string
   createdAt: string
   metadata?: Record<string, unknown>
-}
-
-/** AI gate error — surfaced when Chimmy is locked or daily limit is hit. */
-export type WorldCupChatAiGate = {
-  type: "chimmy_locked" | "daily_limit"
-  message: string
-  upgradePath: string
-  used?: number
-  limit?: number
 }
 
 export type WorldCupAiPromptAction = {

@@ -69,5 +69,6 @@ export interface PushSubscriptionInput {
 export interface SendPushResult {
   ok: boolean
   subscriptionId?: string
+  device?: "mobile" | "desktop"
   error?: string
 }

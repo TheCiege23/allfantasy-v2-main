@@ -3,10 +3,16 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { PricingV4, type PricingPlan, type PricingPack } from "@/components/core-app/screens/PricingV4";
 import { getMonetizationCatalog } from "@/lib/monetization/catalog";
-import { getPlanPresentations, describeYearlySavings } from "@/lib/monetization/planPresentation";
+import { getPlanPresentations } from "@/lib/monetization/planPresentation";
 import { buildSeoMeta } from "@/lib/seo";
 import { pricingIntentRedirect } from "@/lib/monetization/upgradeDestination";
 import { authOptions } from "@/lib/auth";
+import { aiAccessResolver } from "@/lib/ai-access/AIAccessResolver";
+import { isSubscriptionEntitlementBypassUserId } from "@/lib/dev-admin/access";
+import { getDisplayPlanName } from "@/lib/subscription/feature-access";
+import type { PricingAccount } from "@/lib/core-app/pricingAccount";
+import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
+import { buildPlanComparison } from "@/lib/monetization/planComparison";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -30,7 +36,7 @@ import { authOptions } from "@/lib/auth";
 export const metadata: Metadata = buildSeoMeta({
   title: "Pricing & Plans — AllFantasy.ai | Fantasy Tools & Subscriptions",
   description:
-    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
+    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. AllFantasy never holds league dues; commissioners track who has paid.",
   canonicalPath: "/pricing",
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:
@@ -90,12 +96,42 @@ export default async function PricingPage(
     tokenAmount: t.tokenAmount,
   }));
 
+  /*
+   * The Plans board's account layer: which plan the signed-in viewer is on, when it renews and their
+   * token balance — the same resolver the /core shell's plan chip reads. A failed read is null and
+   * the page renders exactly as it did before (no banner, no YOUR PLAN chip), rather than telling a
+   * paying viewer they are on Free.
+   */
+  const userId = session?.user?.id ?? null;
+  let account: PricingAccount | null = null;
+  if (userId) {
+    const [access, weeklySpend] = await Promise.all([
+      aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now: new Date() }).catch(() => null),
+      readWeeklyTokenSpend(userId),
+    ]);
+    if (isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)) {
+      // The spend chart reads the viewer's own ledger, which an admin account has like anyone else.
+      account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null, weeklySpend };
+    } else if (access) {
+      const planIds = access.hasSubscription ? access.subscription.plans : [];
+      account = {
+        planIds,
+        planName: planIds[0] ? getDisplayPlanName(planIds[0]) : null,
+        renewsAt: access.hasSubscription ? access.subscription.currentPeriodEnd : null,
+        tokenBalance: access.tokenBalance,
+        weeklySpend,
+      };
+    }
+  }
+
   return (
     <PricingV4
       plans={plans}
       packs={packs}
-      savingsHeadline={describeYearlySavings(presentations)}
       signedIn={Boolean(session?.user?.id)}
+      account={account}
+      // Computed from the entitlement checks the paywall enforces (lib/monetization/planComparison.ts).
+      comparison={buildPlanComparison()}
     />
   );
 }

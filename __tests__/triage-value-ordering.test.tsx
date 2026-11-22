@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, expect, it } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 
@@ -173,7 +173,10 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
 
     it('offers each affected league its own waiver pool', () => {
       const player = row({ leagues: row().leagues.map(l => ({ ...l, slot: 'starter' })) })
-      const { container } = render(<Dash3ATriage book={[player]} now={NOW} />)
+      const { container, getByRole } = render(<Dash3ATriage book={[player]} now={NOW} />)
+      // Two league rows show; the third is one tap away (2026-11-06 phone pass) and keeps its own pool.
+      expect(container.querySelectorAll('.af-triage-cta').length).toBe(2)
+      fireEvent.click(getByRole('button', { name: 'Show 1 more league' }))
       expect([...container.querySelectorAll('.af-triage-cta')].map(a => a.getAttribute('href')))
         .toEqual(['/core/waivers?league=l1', '/core/waivers?league=l2', '/core/waivers?league=l3'])
     })

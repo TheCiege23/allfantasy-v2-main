@@ -34,13 +34,14 @@
  * silently reports nothing.
  */
 
+import { commissionerAccessResponse, type CommissionerNeed } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isIdpLeague } from '@/lib/idp'
 import { writeIdpSettingsAudit } from '@/lib/idp/IdpSettingsAudit'
 import { prisma } from '@/lib/prisma'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,15 +141,12 @@ function validate(b: Body): string[] {
   return errs
 }
 
-async function gate(leagueId: string) {
+async function gate(leagueId: string, need: CommissionerNeed) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  try {
-    await assertCommissioner(leagueId, userId)
-  } catch {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, need)
+  if (refused) return { error: refused }
   if (!(await isIdpLeague(leagueId))) {
     return { error: NextResponse.json({ error: 'Not an IDP league' }, { status: 404 }) }
   }
@@ -157,7 +155,7 @@ async function gate(leagueId: string) {
 
 export async function GET(_req: Request, { params }: { params: Promise<{ leagueId: string }> }) {
   const { leagueId } = await params
-  const g = await gate(leagueId)
+  const g = await gate(leagueId, 'view')
   if ('error' in g) return g.error
 
   const config = await prisma.iDPCapConfig.findUnique({ where: { leagueId } })
@@ -171,7 +169,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ leagueI
 
 export async function PUT(req: Request, { params }: { params: Promise<{ leagueId: string }> }) {
   const { leagueId } = await params
-  const g = await gate(leagueId)
+  const g = await gate(leagueId, 'rosters')
   if ('error' in g) return g.error
 
   let body: Body
@@ -183,6 +181,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ leagueId
 
   const errors = validate(body)
   if (errors.length) return NextResponse.json({ error: 'Invalid cap settings', errors }, { status: 400 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const before = await prisma.iDPCapConfig.findUnique({ where: { leagueId } })
 
@@ -225,5 +225,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ leagueId
     /* An audit failure must not lose the commissioner's setting. */
   })
 
+  await logFormatRulesChange({ leagueId, userId: g.userId, format: 'idp', fields: Object.keys(body ?? {}) })
   return NextResponse.json({ ok: true, created: !before, config })
 }

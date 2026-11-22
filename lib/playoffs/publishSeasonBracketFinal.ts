@@ -12,7 +12,7 @@ type Game = {
 }
 type Pool = { id: string; series: Game[] }
 type Resolved = { id: string; challengeId: string; home: string; away: string; game: Game }
-export type SeasonGameRead =
+type SeasonGameRead =
   | { ok: true; home: string; away: string; games: Resolved[]; scheduledAt: string }
   | { ok: false; error: string }
 
@@ -101,6 +101,18 @@ export async function publishSeasonBracketFinal(input: {
     })
   } catch {
     return { ok: false, error: "Concurrent result update; nothing was changed." }
+  }
+  try {
+    const { emitPlayoffDecisionAlerts } = await import('@/lib/chimmy/bracketChangeAlerts')
+    const deliveries = await Promise.allSettled(updates.map((row) => emitPlayoffDecisionAlerts({
+      challengeId: row.challengeId,
+      decisions: [{ seriesId: row.id, seriesName: `${row.home} vs ${row.away}`,
+        beforeWinner: row.game.winnerTeamName, winner }],
+    })))
+    const failed = deliveries.filter((result) => result.status === 'rejected').length
+    if (failed) console.warn('[playoff final] change alerts failed', { failed })
+  } catch (error) {
+    console.warn('[playoff final] change alerts unavailable', error)
   }
   return { ok: true, winner, updatedPools: updates.length, totalPools: read.games.length }
 }

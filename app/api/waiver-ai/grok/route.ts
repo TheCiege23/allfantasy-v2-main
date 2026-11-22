@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -335,7 +336,8 @@ export async function POST(req: NextRequest) {
       resolvedSport = (league.sport as string) || 'NFL';
       // Identity is always the authenticated session's own userId — never a client-supplied
       // sleeperUserId/platformUserId, which would let one account read another team's roster.
-      const userRoster = league.rosters.find((r: any) => r.platformUserId === userId);
+      const userRoster = league.rosters.find((r: any) => r.platformUserId === userId)
+        ?? league.rosters.find((r: any) => isRosterManagedBy(r, userId));
       if (!userRoster) {
         return NextResponse.json({ error: 'Roster not found for this user in this league' }, { status: 400 });
       }

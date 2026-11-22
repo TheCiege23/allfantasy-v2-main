@@ -1,0 +1,37 @@
+/*
+ * Your Week, restyled to the Your Week board (2026-11-05).
+ *
+ * Layered after af-week.css and scoped to `.af-core .af-wk`. Adds the board's header progress bar
+ * and the glance tiles (components/core-app/YourWeekGlance.tsx), and moves the existing cards to
+ * the board's 16px corners and 17px section titles. af-core tokens only, so every mode follows.
+ */
+
+/* Eyebrow, title and sub: the shared PageHeader (primitives/af-primitives.css). */
+.af-core .af-wk .af-wk-headactions { align-items: center; }
+
+/* Header progress: "N of M decided" over an 8px bar, as the board draws it. */
+.af-core .af-wk .af-wk-progress { display: flex; flex-direction: column; gap: 6px; min-width: 200px; margin-right: 4px; }
+.af-core .af-wk .af-wk-progress-label {
+  color: var(--accent);
+  font: 600 12px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-core .af-wk .af-wk-progress-bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; }
+.af-core .af-wk .af-wk-progress-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+
+/* Glance tiles: the shared StatStrip (primitives/af-primitives.css); only the spacing below is the screen's. */
+.af-core .af-wk .af-wk-glance { margin: 0 0 28px; }
+
+/* Sections and cards: the board's 17px titles, 16px corners and roomier rows. */
+.af-core .af-wk .af-wk-sectiontitle { font-size: 17px; letter-spacing: -0.01em; }
+.af-core .af-wk .af-wk-sectionnote { font-size: 12.5px; color: var(--muted); }
+.af-core .af-wk .af-wk-flip { border-radius: 16px; padding: 16px 18px; }
+/* 260px, not 210: at 210 a four-up row wrapped every league name onto three lines. */
+.af-core .af-wk .af-wk-leans { gap: 10px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.af-core .af-wk .af-wk-lean { border-radius: 12px; padding: 12px 14px; }
+.af-core .af-wk .af-wk-lean:hover { background: var(--surface2); border-color: var(--line2); }
+.af-core .af-wk .af-wk-foot,
+.af-core .af-wk .af-wk-empty { border-radius: 16px; }
+
+@media (max-width: 760px) {
+  .af-core .af-wk .af-wk-progress { flex: 1 1 100%; margin-right: 0; }
+}

@@ -1,7 +1,7 @@
 import type { LineupSlotDef, OptimizerPlayer, SlotAssignment } from './types'
 
 /** Valid [DEF, MID, FWD] outfield counts (GK separate). */
-export const SOCCER_VALID_FORMATIONS: [number, number, number][] = [
+const SOCCER_VALID_FORMATIONS: [number, number, number][] = [
   [3, 4, 3],
   [3, 5, 2],
   [4, 3, 3],

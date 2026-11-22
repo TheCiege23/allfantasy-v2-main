@@ -34,6 +34,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
 import {
   REDRAFT_DRAFT_PICK_REFUSAL,
   resolveNflRedraftTradeRuntime,
@@ -67,10 +68,46 @@ export type RedraftProposalValidationInput = {
 
 type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' | 'league'>
 
+async function pirateTradeRefusal(input: RedraftProposalValidationInput, source: RedraftProposalValidationSource): Promise<RedraftProposalValidation | null> {
+  try {
+    await assertPirateTradeAllowed(input.leagueId, input.assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+    })))
+    return null
+  } catch (error) {
+    return { ok: false, code: 'PIRATE_TRADE_LOCK', message: error instanceof Error ? error.message : 'Pirate trade is locked.', source }
+  }
+}
+
+/**
+ * 🛑 THE AF TRADE ENGINE REFUSED TRADES IN A NATIVE BEST BALL OR GUILLY LEAGUE; THIS PATH DID NOT.
+ * `resolveLeagueTradeSettings().tradesAllowed` is false for native Classic Best Ball and for a
+ * guillotine league unless its settings enable trades, and `tradeValidationService` refuses with
+ * `TRADES_DISABLED` — but `/api/redraft/trade-proposals` and `/api/redraft/trade-runtime` create
+ * proposals through here and never asked. Scoped to those two formats on purpose: every other
+ * league's trade rules are already this validator's, and widening the check would move them.
+ */
+async function formatTradesDisabledRefusal(leagueId: string, db: ValidationDb): Promise<RedraftProposalValidation | null> {
+  const league = await db.league.findUnique({ where: { id: leagueId } })
+  if (!league || (!league.bestBallMode && !league.guillotineMode)) return null
+  // The commissioner's move lock has its own refusal further down; let it speak for itself.
+  if (league.lockAllMoves) return null
+  const { resolveLeagueTradeSettings } = await import('@/lib/league-trade-engine/tradeSettingsResolver')
+  if (resolveLeagueTradeSettings(league).tradesAllowed) return null
+  return {
+    ok: false,
+    code: 'TRADES_DISABLED',
+    message: league.guillotineMode ? 'Trades are turned off in this Guillotine league.' : 'Trades are turned off in this Best Ball league.',
+    source: 'league_lock',
+  }
+}
+
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
 ): Promise<RedraftProposalValidation> {
+  const formatRefusal = await formatTradesDisabledRefusal(input.leagueId, db)
+  if (formatRefusal) return formatRefusal
   const base = await validateRedraftTradeProposalCore(input, db)
   if (!base.ok) return base
   // Survivor leagues add their own trade rules (tribe windows, played players, the weekly freeze).
@@ -117,6 +154,8 @@ async function validateRedraftTradeProposalCore(
     if (deadline.passed) {
       return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline), source: 'nfl_runtime' }
     }
+    const pirateRefusal = await pirateTradeRefusal(input, 'nfl_runtime')
+    if (pirateRefusal) return pirateRefusal
     return { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
   }
 
@@ -148,9 +187,10 @@ async function validateRedraftTradeProposalCore(
       ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
       assets: input.assets,
     })
-    return result.ok
-      ? { ok: true, warnings: result.warnings, source: 'league_runtime' }
-      : { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    const pirateRefusal = await pirateTradeRefusal(input, 'league_runtime')
+    if (pirateRefusal) return pirateRefusal
+    return { ok: true, warnings: result.warnings, source: 'league_runtime' }
   }
 
   if (deadline.passed) {
@@ -161,7 +201,9 @@ async function validateRedraftTradeProposalCore(
       source: 'ownership_fallback',
     }
   }
-  return validateOwnershipFallback(db, input)
+  const ownership = await validateOwnershipFallback(db, input)
+  if (!ownership.ok) return ownership
+  return (await pirateTradeRefusal(input, 'ownership_fallback')) ?? ownership
 }
 
 function faabAmountOf(asset: NflRedraftTradeAssetInput): number {

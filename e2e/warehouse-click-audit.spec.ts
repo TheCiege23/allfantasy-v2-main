@@ -262,8 +262,8 @@ test.describe('@warehouse full click audit', () => {
     await page.getByRole('button', { name: 'Hide warehouse charts' }).click()
     await expect(page.getByRole('button', { name: 'Show warehouse charts' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Launch AI warehouse insight' }).click()
-    await expect(page.getByText(/Warehouse AI insight context/i)).toBeVisible()
+    await page.getByRole('button', { name: 'Launch Chimmy warehouse insight' }).click()
+    await expect(page.getByText(/Warehouse Chimmy insight context/i)).toBeVisible()
 
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export warehouse data' }).click()

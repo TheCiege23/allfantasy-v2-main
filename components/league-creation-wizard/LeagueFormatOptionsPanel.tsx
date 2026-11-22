@@ -82,6 +82,37 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
         help={<>Specialty formats need a few extra inputs so defaults, hubs, and social layers match your concept.</>}
       />
 
+      {leagueType === 'pirate' && (
+        <div className="space-y-4 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-[#14233a] via-[#0b1729] to-[#06111e] p-5 shadow-[0_16px_45px_rgba(0,0,0,.28)]">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[.2em] text-amber-300">The captain's code</p>
+            <h4 className="mt-1 text-xl font-black text-white">Protect your crew. Win the booty.</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-300">Each scoring period, managers lock players before the first game. A matchup winner may claim one unlocked player from the loser.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5 text-sm font-medium text-white">
+              Protection slots
+              <Select value={String(v.pirateProtectionLimit)} onValueChange={(x) => onChange({ pirateProtectionLimit: Number(x) })}>
+                <SelectTrigger className="min-h-[44px] border-white/20 bg-[#071323] text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{[1, 2, 3, 4, 5, 6].map((n) => <SelectItem key={n} value={String(n)}>{n} players</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1.5 text-sm font-medium text-white">
+              Automatic claim deadline
+              <Select value={String(v.pirateClaimHours)} onValueChange={(x) => onChange({ pirateClaimHours: Number(x) })}>
+                <SelectTrigger className="min-h-[44px] border-white/20 bg-[#071323] text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{[12, 24, 36, 48, 72].map((n) => <SelectItem key={n} value={String(n)}>{n} hours</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+          </div>
+          <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white">
+            <input type="checkbox" checked={v.piratePlayoffClaims} onChange={(e) => onChange({ piratePlayoffClaims: e.target.checked })} className={CHECKBOX_CLASS} />
+            Allow steals during playoffs
+          </label>
+          <p className="text-xs leading-5 text-amber-100/70">Unused protection slots expire at lock. More than the limit, or a change after lock, voids all protection for that period.</p>
+        </div>
+      )}
+
       {leagueType === 'tournament' && (
         <div
           className="space-y-4 rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-950/35 to-[#040915]/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
@@ -148,7 +179,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="app_generated">App-generated names</SelectItem>
-                <SelectItem value="ai_themed">AI-themed names</SelectItem>
+                <SelectItem value="ai_themed">Chimmy-themed names</SelectItem>
                 <SelectItem value="commissioner_custom">I will name each league (one per line below)</SelectItem>
               </SelectContent>
             </Select>
@@ -503,6 +534,27 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 <option value="when_remaining">When X houseguests remain</option>
                 <option value="fixed_week">Fixed week number</option>
               </select>
+              {/* The number the mode needs; without it the game falls back (lib/big-brother/bigBrotherSetupRules.ts). */}
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                inputMode="numeric"
+                value={v.bigBrotherJuryValue ?? ''}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  onChange({ bigBrotherJuryValue: e.target.value === '' || !Number.isFinite(n) || n < 1 ? null : Math.floor(n) })
+                }}
+                placeholder={
+                  (v.bigBrotherJuryMode ?? 'after_eliminations') === 'fixed_week'
+                    ? 'Week the jury starts (required)'
+                    : (v.bigBrotherJuryMode ?? 'after_eliminations') === 'when_remaining'
+                      ? 'Houseguests left (default 9)'
+                      : 'Evictions before the jury (default 7)'
+                }
+                aria-label="Jury start number"
+                className="border-white/20 bg-[#030a20] text-white"
+              />
             </div>
           </div>
 
@@ -517,7 +569,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               >
                 <option value="deterministic_score">Fantasy score (highest weekly score wins)</option>
                 <option value="hybrid">Hybrid (score + challenge factor)</option>
-                <option value="ai_theme">AI-themed challenges</option>
+                <option value="ai_theme">Chimmy-themed challenges</option>
               </select>
             </div>
             <div className="space-y-1.5">

@@ -54,3 +54,26 @@ describe('weekly blueprint UI',()=>{
     expect(screen.getByText('>99%')).toBeTruthy()
   })
 })
+
+/* 2026-11-14: the folded Blueprint says each thing once. */
+describe('WeeklyBlueprint — each thing once', () => {
+  it('the "what decides it" sentence only where the status line has not said it', () => {
+    const withDecides = (p: number) => {
+      const base = path(p)
+      return { ...base, league: { ...base.league!, whatDecidesIt: 'A long-shot forecast; a nonzero probability is not mathematical elimination.' } } as WeeklyPlayoffPath
+    }
+    const { unmount } = render(<PlayoffPath path={withDecides(0.3)} />)
+    expect(screen.getByText(/Long shot; this is not mathematical elimination/)).toBeTruthy()
+    expect(screen.queryByText(/nonzero probability/)).toBeNull()
+    unmount()
+    const mid = path(45)
+    render(<PlayoffPath path={{ ...mid, league: { ...mid.league!, whatDecidesIt: 'Win 3 of your last 4 and you are in.' } } as WeeklyPlayoffPath} />)
+    expect(screen.getByText('Win 3 of your last 4 and you are in.')).toBeTruthy()
+  })
+
+  it('"Compare with Chimmy" once, on the top priority', () => {
+    const two = { ...data, actions: [...data.actions, { ...data.actions[0]!, id: 'A:plan', kind: 'playoff' as const }], actionCount: 2 }
+    render(<WeeklyBlueprint data={two as Blueprint} />)
+    expect(screen.getAllByText('Compare with Chimmy')).toHaveLength(1)
+  })
+})

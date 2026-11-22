@@ -1,4 +1,4 @@
-export type ChimmyFeatureFlags = {
+type ChimmyFeatureFlags = {
   intentChips: boolean
   assistantModes: boolean
   followups: boolean

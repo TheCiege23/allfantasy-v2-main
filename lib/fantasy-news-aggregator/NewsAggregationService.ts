@@ -10,7 +10,6 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import type { NewsFeedItem, FeedType } from './types';
 
 const DEFAULT_LIMIT = 40;
-const STALE_AGE_MS = 35 * 60 * 1000; // consider stale after 35 min
 
 export async function getPlayerNewsFeed(
   playerQuery: string,

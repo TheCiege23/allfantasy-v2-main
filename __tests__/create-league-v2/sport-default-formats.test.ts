@@ -85,3 +85,23 @@ describe('every sport starts on its specialty default', () => {
     expect({ ...devy, ...nextStateForSport(devy, 'SOCCER') }.leagueType).toBe('big_brother')
   })
 })
+
+describe('draft type when the format changes', () => {
+  it('a format with one draft type does not leave it selected on the next format', async () => {
+    const { nextStateForLeagueType } = await import('@/components/create-league-v2/CreateLeagueWizard')
+    const { DEFAULT_V2_STATE } = await import('@/lib/create-league-v2/state')
+    // Redraft on Snake, tap Salary Cap (auction only), then go back to Redraft.
+    const redraft = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, leagueType: 'redraft' as const, draftType: 'snake' as const }
+    const cap = { ...redraft, ...nextStateForLeagueType(redraft, 'salary_cap') }
+    expect(cap.draftType).not.toBe('snake')
+    const back = { ...cap, ...nextStateForLeagueType(cap, 'redraft') }
+    expect(back.draftType).toBe('snake')
+  })
+
+  it('a draft type the manager chose is kept when the next format offers it', async () => {
+    const { nextStateForLeagueType } = await import('@/components/create-league-v2/CreateLeagueWizard')
+    const { DEFAULT_V2_STATE } = await import('@/lib/create-league-v2/state')
+    const redraft = { ...DEFAULT_V2_STATE, sport: 'NFL' as const, leagueType: 'redraft' as const, draftType: 'auction' as const }
+    expect(nextStateForLeagueType(redraft, 'dynasty').draftType).toBe('auction')
+  })
+})
