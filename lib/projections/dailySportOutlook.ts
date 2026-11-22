@@ -1,4 +1,6 @@
 import { liveFactorAdjustments, loadFactorTable, type FactorAdjustment } from '@/lib/af-projections/factors/factorTables'
+import { loadInjurySnapshots, snapshotLevelFor } from '@/lib/af-projections/factors/injurySnapshots'
+import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
 import 'server-only'
 
 import type { PrismaClient } from '@prisma/client'
@@ -186,6 +188,11 @@ export async function loadDailySportOutlook(
    */
   const factorTable = args.afIntelligence === false ? null : await loadFactorTable(db, sport, now).catch(() => null)
   const nextAtMs = daily && periodDay ? Date.parse(`${periodDay}T23:00:00Z`) : now.getTime()
+  // Today's designations (NBA, NHL), from the same pre-game snapshot the learner reads — only once the table has
+  // published an injury level, and only for a one-game daily period.
+  const injurySnapshot = factorTable && daily && periodDay && (sport === 'NBA' || sport === 'NHL') && factorTable.levels.some((l) => l.published && l.factor === 'injury')
+    ? (await loadInjurySnapshots(db, sport, [periodDay]).catch(() => new Map())).get(periodDay)
+    : undefined
   const adjustments = factorTable
     ? await liveFactorAdjustments(db, {
         sport,
@@ -199,7 +206,10 @@ export async function loadDailySportOutlook(
             key: p.key,
             gameLogId: formId,
             next: daily
-              ? { atMs: nextAtMs, opponent: (code ? opponentByTeam.get(code)?.opponent : null) ?? null }
+              ? (() => {
+                  const injury = snapshotLevelFor(injurySnapshot, formId, projectionTeamKey(sport, p.team ?? scored.get(formId)?.team ?? null))
+                  return { atMs: nextAtMs, opponent: (code ? opponentByTeam.get(code)?.opponent : null) ?? null, ...(injury ? { context: { injury } } : {}) }
+                })()
               : { atMs: nextAtMs, drop: ['rest', 'opponent'] as const },
           }]
         }),

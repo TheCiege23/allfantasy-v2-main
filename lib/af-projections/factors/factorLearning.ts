@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { describeFactorTable, learnFactors, type LearnedFactorTable } from './factorLearner'
 import { buildFactorObservations, opponentRatios, usageOf, type GameLine } from './factorObservations'
 import { contextKey, loadNflGameContext, type GameContextLevels } from './gameContext'
-import { loadInjurySnapshots, snapshotLevelFor } from './injurySnapshots'
+import { loadInjurySnapshots, nflPeriod, snapshotLevelFor } from './injurySnapshots'
 import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
 
 /**
@@ -80,12 +80,23 @@ export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sp
     const weeks = [...new Map(out.filter((l) => l.season != null && l.week != null).map((l) => [`${l.season}:${l.week}`, { season: l.season!, week: l.week! }])).values()]
     const ctx = await loadNflGameContext(db as never, weeks).catch(() => new Map<string, GameContextLevels>())
     // The player's own designation as it stood before HIS kickoff — the frozen weekly snapshot, never today's status.
-    const injuries = 'sportsDataCache' in db ? await loadInjurySnapshots(db as never, weeks).catch(() => new Map()) : new Map()
+    const injuries = 'sportsDataCache' in db ? await loadInjurySnapshots(db as never, 'NFL', weeks.map((w) => nflPeriod(w.season, w.week))).catch(() => new Map()) : new Map()
     for (const l of out) {
       const code = projectionTeamKey('NFL', l.team)
       const c = code && l.season != null && l.week != null ? ctx.get(contextKey(l.season, l.week, code)) : undefined
-      const injury = l.season != null && l.week != null ? snapshotLevelFor(injuries.get(`${l.season}:${l.week}`), l.playerId, code) : undefined
+      const injury = l.season != null && l.week != null ? snapshotLevelFor(injuries.get(nflPeriod(l.season, l.week)), l.playerId, code) : undefined
       if (c || injury) l.context = { ...(c ?? {}), ...(injury ? { injury } : {}) }
+    }
+  }
+  if ((sport === 'NBA' || sport === 'NHL') && 'sportsDataCache' in db) {
+    // A daily game's designation, from the snapshot of its US-Eastern date — the date its game log carries.
+    const dayOf = (l: GameLine) => new Date(l.atMs).toISOString().slice(0, 10)
+    const injuries = await loadInjurySnapshots(db as never, sport, [...new Set(out.map(dayOf))]).catch(() => new Map())
+    if (injuries.size) {
+      for (const l of out) {
+        const injury = snapshotLevelFor(injuries.get(dayOf(l)), l.playerId, projectionTeamKey(sport, l.team))
+        if (injury) l.context = { ...(l.context ?? {}), injury }
+      }
     }
   }
   return out

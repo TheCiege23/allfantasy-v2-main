@@ -4,7 +4,7 @@ import { COMPONENT_RULE_KEYS, type IdpComponent } from './idpScoring'
 import { prisma } from '@/lib/prisma'
 import { liveFactorAdjustments, loadFactorTable } from './factors/factorTables'
 import { contextKey, loadNflGameContext } from './factors/gameContext'
-import { loadInjurySnapshots, snapshotLevelFor } from './factors/injurySnapshots'
+import { loadInjurySnapshots, nflPeriod, snapshotLevelFor } from './factors/injurySnapshots'
 import type { PlayerProjection } from '@/lib/core-app/playerProjections'
 import { projectionTeamKey, loadProjectionSchedule } from './leagueProjectionSchedule'
 import { loadNflSpecialistRates } from './nflSpecialistRates'
@@ -92,7 +92,7 @@ async function applyNflFactors(result: Map<string, NflWeekLine>, at: { season: n
   const ctx = wantsContext ? await loadNflGameContext(prisma, [at]).catch(() => new Map()) : new Map()
   // This week's designations, from the same snapshot the learner reads — so a player is matched the same way both times.
   const wantsInjury = table.levels.some((l) => l.published && l.factor === 'injury')
-  const injuries = wantsInjury ? (await loadInjurySnapshots(prisma, [at]).catch(() => new Map())).get(`${at.season}:${at.week}`) : undefined
+  const injuries = wantsInjury ? (await loadInjurySnapshots(prisma, 'NFL', [nflPeriod(at.season, at.week)]).catch(() => new Map())).get(nflPeriod(at.season, at.week)) : undefined
   const adjustments = await liveFactorAdjustments(prisma, {
     sport: 'NFL',
     table,

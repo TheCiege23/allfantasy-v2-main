@@ -32,8 +32,8 @@ export const FACTOR_LEVELS: Readonly<Record<FactorName, readonly string[]>> = {
   vegas: ['average', 'high', 'low'],
   weather: ['normal', 'bad', 'dome'],
   coaching: ['same_coach', 'new_coach'],
-  // The player's own designation before kickoff (`injurySnapshots.ts`) — NFL. Out players have no game to learn from.
-  injury: ['clear', 'questionable', 'doubtful'],
+  // The player's own designation before his game (`injurySnapshots.ts`) — NFL, NBA, NHL. Out players have no game.
+  injury: ['clear', 'probable', 'questionable', 'doubtful'],
 }
 
 export type FactorLevels = Partial<Record<FactorName, string>>
