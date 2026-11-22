@@ -413,3 +413,21 @@ with a logo. Captured in the league owner's own Chrome with their consent:
   extension rather than the site's own page. The connector has not been run in a browser.
 - The managers' names. A team's roster page sends `getTeamRosterInfo`, whose response has
   `teamHeadingInfo.owners`; only its shape was seen, and it is one request per team.
+
+## F-21 — A rostered player missing from `getPlayerIds` has no name anywhere in the API (recorded 2026-11-22, no probe)
+
+Road To Glory NCAA Basketball rosters `06qaj` (F/C, RESERVE, #51 Butler Bulldogs). The snapshot refreshed
+2026-11-22 18:10 UTC, after the refresh switched to the league's own directory (`c3c3014ffa`), and the
+roster row still carries `name: null`, `team: null`. No `PlayerIdentityMap` row holds that `fantraxId`.
+
+What the contract says about other places a name could come from:
+- `getLeagueInfo.playerInfo` carries `eligiblePos` / `status` only, never a name (`cfb-league-2026.json`).
+- `getTeamRosters` items carry an id, position and status, not a name.
+
+So a player absent from `getPlayerIds?sport=NCAAB` cannot be named from the `fxea` API at all, and
+matching by name is ruled out. The page shows `Player 06qaj`.
+
+**Unknown:** why the directory omits a rostered id. Most likely the directory lists only players
+Fantrax currently tracks (a transfer, a departure, or a player off the active list), but that is a
+guess. **To resolve:** `scripts/probe.sh --player-ids NCAAB` and check whether `06qaj` is present; if
+not, the logged-in player page on Fantrax is the only other source, which the import does not read.

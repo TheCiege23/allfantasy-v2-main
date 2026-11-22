@@ -258,10 +258,20 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         '@/lib/devy/devyHeadshotRefresh',
       )
 
+      /*
+       * The CFBD quota reserve, asked once for this tick. The main run's devy phases already
+       * stand down below the reserve; this dedicated tick runs three more CFBD background jobs
+       * (intel feeds, team directory, roster pool) and asked nothing, so a quiet week's worth of
+       * them could still eat the calls kept for the stats and scores imports.
+       */
+      const { cfbdBackgroundAllowed } = await import('@/lib/cfbd-quota')
+      const cfbdGate = await cfbdBackgroundAllowed().catch(() => ({ allowed: true, remaining: null, reason: null }))
+      const cfbdReserved = () => ({ skipped: cfbdGate.reason ?? 'CFBD quota reserve', cfbdRemaining: cfbdGate.remaining })
+
       const outcome = await withSyncJobRun(
         { jobName: 'cron-devy-intel-sources', jobScope: 'NCAAF', trigger: 'cron' },
         async () => {
-          const devyIntelSources = await refreshDevyIntelSources(budget)
+          const devyIntelSources = cfbdGate.allowed ? await refreshDevyIntelSources(budget) : cfbdReserved()
           /*
            * Headshots run AFTER the intel feeds and on the leftover budget, on
            * purpose. The intel feeds fill the columns draftProjectionScore
@@ -310,7 +320,9 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           const { ingestCollegeTeamsIfDue } = await import('@/lib/sport-teams/ingestCollegeTeams')
           const COLLEGE_TEAMS_MIN_MS = 30_000
           const collegeTeams =
-            budget.remainingMs() < COLLEGE_TEAMS_MIN_MS
+            !cfbdGate.allowed
+              ? cfbdReserved()
+              : budget.remainingMs() < COLLEGE_TEAMS_MIN_MS
               ? { skipped: 'deferred: run budget too low to start' }
               : await ingestCollegeTeamsIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
                   (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
@@ -326,7 +338,9 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           const { refreshCollegeRosterPoolIfDue } = await import('@/lib/ncaaf/cfbdRosterPool')
           const COLLEGE_ROSTER_POOL_MIN_MS = 30_000
           const collegeRosterPool =
-            budget.remainingMs() < COLLEGE_ROSTER_POOL_MIN_MS
+            !cfbdGate.allowed
+              ? cfbdReserved()
+              : budget.remainingMs() < COLLEGE_ROSTER_POOL_MIN_MS
               ? { skipped: 'deferred: run budget too low to start' }
               : await refreshCollegeRosterPoolIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
                   (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
