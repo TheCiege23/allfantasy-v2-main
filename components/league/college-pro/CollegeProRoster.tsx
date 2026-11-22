@@ -169,14 +169,20 @@ function DraftsCard({ drafts, pipeline, proSport }: { drafts: CollegeProRosterPa
           </li>
         ))}
       </ul>
-      {pipeline ? <PipelineSection pipeline={pipeline} proSport={proSport} /> : null}
+      {pipeline ? (
+        <PipelineSection
+          pipeline={pipeline}
+          proSport={proSport}
+          proPlatform={drafts.find((d) => d.role === 'pro')?.platform === 'fantrax' ? 'Fantrax' : 'Sleeper'}
+        />
+      ) : null}
     </section>
   )
 }
 
 /** Who moves up from your college team, and how big the shortened rookie draft is. */
-function PipelineSection({ pipeline, proSport }: { pipeline: CollegeProPipeline; proSport: string }) {
-  const { year, movingUp, rookiePool } = pipeline
+function PipelineSection({ pipeline, proSport, proPlatform }: { pipeline: CollegeProPipeline; proSport: string; proPlatform: 'Sleeper' | 'Fantrax' }) {
+  const { year, movingUp, rookiePool, unlinked } = pipeline
   return (
     <div className="mt-3 border-t border-subtle pt-3" data-testid="college-pro-pipeline">
       <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Moving up · {year} {proSport} draft</p>
@@ -196,13 +202,19 @@ function PipelineSection({ pipeline, proSport }: { pipeline: CollegeProPipeline;
               </li>
             ))}
           </ul>
-          <p className="mt-1 px-2 text-[11px] text-muted">Add {movingUp.length === 1 ? 'him' : 'them'} to your Sleeper roster as {movingUp.length === 1 ? 'a rookie' : 'rookies'}.</p>
+          <p className="mt-1 px-2 text-[11px] text-muted">Add {movingUp.length === 1 ? 'him' : 'them'} to your {proPlatform} roster as {movingUp.length === 1 ? 'a rookie' : 'rookies'}.</p>
         </>
       )}
       <p className="mt-2 px-2 text-xs text-secondary" data-testid="college-pro-rookie-pool">
         <span className="font-semibold text-primary">{year} rookie draft pool:</span> {rookiePool.unheld} of {rookiePool.drafted} drafted players
         were not on any college roster in this league.
       </p>
+      {unlinked > 0 ? (
+        <p className="mt-1 px-2 text-[11px] text-muted" data-testid="college-pro-pipeline-unlinked">
+          {unlinked} more drafted college {unlinked === 1 ? 'player' : 'players'} couldn&apos;t be checked against rosters, so check
+          your college roster for {unlinked === 1 ? 'him' : 'them'} by hand.
+        </p>
+      ) : null}
     </div>
   )
 }

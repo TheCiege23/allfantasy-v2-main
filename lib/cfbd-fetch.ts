@@ -79,8 +79,12 @@ function classify(status: number, body: string, path: string): CfbdFailure {
  * `path` starts with a slash and carries its own query string. The key is sent
  * as `Authorization: Bearer` — the scheme the CFBD getting-started page
  * documents — so it never appears in a URL that might be logged.
+ *
+ * `baseUrl` exists for CollegeBasketballData (`lib/cbbd/cbbdFetch.ts`): CFBD's sister API takes the
+ * same key, spends the same monthly quota and fails the same ways, so it reuses this request path
+ * and its quota counting rather than growing a second one.
  */
-export async function cfbdGet<T = unknown>(path: string, apiKey: string): Promise<CfbdResult<T>> {
+export async function cfbdGet<T = unknown>(path: string, apiKey: string, baseUrl: string = CFBD_BASE_URL): Promise<CfbdResult<T>> {
   if (!apiKey) {
     return {
       ok: false,
@@ -90,7 +94,7 @@ export async function cfbdGet<T = unknown>(path: string, apiKey: string): Promis
 
   let res: Response
   try {
-    res = await cfbdFetch(`${CFBD_BASE_URL}${path}`, {
+    res = await cfbdFetch(`${baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
   } catch (err) {
