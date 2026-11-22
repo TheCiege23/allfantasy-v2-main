@@ -36,6 +36,15 @@ export async function register(): Promise<void> {
     );
   }
 
+  if (process.env.RAILWAY_SERVICE_ID === "d523cabc-45f2-474f-b991-2e5e54f2920f") {
+    try {
+      const { prepareAfcStagingReplay } = await import("./lib/afc-championships/staging");
+      await prepareAfcStagingReplay();
+    } catch {
+      console.error("[AFC Championships] Could not initialize the isolated staging replay.");
+    }
+  }
+
   try {
     const { logProviderStatus, logProviderStartupValidation } = await import("./lib/provider-config");
     logProviderStatus();

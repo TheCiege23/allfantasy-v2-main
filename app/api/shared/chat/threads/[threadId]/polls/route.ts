@@ -8,17 +8,35 @@ import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { awardBallotInput } from '@/lib/league-chat/awardBallot'
 import { exportLeagueAwards, publishAwardBallot, updateAwardBallot } from '@/lib/league-chat/awardBallotService'
 import { createAwardSheetToken, readAwardSheetToken } from '@/lib/league-chat/awardSheetToken'
+import { afcSnapshot, isAfcPilotLeague, loadAfcPilot } from '@/lib/afc-championships/staging'
+import { afcStatus, afcTeams } from '@/lib/afc-championships/bracket'
 
 type Context = { params: Promise<{ threadId: string }> }
 
 export async function GET(req: NextRequest, props: Context) {
   const { threadId } = await props.params
   const leagueId = getLeagueIdFromVirtualRoom(decodeURIComponent(threadId))
-  if (!leagueId || req.nextUrl.searchParams.get('view') !== 'award-sheet') {
+  const view = req.nextUrl.searchParams.get('view')
+  if (!leagueId || (view !== 'award-sheet' && !(view === 'afc-sheet' && isAfcPilotLeague(leagueId)))) {
     return NextResponse.json({ error: 'Unknown export' }, { status: 404 })
   }
   const auth = req.headers.get('authorization') ?? ''
   const userId = auth.startsWith('Bearer ') ? readAwardSheetToken(auth.slice(7), leagueId) : null
+  if (view === 'afc-sheet') {
+    const pilot = userId ? await loadAfcPilot(leagueId, userId) : null
+    if (!pilot) return NextResponse.json({ error: 'AFC sheet access denied' }, { status: 403 })
+    const snapshot = await afcSnapshot(pilot)
+    const games = snapshot?.rounds.flatMap(round => round.games.flatMap(game => {
+      if (game.away == null || game.home == null) return []
+      return [{
+        id: game.id, round: round.number, week: round.week,
+        away: afcTeams[game.away], home: afcTeams[game.home],
+        awayScore: game.awayPoints, homeScore: game.homePoints,
+        status: afcStatus[game.status], winner: game.winner == null ? '' : afcTeams[game.winner],
+      }]
+    })) ?? []
+    return NextResponse.json({ leagueId, season: pilot.season, games }, { headers: { 'Cache-Control': 'private, no-store' } })
+  }
   if (!userId || !await canCommissionerAct(leagueId, userId, 'league')) {
     return NextResponse.json({ error: 'Award sheet access denied' }, { status: 403 })
   }

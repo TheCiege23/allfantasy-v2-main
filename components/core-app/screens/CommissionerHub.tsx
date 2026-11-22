@@ -76,6 +76,7 @@ import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
 import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
 import { HubFold } from '@/components/core-app/commissioner/HubFold'
 import { HubFoldOpener } from '@/components/core-app/commissioner/HubFoldOpener'
+import { isAfcPilotLeague } from '@/lib/afc-championships/staging'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -304,6 +305,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
 
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
       <Link className="afh-btn" href={`/league/${encodeURIComponent(league.id)}/awards`}>League awards</Link>
+      {data.role === 'commissioner' && isAfcPilotLeague(league.id) ? (
+        <Link className="afh-btn" href={`/league/${encodeURIComponent(league.id)}/afc-championships`}>AFC Championships</Link>
+      ) : null}
 
       {league.platform === 'fantrax' ? <FantraxResults leagueId={league.id} report={league.fantraxResults ?? null} /> : null}
 
