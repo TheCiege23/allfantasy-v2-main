@@ -93,16 +93,41 @@ describe('rail week boards kept across deploys', () => {
   })
 })
 
-describe('the boards timing line names the slowest leagues', () => {
-  it('lists the three slowest boards by league id, slowest first', async () => {
-    const { logBoardTiming } = await import('@/lib/af-projections/leagueRosterWeek')
+describe('the boards timing line says where each board came from (2026-11-22)', () => {
+  /*
+   * 🛑 TIMING ALONE COULD NOT TELL A STORED BOARD FROM A REBUILT ONE. The first version called anything slower than
+   * 5 ms "rebuilt"; once boards came from Postgres, a stored read is slower than that, and production logged
+   * "47 of 47 rebuilt" for boards that were read, not built. These read the line a real load writes.
+   */
+  async function sourcesOf(run: () => Promise<unknown>) {
+    const { __setBoardTimingThresholdForTests } = await import('@/lib/af-projections/leagueRosterWeek')
+    __setBoardTimingThresholdForTests(0)
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
     try {
-      logBoardTiming(9000, [100, 3700, 260, 2500], [
-        { leagueId: 'A', ms: 100 }, { leagueId: 'B', ms: 3700 }, { leagueId: 'C', ms: 260 }, { leagueId: 'D', ms: 2500 },
-      ])
-      const payload = JSON.parse((info.mock.calls[0] as [string, string])[1])
-      expect(payload.slowestLeagues).toEqual([{ leagueId: 'B', ms: 3700 }, { leagueId: 'D', ms: 2500 }, { leagueId: 'C', ms: 260 }])
-    } finally { info.mockRestore() }
+      await run()
+      const line = info.mock.calls.find(([tag]) => tag === '[rail-boards-timing]') as [string, string] | undefined
+      return JSON.parse(line![1]) as Record<string, number>
+    } finally {
+      info.mockRestore()
+      __setBoardTimingThresholdForTests(1500)
+    }
+  }
+
+  it('a fresh stored board is "stored", not "built"', async () => {
+    stored(12.5, 60_000)
+    const line = await sourcesOf(() => loadLeagueRosterWeeks(request))
+    expect(line).toMatchObject({ boards: 1, stored: 1, built: 0, stale: 0, memory: 0 })
+  })
+
+  it('a 3–33 minute old board is "stale"', async () => {
+    stored(12.5, ROSTER_WEEK_BOARD_TTL_MS + 60_000)
+    const line = await sourcesOf(() => loadLeagueRosterWeeks(request))
+    expect(line).toMatchObject({ stale: 1, built: 0 })
+    await vi.waitFor(() => expect(tier.write).toHaveBeenCalled())
+  })
+
+  it('no board anywhere is "built", and the next call in this process is "memory"', async () => {
+    expect(await sourcesOf(() => loadLeagueRosterWeeks(request))).toMatchObject({ built: 1, stored: 0 })
+    expect(await sourcesOf(() => loadLeagueRosterWeeks(request))).toMatchObject({ memory: 1, built: 0 })
   })
 })

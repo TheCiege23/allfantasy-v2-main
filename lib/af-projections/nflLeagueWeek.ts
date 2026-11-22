@@ -69,11 +69,24 @@ async function readWeek(season: number, week: number): Promise<Map<string, NflWe
   return result
 }
 
+/**
+ * How long one week's AF NFL lines are reused in this process (2026-11-22: was 60 seconds).
+ *
+ * ⚠ WHY FIVE MINUTES. Every rail board, the waiver boards and player projections read this; the rows behind it
+ * (`AFProjectionSnapshot`, season rows) are recomputed once a day (`/api/cron/compute-projections`, 07:50). The
+ * database half is ~40 ms, but turning ~1,900 rows (~2 MB, 1.1 KB each) into lines costs ~0.8 s on a busy process,
+ * and at 60 seconds nearly every /core open more than a minute apart paid it: production's `[rail-boards-timing]`
+ * showed the first four boards finishing at the same instant (776/776/776 ms), all waiting on this read. Five
+ * minutes matches `FOOTBALL_SEASON_ROWS_TTL_MS` beside it. The cost: a daily recompute shows up to five minutes
+ * later than before, instead of up to one.
+ */
+export const AF_NFL_WEEK_TTL_MS = 5 * 60_000
+
 const cache = new Map<string, { at: number; rows: Promise<Map<string, NflWeekLine>> }>()
 export function loadAfNflWeek(at: { season: string; week: number }) {
   const key = at.season + ':' + at.week
   const now = Date.now()
-  for (const [k, v] of cache) if (now - v.at > 60_000) cache.delete(k)
+  for (const [k, v] of cache) if (now - v.at > AF_NFL_WEEK_TTL_MS) cache.delete(k)
   const existing = cache.get(key)
   if (existing) return existing.rows
   const rows = readWeek(Number(at.season), at.week).catch((error) => {
