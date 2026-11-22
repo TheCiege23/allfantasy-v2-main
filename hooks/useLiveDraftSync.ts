@@ -232,26 +232,6 @@ export function useLiveDraftSync({
   }, [sessionStatus, timerStatus])
 
   useEffect(() => {
-    if (typeof document === 'undefined') return
-    const onVisibility = () => {
-      if (document.hidden) return
-      void fetchSession().then((ok) => {
-        if (ok) {
-          pollSessionFailStreakRef.current = 0
-          if (connectionDegradedTimerRef.current != null) {
-            clearTimeout(connectionDegradedTimerRef.current)
-            connectionDegradedTimerRef.current = null
-          }
-          setConnectionDegraded(false)
-        }
-      })
-      refetchOnceRef.current?.()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [fetchSession])
-
-  useEffect(() => {
     if (!leagueId) return
     pollOffset.current ??= Math.random()
     let interval: ReturnType<typeof setInterval> | undefined

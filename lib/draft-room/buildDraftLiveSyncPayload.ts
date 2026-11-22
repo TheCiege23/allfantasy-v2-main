@@ -40,22 +40,28 @@ export async function buildDraftLiveSyncPayload(
     chatLimit?: number
   },
 ): Promise<DraftLiveSyncWire> {
-  const draftSessionRow = await dedupeInFlight('draft:live-sync-version:' + leagueId, async () => {
-    await repairDraftCompletionIfBoardFull(leagueId).catch(error => {
-      console.error('[buildDraftLiveSyncPayload] repairDraftCompletionIfBoardFull', leagueId, error)
-    })
-    await syncPostDraftArtifactsIfCompletedThrottled(leagueId)
-    return prisma.draftSession.findFirst({
+  const draftSessionRow = await dedupeInFlight('draft:live-sync-version:' + leagueId, () =>
+    prisma.draftSession.findFirst({
       where: { leagueId },
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
-      select: { updatedAt: true },
-    })
-  })
+      select: { status: true, updatedAt: true },
+    }),
+  )
 
   if (!draftSessionRow) {
     return { leagueId, updated: false, updatedAt: null, session: null }
   }
 
+  // Recovery and roster materialization can scan a full board and should never hold a clock read.
+  if (['in_progress', 'paused', 'completed'].includes(draftSessionRow.status)) {
+    void dedupeInFlight('draft:live-sync-maintenance:' + leagueId, () =>
+      draftSessionRow.status === 'completed'
+        ? syncPostDraftArtifactsIfCompletedThrottled(leagueId)
+        : repairDraftCompletionIfBoardFull(leagueId),
+    ).catch(error => {
+      console.error('[buildDraftLiveSyncPayload] draft completion maintenance failed', leagueId, error)
+    })
+  }
   const updatedAt = draftSessionRow.updatedAt.toISOString()
   const sinceParsed = opts.since ? new Date(opts.since).getTime() : NaN
   const sinceMs = Number.isFinite(sinceParsed) ? sinceParsed : null
