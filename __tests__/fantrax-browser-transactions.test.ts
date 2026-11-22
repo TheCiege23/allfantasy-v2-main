@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest, NextResponse } from 'next/server'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
  * The browser connector's Transaction History sync: the extension may fetch ONLY the captured download
@@ -22,8 +24,10 @@ import { transactionSummary } from '../tools/fantrax-browser-connector/summary.j
 
 const origin = 'https://www.allfantasy.ai'
 const leagueId = 'ff59b139-03a8-47c6-82c0-59d6580670b4'
-const url = (view = 'CLAIM_DROP') =>
-  `https://www.fantrax.com/fxpa/downloadTransactionHistory?leagueId=abcdefgh1234&pageNumber=1&team=ALL&positionOrGroup=ALL&view=${view}&adminMode=false&includeDeleted=false&executedOnly=true`
+/* The address is read from the committed capture, never retyped: the code under test must build exactly what was captured. */
+const capture = JSON.parse(readFileSync(join(__dirname, '..', 'contracts', 'fantrax', 'fixtures', '2026-transaction-history-download.json'), 'utf8')).download
+const capturedUrl = (view: string) => `${capture.origin}${capture.path}?${new URLSearchParams({ ...capture.query, leagueId: 'abcdefgh1234', view })}`
+const url = (view = 'CLAIM_DROP') => capturedUrl(view)
 const CLAIMS = '"Player","Team","Position","Type","Team","Bid","Date (EST)","Week"\n"A","PHI","WR","Claim","#1 T","1.00","Sat Nov 21, 2026, 9:00AM","11"'
 const TRADES = '"Player","Team","Position","From","To","# Obj","Date (EST)","Week"\n"A","PHI","WR","#1 T","#2 U","0","Sat Nov 21, 2026, 9:00AM","11"'
 const ok = (text: string) => vi.fn().mockResolvedValue({ ok: true, text: async () => text })
