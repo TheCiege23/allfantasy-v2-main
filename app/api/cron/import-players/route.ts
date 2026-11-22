@@ -174,7 +174,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         isExhausted: () => budget.exhausted(),
       })
       const result = currentRosterOnly
-        ? await withSyncJobRun(
+        ? await import('@/lib/production-health/syncJobRunTelemetry').then(({ withSyncJobRun }) => withSyncJobRun(
             { jobName: 'cron-nfl-draft-roster-refresh', sport, provider: 'sleeper', trigger: 'cron' },
             refresh,
             ({ scanned, updated, created, feedUnavailable }) => ({
@@ -183,7 +183,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
               status: feedUnavailable ? 'failed' : budget.exhausted() ? 'partial' : 'success',
               ...(feedUnavailable ? { errors: ['Sleeper current roster feed unavailable'] } : {}),
             }),
-          )
+          ))
         : await refresh()
       const nbaIdentities = sport === 'NBA' && !result.feedUnavailable && !budget.exhausted()
         ? await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
