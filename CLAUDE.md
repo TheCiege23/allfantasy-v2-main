@@ -2381,6 +2381,41 @@ the exit code. It does NOT run vitest by default (`AF_SMOKE_RUN_TESTS=1` turns i
 on). Emergency escape hatch, for a genuine emergency only:
 `AF_SKIP_SMOKE_CHECK=1 git push …`
 
+## 🛑 DO NOT CREATE RAILWAY PROJECTS, ENVIRONMENTS OR SERVICES WITHOUT THE OWNER'S OK
+
+Owner's rule, 2026-11-22, after a Railway bill of ~$500 for one month.
+
+**Railway bills for memory a service HOLDS, every hour it is up, whether or not anything
+uses it.** An idle copy of this Next.js app holds 3–4 GB, which is roughly **$30–40 a month
+per copy**, for doing nothing.
+
+Measured 2026-11-22 (7-day averages from `get-service-metrics`): between 2026-10-20 and
+2026-11-10 sessions created **8 staging/QA projects with ~45 services** — `AllFantasy
+Bracket Isolated QA`, `AllFantasy Bracket Staging`, `AF Redraft Isolated QA`, `AF Dynasty
+Isolated Staging`, `AllFantasy Pirate Staging`, `allfantasy-zombie-rehearsal`, `Guilly
+Staging Web`, `AF Tournament Isolated QA`. Together they held **~43 GB around the clock,
+about $430/month** — more than twice production (~17 GB). Most showed near-zero CPU, and
+several showed byte-identical memory all week, i.e. no traffic at all. Many were pinned to
+one-off branches (`fix/...-20261103`) that nobody would ever look at again. All 8 were
+deleted by the owner the same day.
+
+**The rule:**
+
+1. **Ask the owner before** creating any Railway project, environment, service, database,
+   volume or bucket — including through the Railway MCP, the Railway agent, or the CLI.
+   Say what it is for, roughly what it costs per month, and when it will be deleted.
+2. **Delete it when the task ends**, in the same session, and say so. A QA copy that
+   outlives its task is the failure this section exists to stop. If it must outlive the
+   session, tell the owner its name and its monthly cost, in those words.
+3. **Prefer things that cost nothing while idle:** run the app locally or in a cloud
+   session, use a Neon branch for a throwaway database, and use a Railway `cronSchedule`
+   job (which exits) rather than an always-on service with a poll loop.
+4. **Never add replicas, raise resource limits or add a region on production** without
+   the owner's OK. Each is a recurring charge.
+
+⚠ "It is isolated, so it is safe" is about DATA, not money. An isolated environment is
+billed exactly like production.
+
 ## Deploys cost money, and pushes are the meter
 
 ⚠ **VERCEL IS RETIRED. PRODUCTION IS RAILWAY ONLY.** Production moved to Railway on
