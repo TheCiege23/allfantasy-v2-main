@@ -1491,7 +1491,7 @@ export default async function AfCorePage({
          */
         name: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)
           ? 'AF Supreme · admin access'
-          : access.hasSubscription
+          : access.hasPlan // any paid plan — `hasSubscription` is "holds Chimmy chat" and misses AF Commissioner
           ? titleCase(access.subscription.plans[0] ?? 'premium')
           : 'Free',
         tokensLeft: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email) ? null : access.tokenBalance,
@@ -1507,7 +1507,7 @@ export default async function AfCorePage({
   const toolsViewerPlan = access
     ? isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)
       ? { held: expandPlansWithBundle(['supreme', 'pro', 'commissioner']), name: 'AF Supreme' }
-      : access.hasSubscription
+      : access.hasPlan
       ? {
           held: expandPlansWithBundle(access.subscription.plans),
           name: access.subscription.plans[0] ? getDisplayPlanName(access.subscription.plans[0]) : null,
@@ -1523,7 +1523,7 @@ export default async function AfCorePage({
    * of its own: the plan answer is the one the chip above already awaited.
    */
   const homeLaunchOffer: LaunchOfferView | null = homeLaunchOfferFor({
-    hasPlan: access ? access.hasSubscription : null,
+    hasPlan: access ? access.hasPlan : null,
     now,
   })
 
