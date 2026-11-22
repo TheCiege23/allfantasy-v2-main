@@ -506,10 +506,11 @@ function HalfLineup({
             headshotUrl: p.imageUrl,
             imageUrl: p.imageUrl,
             teamLogoUrl: p.logoUrl,
+            projectedPoints: side.weeklyProjections?.[p.id] ?? null,
           },
         ]),
       ),
-    [side.players],
+    [side.players, side.weeklyProjections],
   )
   const season = new Date().getFullYear()
   const row = (id: string, slotLabel?: string, key?: string) => (
@@ -524,6 +525,7 @@ function HalfLineup({
       week={side.score.week ?? 0}
       season={season}
       liveScore={side.points[id] ?? null}
+      projectionPrecision={side.weeklyProjections ? 2 : undefined}
     />
   )
   // Taxi is a pro-side spot. Devy leagues always have one; a C2C league only shows it when the
