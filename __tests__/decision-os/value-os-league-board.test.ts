@@ -124,6 +124,18 @@ describe('the league board through the kernel', () => {
     expect(build).toHaveBeenCalledTimes(2)
   })
 
+  it('does not share a projection-only board with the Campus-to-Canton trade grader', async () => {
+    const campus = { ...league, platform: 'fantrax', leagueType: 'c2c' }
+    const refused = { ok: false as const, reason: 'Campus-to-Canton trade grade unavailable' }
+    build.mockImplementation(async ({ projectionOnly }) => projectionOnly ? { ok: true, ctx: ctx() } : refused)
+    const d = { store: s.store as never, build: build as never, env: {} }
+    const inputs = { sport: 'NBA' as const, league: campus }
+    expect(await loadCachedLeagueBoardBase({ ...inputs, projectionOnly: true }, d)).toMatchObject({ ok: true, servedFrom: 'live' })
+    expect(await loadCachedLeagueBoardBase(inputs, d)).toEqual(refused)
+    expect(await loadCachedLeagueBoardBase({ ...inputs, projectionOnly: true }, d)).toMatchObject({ ok: true, servedFrom: 'store' })
+    expect(build).toHaveBeenCalledTimes(2)
+  })
+
   it('a throw is "could not be loaded", never cached', async () => {
     build.mockRejectedValueOnce(new Error('db'))
     const r = await loadCachedLeagueBoardBase({ sport: 'NBA', league }, { store: s.store as never, build: build as never, env: {} })
@@ -215,7 +227,7 @@ describe('🛑 one board for the trade grade and the value surfaces', () => {
   it('the value board loader reads through the cache by default', async () => {
     const { readFileSync } = await import('node:fs')
     const src = readFileSync(`${process.cwd()}/lib/sport-values/leagueValueBoard.ts`, 'utf8')
-    expect(src).toMatch(/base: \(sport, league\) => loadCachedLeagueBoardBase\(\{ sport, league \}\)/)
+    expect(src).toMatch(/base: \(sport, league, options\) => loadCachedLeagueBoardBase\(\{ sport, league, \.\.\.options \}\)/)
     const grader = readFileSync(`${process.cwd()}/lib/decision-os/trade/sportPointsGrader.ts`, 'utf8')
     expect(grader).toMatch(/loadLeagueBase: \(a\) => loadCachedLeagueBoardBase\(a\)/)
   })

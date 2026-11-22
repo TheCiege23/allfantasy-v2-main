@@ -43,9 +43,9 @@ import type { PointsGradedSport, SportPointsContext } from '../trade/sportPoints
 
 export const VALUE_BOARD_CACHE_ENV = 'DECISION_OS_VALUE_BOARD_CACHE'
 
-type BoardArgs = {
-  sport: PointsGradedSport
-  league: SportPointsLeague
+type LeagueBoardInput = { sport: PointsGradedSport; league: SportPointsLeague; projectionOnly?: boolean }
+
+type BoardArgs = LeagueBoardInput & {
   /**
    * Not part of the scope: what the kernel's null cannot carry back — a refusal (so its reason is not lost), or a
    * board that was built but has no faithful encoding (served, never stored, so it never reads as "unavailable").
@@ -76,10 +76,10 @@ export const leagueValueBoardSource: OsFactSource<BoardArgs, EncodedFacts> = {
   kind: 'leagueBoard',
   level: 'league',
   ttlMs: 3 * MINUTES,
-  scopeKey: (a) => `${a.league.id}:${a.sport}:${leagueBoardFingerprint(a.league)}`,
+  scopeKey: (a) => `${a.league.id}:${a.sport}:${leagueBoardFingerprint(a.league)}${a.projectionOnly ? ':projections' : ''}`,
   sport: (a) => a.sport,
   derive: async (a) => {
-    const built = await a.build({ sport: a.sport, league: a.league })
+    const built = await a.build({ sport: a.sport, league: a.league, ...(a.projectionOnly ? { projectionOnly: true } : {}) })
     if (!built.ok) {
       a.refusal.result = built
       return null
@@ -106,7 +106,7 @@ export type LeagueBoardDeps = {
  * format) and the campus-only NCAAB read are not league boards and keep calling the builder directly.
  */
 export async function loadCachedLeagueBoardBase(
-  args: { sport: PointsGradedSport; league: SportPointsLeague },
+  args: LeagueBoardInput,
   deps: LeagueBoardDeps = {},
 ): Promise<CachedBoardResult> {
   const build = deps.build ?? loadSportPointsBase
@@ -152,7 +152,7 @@ type Read = {
 const inFlight = new Map<string, Promise<Read>>()
 
 async function readThrough(
-  args: { sport: PointsGradedSport; league: SportPointsLeague },
+  args: LeagueBoardInput,
   build: typeof loadSportPointsBase,
   store: OsStore | undefined,
 ): Promise<Read> {

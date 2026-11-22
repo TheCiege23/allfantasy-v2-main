@@ -10,7 +10,7 @@ import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { boardPlayerValue, boardUnit, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
-import { categoryLeagueReason, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
+import { categoryLeagueReason, isFantraxNbaCampusLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
 import { leagueIdColumn, leagueIdOf, loadIdentityForKeys, resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import { isDynastyLeagueType, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
 import { loadNcaafClassYears, loadNcaafRedraftBase, ncaafTradeScoringRules } from '@/lib/decision-os/trade/ncaafRedraftContext'
@@ -246,8 +246,15 @@ export async function loadLeaguePlayerMetrics(args: {
   if (!league || !isSupportedSport(league.sport) || !league.season) return null
   const { id: leagueId, sport, season } = league
   const now = args.now ?? new Date()
+  const projectionOnly = isFantraxNbaCampusLeague(sport, league)
+  const boardForLeague = async () => {
+    const supplied = await args.valueBoard
+    if (!projectionOnly) return supplied ?? loadLeagueValueBoard(leagueId)
+    if (supplied?.kind === 'ok' && supplied.projectionOnly) return supplied
+    return loadLeagueValueBoard(leagueId, {}, { projectionOnly: true })
+  }
   const [board, footballRates, resolution] = await Promise.all([
-    isPointsGradedSport(sport) ? args.valueBoard ?? loadLeagueValueBoard(leagueId) : Promise.resolve(null),
+    isPointsGradedSport(sport) ? boardForLeague() : Promise.resolve(null),
     sport === 'NFL' || sport === 'NCAAF'
       ? loadFootballRates({ ...league, season })
       : Promise.resolve([]),
