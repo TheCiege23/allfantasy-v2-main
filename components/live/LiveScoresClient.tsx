@@ -35,6 +35,8 @@ import { LiveImpactPanel } from './LiveImpactPanel'
 
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
+/** Scores on screen older than this when the page opens are re-read at once (see the mount effect). */
+const STALE_ON_OPEN_MS = 15_000
 
 export function LiveScoresClient({ initial }: { initial: LivePageData }) {
   const [data, setData] = useState<LivePageData>(initial)
@@ -231,6 +233,20 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
      */
   }, [load, sport, scope, pollIntervalMs])
 
+  /*
+   * ⚠ A STALE SCREEN POLLS ON OPEN, NOT A FULL INTERVAL LATER (2026-11-14). A page revisited within
+   * 30s now comes from the client router cache (`staleTimes.dynamic` in next.config.js), so the
+   * scores it opens with can be up to 30s old — and the interval above would leave them there for
+   * another 20s. If what is on screen is older than STALE_ON_OPEN_MS, read once now. Mount only.
+   */
+  useEffect(() => {
+    const at = data.fetchedAt == null ? NaN : new Date(data.fetchedAt).getTime()
+    if (!Number.isFinite(at) || Date.now() - at > STALE_ON_OPEN_MS) {
+      if (!document.hidden && navigator.onLine !== false) void load(sport, scope)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on open
+  }, [])
+
   // The freshness clock ticks independently of the poll so the label stays true
   // between refreshes — and keeps climbing when a refresh fails.
   useEffect(() => {
@@ -414,7 +430,7 @@ export function FreshnessBadge({
  * real -- they are simply the last ones we received -- and a notice that omitted
  * that would leave the reader unsure whether to believe any of it.
  */
-export function ConnectionNotice({ state }: { state: LiveConnectionState }) {
+function ConnectionNotice({ state }: { state: LiveConnectionState }) {
   const detail = connectionDetail(state)
   if (detail == null) return null
 

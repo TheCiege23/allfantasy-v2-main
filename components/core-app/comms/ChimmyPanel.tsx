@@ -52,16 +52,19 @@ import '@/components/core-app/af-comms.css'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
+import ChimmyMusicCard from '@/components/chimmy/ChimmyMusicCard'
+import { readMusicCard, type MusicCard } from '@/lib/chimmy/musicCards'
 import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
 import {
   newerAnswers,
   readAnswerPolish,
   readChimmyFaabCard,
   readChimmyVerdict,
+  readProUpsell,
   type ChimmyFaabCard,
   type ChimmyVerdict,
 } from '@/lib/chimmy/answerPolish'
-import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyVerdictChip } from './ChimmyAnswerPolish'
+import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyPastChatsChip, ChimmyProUpsell, ChimmyVerdictChip } from './ChimmyAnswerPolish'
 
 /**
  * Chimmy's private chat — ONE component, shown in two places:
@@ -217,6 +220,8 @@ type ChatTurn = {
    * A card changes nothing until the user taps Confirm on it; see lib/chimmy/actions/confirmAction.ts.
    */
   actionCards?: ChimmyActionCardData[] | null
+  /** "Play some hype music": a music card from `meta.musicCard`. It plays only when the user taps it. */
+  musicCard?: MusicCard | null
   /** The engine's call — HOLD / BID / START … — from `meta`, never from the text. See answerPolish.ts. */
   verdict?: ChimmyVerdict | null
   /** The structured `get_faab_bid_plan` result, rendered as a card. */
@@ -228,6 +233,10 @@ type ChatTurn = {
    * sessionStorage) so an earlier answer can be marked "Newer answer below" by a later one.
    */
   answerKeys?: string[] | null
+  /** AF Pro tools a free answer needed and was refused — the "Get AF Pro" button. Re-read at render. */
+  proUpsell?: string[] | null
+  /** The answer quoted the user's earlier chats (`recall_past_chats`) — the "From your past chats" chip. */
+  recalledPastChats?: boolean | null
 }
 
 function scenarioFollowUps(scenario: ReadyChimmyScenario | null): string[] | null {
@@ -528,7 +537,7 @@ function newAnswerId(): string {
  * children "may be duplicated and/or omitted", and the report was exactly that: the question
  * appeared twice (owner, 2026-09-25).
  */
-export function newTurnId(role: 'you' | 'chimmy'): string {
+function newTurnId(role: 'you' | 'chimmy'): string {
   return `${role}-${newAnswerId()}`
 }
 
@@ -1053,9 +1062,12 @@ export function ChimmyPanel({
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
             actionCards: readActionCards(payload.meta),
+            musicCard: readMusicCard(payload.meta),
             verdict: polish.verdict,
             faabPlan: polish.faabPlan,
             answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
+            proUpsell: polish.proUpsell.length ? polish.proUpsell : null,
+            recalledPastChats: polish.recalledPastChats || null,
             gif: payload.meta?.gif ?? null,
           },
         ])
@@ -1295,6 +1307,7 @@ export function ChimmyPanel({
               ) : null}
               {/* Re-read at render: a turn restored from sessionStorage is not re-validated on the way in. */}
               {t.role === 'chimmy' && readChimmyVerdict(t.verdict) ? <ChimmyVerdictChip verdict={readChimmyVerdict(t.verdict)!} /> : null}
+              {t.role === 'chimmy' && t.recalledPastChats === true ? <ChimmyPastChatsChip /> : null}
               {t.role === 'chimmy' && readChimmyFaabCard(t.faabPlan) ? <ChimmyFaabBidCard card={readChimmyFaabCard(t.faabPlan)!} /> : null}
 
               {t.role === 'chimmy' && readPortfolioEvidence(t.portfolio) ? <ChimmyPortfolioCard evidence={readPortfolioEvidence(t.portfolio)!} onEvidenceChange={portfolio => setTurns(all => all.map(x => x.id === t.id ? { ...x, portfolio } : x))} onAsk={(prompt, state) => {
@@ -1314,6 +1327,7 @@ export function ChimmyPanel({
                 <>
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
                   {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
+                  {readProUpsell(t.proUpsell).length > 0 ? <ChimmyProUpsell tools={readProUpsell(t.proUpsell)} /> : null}
                   <ChimmyCopyActions text={t.text} />
                 </>
               ) : (
@@ -1394,6 +1408,7 @@ export function ChimmyPanel({
               {t.role === 'chimmy' && t.actionCards?.length
                 ? t.actionCards.map((card) => <ChimmyActionCard key={card.actionId} card={card} />)
                 : null}
+              {t.role === 'chimmy' && t.musicCard ? <ChimmyMusicCard card={t.musicCard} /> : null}
 
               {t.role === 'chimmy' && t.advice ? (
                 <ChimmyAdviceFollow

@@ -206,4 +206,3 @@ export function DraftReportCardPanel({ leagueId, rosterId, initialResults }: Pro
   )
 }
 
-export default DraftReportCardPanel

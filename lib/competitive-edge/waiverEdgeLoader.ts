@@ -37,6 +37,8 @@ function firstAdd(adds: unknown): string | null {
   return null
 }
 
+export type WaiverEdgeInput = Parameters<typeof buildWaiverEdge>[0]
+
 export async function loadWaiverEdge(input: {
   leagueId: string
   userId: string
@@ -44,6 +46,20 @@ export async function loadWaiverEdge(input: {
   usesFaab: boolean
   now?: Date
 }): Promise<SectionState<WaiverEdge>> {
+  const read = await readWaiverEdgeInput(input)
+  return read.available ? { available: true, data: buildWaiverEdge(read.data) } : read
+}
+
+/**
+ * The league's waiver history this season and every team's budget — the read half of the waiver
+ * edge, shared with a manager's record (./managerRecordLoader.ts) so both count the same claims.
+ */
+export async function readWaiverEdgeInput(input: {
+  leagueId: string
+  userId: string
+  usesFaab: boolean
+  now?: Date
+}): Promise<SectionState<WaiverEdgeInput>> {
   const now = input.now ?? new Date()
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
@@ -151,7 +167,7 @@ export async function loadWaiverEdge(input: {
 
   return {
     available: true,
-    data: buildWaiverEdge({
+    data: {
       season: league.season,
       usesFaab: input.usesFaab,
       claims,
@@ -159,7 +175,7 @@ export async function loadWaiverEdge(input: {
       viewerTeamExternalId: viewer?.externalId ?? null,
       asOf: lastSyncedAt ? lastSyncedAt.toISOString() : null,
       stale: lastSyncedAt ? now.getTime() - lastSyncedAt.getTime() > STALE_AFTER_MS : false,
-    }),
+    },
   }
 }
 

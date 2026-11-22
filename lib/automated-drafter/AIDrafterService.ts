@@ -4,11 +4,11 @@
  */
 
 import { computeCPUPick } from './CPUDrafterService'
-import type { CPUDrafterInput, DrafterPickResult, OrphanDrafterMode } from './types'
+import type { CPUDrafterInput, DrafterPickResult } from './types'
 import { getProviderStatus } from '@/lib/provider-config'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export interface AIDrafterOptions {
+interface AIDrafterOptions {
   /** If true, attempt AI provider; otherwise use CPU only. */
   useAIProvider?: boolean
 }
@@ -149,14 +149,14 @@ function buildHeuristicAIPick(
   const blendedPlayer = selectedKey === fallbackKey ? cpuFallback.player : selected.player
   const confidence = Math.max(cpuFallback.confidence, Math.min(96, 66 + Math.round(selected.total / 12)))
   const reason = selectedKey === fallbackKey
-    ? `${profile.label} AI profile confirmed the CPU baseline as the best fit for this round.`
-    : `${profile.label} AI profile prioritized ${normalizePosition(selected.player.position)} value and roster fit for this pick window.`
+    ? `${profile.label} Chimmy profile confirmed the CPU baseline as the best fit for this round.`
+    : `${profile.label} Chimmy profile prioritized ${normalizePosition(selected.player.position)} value and roster fit for this pick window.`
   const narrative = [
     `${profile.label} strategy (${phase} phase).`,
     `Signal mix -> ADP ${selected.adpScore}, need ${selected.needScore}, priority ${selected.priorityScore}, queue ${selected.queueScore}.`,
     selectedKey === fallbackKey
       ? 'Decision converged with deterministic CPU baseline.'
-      : `AI lane diverged from CPU baseline to improve roster construction balance.`,
+      : `Chimmy lane diverged from CPU baseline to improve roster construction balance.`,
   ].join(' ')
 
   return {

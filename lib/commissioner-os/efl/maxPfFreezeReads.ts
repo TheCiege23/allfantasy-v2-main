@@ -23,8 +23,4 @@
 
 export {
   readMaxPfFreezeStatus,
-  starterSeatsFromTemplate,
-  type MaxPfDataProvenance,
-  type ReadMaxPfFreezeResult,
-  type ReadMaxPfInput,
 } from '@/lib/commissioner-os/efl/maxPfReads'

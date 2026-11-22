@@ -175,6 +175,13 @@ describe('loadImportAssertions reads the active lane row', () => {
     const a = await loadImportAssertions('kbfl')
     expect(a?.activeLane).toBeNull()
   })
+
+  it('marks a league hosted on AllFantasy as native, and an imported one as not (2026-11-20)', async () => {
+    h.findUniqueSyncState.mockResolvedValue(null)
+    expect((await loadImportAssertions('kbfl'))?.native).toBe(false)
+    h.findUniqueLeague.mockResolvedValue({ id: 'af1', platform: 'allfantasy', platformLeagueId: null, season: 2026, leagueSize: 12 })
+    expect((await loadImportAssertions('af1'))?.native).toBe(true)
+  })
 })
 
 describe('the mirrored scope list', () => {

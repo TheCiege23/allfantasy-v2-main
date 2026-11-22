@@ -108,7 +108,7 @@ function PickSummaryChip({
   )
 }
 
-export type DraftPickTradePanelRootProps = {
+type DraftPickTradePanelRootProps = {
   className: string
   presentationVariant?: 'default' | 'redraft_snake'
   leagueName?: string
@@ -694,7 +694,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                     </div>
                   </section>
 
-                  {/* AI blocks — structured “rails” */}
+                  {/* Chimmy blocks — structured “rails” */}
                   <div className="grid gap-6 lg:grid-cols-2">
                     <section
                       className={`relative overflow-hidden rounded-3xl border p-6 ${
@@ -707,17 +707,17 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                       <div className="pl-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <Sparkles className="h-5 w-5 text-violet-300" />
-                          <h3 className="text-base font-bold text-white">AI Trade Suggestor</h3>
+                          <h3 className="text-base font-bold text-white">Chimmy Trade Suggestor</h3>
                           <span className="rounded-full border border-white/15 bg-black/35 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">
                             Live inventory
                           </span>
                         </div>
                         <p className="mt-2 text-[13px] leading-relaxed text-white/48">
-                          Ranked swaps validated against live ownership; AF Pro adds AI ranking and rationale. Choose a partner first.
+                          Ranked swaps validated against live ownership; AF Pro adds Chimmy ranking and rationale. Choose a partner first.
                         </p>
                         {!tradeAiPremium ? (
                           <p className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2 text-[12px] leading-snug text-amber-100/90">
-                            AF Pro unlocks AI-ranked rationales for suggestions. You still get valid deterministic swaps.
+                            AF Pro unlocks Chimmy-ranked rationales for suggestions. You still get valid deterministic swaps.
                           </p>
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -789,7 +789,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                         ) : null}
                         {suggestionMeta ? (
                           <p className="mt-2 text-[11px] text-white/38">
-                            {suggestionMeta.aiUsed ? 'AI-ranked' : 'Deterministic'}{' '}
+                            {suggestionMeta.aiUsed ? 'Chimmy-ranked' : 'Deterministic'}{' '}
                             {suggestionMeta.source ? `· ${suggestionMeta.source}` : ''}
                             {suggestionMeta.reasonCode ? ` · ${suggestionMeta.reasonCode}` : ''}
                           </p>
@@ -823,7 +823,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                                     </span>
                                     {s.aiEnhanced ? (
                                       <span className="rounded-md border border-violet-400/35 bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-100/95">
-                                        AI
+                                        Chimmy
                                       </span>
                                     ) : null}
                                   </div>
@@ -854,14 +854,14 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                       <div className="pl-4">
                         <div className="flex items-center gap-2">
                           <Zap className="h-5 w-5 text-cyan-300" />
-                          <h3 className="text-base font-bold text-white">AI Trade Analyzer</h3>
+                          <h3 className="text-base font-bold text-white">Chimmy Trade Analyzer</h3>
                         </div>
                         <p className="mt-2 text-[13px] leading-relaxed text-white/48">
-                          Deterministic capital bands plus AF Pro AI summary when entitled—grounded in live picks on the board.
+                          Deterministic capital bands plus AF Pro Chimmy summary when entitled—grounded in live picks on the board.
                         </p>
                         {!tradeAiPremium ? (
                           <p className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2 text-[12px] leading-snug text-amber-100/90">
-                            Upgrade to AF Pro for AI narrative on this analyzer. Structured fairness chips below still run for
+                            Upgrade to AF Pro for Chimmy narrative on this analyzer. Structured fairness chips below still run for
                             everyone.
                           </p>
                         ) : null}
@@ -1239,7 +1239,7 @@ function OfferCard(props: {
           className="inline-flex items-center gap-2 rounded-2xl border border-violet-400/45 bg-violet-500/18 px-5 py-2.5 text-sm font-bold text-violet-50 transition hover:bg-violet-500/28 disabled:opacity-45"
         >
           <Sparkles className="h-4 w-4" />
-          {aiLoading ? '…' : 'AI analyze'}
+          {aiLoading ? '…' : 'Chimmy analyze'}
         </button>
       </div>
 
@@ -1303,7 +1303,7 @@ function OfferCard(props: {
               ) : null}
             </div>
           ) : (
-            !aiLoading && <p className="mt-3 text-sm text-white/45">Run AI analyze for a structured verdict.</p>
+            !aiLoading && <p className="mt-3 text-sm text-white/45">Run Chimmy analyze for a structured verdict.</p>
           )}
 
           <div className="mt-6 flex flex-wrap gap-3">

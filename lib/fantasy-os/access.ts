@@ -28,7 +28,7 @@ import { isAdminRole, isAdminEmailAllowed } from '@/lib/adminAuth'
 import { isDevAdminUserId } from '@/lib/dev-admin/access'
 import type { EntitlementStatus } from '@/lib/subscription/types'
 
-export type FantasyOsAccessInput = {
+type FantasyOsAccessInput = {
   userId?: string | null
   email?: string | null
   /** NextAuth session role, when available (e.g. "admin"). */
@@ -36,16 +36,11 @@ export type FantasyOsAccessInput = {
 }
 
 /** Reason an access decision was reached — useful for the launch-card variant + debugging. */
-export type FantasyOsAccessReason = 'admin' | 'owner' | 'enterprise' | 'none'
+type FantasyOsAccessReason = 'admin' | 'owner' | 'enterprise' | 'none'
 
 const ACTIVE_STATUSES: ReadonlySet<EntitlementStatus> = new Set<EntitlementStatus>(['active', 'grace'])
 
 const entitlementResolver = new EntitlementResolver()
-
-/** Owner/admin override — always passes, independent of subscription state. */
-export function isFantasyOsAdminOrOwner(input: FantasyOsAccessInput): boolean {
-  return isAdminRole(input.role) || isAdminEmailAllowed(input.email) || isDevAdminUserId(input.userId)
-}
 
 /**
  * Resolve Fantasy OS access + the reason. Admin/owner short-circuits without a DB read;
@@ -74,18 +69,3 @@ export async function canAccessFantasyOS(input: FantasyOsAccessInput): Promise<b
   return allowed
 }
 
-/**
- * Smallest client-safe access view for dashboard UI. Carries only allowed + a coarse reason
- * (owner/admin/enterprise/unauthorized) — never raw entitlements, admin flags, plan ids, or
- * internal authorization details. The server resolver remains the authorization source of truth;
- * this is a presentational hint for nav/card visibility + copy variant.
- */
-export type FantasyOsAccessView = {
-  allowed: boolean
-  reason: 'owner' | 'admin' | 'enterprise' | 'unauthorized'
-}
-
-export async function resolveFantasyOsAccessView(input: FantasyOsAccessInput): Promise<FantasyOsAccessView> {
-  const { allowed, reason } = await resolveFantasyOsAccess(input)
-  return { allowed, reason: reason === 'none' ? 'unauthorized' : reason }
-}

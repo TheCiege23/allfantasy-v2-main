@@ -49,7 +49,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
  * one run to run.
  */
 
-export type SleeperPlayerIdentity = {
+type SleeperPlayerIdentity = {
   sleeperId: string
   name: string | null
   position: string | null
@@ -62,7 +62,7 @@ export type SleeperPlayerIdentity = {
   source: 'sports_player' | 'roster' | 'unresolved'
 }
 
-export type SleeperCrosswalkResult = {
+type SleeperCrosswalkResult = {
   byId: Map<string, SleeperPlayerIdentity>
   resolved: number
   unresolved: number
@@ -113,7 +113,7 @@ function matchCanonical<T extends CanonicalRow>(
 }
 
 /** One player to find an image for. A bare string is a name with nothing to verify it by. */
-export type PlayerImageLookup = string | { name: string; position?: string | null; team?: string | null }
+type PlayerImageLookup = string | { name: string; position?: string | null; team?: string | null }
 
 /** The key `resolveImagesByPlayerName` stores a lookup's image under. */
 export function playerImageKey(lookup: PlayerImageLookup): string {

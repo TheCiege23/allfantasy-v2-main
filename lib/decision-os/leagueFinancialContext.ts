@@ -74,7 +74,7 @@ export function defaultLeagueFinancialContext(
   }
 }
 
-export interface ManualFinancialConfirmationInput {
+interface ManualFinancialConfirmationInput {
   /** Only FREE or PAID — a manual confirmation can never itself produce VERIFIED_PAID (see
    * `applyEscrowVerification`, the only path to that tier). */
   financialStatus: 'FREE' | 'PAID'
@@ -123,7 +123,7 @@ export function resetLeagueFinancialContext(leagueId: string, provider: string):
   return defaultLeagueFinancialContext(leagueId, provider)
 }
 
-export interface EscrowVerificationInput {
+interface EscrowVerificationInput {
   escrowProvider: Exclude<LeagueEscrowProvider, 'UNKNOWN'>
   buyInAmount?: number | null
   buyInCurrency?: string | null

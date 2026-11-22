@@ -14,7 +14,7 @@ import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/co
 
 type OverallStatus = CommissionerLeagueHealthSnapshot['overallStatus']
 import type { CommissionerHealthDCO } from './dco'
-import { evaluateCommissionerHealthRules, deriveCommissionerRiskScores } from './rules'
+import { evaluateCommissionerHealthRules, deriveCommissionerRiskScores, type CommissionerHealthLearning } from './rules'
 
 /** A read-only commissioner action SUGGESTION (navigation only — never executed by the Decision OS). */
 export interface CommissionerActionSuggestion {
@@ -46,6 +46,8 @@ export interface CommissionerHealthDecisionDeps {
   evaluate: () => Promise<CommissionerLeagueHealthSnapshot>
   newId?: () => string
   lifecyclePhase?: string
+  /** Graded outcomes the rules may use (the inactive flag's record). Absent: every verdict is as before. */
+  learned?: CommissionerHealthLearning
 }
 
 /** Map the deterministic snapshot → an assessment (NO AI/prose consumed; risk derived from memo). */
@@ -88,7 +90,7 @@ export async function decideCommissionerHealth(
   const assessment = snapshotToAssessment(snapshot)
 
   // 2) Rules (assessment, not legality) — deterministic threshold → commissioner-attention verdicts.
-  const verdicts: RuleVerdict[] = evaluateCommissionerHealthRules(snapshot)
+  const verdicts: RuleVerdict[] = evaluateCommissionerHealthRules(snapshot, deps.learned)
   const attention = verdicts.filter((v) => v.verdict === 'requires_approval')
   const critical = attention.filter((v) => v.severity === 'critical')
 

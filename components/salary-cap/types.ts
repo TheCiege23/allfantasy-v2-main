@@ -2,7 +2,7 @@
  * Frontend types for Salary Cap summary and UI state. PROMPT 340.
  */
 
-export interface SalaryCapSummaryConfig {
+interface SalaryCapSummaryConfig {
   mode: string
   startupCap: number
   capGrowthPercent: number
@@ -25,7 +25,7 @@ export interface SalaryCapSummaryConfig {
   offseasonPhase: string | null
 }
 
-export interface SalaryCapSummaryLedger {
+interface SalaryCapSummaryLedger {
   rosterId: string
   capYear: number
   totalCapHit: number
@@ -34,7 +34,7 @@ export interface SalaryCapSummaryLedger {
   capSpace: number
 }
 
-export interface FutureCapYearUI {
+interface FutureCapYearUI {
   capYear: number
   capCeiling: number
   totalCapHit: number
@@ -43,7 +43,7 @@ export interface FutureCapYearUI {
   contractCount: number
 }
 
-export interface ContractRowUI {
+interface ContractRowUI {
   id: string
   playerId: string
   playerName: string | null
@@ -59,6 +59,10 @@ export interface ContractRowUI {
 export interface SalaryCapSummary {
   config: SalaryCapSummaryConfig
   myRosterId?: string
+  /** An imported league with no contracts on file: why the cap screens are empty (lib/salary-cap/importedContractsNote.ts). */
+  contractsNote?: string | null
+  /** The viewer is the commissioner of an imported cap league and may upload its contract sheet. */
+  canImportContracts?: boolean
   ledger: SalaryCapSummaryLedger | null
   futureProjection: FutureCapYearUI[]
   contracts: ContractRowUI[]

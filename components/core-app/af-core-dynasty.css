@@ -30,6 +30,12 @@
   --dyn-art:url('/artwork/dynasty/dynasty-hall-1600.webp');
   --dyn-art-veil:rgba(6,7,15,.9);
   --accent:var(--dyn-accent-text);--accent-ink:var(--dyn-accent-ink);--accent-soft:var(--dyn-accent-soft);--accent-line:var(--dyn-accent-line);
+  /* The Matchup scoreboard reads its own token, and it stayed the default cyan inside a gold page
+   * (owner's call 2026-11-07: the board follows the league's colour, as redraft's already does).
+   * ⚠ DECLARED HERE AND NOT IN THE LIGHT BLOCK ON PURPOSE: the board is dark in EVERY mode
+   * (af-core.css --mu-sb-bg), so it needs the bright gold even on a light page; light's #7A5310 would
+   * sink into it. #E8C07A on the darkest board (#141a33) is well over 7:1. */
+  --mu-sb-accent:#E8C07A;
   --hero:radial-gradient(760px 420px at 18% 10%,var(--dyn-glow),transparent 68%);
   /* The art sits under a heavy veil and only across the first viewport: the shell is as tall as its
    * page, and `cover` over the whole document would blow the hall up to a few smears. Below it the
@@ -52,6 +58,17 @@ html[data-mode='light'] .af-core.af-shell[data-dynasty-background=true]{
 .af-core.af-shell[data-dynasty-background=true] .af-topbar{border-bottom-color:var(--dyn-accent-line)}
 .af-core.af-shell[data-dynasty-background=true] .af-scope-btn{border-color:var(--dyn-accent-line)}
 .af-core.af-shell[data-dynasty-background=true] .af-nav{border-right-color:var(--dyn-accent-line)}
+
+/* Chat launcher: af-comms.css paints it a literal #22d3ee (not --accent), so it stayed cyan on a gold
+ * page. Gold fill with ink is 8.3:1 and reads on both the dark and the light page. */
+.af-core.af-shell[data-dynasty-background=true] .af-cm-launch{background:var(--dyn-gold);color:var(--dyn-ink);box-shadow:0 20px 40px -16px rgba(212,162,76,.55)}
+.af-core.af-shell[data-dynasty-background=true] .af-cm-launch[data-dragging='true']{box-shadow:0 24px 48px -16px rgba(212,162,76,.7)}
+
+/* Rail: a small gold crown on a dynasty league's tile, on EVERY page (not only inside a dynasty league),
+ * so the league is recognisable before it is opened. Bottom-left INSIDE the tile (its art clips with
+ * overflow:hidden), clear of the alert dot (top-right)
+ * and the unread count. Literal gold, not a --dyn token: the rail renders outside any dynasty stamp. */
+.af-rail-crown{position:absolute;left:1px;bottom:1px;display:grid;place-items:center;width:17px;height:17px;border-radius:999px;background:#D4A24C;color:#0B0F17;border:2px solid var(--rail,#0b0f17);pointer-events:none}
 
 @media (max-width:720px){
   /* Phone: the nav column is a top strip (af-core-shell.css), so its rule moves to the bottom edge;

@@ -35,6 +35,8 @@ export const matchupScreenMessages = defineMessages({
 
     // Matchup
     guillyBasis: 'In a Guilly league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.',
+    noMatchupTitle: 'No matchup to show yet',
+    noMatchupHint: 'Your opponent and both lineups appear here once this week’s schedule is on file — in a new league, that is after the draft.',
     meetingsOnFile: (you: number, them: number, week: number) =>
       `meetings on file; last: ${you > them ? 'W' : you < them ? 'L' : 'T'} ${you.toFixed(1)}–${them.toFixed(1)} (wk ${week})`,
     builtWithout: (you: number, opponent: number) =>
@@ -65,7 +67,7 @@ export const matchupScreenMessages = defineMessages({
           : yours.length
             ? `Your ${list(yours)}, and nobody of theirs.`
             : `Their ${list(theirs)}, and nobody of yours.`
-      return `${who} ${inGame} of ${remaining} starters still to play.`
+      return `${who} ${inGame} of the ${remaining} starters still to play are in this game.`
     },
     lineupLabel: 'Lineup check',
     lineupTitle: (n: number, name: string | null, slot: string) =>
@@ -77,22 +79,22 @@ export const matchupScreenMessages = defineMessages({
     lineupFix: (n: number): string =>
       n === 1 ? 'That is a certain zero until the lineup changes.' : 'Each one is a certain zero until the lineup changes.',
     toWinLabel: 'To win',
-    toWinNeed: (needed: number) => `${needed.toFixed(1)} more points`,
+    toWinNeed: (needed: number) => `${needed.toFixed(1)} more points to pass them`,
     toWinAhead: 'Already past their projection',
-    toWinBody: (needed: number, theirProjected: number, yourScore: number, left: number, leftProjected: number | null) => {
-      const head =
-        needed > 0
-          ? `That passes their projected final of ${theirProjected.toFixed(1)}.`
-          : `Your ${yourScore.toFixed(1)} already beats their projected final of ${theirProjected.toFixed(1)}.`
-      const tail =
-        left === 0
-          ? ' Everyone of yours has kicked off.'
-          : leftProjected != null
-            ? left === 1
-              ? ` Your one still to play projects for ${leftProjected.toFixed(1)}.`
-              : ` Your ${left} still to play project for ${leftProjected.toFixed(1)}.`
-            : ''
-      return head + tail
+    /*
+     * One line that answers the card's question (2026-11-14): do you get there? It read "That passes
+     * their projected final of 233.0. Your 16 still to play project for 186.9." — a second projection
+     * beside the scoreboard's 186.8, with the subtraction left to the reader. `short` comes off the
+     * scoreboard's own projected finals.
+     */
+    toWinBody: (needed: number, theirProjected: number, yourScore: number, left: number, _leftProjected: number | null, short: number | null) => {
+      if (needed <= 0) return `Your ${yourScore.toFixed(1)} already beats their projected final of ${theirProjected.toFixed(1)}.`
+      if (left === 0) return 'Everyone of yours has kicked off.'
+      if (short == null) return ''
+      const still = left === 1 ? '1 player still to play' : `${left} players still to play`
+      return short > 0
+        ? `On projection you finish ${short.toFixed(1)} short, with ${still}.`
+        : `On projection you get there, with ${still}.`
     },
   },
   es: {
@@ -119,6 +121,8 @@ export const matchupScreenMessages = defineMessages({
       `Calculado con ${yoursFrom} de tus ${yoursOf} titulares y ${theirsFrom} de sus ${theirsOf}; ambos totales pueden ser bajos en distinta medida.`,
 
     guillyBasis: 'En una liga Guilly compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.',
+    noMatchupTitle: 'Todavía no hay enfrentamiento',
+    noMatchupHint: 'Tu rival y las dos alineaciones aparecerán aquí cuando el calendario de esta semana esté registrado; en una liga nueva, eso ocurre después del draft.',
     meetingsOnFile: (you, them, week) =>
       `enfrentamientos registrados; último: ${you.toFixed(1)}–${them.toFixed(1)} (sem. ${week})`,
     builtWithout: (you, opponent) =>
@@ -158,22 +162,16 @@ export const matchupScreenMessages = defineMessages({
     lineupFix: (n) =>
       n === 1 ? 'Es un cero seguro hasta que cambie la alineación.' : 'Cada uno es un cero seguro hasta que cambie la alineación.',
     toWinLabel: 'Para ganar',
-    toWinNeed: (needed) => `${needed.toFixed(1)} puntos más`,
+    toWinNeed: (needed) => `${needed.toFixed(1)} puntos más para superarlos`,
     toWinAhead: 'Ya superas su proyección',
-    toWinBody: (needed, theirProjected, yourScore, left, leftProjected) => {
-      const head =
-        needed > 0
-          ? `Con eso superas su total proyectado de ${theirProjected.toFixed(1)}.`
-          : `Tus ${yourScore.toFixed(1)} ya superan su total proyectado de ${theirProjected.toFixed(1)}.`
-      const tail =
-        left === 0
-          ? ' Todos los tuyos ya empezaron a jugar.'
-          : leftProjected != null
-            ? left === 1
-              ? ` Tu titular pendiente proyecta ${leftProjected.toFixed(1)}.`
-              : ` Tus ${left} pendientes proyectan ${leftProjected.toFixed(1)}.`
-            : ''
-      return head + tail
+    toWinBody: (needed, theirProjected, yourScore, left, _leftProjected, short) => {
+      if (needed <= 0) return `Tus ${yourScore.toFixed(1)} ya superan su total proyectado de ${theirProjected.toFixed(1)}.`
+      if (left === 0) return 'Todos los tuyos ya empezaron a jugar.'
+      if (short == null) return ''
+      const still = left === 1 ? '1 jugador por jugar' : `${left} jugadores por jugar`
+      return short > 0
+        ? `Según la proyección te quedas a ${short.toFixed(1)} puntos, con ${still}.`
+        : `Según la proyección lo logras, con ${still}.`
     },
   },
 })

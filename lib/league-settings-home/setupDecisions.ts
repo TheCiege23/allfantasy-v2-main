@@ -67,8 +67,6 @@ const SPECS: readonly Spec[] = [
   },
 ]
 
-export const SETUP_DECISION_COUNT = SPECS.length
-
 /**
  * The five decisions, answered from the settings list. A decision whose row the viewer cannot edit
  * (no `target`) is left out, so a co-commissioner without that power is never asked it.

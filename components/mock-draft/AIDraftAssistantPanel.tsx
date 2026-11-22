@@ -6,7 +6,7 @@ import { Bot, AlertTriangle, Info, MessageCircle, RefreshCw } from 'lucide-react
 import { useAIDraftAssistant, type FetchSuggestionParams } from '@/hooks/useAIDraftAssistant'
 import { buildAskChimmyAboutPickPrompt, getDraftAIChatUrl } from '@/lib/draft-room/DraftToAIContextBridge'
 
-export interface AIDraftAssistantPanelProps {
+interface AIDraftAssistantPanelProps {
   /** When non-null, fetch suggestion for this pick/context */
   params: FetchSuggestionParams | null
   /** Auto-fetch when params change */

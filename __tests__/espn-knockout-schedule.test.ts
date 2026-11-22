@@ -53,7 +53,7 @@ describe('applySchedule — a week with no opponent', () => {
     expect(out.soloRowsWritten).toBe(1)
     expect(out.weeksWritten).toBe(1)
     expect(rowsWritten()).toEqual([
-      { leagueId: 'L1', seasonYear: 2026, week: 2, rosterId: '7', matchupId: 1, pointsFor: 132.1, pointsAgainst: 0, win: 0 },
+      { leagueId: 'L1', seasonYear: 2026, week: 2, rosterId: '7', matchupId: 1, game: 1, pointsFor: 132.1, pointsAgainst: 0, win: 0 },
     ])
   })
 
@@ -78,8 +78,8 @@ describe('applySchedule — a week with no opponent', () => {
     ])
     expect(out.soloRowsWritten).toBe(0)
     expect(rowsWritten()).toEqual([
-      { leagueId: 'L1', seasonYear: 2026, week: 1, rosterId: 'a', matchupId: 1, pointsFor: 120, pointsAgainst: 100, win: 1 },
-      { leagueId: 'L1', seasonYear: 2026, week: 1, rosterId: 'b', matchupId: 1, pointsFor: 100, pointsAgainst: 120, win: 0 },
+      { leagueId: 'L1', seasonYear: 2026, week: 1, rosterId: 'a', matchupId: 1, game: 1, pointsFor: 120, pointsAgainst: 100, win: 1 },
+      { leagueId: 'L1', seasonYear: 2026, week: 1, rosterId: 'b', matchupId: 1, game: 1, pointsFor: 100, pointsAgainst: 120, win: 0 },
     ])
   })
 
@@ -106,6 +106,53 @@ describe('applySchedule — a week with no opponent', () => {
     const solos = rows.filter((r) => r.rosterId === 'c' || r.rosterId === 'd')
     expect(new Set(solos.map((r) => r.matchupId)).size).toBe(2)
     expect(solos.map((r) => r.matchupId)).not.toContain(1)
+  })
+
+  /*
+   * A league whose teams play several games a week (Fantrax: 3 or 5). The roster-week key kept the
+   * first game and silently dropped the rest, leaving half-pairs behind.
+   */
+  it('keeps every game of a team that plays several in one week, each numbered and still paired', async () => {
+    reset()
+    const out = await applySchedule(idOf, 'L1', [
+      {
+        week: 4,
+        season: 2026,
+        matchups: [
+          { teamId1: 'a', teamId2: 'b', points1: 110, points2: 90 },
+          { teamId1: 'c', teamId2: 'a', points1: 80, points2: 95 },
+          { teamId1: 'a', teamId2: 'd', points1: 70, points2: 100 },
+          { teamId1: 'b', teamId2: 'c', points1: 60, points2: 60 },
+        ],
+      },
+    ])
+    expect(out.weeksWritten).toBe(1)
+    const rows = rowsWritten() as Array<{ rosterId: string; matchupId: number; game: number; win: number }>
+    expect(rows).toHaveLength(8)
+    // Team a plays three games: numbered 1..3, one row each, two wins and a loss.
+    const a = rows.filter((r) => r.rosterId === 'a')
+    expect(a.map((r) => r.game)).toEqual([1, 2, 3])
+    expect(a.map((r) => r.win)).toEqual([1, 1, 0])
+    // No two rows share the stored key, so nothing is dropped as a duplicate.
+    expect(new Set(rows.map((r) => `${r.rosterId}#${r.game}`)).size).toBe(8)
+    // Each game is still one pairing of exactly two rows.
+    for (const id of [1, 2, 3, 4]) expect(rows.filter((r) => r.matchupId === id)).toHaveLength(2)
+  })
+
+  it('reads a multi-game week already stored as unchanged, and rewrites it when one game changes', async () => {
+    reset()
+    const week = { week: 4, season: 2026, matchups: [
+      { teamId1: 'a', teamId2: 'b', points1: 110, points2: 90 },
+      { teamId1: 'a', teamId2: 'c', points1: 70, points2: 100 },
+    ] }
+    await applySchedule(idOf, 'L1', [week])
+    const stored = rowsWritten() as Array<Record<string, unknown>>
+    weeklyFindMany.mockResolvedValue(stored)
+    weeklyCreateMany.mockClear()
+    expect(await applySchedule(idOf, 'L1', [week])).toMatchObject({ weeksWritten: 0, weeksUnchanged: 1 })
+    expect(weeklyCreateMany).not.toHaveBeenCalled()
+    const changed = { ...week, matchups: [week.matchups[0]!, { ...week.matchups[1]!, points1: 101 }] }
+    expect(await applySchedule(idOf, 'L1', [changed])).toMatchObject({ weeksWritten: 1, weeksUnchanged: 0 })
   })
 
   it('writes an unplayed solo week as 0-0, which isScored still reads as unplayed', async () => {

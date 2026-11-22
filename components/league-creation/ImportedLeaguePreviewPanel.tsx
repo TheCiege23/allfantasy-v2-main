@@ -7,7 +7,7 @@ import type { ImportPreviewResponse } from '@/lib/league-import/ImportedLeaguePr
 import { getImportProviderLabel } from '@/lib/league-import/provider-ui-config';
 import type { ImportProvider } from '@/lib/league-import/types';
 
-export interface ImportedLeaguePreviewPanelProps {
+interface ImportedLeaguePreviewPanelProps {
   /** Current import provider (e.g. sleeper). */
   provider: ImportProvider | null;
   preview: ImportPreviewResponse | null;

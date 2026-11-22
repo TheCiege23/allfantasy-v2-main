@@ -132,7 +132,57 @@ const config = {
   darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
+      /*
+       * 🛑 OPACITY STEPS THE APP USES THAT TAILWIND 3.4 DOES NOT SHIP. Its default scale is 0, 5, 10,
+       * 15 … 100, and an opacity modifier outside the scale generates NOTHING: `border-white/8` (443 uses)
+       * fell back to Preflight's default light-grey border, `bg-black/72` to no background at all, and
+       * `text-white/88` to the inherited colour — no warning, no build error. Every off-scale step the
+       * code uses (a census of app/, components/ and lib/ on 2026-11-06) is listed here so each class
+       * renders as written. Add a step here before using a new one.
+       */
+      opacity: Object.fromEntries(
+        [2, 3, 4, 6, 7, 8, 9, 12, 14, 16, 18, 22, 24, 26, 28, 32, 34, 38, 42, 48, 52, 58, 62, 68, 72, 76, 78, 82, 84, 86, 88, 92, 93, 96, 98]
+          .map((n) => [String(n), String(n / 100)]),
+      ),
       colors: {
+        // zombie colours with opacity support (see the cap note below): `bg-zombie-crimson/15`.
+        zombie: {
+          crimson: 'rgb(var(--zombie-crimson-rgb) / <alpha-value>)',
+          green: 'rgb(var(--zombie-green-rgb) / <alpha-value>)',
+          toxic: 'rgb(var(--zombie-toxic-rgb) / <alpha-value>)',
+          red: 'rgb(var(--zombie-red-rgb) / <alpha-value>)',
+          purple: 'rgb(var(--zombie-purple-rgb) / <alpha-value>)',
+          gold: 'rgb(var(--zombie-gold-rgb) / <alpha-value>)',
+          panel: 'rgb(var(--zombie-panel-rgb) / <alpha-value>)',
+          gray: 'rgb(var(--zombie-gray-rgb) / <alpha-value>)',
+        },
+        // tournament colours with opacity support (see the cap note below): `bg-tournament-gold/15`.
+        tournament: {
+          gold: 'rgb(var(--tournament-gold-rgb) / <alpha-value>)',
+          panel: 'rgb(var(--tournament-panel-rgb) / <alpha-value>)',
+          bubble: 'rgb(var(--tournament-bubble-rgb) / <alpha-value>)',
+          bg: 'rgb(var(--tournament-bg-rgb) / <alpha-value>)',
+          active: 'rgb(var(--tournament-active-rgb) / <alpha-value>)',
+          accent: 'rgb(var(--tournament-accent-rgb) / <alpha-value>)',
+        },
+        // IDP stat colours, same reason as `cap`: `bg-idp-defense/25`.
+        idp: {
+          defense: 'rgb(var(--idp-defense-rgb) / <alpha-value>)',
+          offense: 'rgb(var(--idp-offense-rgb) / <alpha-value>)',
+          combined: 'rgb(var(--idp-combined-rgb) / <alpha-value>)',
+          tackle: 'rgb(var(--idp-tackle-rgb) / <alpha-value>)',
+          sack: 'rgb(var(--idp-sack-rgb) / <alpha-value>)',
+          int: 'rgb(var(--idp-int-rgb) / <alpha-value>)',
+          td: 'rgb(var(--idp-td-rgb) / <alpha-value>)',
+        },
+        // IDP salary cap. Channel tokens (app/globals.css) so opacity modifiers work: `bg-cap-green/25`.
+        cap: {
+          green: 'rgb(var(--cap-green-rgb) / <alpha-value>)',
+          amber: 'rgb(var(--cap-amber-rgb) / <alpha-value>)',
+          red: 'rgb(var(--cap-red-rgb) / <alpha-value>)',
+          dead: 'rgb(var(--cap-dead-rgb) / <alpha-value>)',
+          contract: 'rgb(var(--cap-contract-rgb) / <alpha-value>)',
+        },
         app: 'var(--surface-app)',
         surface: {
           DEFAULT: 'var(--surface-card)',

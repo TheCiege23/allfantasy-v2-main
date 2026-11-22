@@ -17,7 +17,7 @@ import type { DynastyLineupResult } from './dynastyLineupEngine'
 import type { DynastyWaiverResult } from './dynastyWaiverEngine'
 import type { DynastyTradeAnalysis, DynastyTradeFinderResult } from './dynastyTradeEngine'
 
-export interface DynastyWarRoomPromptInputs {
+interface DynastyWarRoomPromptInputs {
   context: DynastyWarRoomContext
   direction?: DynastyDirectionResult | null
   needs?: DynastyNeedsResult | null

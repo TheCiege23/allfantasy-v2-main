@@ -3,7 +3,8 @@
  * iCloud Private Relay users are placed by Apple's published state instead of
  * being refused as a VPN — under the owner's rule (2026-09-28):
  *
- *   Pacific time (CA, OR, NV, WA, and ID)  → still refused: could be Washington
+ *   Pacific time (CA, OR, NV, WA, and ID)  → free product yes, paid features no
+ *                                            (until Nov 2026 refused: Washington was full-block)
  *   Mountain time (AZ, CO, MT, NM, UT, WY) → free product yes, paid features no
  *   everywhere else                         → placed; ordinary state rules apply
  *
@@ -162,10 +163,10 @@ describe("the feed", () => {
 })
 
 describe("the owner's rule", () => {
-  it("refuses every Pacific-time state, Idaho included", () => {
+  it("places every Pacific-time state, Idaho included, with paid features off", () => {
     for (const s of ["CA", "OR", "NV", "WA", "ID"]) {
       expect(relayZoneForState(s), s).toBe("pacific")
-      expect(decideRelay(s).kind, s).toBe("blocked")
+      expect(decideRelay(s), s).toEqual({ kind: "placed", state: s, paidBlocked: true })
     }
   })
 
@@ -192,15 +193,16 @@ describe("the middleware gate", () => {
     expect(location(await middleware(request("/login", RELAY_V6_NY)))).toBeNull()
   })
 
-  it("still refuses a California relay user — they could be in Washington", async () => {
-    const res = await middleware(request("/login", RELAY_CA))
-    expect(location(res)?.pathname).toBe("/vpn-blocked")
-    expect(location(res)?.searchParams.get("why")).toBe("privacy_relay")
-    expect(location(res)?.searchParams.get("scope")).toBeNull()
+  it("lets a California relay user in, but not onto paid features — they could be in Washington", async () => {
+    expect(location(await middleware(request("/login", RELAY_CA)))).toBeNull()
+    const paidApi = await middleware(request("/api/user/autocoach", RELAY_CA, "POST"))
+    expect(paidApi.status).toBe(451)
+    expect(await paidApi.json()).toMatchObject({ error: "PAID_GEO_BLOCKED", reason: "private_relay", allowFree: true })
   })
 
-  it("still refuses an Idaho relay user (the panhandle is on Pacific time)", async () => {
-    expect(location(await middleware(request("/login", RELAY_ID)))?.pathname).toBe("/vpn-blocked")
+  it("lets an Idaho relay user in (the panhandle is on Pacific time), paid features off", async () => {
+    expect(location(await middleware(request("/login", RELAY_ID)))).toBeNull()
+    expect((await middleware(request("/api/user/autocoach", RELAY_ID, "POST"))).status).toBe(451)
   })
 
   it("lets a Colorado relay user in, but not onto paid features", async () => {
@@ -279,7 +281,8 @@ describe("/api/geo/vpn-status", () => {
 
   it("agrees with the gate", async () => {
     expect(await status(RELAY_NY)).toMatchObject({ blocked: false, kind: null })
-    expect(await status(RELAY_CA)).toMatchObject({ blocked: true, kind: "privacy_relay" })
+    expect(await status(RELAY_CA)).toMatchObject({ blocked: false, kind: null })
+    expect(await status(RELAY_CA, "?scope=paid")).toMatchObject({ blocked: true, kind: "privacy_relay" })
   })
 
   it("answers for paid pages when asked with scope=paid", async () => {
@@ -296,8 +299,8 @@ describe("signup and checkout agree with the gate", () => {
     expect(await detectUserState(req(RELAY_NY))).toMatchObject({ isVpnOrProxy: false, stateCode: "NY", privateRelay: { state: "NY", paidBlocked: false } })
   })
 
-  it("keeps a California relay user refused", async () => {
-    expect(await detectUserState(req(RELAY_CA))).toMatchObject({ isVpnOrProxy: true })
+  it("places a California relay user for signup, paid features off", async () => {
+    expect(await detectUserState(req(RELAY_CA))).toMatchObject({ isVpnOrProxy: false, stateCode: "CA", privateRelay: { state: "CA", paidBlocked: true } })
   })
 
   it("refuses checkout for a Colorado relay user, and allows the billing portal", async () => {

@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     if (!messageId) return NextResponse.json({ error: 'messageId required' }, { status: 400 })
     const msg = await prisma.survivorChatMessage.findFirst({ where: { id: messageId } })
     if (!msg) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const comm = await assertLeagueCommissioner(msg.leagueId, userId)
+    const comm = await assertLeagueCommissioner(msg.leagueId, userId, 'chat')
     if (!comm.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
     const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
   if (!access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   if (contentType === 'host_announcement') {
-    const comm = await assertLeagueCommissioner(channel.leagueId, userId)
+    const comm = await assertLeagueCommissioner(channel.leagueId, userId, 'chat')
     if (!comm.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -223,7 +223,7 @@ export async function PATCH(req: NextRequest) {
   const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
   const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
   if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const comm = await assertLeagueCommissioner(msg.leagueId, userId)
+  const comm = await assertLeagueCommissioner(msg.leagueId, userId, 'chat')
   if (msg.senderUserId !== userId && !comm.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -256,7 +256,7 @@ export async function DELETE(req: NextRequest) {
   const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
   const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
   if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const comm = await assertLeagueCommissioner(msg.leagueId, userId)
+  const comm = await assertLeagueCommissioner(msg.leagueId, userId, 'chat')
   if (msg.senderUserId !== userId && !comm.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

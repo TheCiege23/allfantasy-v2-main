@@ -1,4 +1,5 @@
 import type { SGConfig, SGMode, SGPeriod, SGSport } from './types'
+import { validateSGExtensions } from './seasonRules'
 
 export const SG_MODE_LABELS: Record<SGMode, string> = {
   match_play: 'Match Play', tribe_champion: 'Tribe Champion', gauntlet: 'Gauntlet',
@@ -13,7 +14,8 @@ export function parseSGLiveConfig(value: unknown): SGConfig {
   if (sport !== 'NFL' && sport !== 'NBA') throw new Error('Choose NFL or NBA.')
   const base = defaultSGConfig(sport)
   for (const key of Object.keys(base)) if (!(key in input)) throw new Error(`Missing rule: ${key}.`)
-  for (const key of Object.keys(input)) if (!(key in base)) throw new Error(`Unknown rule: ${key}.`)
+  const optional = ['rosterExpansion', 'rewardChallenges', 'gauntletIdolMode', 'championRotation', 'waiverDelayHours']
+  for (const key of Object.keys(input)) if (!(key in base) && !optional.includes(key)) throw new Error(`Unknown rule: ${key}.`)
   const integers = ['teamCount', 'tribeCount', 'championshipPeriod', 'gauntletPeriods', 'mergedChopPeriods', 'matchupBatchSize', 'faabBudget', 'nbaGameCap']
   for (const key of integers) if (!Number.isInteger(input[key]) || Number(input[key]) < 0) throw new Error(`Invalid ${key}.`)
   const booleans = ['gauntletTribeImmunity', 'gauntletIdolAuction', 'tradesEnabled', 'ceremonyPresentation']
@@ -57,13 +59,26 @@ export function defaultSGConfig(sport: SGSport = 'NFL', championshipPeriod = 17)
   }
 }
 
+/** An explicit preset: existing saved seasons retain their original rules until reviewed. */
+export function allStarsSGConfig(): SGConfig {
+  return { ...defaultSGConfig(), gauntletDraft: 'alternating', shufflePeriods: [7], gauntletIdolMode: 'retired_player',
+    championRotation: true, waiverDelayHours: 24,
+    rosterExpansion: { enabled: true, openingBenchSlots: null, benchPerExpansion: 1,
+      steps: [{ period: 7, slot: 'FLEX', count: 1 }, { period: 9, slot: 'SUPERFLEX', count: 1 },
+        { period: 11, slot: 'FLEX', count: 1 }, { period: 14, slot: 'FLEX', count: 1 }] },
+    rewardChallenges: [{ period: 5, kind: 'tribe_blowout_faab', amount: 25 },
+      { period: 6, kind: 'highest_score_idol', amount: 0 }, { period: 8, kind: 'highest_score_swap', amount: 0 },
+      { period: 9, kind: 'tribe_blowout_faab', amount: 25 }] }
+}
+
 /** Counts scoring periods, not calendar weeks. All-Star breaks are explicit overrides. */
 export function buildSGSchedule(config: SGConfig): { periods: SGPeriod[]; errors: string[] } {
-  const errors: string[] = []
+  const errors: string[] = validateSGExtensions(config)
   if (!['NFL', 'NBA'].includes(config.sport)) errors.push('Choose NFL or NBA.')
   if (!Number.isInteger(config.teamCount) || config.teamCount < 4 || config.teamCount > 64) errors.push('Choose 4–64 starting teams.')
   if (!Number.isInteger(config.tribeCount) || config.tribeCount < 2 || config.tribeCount > 4 || config.tribeCount > config.teamCount) errors.push('Choose 2–4 tribes with at least one team each.')
   if (!Number.isInteger(config.championshipPeriod) || config.championshipPeriod < 2 || config.championshipPeriod > 60) errors.push('Choose a championship scoring period between 2 and 60.')
+  if (config.sport === 'NFL' && config.championshipPeriod > 18) errors.push('NFL scoring periods must finish within the 18-week regular season.')
   if (!Number.isInteger(config.gauntletPeriods) || config.gauntletPeriods < 0 || config.gauntletPeriods > 20) errors.push('Gauntlet length must be 0–20 scoring periods.')
   if (config.gauntletIdolAuction && config.gauntletPeriods === 0) errors.push('Gauntlet idol bidding needs at least one Gauntlet period.')
   if (!Number.isInteger(config.mergedChopPeriods) || config.mergedChopPeriods < 1 || config.mergedChopPeriods > 20) errors.push('Choose 1–20 individual elimination periods.')
@@ -111,5 +126,11 @@ export function buildSGSchedule(config: SGConfig): { periods: SGPeriod[]; errors
     if (merged && ['match_play', 'tribe_champion', 'gauntlet'].includes(period.mode)) errors.push(`Period ${period.period}: tribe competition cannot resume after the merge.`)
   }
   if (config.shufflePeriods.some(period => !Number.isInteger(period) || period < 1 || !periods.some(row => row.period === period && ['match_play', 'tribe_champion'].includes(row.mode)))) errors.push('Schedule shuffles during the tribal phase only.')
+  for (const reward of config.rewardChallenges ?? []) {
+    const row = periods.find(p => p.period === reward.period)
+    if (reward.kind === 'tribe_blowout_faab' && row?.mode !== 'match_play') errors.push('A biggest-blowout reward requires a Match Play period.')
+    const merge = periods.find(p => p.mode === 'merged')?.period ?? config.championshipPeriod
+    if (reward.kind !== 'tribe_blowout_faab' && (row?.mode === 'off' || reward.period >= merge - 1)) errors.push('Power rewards must leave an active period before merge to use them.')
+  }
   return { periods, errors: [...new Set(errors)] }
 }

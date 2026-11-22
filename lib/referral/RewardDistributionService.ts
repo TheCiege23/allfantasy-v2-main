@@ -292,11 +292,6 @@ async function getSuccessfulReferralCount(referrerId: string): Promise<number> {
   })
 }
 
-export async function getRewardDefinitions(): Promise<ReferralRewardDefinition[]> {
-  const definitions = await getResolvedRewardDefinitions()
-  return definitions.map(({ id: _id, ...definition }) => definition)
-}
-
 export async function grantRewardsForTrigger(input: {
   referrerId: string
   referralId: string

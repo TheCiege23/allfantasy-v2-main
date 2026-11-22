@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import { fantraxScoringRules, parseFantraxSoccerScoring } from '@/lib/league-import/fantrax/fantraxScoring'
+import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import epl from '../tests/fixtures/fantrax/epl-public-2026.json'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 
 /**
@@ -22,6 +24,59 @@ function info(configs: unknown[]): FantraxLeagueInfo {
     scoringSystem: { scoringCategorySettings: [{ configs }] } as unknown as Record<string, unknown>,
   } as FantraxLeagueInfo
 }
+
+describe('captured Fantrax Soccer points', () => {
+  const sport = 'SOCCER'
+  const scoringSystem = epl.info.scoringSystem
+  const settings = { fantrax_settings: { scoringSystem } }
+
+  it('scores keeper and outfield stats separately and surfaces omitted rules', () => {
+    const result = parseFantraxSoccerScoring(scoringSystem)
+    expect(result?.positionWeights.GK).toMatchObject({ assists: 4, saves: 2, gk_goals_against: -3, pen_save: 8 })
+    expect(result?.positionWeights.FWD).toMatchObject({ assists: 3, shots_on_target: 2, pen_miss: -5 })
+    expect(result?.gaps).toHaveLength(43)
+    expect(result?.gaps).toEqual(expect.arrayContaining([expect.stringMatching(/assists \(second\)/i)]))
+    const score = buildLeagueStatScorer({ sport, settings })!
+    const line = { goals: 1, assists: 1, saves: 3, gk_goals_against: 2, shots_on_target: 2, clean_sheet_gk: 1, appearance: 1 }
+    expect(score(line, 'Goalkeeper')).toBe(11)
+    expect(score(line, 'Forward')).toBe(14)
+    expect(score(line)).toBe(7)
+  })
+
+  it('honors a league’s explicitly saved scoring weights', () => {
+    const score = buildLeagueStatScorer({ sport, settings: { ...settings, sportConfig: { categoryPoints: { assists: 9 } } } })!
+    expect(score({ assists: 1 }, 'GK')).toBe(9)
+  })
+
+  function scoringWithGoalOverrides(shortName: string, weights: number[]) {
+    const groups = structuredClone(scoringSystem.scoringCategorySettings)
+    const outfield = groups.find((group) => group.group.code === 'SOCCER_NON_GOALIE')!
+    const goals = outfield.configs.find((config) => config.scoringCategory.code === 'INDIVIDUAL_GOALS')!
+    outfield.configs.unshift(...weights.map((points) => ({ ...goals, points, position: { ...goals.position, shortName } })))
+    return { ...scoringSystem, scoringCategorySettings: groups }
+  }
+
+  it('uses a position override as the full value for that position', () => {
+    const source = scoringWithGoalOverrides('D', [9])
+    const score = buildLeagueStatScorer({ sport, settings: { fantrax_settings: { scoringSystem: source } } })!
+    expect(score({ goals: 1 }, 'Defender')).toBe(9)
+    expect(score({ goals: 1 }, 'M')).toBe(7)
+    expect(score({ goals: 1 }, 'G')).toBe(7)
+    expect(score({ goals: 1 })).toBe(0)
+    expect(parseFantraxSoccerScoring(source)?.gaps).toHaveLength(43)
+  })
+
+  it('omits a conflicting override for that position and an unknown override for its group', () => {
+    const conflict = parseFantraxSoccerScoring(scoringWithGoalOverrides('D', [9, 11]))
+    expect(conflict?.positionWeights.DEF.goals).toBeUndefined()
+    expect(conflict?.positionWeights.MID.goals).toBe(7)
+    expect(conflict?.gaps).toEqual(expect.arrayContaining([expect.stringMatching(/conflicting position rule/)]))
+    const unknown = parseFantraxSoccerScoring(scoringWithGoalOverrides('FLEX', [9]))
+    expect(unknown?.positionWeights.DEF.goals).toBeUndefined()
+    expect(unknown?.positionWeights.FWD.goals).toBeUndefined()
+    expect(unknown?.positionWeights.GK.goals).toBe(7)
+  })
+})
 
 const DEFAULT = { shortName: 'Default', code: 'DEFAULT' }
 const cat = (code: string, name: string, shortName: string) => ({ code, name, shortName })

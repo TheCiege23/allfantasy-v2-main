@@ -50,44 +50,44 @@ export function AiOpponentsCommissionerSection({
   }
 
   if (loading) {
-    return <p className="text-[12px] text-white/50">Loading AI opponents…</p>
+    return <p className="text-[12px] text-white/50">Loading Chimmy opponents…</p>
   }
 
   return (
     <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div>
-        <SettingsSectionLabel>AI opponents</SettingsSectionLabel>
+        <SettingsSectionLabel>Chimmy opponents</SettingsSectionLabel>
         <p className="mt-1 text-[12px] leading-relaxed text-white/55">
           Bot managers for mocks, fill-ins, and orphan takeovers. Off by default — no impact until enabled.
         </p>
       </div>
       {saving ? <p className="text-[11px] text-white/40">Saving…</p> : null}
       <SettingsToggleRow
-        label="Enable AI opponents"
+        label="Enable Chimmy opponents"
         checked={Boolean(settings.enabled)}
         disabled={disabled}
         onChange={(v) => void patch({ enabled: v })}
       />
       <SettingsToggleRow
-        label="Fill empty slots with AI (when commissioner adds bots)"
+        label="Fill empty slots with Chimmy (when commissioner adds bots)"
         checked={Boolean(settings.fillEmptyWithAi)}
         disabled={disabled || !settings.enabled}
         onChange={(v) => void patch({ fillEmptyWithAi: v })}
       />
       <SettingsToggleRow
-        label="Allow AI takeover for inactive / orphan teams"
+        label="Allow Chimmy takeover for inactive / orphan teams"
         checked={Boolean(settings.takeoverInactive)}
         disabled={disabled || !settings.enabled}
         onChange={(v) => void patch({ takeoverInactive: v })}
       />
       <SettingsToggleRow
-        label="Mock / practice drafts only (no live AI without explicit assignment)"
+        label="Mock / practice drafts only (no live Chimmy without explicit assignment)"
         checked={Boolean(settings.mockDraftsOnly)}
         disabled={disabled || !settings.enabled}
         onChange={(v) => void patch({ mockDraftsOnly: v })}
       />
       <SettingsToggleRow
-        label="Allow full AI leagues"
+        label="Allow full Chimmy leagues"
         checked={Boolean(settings.allowFullAiLeagues)}
         disabled={disabled || !settings.enabled}
         onChange={(v) => void patch({ allowFullAiLeagues: v })}

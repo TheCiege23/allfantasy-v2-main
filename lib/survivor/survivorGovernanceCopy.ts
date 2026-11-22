@@ -5,7 +5,7 @@
  */
 import { defineMessages, messagesFor } from '@/lib/i18n/messages'
 
-export type GovernanceLang = 'en' | 'es'
+type GovernanceLang = 'en' | 'es'
 
 export function governanceLang(language: string | null | undefined): GovernanceLang {
   return String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'
@@ -14,7 +14,7 @@ export function governanceLang(language: string | null | undefined): GovernanceL
 const NUM_EN = ['zero', 'one', 'two', 'three', 'four', 'five']
 const NUM_ES = ['cero', 'una', 'dos', 'tres', 'cuatro', 'cinco']
 
-export const survivorGovernanceCopy = defineMessages({
+const survivorGovernanceCopy = defineMessages({
   en: {
     swapSealedResize: (count: number): string => `Drop your buffs. The cast is being redrawn into ${NUM_EN[count] ?? count} tribes, sealed until the next lineup lock.`,
     swapSealedReturn: 'Drop your buffs. Everyone still in the game is heading back to their original tribe, revealed at the next lineup lock.',
@@ -63,7 +63,7 @@ export const survivorGovernanceCopy = defineMessages({
   },
 })
 
-export type SurvivorGovernanceCopy = typeof survivorGovernanceCopy.en
+type SurvivorGovernanceCopy = typeof survivorGovernanceCopy.en
 
 export function governanceCopy(language: string | null | undefined): SurvivorGovernanceCopy {
   return messagesFor(survivorGovernanceCopy, governanceLang(language))

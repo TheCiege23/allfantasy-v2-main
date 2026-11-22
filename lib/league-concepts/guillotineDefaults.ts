@@ -17,15 +17,15 @@ import type { TiebreakStep } from '@/lib/guillotine/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type GuillotineEligibleSport = 'NFL' | 'NCAAF'
+type GuillotineEligibleSport = 'NFL' | 'NCAAF'
 
 export const GUILLOTINE_DRAFT_TYPE_IDS = ['snake', 'linear', 'auction'] as const
 
-export type GuillotineDraftType = (typeof GUILLOTINE_DRAFT_TYPE_IDS)[number]
+type GuillotineDraftType = (typeof GUILLOTINE_DRAFT_TYPE_IDS)[number]
 
 type EngineDraftType = 'snake' | 'linear' | 'auction'
 
-export interface GuillotineRosterTemplate {
+interface GuillotineRosterTemplate {
   rosterMode: 'guillotine'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -39,7 +39,7 @@ export interface GuillotineRosterTemplate {
   defensePosition: 'DST' | 'DEF'
 }
 
-export interface GuillotineDraftSettings {
+interface GuillotineDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: GuillotineDraftType
   rounds: number
@@ -57,7 +57,7 @@ export interface GuillotineDraftSettings {
   auctionBudgetPerTeam: number | null
 }
 
-export interface GuillotineEliminationSettings {
+interface GuillotineEliminationSettings {
   eliminationsPerPeriod: 1
   eliminationPeriod: 'weekly'
   eliminationStartWeek: number
@@ -72,7 +72,7 @@ export interface GuillotineEliminationSettings {
   dangerMarginPoints: number
 }
 
-export interface GuillotineWaiverSettings {
+interface GuillotineWaiverSettings {
   waiverType: 'faab'
   faabEnabled: true
   faabBudgetPerTeam: number
@@ -85,7 +85,7 @@ export interface GuillotineWaiverSettings {
   continuousWaiversBehavior: false
 }
 
-export interface GuillotineDefaultContract {
+interface GuillotineDefaultContract {
   sport: GuillotineEligibleSport
   league_type: 'guillotine'
   leagueType: 'guillotine'

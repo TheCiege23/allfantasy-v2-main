@@ -195,4 +195,3 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
   )
 }
 
-export default WaiverOversight

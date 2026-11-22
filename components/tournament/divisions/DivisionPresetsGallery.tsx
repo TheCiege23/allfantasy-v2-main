@@ -16,7 +16,7 @@ export function DivisionPresetsGallery({ selectedId, onSelect, sampleConference 
         <p className="text-slate-300">20 contrasting pairs to start from. Every name is editable, and every image is unnamed so it fits any league.</p>
       </header>
       {selected && (
-        <div className="grid items-center gap-6 rounded-2xl border border-white/10 p-5 lg:grid-cols-[1fr_auto]"
+        <div className="grid grid-cols-1 items-center gap-6 rounded-2xl border border-white/10 p-5 lg:grid-cols-[1fr_auto]"
           style={{ background: `linear-gradient(90deg, ${side(selected.a).dark}55, #0b0d14 45%, #0b0d14 55%, ${side(selected.b).dark}55)` }}>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <img src={medallionPath(selected.a)} alt={side(selected.a).name} width={120} height={120} className="h-24 w-24 sm:h-32 sm:w-32" />

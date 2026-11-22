@@ -85,7 +85,7 @@ export default function CommunityInsights() {
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-medium hover:bg-purple-500/20 transition-colors disabled:opacity-50"
         >
           <Sparkles size={12} className={summarizing ? 'animate-pulse' : ''} />
-          {summarizing ? 'Summarizing...' : 'AI Summary'}
+          {summarizing ? 'Summarizing...' : 'Chimmy Summary'}
         </button>
       </div>
 
@@ -99,7 +99,7 @@ export default function CommunityInsights() {
         <div className="p-3 rounded-xl bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/20">
           <div className="flex items-center gap-2">
             <RefreshCw size={14} className="text-purple-400 animate-spin" />
-            <span className="text-xs text-purple-300">Generating AI summary of latest news...</span>
+            <span className="text-xs text-purple-300">Generating Chimmy summary of latest news...</span>
           </div>
         </div>
       )}
@@ -108,7 +108,7 @@ export default function CommunityInsights() {
         <div className="p-3 rounded-xl bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/20">
           <div className="flex items-center gap-1.5 mb-2">
             <Sparkles size={14} className="text-purple-400" />
-            <span className="text-xs font-semibold text-purple-300">AI News Briefing</span>
+            <span className="text-xs font-semibold text-purple-300">Chimmy News Briefing</span>
           </div>
           <div className="text-xs text-white/70 whitespace-pre-wrap leading-relaxed">{aiSummary}</div>
         </div>

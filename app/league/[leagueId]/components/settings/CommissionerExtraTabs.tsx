@@ -228,7 +228,7 @@ export function AppearanceTab({ leagueId, logoUrl, canEdit }: { leagueId: string
 }
 
 /** The seasons a commissioner may pick for the tradeable-pick horizon (the trade engine's 1-5 clamp). */
-export const PICK_YEAR_OPTIONS = Array.from({ length: NATIVE_PICK_YEARS_MAX - NATIVE_PICK_YEARS_MIN + 1 }, (_, i) => NATIVE_PICK_YEARS_MIN + i)
+const PICK_YEAR_OPTIONS = Array.from({ length: NATIVE_PICK_YEARS_MAX - NATIVE_PICK_YEARS_MIN + 1 }, (_, i) => NATIVE_PICK_YEARS_MIN + i)
 
 export function DraftPicksTab({ leagueId, nativeDynasty, canEdit }: { leagueId: string; nativeDynasty: boolean; canEdit: boolean }) {
   const lang = useTabsLang()

@@ -22,19 +22,41 @@ const m = vi.hoisted(() => ({
   leagueUpdate: vi.fn(async () => ({})),
   faabRemaining: 80 as number | null,
   rosterUpdate: vi.fn(async () => ({})),
+  redraftUpdate: vi.fn(async () => ({})),
   upsert: vi.fn(async () => ({})),
 }))
+/*
+ * 🛑 THE REAL ID SPACES. A native tanking flag names a `RedraftRoster` ('r1'); the league's `Roster`
+ * row is a different record ('gen-r1') linked by `redraftRosterId`. This mock used to return a
+ * roster for ANY id, which is how the service shipped looking up the flag's id in the wrong table —
+ * no warning sent, no pick or FAAB ever found — with this suite green.
+ */
+const { findRoster } = vi.hoisted(() => {
+  const ROSTERS = [
+    { id: 'gen-r1', redraftRosterId: 'r1', platformUserId: 'user-r1' },
+  ]
+  type RosterWhere = { leagueId: string; OR: Array<{ id?: string; redraftRosterId?: string }> }
+  const findRoster = async ({ where }: { where: RosterWhere }) =>
+    ROSTERS.find((r) => where.OR.some((c) => (c.id != null && c.id === r.id) || (c.redraftRosterId != null && c.redraftRosterId === r.redraftRosterId))) ?? null
+  return { findRoster }
+})
 vi.mock('@/lib/prisma', () => {
   const tx = {
     league: { findUnique: vi.fn(async () => ({ settings: m.leagueSettings })), update: m.leagueUpdate },
-    roster: { findUnique: vi.fn(async () => ({ faabRemaining: m.faabRemaining })), update: m.rosterUpdate },
+    roster: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => (where.id === 'gen-r1' ? { faabRemaining: m.faabRemaining } : null)),
+      update: m.rosterUpdate,
+      findMany: vi.fn(async () => [{ id: 'gen-r1', faabRemaining: (m.faabRemaining ?? 0) - 25, redraftRosterId: 'r1' }]),
+    },
+    redraftRoster: { updateMany: m.redraftUpdate },
     futureDraftPick: { upsert: m.upsert },
   }
   return {
     prisma: {
       integrityFlag: { findUnique: m.flag, count: m.strikes },
       redraftSeason: { findFirst: vi.fn(async () => null) },
-      roster: { findUnique: vi.fn(async () => ({ platformUserId: 'user-r1' })) },
+      roster: { findFirst: vi.fn(findRoster) },
+      redraftRoster: { findFirst: vi.fn(async () => null) },
       appUser: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id })) },
       $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
     },
@@ -121,8 +143,9 @@ describe('confirming the penalty strike', () => {
     expect(r[0]).toMatchObject({ step: { kind: 'lottery_odds' }, penalty: { label: '75% of its odds in the next rookie-draft lottery' } })
     const data = (m.leagueUpdate.mock.calls[0] as unknown as [{ data: { settings: Record<string, unknown> } }])[0].data.settings
     expect(data.other).toBe(1)
-    expect(readLotteryOddsPenalties(data)).toEqual([expect.objectContaining({ rosterId: 'r1', cutPct: 75, flagId: 'f1' })])
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TANKING_LOTTERY_ODDS_ACTION, entityId: 'r1' }))
+    // Keyed on the `Roster` id, which is what the rookie lottery's standings carry.
+    expect(readLotteryOddsPenalties(data)).toEqual([expect.objectContaining({ rosterId: 'gen-r1', cutPct: 75, flagId: 'f1' })])
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TANKING_LOTTERY_ODDS_ACTION, entityId: 'gen-r1' }))
     expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Tanking penalty applied' }))
     expect(m.upsert).not.toHaveBeenCalled()
   })
@@ -131,7 +154,9 @@ describe('confirming the penalty strike', () => {
     m.flag.mockResolvedValue(flagRow({ integrity_tanking_penalties: { penalty: 'faab', faabPercent: 25 } }))
     const r = await onTankingFlagConfirmed('f1', 'commish')
     expect(r[0]).toMatchObject({ step: { kind: 'faab' }, penalty: { label: '$25 of FAAB' } })
-    expect(m.rosterUpdate).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { faabRemaining: { decrement: 25 } } })
+    expect(m.rosterUpdate).toHaveBeenCalledWith({ where: { id: 'gen-r1' }, data: { faabRemaining: { decrement: 25 } } })
+    // And the redraft copy that redraft waivers, standings and Chimmy read is brought level.
+    expect(m.redraftUpdate).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { faabBalance: 55 } })
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TANKING_FAAB_ACTION, metadata: expect.objectContaining({ amount: 25, faabAfter: 55 }) }))
   })
 

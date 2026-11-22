@@ -34,7 +34,7 @@ const REGISTRY: AIToolRegistration[] = [
   },
   {
     toolKey: 'waiver_ai',
-    toolName: 'Waiver Wire AI',
+    toolName: 'Waiver Wire Chimmy',
     deterministicRequired: true,
     allowedProviders: ['openai', 'deepseek', 'grok'],
     supportedModes: ['single_model', 'specialist', 'consensus', 'unified_brain'],
@@ -101,7 +101,7 @@ const REGISTRY: AIToolRegistration[] = [
   },
   {
     toolKey: 'ai_commissioner',
-    toolName: 'AI Commissioner',
+    toolName: 'Chimmy Commissioner',
     deterministicRequired: true,
     allowedProviders: ['openai', 'deepseek', 'grok'],
     supportedModes: ['single_model', 'specialist', 'consensus', 'unified_brain'],

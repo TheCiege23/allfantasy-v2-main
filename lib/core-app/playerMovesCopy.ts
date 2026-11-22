@@ -19,7 +19,7 @@ import { coreLang } from './messages/coreLocale'
  * PURE, client-safe.
  */
 
-export type MoveText = { title: string; path: string; note: string | null }
+type MoveText = { title: string; path: string; note: string | null }
 
 const SCREEN_ES: Record<MoveScreen, string> = {
   Roster: 'Plantilla',

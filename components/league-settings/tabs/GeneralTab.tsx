@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useSettingsSaveScope } from '@/components/league-settings/home/SettingsSaveScope'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
+import { RosterValidationBanner } from '@/components/league-settings/roster/RosterValidationBanner'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { SETTINGS_CARD_CLASS, SETTINGS_INPUT_CLASS, SETTINGS_LABEL_CLASS, WaiversSection } from './WaiversTab'
@@ -42,8 +43,16 @@ export function GeneralTab({
   const { t } = useLanguage()
   const manual = useSettingsSaveScope() != null
   const leagueId = ctx.league.id
+  // Best ball: a new team count that saved but leaves the sport's player pool tight
+  // (lib/bestball/poolCapacity.ts) comes back as plain-English warnings, shown under the field.
+  const [poolWarnings, setPoolWarnings] = useState<string[]>([])
   const { queuePatch, saving, lastError, savedAt } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
     enabled: canEdit,
+    onSuccess: (data) => {
+      const saved = data as { updatedFields?: unknown; bestBallPoolWarnings?: unknown }
+      if (!Array.isArray(saved.updatedFields) || !saved.updatedFields.includes('leagueSize')) return
+      setPoolWarnings(Array.isArray(saved.bestBallPoolWarnings) ? saved.bestBallPoolWarnings.map(String) : [])
+    },
   })
 
   const seedName = () => String(savedOr(leagueId, 'name', ctx.league.name ?? ''))
@@ -100,6 +109,11 @@ export function GeneralTab({
               }}
               className={SETTINGS_INPUT_CLASS} data-testid="league-settings-general-team-count" />
             <span className="mt-1 block text-xs text-white/60">{t('lsHub.gen.teamCountHint')}</span>
+            {poolWarnings.length > 0 ? (
+              <div className="mt-2" data-testid="league-settings-general-best-ball-pool-warning">
+                <RosterValidationBanner warnings={poolWarnings} />
+              </div>
+            ) : null}
           </label>
           <label className="block">
             <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.leagueName')}</span>

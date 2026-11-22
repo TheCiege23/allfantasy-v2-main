@@ -17,6 +17,8 @@ vi.mock('@/lib/league-log/leagueLogService', () => ({ readLeagueLog: m.read }))
 vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: m.role }))
 vi.mock('@/server/services/auditService', () => ({ getAuditLogs: m.audit }))
 vi.mock('@/lib/commissioner-undo/commissionerUndoService', () => ({ undoCommissionerAction: m.undo }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, POST, PUT } from '@/app/api/leagues/[leagueId]/league-log/handler'
 import { GET as RAW_GET } from '@/app/api/leagues/[leagueId]/audit-logs/handler'

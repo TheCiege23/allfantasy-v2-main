@@ -31,8 +31,3 @@ export const soccerAdapter: SportAdapter = {
   },
 }
 
-export function getFixtureDifficulty(_teamId: string, _week: number): 1 | 2 | 3 | 4 | 5 {
-  void _teamId
-  void _week
-  return 3
-}

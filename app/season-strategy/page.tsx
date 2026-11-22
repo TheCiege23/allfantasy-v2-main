@@ -146,7 +146,7 @@ const PHASES: Array<{ key: PhaseKey; label: string; icon: string }> = [
   { key: 'enriching', label: 'Pricing all players...', icon: '💰' },
   { key: 'news', label: 'Fetching live player news...', icon: '📡' },
   { key: 'opponents', label: 'Scouting opponent rosters...', icon: '🔍' },
-  { key: 'ai', label: 'AI building season blueprint...', icon: '🧠' },
+  { key: 'ai', label: 'Chimmy building season blueprint...', icon: '🧠' },
   { key: 'done', label: 'Strategy ready', icon: '✅' },
 ]
 
@@ -237,7 +237,7 @@ function LoginRequiredState() {
           <div className="text-xs font-bold uppercase tracking-[0.3em] text-violet-300">Season Strategy</div>
           <h1 className="mt-4 text-3xl font-black">Sign in to build your season blueprint</h1>
           <p className="mt-3 text-sm leading-6 text-white/55">
-            Load a Sleeper league, attach your username, and generate a full AI GM roadmap for the season.
+            Load a Sleeper league, attach your username, and generate a full Chimmy GM roadmap for the season.
           </p>
           <Link
             href="/login?callbackUrl=%2Fseason-strategy"
@@ -271,7 +271,7 @@ function LeagueGate({
           </span>
           <h1 className="mt-3 text-3xl font-black">Select a Sleeper League</h1>
           <p className="mt-2 max-w-2xl text-sm text-white/45">
-            This planner analyzes your specific roster and your full league. Start by picking a Sleeper league, then confirm the username you want the AI to plan around.
+            This planner analyzes your specific roster and your full league. Start by picking a Sleeper league, then confirm the username you want Chimmy to plan around.
           </p>
         </div>
       </div>
@@ -711,7 +711,7 @@ export default function SeasonStrategyPage() {
               <div className="max-w-3xl">
                 <div className="text-xs font-bold uppercase tracking-[0.3em] text-violet-300/80">Full-League Blueprint</div>
                 <h2 className="mt-3 text-3xl font-black leading-tight">
-                  One AI GM pass across your roster, the rest of the league, trade context, picks, and current momentum.
+                  One Chimmy GM pass across your roster, the rest of the league, trade context, picks, and current momentum.
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-white/55">
                   The planner classifies your win window, spots trade paths, flags roster pressure points, and maps the most important actions for the rest of the season.

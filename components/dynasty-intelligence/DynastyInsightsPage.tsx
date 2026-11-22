@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import Link from 'next/link'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
@@ -177,7 +178,7 @@ export default function DynastyInsightsPage() {
       })
       const payload = await response.json()
       if (!response.ok || payload?.error) {
-        throw new Error(payload?.error ?? 'Failed to load dynasty intelligence')
+        throw new Error(readPlanRefusal(response.status, payload)?.message ?? payload?.error ?? 'Failed to load dynasty intelligence')
       }
       setData(payload.data)
       setInsight(payload.insight ?? null)

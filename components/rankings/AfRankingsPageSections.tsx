@@ -21,7 +21,7 @@ import {
   XpProgressPremium,
 } from '@/components/rankings/af-rankings-ui/AfRankingsUiKit'
 
-export type PlayerRankLite = {
+type PlayerRankLite = {
   careerTier: number
   careerTierName: string
   careerLevel: number
@@ -170,7 +170,7 @@ export function AfRankingsAiPanel({ rank }: { rank: PlayerRankLite }) {
     <section className="rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-950/40 to-[#0a0f1c] p-5 sm:p-6">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-violet-300" aria-hidden />
-        <h2 className="text-lg font-black text-white sm:text-xl">AI insights</h2>
+        <h2 className="text-lg font-black text-white sm:text-xl">Chimmy insights</h2>
       </div>
       <p className="mt-3 text-sm leading-relaxed text-white/70">{rank.aiInsight}</p>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">

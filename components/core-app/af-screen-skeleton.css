@@ -1,0 +1,41 @@
+/*
+ * Screen-shaped skeletons (CoreScreenSkeleton `screen` prop). The blocks reuse `.af-sk-block` from
+ * af-core-shell.css — its fill, sheen, theme inversion and reduced-motion rule — so only the LAYOUT
+ * lives here. Heights follow the screens they stand in for, so the real screen lands on roughly the
+ * same lines and the page does not jump.
+ */
+.af-core .af-sk-screen { display: flex; flex-direction: column; gap: 16px; }
+
+/* Standings / Rankings / Waivers: a strip of stat tiles over the table. */
+.af-core .af-sk-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.af-core .af-sk-stat { height: 92px; border-radius: 14px; }
+
+/* Matchup / Live scores: the scoreboard card. */
+.af-core .af-sk-board { height: 168px; border-radius: 18px; }
+
+/* My team: the team header card. */
+.af-core .af-sk-teamcard { height: 132px; border-radius: 18px; }
+
+.af-core .af-sk-rows {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08)); border-radius: 14px; overflow: hidden;
+}
+.af-core .af-sk-row {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.af-core .af-sk-row:first-child { border-top: 0; }
+.af-core .af-sk-chip { width: 34px; height: 20px; border-radius: 6px; }
+.af-core .af-sk-name { flex: 1 1 auto; max-width: 240px; height: 13px; border-radius: 6px; }
+.af-core .af-sk-num { width: 52px; height: 13px; margin-left: auto; border-radius: 6px; }
+
+/*
+ * Trades: the completed-trade history streaming in under a Trade Center that has already painted
+ * (components/core-app/screens/TradesHistorySection.tsx) — the grading banner, the section title,
+ * then trade cards. Full width at every size, so the phone layout needs no rule of its own.
+ */
+.af-core .af-sk-trades { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.af-core .af-sk-trades-banner { height: 72px; border-radius: var(--af-radius-card, 16px); }
+.af-core .af-sk-trades-title { width: min(220px, 60%); height: 22px; border-radius: 8px; }
+.af-core .af-sk-trades-list { display: flex; flex-direction: column; gap: 12px; }
+.af-core .af-sk-trade { height: 132px; border-radius: var(--af-radius-card, 16px); }

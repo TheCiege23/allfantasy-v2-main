@@ -74,7 +74,13 @@ function similarityRatio(a: string, b: string): number {
 }
 
 /** Strips gmail dot/+tag evasion tricks; other domains only get case/whitespace normalization. */
-function normalizeEmailForComparison(email: string): { local: string; domain: string } {
+/**
+ * Null for a phone-only account. ⚠ Two missing emails must never compare as a match: both would
+ * normalise to { local: "", domain: "" } and every pair of phone-only managers would score as
+ * "same email".
+ */
+function normalizeEmailForComparison(email: string | null): { local: string; domain: string } | null {
+  if (!email) return null
   const trimmed = email.trim().toLowerCase()
   const [localRaw, domainRaw] = trimmed.split("@")
   const domain = domainRaw ?? ""
@@ -185,8 +191,11 @@ export async function assessLeagueJoinRisk(input: {
     }
 
     const suspectEmailNorm = normalizeEmailForComparison(suspectUser.email)
-    const emailExactNormMatch = joiningEmailNorm.domain === suspectEmailNorm.domain && joiningEmailNorm.local === suspectEmailNorm.local
+    const emailExactNormMatch =
+      !!joiningEmailNorm && !!suspectEmailNorm &&
+      joiningEmailNorm.domain === suspectEmailNorm.domain && joiningEmailNorm.local === suspectEmailNorm.local
     const emailCloseMatch =
+      !!joiningEmailNorm && !!suspectEmailNorm &&
       !emailExactNormMatch &&
       joiningEmailNorm.domain === suspectEmailNorm.domain &&
       joiningEmailNorm.local.length > 2 &&

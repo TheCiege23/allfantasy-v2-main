@@ -12,6 +12,8 @@ vi.mock('@/lib/subscription/requireEntitlement', () => ({ requireEntitlement: vi
 vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: vi.fn(async () => undefined) }))
 vi.mock('@/lib/league/dispersal-draft-eligibility', () => ({ isLeagueEligibleForDispersalDraft: () => true }))
 vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: m.publish }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { POST } from '@/app/api/leagues/[leagueId]/downsize/handler'
 

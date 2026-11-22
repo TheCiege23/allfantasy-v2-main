@@ -66,7 +66,21 @@ export type ProposeTradeModalProps = {
   sport?: string | null
   /** Pending native offer being answered, when composing a counter. */
   counterTradeId?: string | null
+  /**
+   * Opened from the Propose grid (components/league/TradeProposeGrid.tsx): the manager tapped, and
+   * the player tapped on their roster. Applied once, after the rosters load.
+   */
+  initialPartnerRosterId?: string | null
+  initialGetPlayerId?: string | null
 }
+
+/** Offer lifetimes the trade engine accepts (`expiresInHours`; it defaults to 48). */
+export const TRADE_EXPIRY_OPTIONS: ReadonlyArray<{ hours: number; label: string }> = [
+  { hours: 24, label: '1 day' },
+  { hours: 48, label: '2 days' },
+  { hours: 72, label: '3 days' },
+  { hours: 168, label: '1 week' },
+]
 
 type TradeContext = {
   valueBook: string
@@ -91,7 +105,12 @@ export function ProposeTradeModal({
   platform,
   sport,
   counterTradeId = null,
+  initialPartnerRosterId = null,
+  initialGetPlayerId = null,
 }: ProposeTradeModalProps) {
+  const [expiresInHours, setExpiresInHours] = useState(48)
+  const [sendDirectMessage, setSendDirectMessage] = useState(true)
+  const preselectApplied = useRef(false)
   const { data: session } = useSession()
   const myUserId = session?.user?.id ?? null
   const tradeCopy = useMemo(() => writeAuthorityCopy('trade', platform), [platform])
@@ -196,8 +215,26 @@ export function ProposeTradeModal({
       setError(null)
       setCounterReady(false)
       setCounterLoading(false)
+      setExpiresInHours(48)
+      setSendDirectMessage(true)
+      preselectApplied.current = false
     }
   }, [open])
+
+  // Opened from the Propose grid: select the tapped manager and player once the rosters are in.
+  useEffect(() => {
+    if (!open || counterTradeId || preselectApplied.current || !rosters || (!initialPartnerRosterId && !initialGetPlayerId)) return
+    // The Players screen's Trade tab knows the player and may not know his team's roster id here:
+    // the team is then whichever other roster holds him.
+    const mine = viewerTeamRosterId ?? viewerRosterId
+    const partner =
+      (initialPartnerRosterId ? rosters.find((r) => r.rosterId === initialPartnerRosterId) : undefined) ??
+      (initialGetPlayerId ? rosters.find((r) => r.rosterId !== mine && r.players.some((p) => p.id === initialGetPlayerId)) : undefined)
+    if (!partner) return
+    preselectApplied.current = true
+    setPartnerRosterId(partner.rosterId)
+    if (initialGetPlayerId && partner.players.some((p) => p.id === initialGetPlayerId)) setGetPlayerIds(new Set([initialGetPlayerId]))
+  }, [open, counterTradeId, rosters, initialPartnerRosterId, initialGetPlayerId, viewerTeamRosterId, viewerRosterId])
 
   const myRoster = useMemo(
     () => rosters?.find((r) => r.rosterId === viewerTeamRosterId) ?? rosters?.find((r) => r.rosterId === viewerRosterId) ?? rosters?.find((r) => r.platformUserId === myUserId) ?? null,
@@ -432,7 +469,9 @@ export function ProposeTradeModal({
           receiverRosterId: partnerRoster.rosterId,
           assets,
           decisionEvidenceToken: selectedPackage?.decisionEvidenceToken ?? selectedMultiPackage?.decisionEvidenceToken ?? null,
+          expiresInHours,
           metadata: {
+            sendDirectMessage,
             multiTeam: Boolean(multiTeam && secondPartnerRoster),
             participantRosterIds: [myRoster.rosterId, partnerRoster.rosterId, ...(secondPartnerRoster ? [secondPartnerRoster.rosterId] : [])],
             acceptedRosterIds: [],
@@ -728,6 +767,83 @@ export function ProposeTradeModal({
                 )}
               </div>
             ) : null}
+
+            {/* Review (owner's page review #9): what each team receives and sends, how long the offer
+                stays open, and whether it lands in the managers' DM. */}
+            {myRoster && partnerRoster && firstHasAssets ? (() => {
+              const participants = [myRoster, partnerRoster, ...(multiTeam && secondPartnerRoster ? [secondPartnerRoster] : [])]
+              const nameOf = (id: string) => (id === myRoster.rosterId ? 'You' : rosters?.find((r) => r.rosterId === id)?.ownerName ?? 'Manager')
+              const legs: Array<{ from: string; to: string; label: string; pos: string | null }> = []
+              const addLegs = (from: typeof myRoster, to: typeof myRoster, players: ReadonlySet<string>, picks: ReadonlySet<string>, faab: string) => {
+                for (const id of players) {
+                  const p = from.players.find((x) => x.id === id)
+                  legs.push({ from: from.rosterId, to: to.rosterId, label: p?.name ?? id, pos: p?.position ?? null })
+                }
+                for (const id of picks) legs.push({ from: from.rosterId, to: to.rosterId, label: from.picks.find((x) => x.pickId === id)?.label ?? id, pos: 'PICK' })
+                const amount = Math.floor(Number(faab))
+                if (amount > 0) legs.push({ from: from.rosterId, to: to.rosterId, label: `$${amount} FAAB`, pos: 'FAAB' })
+              }
+              addLegs(myRoster, partnerRoster, givePlayerIds, givePickIds, giveFaab)
+              addLegs(partnerRoster, myRoster, getPlayerIds, getPickIds, getFaab)
+              if (multiTeam && secondPartnerRoster) {
+                addLegs(myRoster, secondPartnerRoster, secondGivePlayerIds, secondGivePickIds, secondGiveFaab)
+                addLegs(secondPartnerRoster, myRoster, secondGetPlayerIds, secondGetPickIds, secondGetFaab)
+              }
+              for (const leg of directPartnerLegs) legs.push({ from: leg.fromRosterId, to: leg.toRosterId, label: leg.asset.name, pos: leg.asset.position ?? null })
+              return (
+                <div className="flex flex-col gap-3 rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-3" data-testid="propose-trade-review">
+                  <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted)]">
+                    Review trade offer · {participants.length === 3 ? '3-way trade: ' : ''}{participants.map((r) => nameOf(r.rosterId)).join(' · ')}
+                  </p>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                    {participants.map((r) => (
+                      <div key={r.rosterId} className="rounded-lg border border-[var(--line2)] bg-[var(--surface)] p-2.5" data-testid="propose-trade-review-team">
+                        <p className="text-[13px] font-bold text-[var(--text)]">{nameOf(r.rosterId)}</p>
+                        <div className="mt-1.5 grid grid-cols-2 gap-2 text-[12px]">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-extrabold tracking-wider text-emerald-300">RECEIVES</p>
+                            {legs.filter((l) => l.to === r.rosterId).map((l, i) => <p key={i} className="truncate text-[var(--text)]">{l.label}<span className="block text-[11px] text-[var(--muted)]">from {nameOf(l.from)}</span></p>)}
+                            {legs.every((l) => l.to !== r.rosterId) ? <p className="text-[var(--muted)]">—</p> : null}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-extrabold tracking-wider text-rose-300">SENDS</p>
+                            {legs.filter((l) => l.from === r.rosterId).map((l, i) => <p key={i} className="truncate text-[var(--text)]">{l.label}<span className="block text-[11px] text-[var(--muted)]">to {nameOf(l.to)}</span></p>)}
+                            {legs.every((l) => l.from !== r.rosterId) ? <p className="text-[var(--muted)]">—</p> : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)]">
+                      Offer expires in
+                      <select
+                        value={expiresInHours}
+                        onChange={(e) => setExpiresInHours(Number(e.target.value))}
+                        className="min-h-[36px] rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-2 text-[13px] text-[var(--text)]"
+                        data-testid="propose-trade-expiry"
+                      >
+                        {TRADE_EXPIRY_OPTIONS.map((o) => <option key={o.hours} value={o.hours}>{o.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)]">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={sendDirectMessage}
+                        onChange={(e) => setSendDirectMessage(e.target.checked)}
+                        className="h-4 w-4 accent-[var(--accent)]"
+                        data-testid="propose-trade-send-dm"
+                      />
+                      Send a direct message
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-[var(--muted)]">
+                    Every team must send or receive at least one asset.{multiTeam ? ' Direct messages go to two-team offers only.' : ''}
+                  </p>
+                </div>
+              )
+            })() : null}
 
             <div className="flex justify-end gap-2 pt-2">
               <button

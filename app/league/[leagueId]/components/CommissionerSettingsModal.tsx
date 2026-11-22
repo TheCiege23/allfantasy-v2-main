@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { useAutosave } from '@/lib/hooks/useAutosave'
 import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { CO_COMMISSIONER_SCOPES, type CoCommissionerScope } from '@/lib/league/coCommissionerScopes'
 import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
 import {
@@ -39,8 +41,6 @@ import {
   isC2cSettingsTab,
 } from './settings/SettingsNav'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
-import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
-import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { IDPCapPanel } from '@/app/idp/components/settings/IDPCapPanel'
 import { KeeperCommissionerDashboard } from './KeeperCommissionerDashboard'
@@ -87,6 +87,7 @@ import { C2CAIPanel } from '@/app/c2c/components/settings/C2CAIPanel'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 import { SportConfigSettingsPanel } from './settings/SportConfigSettingsPanel'
 import { CommissionerScoringSettingsPanel } from './settings/CommissionerScoringSettingsPanel'
+import { SportScoringPanel } from '@/components/league-settings/tabs/ScoringTab'
 import type { LeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { SubscriptionGateProvider } from '@/hooks/useSubscriptionGate'
 import { useEntitlements } from '@/hooks/useEntitlements'
@@ -96,6 +97,7 @@ import { CommissionerControlPanel } from '@/components/league-settings/Commissio
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { LeaguePreviousSeasonsPanel } from '@/components/league-settings/LeaguePreviousSeasonsPanel'
 import { CommissionerLeagueDeletePanel } from '@/components/league-settings/CommissionerLeagueDeletePanel'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import {
   commissionerKeeperSectionHeading,
   showKeeperSelectionInCommissionerSettings,
@@ -118,6 +120,8 @@ type ApiGet = {
   leagueOwnerUserId?: string
   hasAfCommissionerSub: boolean
   canEdit: boolean
+  /** The areas this viewer may change: all for the head commissioner, the granted ones for a co-commissioner. */
+  commissionerScopes?: CoCommissionerScope[]
   /** Raw `League.settings` JSON for merges (description, schedule, notification prefs). */
   settingsSnapshot?: Record<string, unknown>
   league: CommissionerSettingsFormData & Record<string, unknown>
@@ -140,7 +144,12 @@ export function CommissionerSettingsModal({
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [payload, setPayload] = useState<ApiGet | null>(null)
-  const [survivorMode, setSurvivorMode] = useState(false)
+  const { t } = useLanguage()
+  const [survivorFlag, setSurvivorMode] = useState(false)
+  // Survivor settings drive AllFantasy's own island engine. A league played as Survivor on another
+  // platform carries the flag (two Sleeper imports in production do) but has no island here, so its
+  // commissioner was offered settings tabs that change nothing.
+  const survivorMode = survivorFlag && isNativePlatform(typeof payload?.league?.platform === 'string' ? payload.league.platform : null)
   const [tournamentShellId, setTournamentShellId] = useState<string | null>(null)
   const [zombieMode, setZombieMode] = useState(false)
   const [idpLeague, setIdpLeague] = useState(false)
@@ -338,8 +347,19 @@ export function CommissionerSettingsModal({
   if (!isOpen) return null
 
   const canEdit = payload?.canEdit ?? false
+  /*
+   * A co-commissioner may change only the areas the head commissioner granted (lib/league/commissionerAccess.ts). Each
+   * panel is editable only for its area, so a limited co-commissioner sees the rest read-only instead of every save
+   * being refused. An older response without `commissionerScopes` keeps the old behaviour.
+   */
+  const scopes = payload?.commissionerScopes ?? CO_COMMISSIONER_SCOPES
+  const canEditArea = (area: CoCommissionerScope) => canEdit && scopes.includes(area)
+  const limitedCoCommissioner = canEdit && payload?.userRole === 'co_commissioner' && scopes.length < CO_COMMISSIONER_SCOPES.length
   const hasSub = hasCommissioner || (payload?.hasAfCommissionerSub ?? false)
   const initialData = payload?.league as CommissionerSettingsFormData | undefined
+  // IDP defensive scoring and survivor-guillotine capped scoring still read the override rows.
+  const usesOverrideScoring =
+    idpLeague || (payload?.scoringConfig as { leagueVariant?: string | null } | null | undefined)?.leagueVariant === 'survivor_guillotine'
   /** The raw league row from /api/league/settings, for the fields the form data does not type. */
   const leagueRow: Record<string, unknown> = payload?.league ?? {}
 
@@ -416,6 +436,11 @@ export function CommissionerSettingsModal({
               </Link>
             </div>
           ) : null}
+          {limitedCoCommissioner ? (
+            <p className="mx-6 mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100" data-testid="co-commissioner-scope-banner">
+              {t('coCommissioner.limitedBanner').replace('{{areas}}', scopes.length ? scopes.map((a) => t(`coCommissioner.area.${a}`)).join(', ') : t('coCommissioner.none'))}
+            </p>
+          ) : null}
           {loading ? (
             <div className="space-y-3 px-6 py-8">
               <div className="h-10 animate-pulse rounded-xl bg-white/[0.06]" />
@@ -432,7 +457,7 @@ export function CommissionerSettingsModal({
               initialData={initialData}
               settingsSnapshot={payload?.settingsSnapshot ?? {}}
               hasAfCommissionerSub={hasSub}
-              canEdit={canEdit}
+              canEdit={canEditArea('league')}
               save={save}
               debouncedSave={debouncedSave}
             />
@@ -444,35 +469,60 @@ export function CommissionerSettingsModal({
                 leagueId={leagueId}
                 sport={initialData.sport ?? null}
                 initialMode={initialData.lineupMode ?? null}
-                canEdit={canEdit}
+                canEdit={canEditArea('rosters')}
               />
-              <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+              <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEditArea('rosters')} debouncedSave={debouncedSave} />
             </div>
           ) : activeTab === 'scoring' ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <CommissionerScoringSettingsPanel
-                key={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
-                leagueId={leagueId}
+              {/*
+                🛑 THIS TAB EDITED A STORE LIVE SCORING NEVER READS. CommissionerScoringSettingsPanel saves
+                `LeagueScoringOverride` rows; the live scorer resolves points from `League.settings` only
+                (lib/redraft/leagueScoringRules.ts). A commissioner changed scoring here, saw "saved", and every
+                score stayed the same. The tab now shows the same per-sport editor as League settings → Scoring,
+                which is what the scorer reads.
+              */}
+              <SportScoringPanel
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
-                canEdit={canEdit}
-                scoringConfig={payload?.scoringConfig ?? null}
+                leagueId={leagueId}
+                isCommissioner={canEditArea('scoring')}
               />
+              {/* The two formats whose scoring still reads the override rows: IDP defensive stats
+                  (lib/idp/scoringEngine.ts) and survivor-guillotine capped scoring (lib/survivor-guillotine/capped-scoring.ts). */}
+              {usesOverrideScoring ? (
+                <div className="mt-6 border-t border-white/10 pt-4">
+                  <p className="mb-2 text-xs text-white/55">
+                    {idpLeague
+                      ? 'Defensive (IDP) stat values. These set how defensive players score.'
+                      : 'Capped-scoring stat values. These set how weekly capped scores are counted.'}
+                  </p>
+                  <CommissionerScoringSettingsPanel
+                    key={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                    leagueId={leagueId}
+                    sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                    canEdit={canEditArea('scoring')}
+                    scoringConfig={payload?.scoringConfig ?? null}
+                  />
+                </div>
+              ) : null}
               <GamesLimitsSettingsPanel
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                 initialData={initialData}
-                canEdit={canEdit}
+                canEdit={canEditArea('scoring')}
                 debouncedSave={debouncedSave}
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
                 <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
-                  League format, roster slots & advanced sport config
+                  League format & advanced sport config
                 </summary>
                 <SportConfigSettingsPanel
                   sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                   leagueSettings={initialData as Record<string, unknown>}
-                  canEdit={canEdit}
+                  canEdit={canEditArea('scoring')}
                   onSportConfigChange={(next) => debouncedSave({ sportConfig: next })}
-                  omitSections={{ scoring: true }}
+                  // Roster slots here wrote `sportConfig.rosterSlotCounts`, which no lineup check reads; the Roster
+                  // tab's editor is where slots live (2026-11-15).
+                  omitSections={{ scoring: true, roster: true }}
                 />
               </details>
             </div>
@@ -480,7 +530,8 @@ export function CommissionerSettingsModal({
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
               league={payload?.league ?? null}
-              canEdit={canEdit}
+              leagueId={leagueId}
+              canEdit={canEditArea('league')}
               save={save}
               debouncedSave={debouncedSave}
             />
@@ -497,15 +548,16 @@ export function CommissionerSettingsModal({
               <CoOwnerSettingsPanel leagueId={leagueId} />
             </div>
           ) : activeTab === 'trade' ? (
-            <TradeSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} save={save} />
+            <TradeSettingsPanel initialData={initialData} canEdit={canEditArea('trades')} debouncedSave={debouncedSave} save={save} />
           ) : activeTab === 'waiver' ? (
-            <WaiverLeagueSettingsPanel leagueId={leagueId} initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            <WaiverLeagueSettingsPanel leagueId={leagueId} initialData={initialData} canEdit={canEditArea('league')} debouncedSave={debouncedSave} />
           ) : activeTab === 'playoff' ? (
-            <PlayoffSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
+            <PlayoffSettingsPanel initialData={initialData} canEdit={canEditArea('league')} debouncedSave={debouncedSave} />
           ) : activeTab === 'schedule' ? (
             <ScheduleSettingsPanel
               settingsSnapshot={payload?.settingsSnapshot ?? {}}
-              canEdit={canEdit}
+              playoffStartWeek={initialData.playoffStartWeek ?? null}
+              canEdit={canEditArea('league')}
               debouncedSave={debouncedSave}
             />
           ) : activeTab === 'ai' ? (
@@ -513,7 +565,7 @@ export function CommissionerSettingsModal({
               leagueId={leagueId}
               settingsSnapshot={payload?.settingsSnapshot ?? {}}
               initialData={initialData}
-              canEdit={canEdit}
+              canEdit={canEditArea('league')}
               debouncedSave={debouncedSave}
               save={save}
               hasAfCommissionerSub={hasSub}
@@ -536,11 +588,11 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'advanced' ? (
             <AdvancedRulesTab leagueId={leagueId} />
           ) : activeTab === 'appearance' ? (
-            <AppearanceTab leagueId={leagueId} logoUrl={typeof leagueRow.logoUrl === 'string' ? leagueRow.logoUrl : null} canEdit={canEdit} />
+            <AppearanceTab leagueId={leagueId} logoUrl={typeof leagueRow.logoUrl === 'string' ? leagueRow.logoUrl : null} canEdit={canEditArea('league')} />
           ) : activeTab === 'security' ? (
             <PermissionsTab leagueId={leagueId} />
           ) : activeTab === 'draft_picks' ? (
-            <DraftPicksTab leagueId={leagueId} nativeDynasty={isNativeDynastyLeague(leagueRow)} canEdit={canEdit} />
+            <DraftPicksTab leagueId={leagueId} nativeDynasty={isNativeDynastyLeague(leagueRow)} canEdit={canEditArea('league')} />
           ) : activeTab === 'integrations' ? (
             <IntegrationsTab leagueId={leagueId} leagueOwnerUserId={payload?.leagueOwnerUserId ?? ''} />
           ) : activeTab === 'commissioner' ? (
@@ -629,11 +681,9 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'zombie_ai' ? (
             <ZombieAIPanel hasAfSub={hasSub} />
           ) : activeTab === 'idp_roster' ? (
-            <IDPRosterPanel />
-          ) : activeTab === 'idp_scoring' ? (
-            <IDPScoringPanel />
-          ) : activeTab === 'idp_display' ? (
-            <IDPDisplayPanel />
+            <div className="px-6 py-6">
+              <IDPRosterPanel leagueId={leagueId} canEdit={canEdit} />
+            </div>
           ) : activeTab === 'idp_ai' ? (
             <IDPAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={payload?.canEdit ?? false} />
           ) : activeTab === 'idp_cap' ? (

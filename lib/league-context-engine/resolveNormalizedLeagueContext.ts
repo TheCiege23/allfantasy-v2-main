@@ -7,6 +7,8 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeLeagueScoring } from '@/lib/league-context-engine/normalizeScoring'
 import { resolveMatchupPeriod } from '@/lib/league-context-engine/resolvePeriod'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { isDailyBestBallLeague } from '@/lib/bestball/scoringPeriod'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { hasVerifiedBestBallRuleConfiguration } from '@/lib/best-ball-war-room/bestBallRuleEvidence'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import type {
@@ -130,9 +132,17 @@ export async function resolveNormalizedLeagueContext(
     : null
 
   const lineupBehavior = {
-    scoringPeriod:
-      league.bbScoringPeriod === 'daily' ? ('daily' as const) : ('weekly' as const),
+    // The period the league is ACTUALLY scored with (lib/bestball/scoringPeriod.ts), never the stored
+    // `League.bbScoringPeriod`: every NBA/NHL/MLB/NCAAB best ball league created before daily scoring
+    // existed stores "daily" as an old profile default and has always been scored weekly. Chimmy,
+    // start/sit and waiver advice all read this label.
+    scoringPeriod: isDailyBestBallLeague({ sport: String(league.sport), settings: league.settings, bestBallMode: league.bestBallMode })
+      ? ('daily' as const)
+      : ('weekly' as const),
     bestBallMode: league.bestBallMode === true,
+    // Classic Best Ball or best ball Guilly: the lineup is the optimizer's either way, so nothing that
+    // reads this context may offer a start/sit move (lib/bestball/bestBallLeagueState.ts).
+    lineupSetsItself: bestBallLineupSetsItself(league),
     bestBallSettings: bestBallSettings
       ? {
           mode: bestBallSettings.mode,

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import type {
   PortfolioInsights,
   PortfolioLeagueFacts,
@@ -77,10 +78,16 @@ const VIEWS: Array<{ key: PortfolioViewKey; label: string }> = [
   { key: 'exposure', label: 'Exposure' },
   { key: 'risk', label: 'Risk' },
   { key: 'value', label: 'Value' },
-  { key: 'leagues', label: 'Leagues' },
+  /*
+   * "Teams", not "Leagues" (2026-11-12): this screen now sits behind the My Leagues entry, whose
+   * switch already offers "Leagues" — two controls with one name on one page. It is also the more
+   * accurate word: one row per CLAIMED TEAM (see Portfolio.tsx), with the board's filters applied.
+   * The `pf_view=leagues` param is unchanged, so old links still open this tab.
+   */
+  { key: 'leagues', label: 'Teams' },
 ]
 
-export type PortfolioBoardProps = {
+type PortfolioBoardProps = {
   insights: PortfolioInsights
   recorded: RecordedValueDay[]
   /** Now-facts from the home loader, per league id. Null when that read failed. */
@@ -605,6 +612,12 @@ export function PortfolioBoard({
             {actions.length > 8 ? <p className="af-pfb-note">{plural(actions.length - 8, 'more league')} with smaller issues.</p> : null}
           </section>
 
+          {/*
+            2026-11-20: the page's one "More detail" fold (MoreDetail.tsx). The overview answers "which
+            leagues need me"; the league-mix chart is background, so it moved in here unchanged. The other
+            views are tabs the reader chose, so their content stays open.
+          */}
+          <MoreDetail note="Where your leagues sit — by platform, format, scoring, sport and stage" testId="portfolio-more">
           <section className="af-pfb-card" aria-labelledby="af-pfb-dist">
             <header className="af-pfb-card-head">
               <div>
@@ -690,6 +703,7 @@ export function PortfolioBoard({
               </div>
             ) : null}
           </section>
+          </MoreDetail>
         </>
       ) : null}
 
@@ -1190,4 +1204,3 @@ export function PortfolioBoard({
 
 export type { PortfolioViewKey }
 
-export default PortfolioBoard

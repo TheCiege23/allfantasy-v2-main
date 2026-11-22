@@ -11,7 +11,7 @@
 import { Bot, MessageSquare, Users } from "lucide-react"
 import type { WorldCupChatMode } from "./worldCupChatTypes"
 
-export type WorldCupChatModeTabsProps = {
+type WorldCupChatModeTabsProps = {
   mode: WorldCupChatMode
   onModeChange: (mode: WorldCupChatMode) => void
   /** Override labels — defaults to English */

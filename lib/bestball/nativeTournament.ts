@@ -36,13 +36,74 @@ export async function ensureNativeTournamentEntries(leagueId: string, seasonId: 
   await prisma.bestBallContest.updateMany({ where: { id: contestId, status: 'open' }, data: { status: 'active' } })
 }
 
+/**
+ * 🛑 A RENEWED TOURNAMENT LEAGUE ENDED ITS NEW SEASON ON THE FIRST TICK. A contest is created once, at
+ * league creation, and nothing on renewal replaced it — so year two still pointed at year one's
+ * COMPLETED contest, and the branch below took "complete" to mean "this season is over", finalized the
+ * new season and moved the league to completed. A contest belongs to the season whose rosters hold its
+ * entries (`${contestId}:${rosterId}`, see ensureNativeTournamentEntries); a completed one with entries
+ * but none for this season is last year's. It is replaced, with the same settings, by a fresh open
+ * contest for this season. Done here rather than in renewal so every renewal path is covered.
+ */
+async function currentSeasonContestId(season: { id: string; leagueId: string }, contestId: string): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const league = await tx.league.findUniqueOrThrow({ where: { id: season.leagueId }, select: { bbContestId: true } })
+    // Another tick already rolled it.
+    if (league.bbContestId && league.bbContestId !== contestId) return league.bbContestId
+    const contest = await tx.bestBallContest.findUniqueOrThrow({ where: { id: contestId } })
+    if (contest.status !== 'complete') return contestId
+    const rosters = await tx.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true } })
+    const ownIds = rosters.map((r) => `${contestId}:${r.id}`)
+    const [entries, ours] = await Promise.all([
+      tx.bestBallEntry.count({ where: { contestId } }),
+      tx.bestBallEntry.count({ where: { contestId, id: { in: ownIds } } }),
+    ])
+    if (entries === 0 || ours > 0) return contestId
+    const fresh = await tx.bestBallContest.create({
+      data: {
+        name: contest.name, sport: contest.sport, variant: contest.variant,
+        podSize: contest.podSize, rosterSize: contest.rosterSize, rounds: contest.rounds,
+        advancersPerPod: contest.advancersPerPod, draftType: contest.draftType, draftSpeed: contest.draftSpeed,
+        entryType: contest.entryType, maxEntriesPerUser: contest.maxEntriesPerUser,
+        scoringPeriod: contest.scoringPeriod, cumulativeScoring: contest.cumulativeScoring,
+        resetBetweenRounds: contest.resetBetweenRounds,
+      },
+    })
+    await tx.league.update({ where: { id: season.leagueId }, data: { bbContestId: fresh.id } })
+    return fresh.id
+  }, { isolationLevel: 'Serializable', timeout: 30_000 })
+}
+
 /** Missing or unsealed native matchup scores never become zero-point results. */
 export async function runNativeTournamentWeek(seasonId: string, throughWeek: number): Promise<string> {
   if (!Number.isInteger(throughWeek) || throughWeek < 1) throw new Error('Invalid scoring period')
   const season = await prisma.redraftSeason.findUniqueOrThrow({ where: { id: seasonId }, include: { league: true } })
-  const contestId = season.league.bbContestId
-  if (!isNativeTournamentLeague(season.league) || !contestId) return 'not_tournament'
-  const contest = await prisma.bestBallContest.findUniqueOrThrow({ where: { id: contestId } })
+  const storedContestId = season.league.bbContestId
+  if (!isNativeTournamentLeague(season.league) || !storedContestId) return 'not_tournament'
+  /*
+   * 🛑 AND LAST SEASON KEPT FINALIZING THE LEAGUE. score-sync keeps a completed tournament season in its
+   * batch while the league is post_draft..completed so a failed archive can retry — which after a
+   * renewal is the NEW season's lifecycle. Each tick then re-finalized the old season, and that
+   * transition moved the renewed, in-season league to `completed`. A completed season with a newer one
+   * behind it was archived before the renewal could start (renewal begins from the offseason).
+   */
+  if (season.status === 'complete') {
+    const newer = await prisma.redraftSeason.findFirst({
+      where: { leagueId: season.leagueId, id: { not: season.id }, createdAt: { gt: season.createdAt } },
+      select: { id: true },
+    })
+    if (newer) return 'superseded'
+  }
+  let contestId = storedContestId
+  let contest = await prisma.bestBallContest.findUniqueOrThrow({ where: { id: contestId } })
+  // Only a completed contest can be last season's; roll it before reading "complete" as "this season is over".
+  if (contest.status === 'complete') {
+    const current = await currentSeasonContestId(season, contestId)
+    if (current !== contestId) {
+      contestId = current
+      contest = await prisma.bestBallContest.findUniqueOrThrow({ where: { id: contestId } })
+    }
+  }
   if (contest.status === 'complete') {
     await finalizeNativeTournamentSeason(seasonId)
     return 'complete'

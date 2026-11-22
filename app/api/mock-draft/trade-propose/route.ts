@@ -102,9 +102,6 @@ export async function POST(req: NextRequest) {
 
     const totalRounds = Math.max(...draftResults.map((p: any) => p.round))
     const userPicks = draftResults.filter((p: any) => p.isUser)
-    const otherManagers = Array.from(new Set(
-      draftResults.filter((p: any) => !p.isUser).map((p: any) => p.manager)
-    ))
 
     const proposals: any[] = []
 

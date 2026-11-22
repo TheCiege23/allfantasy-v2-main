@@ -38,7 +38,7 @@ export function mentionsModel(text: string): boolean {
   return MODEL_LEAK.test(text)
 }
 
-export type EnrichmentRefusal =
+type EnrichmentRefusal =
   /** No analysis exists for this decision's evidence yet. The overwhelmingly common case. */
   | 'no_analysis'
   /** Analysis exists but is not usable (still running, failed, evidence changed under it). */
@@ -52,7 +52,7 @@ export type EnrichmentRefusal =
   /** The analysis carried no usable narrative. */
   | 'empty_narrative'
 
-export type EnrichmentOutcome<TAction = unknown> =
+type EnrichmentOutcome<TAction = unknown> =
   | { enriched: true; decision: Decision<TAction>; stale: boolean }
   | { enriched: false; decision: Decision<TAction>; reason: EnrichmentRefusal }
 

@@ -5,7 +5,7 @@
 
 import type { ProductId } from "@/lib/shell"
 
-export interface ProductRouteConfig {
+interface ProductRouteConfig {
   productId: ProductId
   label: string
   /** Main entry route for the product (used by product switcher and deep links). */
@@ -14,7 +14,7 @@ export interface ProductRouteConfig {
   pathPrefixes: string[]
 }
 
-export const PRODUCT_ROUTE_CONFIGS: ProductRouteConfig[] = [
+const PRODUCT_ROUTE_CONFIGS: ProductRouteConfig[] = [
   { productId: "home", label: "Home", entryRoute: "/dashboard", pathPrefixes: ["/dashboard"] },
   {
     productId: "webapp",

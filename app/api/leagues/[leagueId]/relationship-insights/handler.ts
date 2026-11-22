@@ -75,7 +75,6 @@ export async function POST(
       rebuildGraph: body?.rebuildGraph === true,
       runRivalry: body?.runRivalry !== false,
       runDrama: body?.runDrama !== false,
-      runProfiles: body?.runProfiles === true,
       syncGraphRivalryEdges: body?.syncGraphRivalryEdges !== false,
     })
 

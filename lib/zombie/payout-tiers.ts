@@ -1,7 +1,7 @@
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 /** Fractions of the post-fee pot (must sum ≤ 1 when ultimate survivor is off; ultimate uses survivorBonus slice). */
-export type ZombiePayoutTierRates = {
+type ZombiePayoutTierRates = {
   weeklyPayoutRate: number
   seasonPayoutRate: number
   survivorBonusRate: number

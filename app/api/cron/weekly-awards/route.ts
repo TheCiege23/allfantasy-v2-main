@@ -244,14 +244,36 @@ export async function GET(req: NextRequest) {
             errors.push(l.id)
           }
         }
-        const nativeLeagues = await prisma.league.findMany({
+        /*
+         * 🛑 THE SAME FIRST-HUNDRED BUG THE SLEEPER LOOP FIXED (2026-11-15). This read `take: 100` with no order, so past
+         * a hundred opted-in leagues the same ones were recapped every week and the rest never. Now every opted-in league,
+         * minus the ones already recapped this week (a later fire costs nothing for them); the time budget still bounds
+         * a fire, and the schedule fires three times on Tuesday to finish the walk.
+         */
+        const optedInNative = await prisma.league.findMany({
           where: {
             platform: { in: ['manual', 'allfantasy', 'af', 'native'] },
             settings: { path: ['commissionerRecipes', 'recipes', 'weeklyRecap'], equals: true },
           },
           select: { id: true, name: true, userId: true, settings: true },
-          take: 100,
+          orderBy: { id: 'asc' },
         })
+        const nativeRecappedThisWeek = new Set(
+          (
+            await prisma.leagueChatMessage
+              .findMany({
+                where: {
+                  leagueId: { in: optedInNative.map((l) => l.id) },
+                  createdAt: { gte: new Date(startedAt - 6 * 24 * 60 * 60 * 1000) },
+                  metadata: { path: ['chimmyMoment', 'kind'], equals: 'weekly_awards' },
+                },
+                select: { leagueId: true },
+                distinct: ['leagueId'],
+              })
+              .catch(() => [] as Array<{ leagueId: string }>)
+          ).map((r) => r.leagueId),
+        )
+        const nativeLeagues = optedInNative.filter((l) => !nativeRecappedThisWeek.has(l.id))
         let nativePosted = 0
         for (const league of nativeLeagues) {
           if (Date.now() - startedAt > TIME_BUDGET_MS) {

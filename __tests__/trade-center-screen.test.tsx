@@ -15,6 +15,7 @@ const SRC = readFileSync(
   'utf8',
 )
 const PAGE = readFileSync(resolve(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
+const HISTORY_SECTION = readFileSync(resolve(process.cwd(), 'components/core-app/screens/TradesHistorySection.tsx'), 'utf8')
 
 const LEAGUE = { id: 'l1', name: 'Last League Left', format: 'Dynasty · PPR', teamCount: 12 }
 
@@ -25,8 +26,8 @@ function text(ui: React.ReactElement): string {
 describe('Trade Center renders and is reachable', () => {
   it('shows the league context and only asset kinds the builder can add', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
-    expect(t).toContain('Trade Center')
-    expect(t).toContain('Last League Left')
+    expect(t).toContain('Trades · Last League Left')
+    expect(t).toContain('Build a trade and get it graded')
     expect(t).toContain('Player · any position, incl. IDP')
     expect(t).toContain('Pick')
     expect(t).toContain('FAAB')
@@ -41,7 +42,9 @@ describe('Trade Center renders and is reachable', () => {
      * new surface settles.
      */
     expect(PAGE).toContain('<TradeCenter')
-    expect(PAGE).toContain('<Trades data={trades} hidePending />')
+    // The history streams into the Trade Center's slot (TradesHistorySection), still the same screen.
+    expect(PAGE).toContain('<TradesHistorySlot')
+    expect(HISTORY_SECTION).toContain('<Trades data={resolved} hidePending />')
   })
 
   it('⚠ posts to the EXISTING analyze route, not a new one', () => {
@@ -50,10 +53,10 @@ describe('Trade Center renders and is reachable', () => {
     expect(SRC).toContain('NO NEW API ROUTE')
   })
 
-  it('says the deadline when the league has one', () => {
-    expect(text(<TradeCenter league={LEAGUE} deadlineLabel="Deadline · week 11" />)).toContain(
-      'Deadline · week 11',
-    )
+  it('says the deadline when the league has one — as the headline, once (2026-11-13)', () => {
+    const t = text(<TradeCenter league={LEAGUE} deadlineLabel="Deadline · week 11" />)
+    expect(t).toContain('Trade deadline: week 11')
+    expect(t).not.toContain('Deadline · week 11')
   })
 })
 

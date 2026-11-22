@@ -34,7 +34,7 @@ import {
  * empty: the Wire does not report injuries, and the home already does.
  */
 
-export const CAREER_VISIT_KEY_PREFIX = 'core-career-visit:v1:'
+const CAREER_VISIT_KEY_PREFIX = 'core-career-visit:v1:'
 const MARKER_TTL_MS = 60 * 24 * 60 * 60_000
 
 function isMarker(value: unknown): value is VisitMarker {

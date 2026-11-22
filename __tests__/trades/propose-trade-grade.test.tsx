@@ -165,6 +165,18 @@ describe('POST /api/leagues/[leagueId]/trades/grade-preview', () => {
     expect(h.gradeDeal).not.toHaveBeenCalled()
   })
 
+  it('labels the roster grade and the league-value grade separately', async () => {
+    h.gradeDeal.mockResolvedValue({
+      ...GRADED, letter: 'C', letterBasis: 'your_team',
+      market: { letter: 'D', partnerLetter: 'B', label: GRADED.label, giveValue: 6100, getValue: 5200, percentDiff: -14 },
+    })
+    const response = await call({ give: [{ kind: 'player', id: '6813', name: 'Travis Kelce' }], get: [{ kind: 'faab', amount: 25 }] })
+    const { grade } = await response.json()
+    expect(grade).toMatchObject({ letter: 'C', leagueValueLetter: 'D', partnerLetter: 'B' })
+    render(<ComposerGradeLine grade={grade} partnerName="Jordan" />)
+    expect(screen.getByTestId('composer-grade').textContent).toContain('For your roster: C · League value: You D · Jordan B')
+  })
+
   it('grades the composed deal from the viewer’s side on the league’s own grader', async () => {
     const res = await call({ give: [{ kind: 'player', id: '6813', name: 'Travis Kelce' }], get: [{ kind: 'pick', season: 2027, round: 1, label: '2027 1st' }] })
     expect(await res.json()).toEqual({ grade: GRADED })

@@ -1,4 +1,4 @@
-export type LeagueClass = 'dynasty' | 'redraft' | 'specialty'
+type LeagueClass = 'dynasty' | 'redraft' | 'specialty'
 
 export interface LeagueRecord {
   league_id: string
@@ -318,7 +318,7 @@ export function generateLaneInsight(lane: LaneStats): {
   let nextAction: { label: string; tab: string }
 
   if (lane.playoffRate < 40) {
-    nextAction = { label: 'Open Waiver AI', tab: 'waiver' }
+    nextAction = { label: 'Open Waiver Chimmy', tab: 'waiver' }
   } else if (lane.championshipRate < 10 && lane.playoffRate >= 40) {
     nextAction = { label: 'Open Trade Hub', tab: 'trade' }
   } else {

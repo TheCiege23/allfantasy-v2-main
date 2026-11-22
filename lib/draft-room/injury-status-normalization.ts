@@ -1,4 +1,4 @@
-export type NormalizedDraftPoolInjuryStatus =
+type NormalizedDraftPoolInjuryStatus =
   | 'OUT'
   | 'DOUBTFUL'
   | 'QUESTIONABLE'

@@ -14,7 +14,7 @@
 import { IntelligenceAccessError } from '../IntelligenceQueryService'
 import type { IntelligenceQueryService } from '../IntelligenceQueryService'
 
-export interface ApiResult {
+interface ApiResult {
   status: number
   body: unknown
 }

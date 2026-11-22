@@ -14,7 +14,7 @@ import type { AllFantasyStandardAiPayload } from '@/lib/ai-payload/types'
 import { buildLongTermCoachingAnalysis } from '@/lib/long-term-coaching/buildLongTermCoachingAnalysis'
 import { strategicCoachingFromAnalysis } from '@/lib/long-term-coaching/strategicCoachingSnapshot'
 
-export type BuildStandardAiPayloadArgs = {
+type BuildStandardAiPayloadArgs = {
   userId: string
   tool: string
   mode: 'global' | 'league'

@@ -22,6 +22,8 @@ export const seasonOutlookMessages = defineMessages({
     preseason: (kickoff: string) =>
       `Odds are simulated from each team's completed weeks, and none have been played this season. They start filling in as weeks are scored — first kickoff ${kickoff}.`,
     withheld: (n: number) => `${n} ${n === 1 ? 'league is' : 'leagues are'} not on this page`,
+    /* The "More detail" fold's note (2026-11-20): the leagues we could not forecast are inside. */
+    moreNote: 'Leagues we could not forecast',
   },
   es: {
     onTrack: (leagues) => `de ${leagues} con opciones de playoffs`,
@@ -37,5 +39,6 @@ export const seasonOutlookMessages = defineMessages({
     preseason: (kickoff) =>
       `Las probabilidades se simulan a partir de las semanas completas de cada equipo. Aún no se ha jugado ninguna esta temporada. Empezarán a aparecer tras el primer partido: ${kickoff}.`,
     withheld: (n) => `${n} ${n === 1 ? 'liga no aparece' : 'ligas no aparecen'} en esta página`,
+    moreNote: 'Ligas que no pudimos pronosticar',
   },
 })

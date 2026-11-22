@@ -13,7 +13,7 @@ const ACCENT = '#0ea5e9'
 
 export const SOCIAL_POST_CARD_ID = 'social-post-card-capture'
 
-export interface SocialPostCardProps {
+interface SocialPostCardProps {
   title: string
   bodyLines?: string[]
   leagueName?: string

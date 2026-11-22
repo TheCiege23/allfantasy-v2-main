@@ -13,7 +13,7 @@ export const SOCIAL_PULSE_SIGNAL_VALUES = [
   "idp_scarcity",
 ] as const
 
-export const SocialPulseSignalSchema = z.enum(SOCIAL_PULSE_SIGNAL_VALUES)
+const SocialPulseSignalSchema = z.enum(SOCIAL_PULSE_SIGNAL_VALUES)
 
 export const SocialPulseRequestSchema = z.object({
   sport: z.enum(["NFL", "NBA"]),
@@ -42,6 +42,5 @@ export const SocialPulseResponseSchema = z.object({
   sources: z.array(z.string().min(1)).max(20).optional(),
 })
 
-export type SocialPulseRequest = z.infer<typeof SocialPulseRequestSchema>
 export type SocialPulseResponse = z.infer<typeof SocialPulseResponseSchema>
 export type SocialPulseSignal = z.infer<typeof SocialPulseSignalSchema>

@@ -66,7 +66,6 @@ export function TournamentLeagueHome({ leagueId }: { leagueId: string }) {
 
   const accentColor = config.theme?.accentColor ?? undefined
   const hasBanner = Boolean(config.theme?.bannerUrl)
-  const themePack = config.theme?.themePack ?? 'default'
 
   return (
     <div

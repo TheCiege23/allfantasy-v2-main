@@ -296,7 +296,7 @@ export async function POST(req: Request) {
       "These insights are based on bracket seeds and current pool pick distribution. They are not guarantees of any outcome.",
     advisoryOnly,
     note: advisoryOnly
-      ? "Tournament is locked. AI output is advisory-only and intended to support your decisions, not replace them."
+      ? "Tournament is locked. Chimmy output is advisory-only and intended to support your decisions, not replace them."
       : undefined,
   })
 }

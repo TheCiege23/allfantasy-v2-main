@@ -5,6 +5,7 @@
  *        Immediately applies waiver penalties for designated rosters.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { Prisma } from '@prisma/client'
@@ -78,7 +79,7 @@ export async function POST(
     isBigBrotherLeague(leagueId),
   ])
   if (!isBB) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })
-  if (!league || league.userId !== userId) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!league || !(await canCommissionerAct(leagueId, userId, 'league'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const config = await getBigBrotherConfig(leagueId)
   if (!config) return NextResponse.json({ error: 'Config not found' }, { status: 500 })

@@ -30,7 +30,7 @@ import { CommissionerFanCredSetupNotice } from "@/components/legal/CommissionerF
  * left to imply a protection it does not provide.
  */
 
-export type PlayoffSettingsModalProps = {
+type PlayoffSettingsModalProps = {
   view: PlayoffChallengeView
   canAdmin: boolean
   onClose: () => void

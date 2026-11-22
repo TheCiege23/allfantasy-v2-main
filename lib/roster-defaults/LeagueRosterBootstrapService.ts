@@ -5,7 +5,6 @@
 import type { LeagueSport } from '@prisma/client'
 import { getRosterTemplateForLeague, resolveLeagueRosterConfig } from '@/lib/multi-sport/MultiSportRosterService'
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
-import { leagueSportToSportType } from '@/lib/multi-sport/SportConfigResolver'
 
 export interface BootstrapResult {
   leagueId: string

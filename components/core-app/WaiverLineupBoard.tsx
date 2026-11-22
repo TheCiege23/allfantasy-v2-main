@@ -1,6 +1,7 @@
 'use client'
 
 import PlayerName from '@/components/core-app/player-card/PlayerName'
+import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/screens/DynastyRosterMarkers'
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -15,6 +16,10 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
+import { crowdLine } from '@/lib/waivers/waiverCrowdLine'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { waiverPick, type WaiverPick } from '@/lib/core-app/waiversGuide'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -55,14 +60,22 @@ export type WaiverLineupBoardProps = {
    * of the order, so the list says what that costs against what waiting costs — facts, not a verdict.
    */
   rollingPriority?: { priority: number; leagueRosters: number } | null
+  /**
+   * The page headline reads the board's top row (2026-11-13 guide): called once the board loads, or
+   * fails. One read, shared — the headline never fetches a second copy of the wire.
+   */
+  onPick?: (pick: WaiverPick) => void
 }
 
-export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null }: WaiverLineupBoardProps) {
+export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null, onPick }: WaiverLineupBoardProps) {
+  const guide = useMessages(waiversGuideMessages)
   const [board, setBoard] = useState<WaiverBoard | null>(null)
   const [failed, setFailed] = useState(false)
   /* The filter bar: a name search and one position chip at a time, over the ranked adds only. */
   const [query, setQuery] = useState('')
   const [pos, setPos] = useState<string | null>(null)
+  /* Phone only: the coverage notes fold behind one button (the stylesheet decides; see af-waivers.css). */
+  const [notesOpen, setNotesOpen] = useState(false)
   const { data: intelResponse } = useWaiverIntel(leagueId, faab != null)
   const bidQuotes = intelResponse && intelResponse.supported ? (intelResponse.intel?.bidQuotes ?? null) : null
   /*
@@ -93,11 +106,21 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         if (!r.ok) throw new Error(String(r.status))
         return (await r.json()) as WaiverBoard
       })
-      .then((b) => alive && setBoard(b))
-      .catch(() => alive && setFailed(true))
+      .then((b) => {
+        if (!alive) return
+        setBoard(b)
+        onPick?.(waiverPick(b))
+      })
+      .catch(() => {
+        if (!alive) return
+        setFailed(true)
+        // A failed board removes itself; the headline then says only what the page is for.
+        onPick?.({ kind: 'unranked' })
+      })
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onPick is a callback, not an input to the read
   }, [leagueId, out])
 
   // Bring the highlighted add into view once the board has drawn him.
@@ -145,13 +168,10 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         <h2 className="af-label">
           {m.worthAdding} <TopicTip topic="worthAdding" />
         </h2>
-        {board.state === 'ok' && board.currentLineupPoints != null ? (
-          <span className="af-wv-section-note af-num">
-            {/* The BEST lineup your roster can field — not the one set on the platform. */}
-            {m.yourBestLineup} {board.currentLineupPoints}
-            {perGame ? m.perGame : board.week ? m.weekSuffix(board.week) : ''}
-          </span>
-        ) : null}
+        {/*
+          "your best lineup 133.7 · wk 9" stood here. Every row's "+N" is already against that lineup, so
+          the total was a second number to decode (2026-11-13 guide) — the "?" above explains the basis.
+        */}
       </div>
 
       {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} /> : null}
@@ -168,6 +188,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           )}
         </p>
       ) : (
+        <DynastyMarkersScope markers={board.dynastyMarkers}>
         <WaiverFilteredList candidates={board.candidates} query={query} pos={pos} onQuery={setQuery} onPos={setPos}>
           {(shown) => (
         <ul className="af-wlb-list">
@@ -187,6 +208,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                 {c.position ?? '—'}
               </span>
               <span className="af-wlb-who">
+                {/* Dynasty leagues: age / ROOKIE chips after the name (renders the name alone otherwise). */}
+                <DynastyNameLine markerKey={c.sleeperId}>
                 <span className="af-wlb-name">
                   {/*
                     Opens the player card in this league's context (handoff STATE 7). Outside the
@@ -203,22 +226,23 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                     leagueId={leagueId}
                   />
                 </span>
+                </DynastyNameLine>
                 <span className="af-wlb-meta">
                   <span className="af-wlb-meta-pos">{c.position ?? '—'} · </span>
-                  {c.team ? `${c.team} · ` : ''}{m.proj}{' '}
-                  <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
-                  {/* AllFantasy's own engine, beside the provider's figure. */}
-                  {c.afProjectedPoints != null ? (
-                    <>
-                      {' · '}
-                      <span
-                        className="af-wlb-af af-num"
-                        title={m.afEngineTitle}
-                      >
-                        AF {c.afProjectedPoints.toFixed(1)}
-                      </span>
-                    </>
-                  ) : null}
+                  {c.team ? `${c.team} · ` : ''}
+                  {/* One unit: the chips after it must not leave "proj" at a line end without its number. */}
+                  {/*
+                    ONE projection on the row (2026-11-13 guide): "proj 11.1 · AF 11.8" made the reader
+                    pick between two numbers that rank nothing. The ranking runs on `projectedPoints`;
+                    AllFantasy's own figure stays one hover away, in the title.
+                  */}
+                  <span
+                    className="af-wlb-proj"
+                    title={c.afProjectedPoints != null ? guide.afTitle(c.afProjectedPoints.toFixed(1)) : undefined}
+                  >
+                    {m.proj}{' '}
+                    <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
+                  </span>
                   {/*
                     ⚠ A FORM NUMBER IS BACKWARD-LOOKING AND SAYS SO. It is a recency-weighted mean
                     of what he has actually scored here, used only where no projection feed covers
@@ -242,6 +266,36 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                       {m.seasonRateChip}
                     </span>
                   ) : null}
+                  {/* A league-value-board add carries what it rests on (games, or at-bats / innings); thin is flagged. */}
+                  {c.sample ? (
+                    <span className="af-wlb-chip" title={m.gamesTitle} data-thin={c.sample.thin ? 'true' : undefined}>
+                      {m.sampleChip(c.sample.kind, c.sample.count, c.sample.thin)}
+                    </span>
+                  ) : null}
+                  {/*
+                    How synced Sleeper leagues see him (NFL only): the share that roster him and how
+                    many added him this week. The population is named in each title — these are
+                    leagues synced to AllFantasy, not all of Sleeper — and below five leagues the row
+                    shows nothing rather than a share of two.
+                  */}
+                  {(() => {
+                    const crowd = crowdLine(board.crowd, c.sleeperId)
+                    if (!crowd) return null
+                    return (
+                      <>
+                        {crowd.rosteredPct != null ? (
+                          <span className="af-wlb-crowd af-num" data-kind="rostered" title={m.rosteredTitle(crowd.syncedLeagues)}>
+                            {m.rosteredChip(crowd.rosteredPct)}
+                          </span>
+                        ) : null}
+                        {crowd.addedIn != null ? (
+                          <span className="af-wlb-crowd af-num" data-kind="added" title={m.addedTitle(crowd.addedIn, crowd.activeLeagues)}>
+                            {m.addedChip(crowd.addedIn)}
+                          </span>
+                        ) : null}
+                      </>
+                    )
+                  })()}
                   {/*
                     The bid, from the Waiver intelligence rule — the only bid source on this
                     screen. A player that rule has no market value for gets no figure, never a
@@ -266,11 +320,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
               <span className="af-wlb-over">
                 {c.displaces ? (
                   <>
-                    {m.over} {c.displaces.name}{' '}
-                    <span className="af-num">
-                      ({c.displaces.projectedPoints.toFixed(1)}
-                      {c.displaces.afProjectedPoints != null ? ` · AF ${c.displaces.afProjectedPoints.toFixed(1)}` : ''})
-                    </span>
+                    {guide.replaces} {c.displaces.name}{' '}
+                    <span className="af-num">({c.displaces.projectedPoints.toFixed(1)})</span>
                   </>
                 ) : (
                   // No incumbent to name; a blank here would read as a bug.
@@ -282,6 +333,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         </ul>
           )}
         </WaiverFilteredList>
+        </DynastyMarkersScope>
       )}
 
       {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (
@@ -292,11 +344,25 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         Coverage rides with the ranking. A board built from a third of the wire is a different
         claim from one built off all of it, and nothing else on screen would say which.
       */}
-      {board.notes.map((n) => (
-        <p key={n} className="af-wlb-note">
-          {copy(n)}
-        </p>
-      ))}
+      {board.notes.length > 0 ? (
+        <button
+          type="button"
+          className="af-wlb-notes-toggle"
+          aria-expanded={notesOpen}
+          aria-controls="af-wlb-notes"
+          onClick={() => setNotesOpen((open) => !open)}
+        >
+          {notesOpen ? guide.hideWhyNotListed : guide.whyNotListed}
+        </button>
+      ) : null}
+      <div className="af-wlb-notes" id="af-wlb-notes" data-open={notesOpen || undefined}>
+        {board.notes.map((n) => (
+          <p key={n} className="af-wlb-note">
+            {copy(n)}
+          </p>
+        ))}
+      </div>
+      {/* No "Why it matters" (2026-11-14): the list's GAIN column already says it is ranked by what each player adds. */}
     </section>
   )
 }
@@ -344,6 +410,8 @@ export function WaiverFilteredList({
     (c) => (pos == null || c.position === pos) && (q === '' || c.name.toLowerCase().includes(q)),
   )
   const showBar = candidates.length >= 3
+  /* The "All" chip's id: no position is spelled like this. */
+  const ALL_POSITIONS = '__all__'
   return (
     <>
       {showBar ? (
@@ -357,23 +425,20 @@ export function WaiverFilteredList({
             aria-label={m.searchLabel}
           />
           {positions.length > 1 ? (
-            <div className="af-wlb-chips">
-              <button type="button" className="af-wlb-chip-btn" aria-pressed={pos == null} onClick={() => onPos(null)}>
-                {m.allPositions}
-              </button>
-              {positions.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="af-wlb-chip-btn"
-                  data-pos={posKey(p)}
-                  aria-pressed={pos === p}
-                  onClick={() => onPos(pos === p ? null : p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            /*
+              The shared FilterChips (components/core-app/primitives): one pressed pill is the position.
+              Tapping the pressed one again clears it, as before. `data-pos` keeps the position colour.
+            */
+            <FilterChips
+              className="af-wlb-chips"
+              ariaLabel={m.positionFilterLabel}
+              value={pos ?? ALL_POSITIONS}
+              onChange={(next) => onPos(next === ALL_POSITIONS || next === pos ? null : next)}
+              options={[
+                { id: ALL_POSITIONS, label: m.allPositions },
+                ...positions.map((p) => ({ id: p, label: p, data: { pos: posKey(p) } })),
+              ]}
+            />
           ) : null}
           {shown.length !== candidates.length ? (
             <span className="af-wlb-count af-num" aria-live="polite">

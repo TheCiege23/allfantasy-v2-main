@@ -63,7 +63,7 @@ const STROKE = {
  * Bar controls that are not nav destinations: the league-first bar's Chimmy, Play and Me, and the
  * More button. They used unicode marks (✦ ⊕ ◉ ⋯) beside drawn destination icons on the same bar.
  */
-export type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
+type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
 
 const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
   /* House. */
@@ -165,6 +165,13 @@ const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
       <circle cx="8" cy="17.5" r="2" />
     </>
   ),
+  /* Gear — one league's own settings (2026-11-15). */
+  'league-settings': (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6M6 6l1.8 1.8M16.2 16.2 18 18M6 18l1.8-1.8M16.2 7.8 18 6" />
+    </>
+  ),
   /* Mortarboard — college prospects. */
   devy: (
     <>
@@ -250,6 +257,21 @@ const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
       <path d="M20 4.5v4.1h-4.1M4 19.5v-4.1h4.1" />
     </>
   ),
+  /* Calendar — the league's fixtures and rule dates. */
+  schedule: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4M7.5 13.5h2.5M14 13.5h2.5M7.5 17h2.5" />
+    </>
+  ),
+  /* Two opposed arrows with a plus — trades and waiver adds, the moves you can make. */
+  moves: (
+    <>
+      <path d="M4 8h12.5M13.5 5l3 3-3 3" />
+      <path d="M20 16H7.5M10.5 13l-3 3 3 3" />
+      <path d="M19.5 4v4M17.5 6h4" />
+    </>
+  ),
   /* Shield — the Defense Hub. */
   'defense-hub': (
     <>
@@ -319,4 +341,3 @@ export function CoreNavIcon({ navKey, size = 18 }: { navKey: CoreNavKey | ShellI
   )
 }
 
-export default CoreNavIcon

@@ -1,9 +1,9 @@
 import { callDecisionOS } from '../adapter/transport'
 import { isLiveReady } from '../liveReadiness'
 import { resolveActiveLeagueId } from '../resolveActiveLeagueId'
-import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import { readAnalyticsDataWindow } from '../analytics/dataWindow'
 import { readLeagueActivityTrend } from '@/lib/commissioner-mission-control/activityTrendReads'
+import { readManagerHighlights } from '@/lib/commissioner-mission-control/managerHighlightReads'
 import type { CommissionerErrorContract, CommissionerModuleId } from '../contracts'
 import type { SeverityTier } from '../tokens/colors'
 import type { DecisionOSClient, LeagueHealthSummary, ManagerHighlight, MissionControlKpis } from './types'
@@ -59,17 +59,6 @@ interface LeagueDeadlineShape {
   data: { nextActionableEvent: (WeekMilestoneShape | TimeMilestoneShape) | null }
 }
 
-interface ManagerSummaryShape {
-  managerId: string
-  retentionRisk: 'low' | 'medium' | 'high' | 'critical'
-  retentionRiskReasons: string[]
-  isInactive: boolean
-  inactivityWarning: string | null
-}
-interface LeagueManagersShape {
-  data: ManagerSummaryShape[]
-}
-
 // ── Presentation formatting of real data (not fabrication — every input is a
 // real, already-computed value; this only phrases it, matching exactly what
 // Mission Control's own demo.ts already hand-writes for its fixtures) ───────
@@ -101,14 +90,6 @@ function formatDeadlineLabel(event: WeekMilestoneShape | TimeMilestoneShape | nu
     return hoursAway <= 1 ? `${what} within the hour` : `${what} in ${hoursAway} hours`
   }
   return `${what} on ${event.at.slice(0, 10)}`
-}
-
-function toneFromRisk(retentionRisk: string, isInactive: boolean): 'positive' | 'risk' {
-  return isInactive || retentionRisk === 'high' || retentionRisk === 'critical' ? 'risk' : 'positive'
-}
-
-function calloutFromManager(m: ManagerSummaryShape): string {
-  return m.retentionRiskReasons[0] ?? m.inactivityWarning ?? 'Active and engaged'
 }
 
 /**
@@ -224,29 +205,27 @@ export const liveDecisionOSClient: DecisionOSClient = {
     if (!leagueId) {
       return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp }
     }
-
-    const { data, error } = await callDecisionOS<LeagueManagersShape>(
-      'mission-control',
-      `/api/v1/intelligence/league/managers?leagueId=${encodeURIComponent(leagueId)}`,
-    )
-    if (error || !data) {
-      return { data: null, error: error ?? notYetIntegrated('mission-control'), source: 'live', timestamp }
+    /*
+     * 🛑 NOT `/api/v1/intelligence/league/managers` — that profile route is retired and answers 410, so this card had
+     * no data at all. Highlights now come from the member-activity facts the Commissioner page shows
+     * (`managerHighlightReads.ts`).
+     */
+    const result = await readManagerHighlights(leagueId)
+    if (!result.ok) {
+      return {
+        data: null,
+        error: {
+          category: 'upstream_unavailable',
+          message: result.reason,
+          moduleId: 'mission-control',
+          retryable: true,
+          timestamp,
+        } satisfies CommissionerErrorContract,
+        source: 'live',
+        timestamp,
+      }
     }
-
-    const managers = data.data
-    const names = await resolveManagerDisplayNames(leagueId, managers.map((m) => m.managerId))
-    const highlights: ManagerHighlight[] = managers.map((m) => ({
-      id: m.managerId,
-      /*
-       * ⚠ THE FALLBACK USED TO BE `m.managerId`, WHICH PRINTED `sleeper:1267977501351628801`
-       * INTO THE MANAGER HIGHLIGHT CARD. A raw provider id is not a degraded name, it is a leak
-       * of an internal identifier onto a surface a commissioner shows their league.
-       */
-      managerName: names.get(m.managerId) ?? UNKNOWN_MANAGER_NAME,
-      callout: calloutFromManager(m),
-      tone: toneFromRisk(m.retentionRisk, m.isInactive),
-    }))
-    return { data: highlights, error: null, source: 'live', timestamp }
+    return { data: result.highlights, error: null, source: 'live', timestamp }
   },
 
   async getMissionControlKpis() {

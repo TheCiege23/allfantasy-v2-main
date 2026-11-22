@@ -146,16 +146,35 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const order = Array.isArray(object(nativeSnap.session).slotOrder) ? object(nativeSnap.session).slotOrder as Record<string, unknown>[] : [];
     const sourceSlotMap = object(providerSnap.slotToRosterId);
     const providerRosters = Array.isArray(providerSnap.observedSeasonRosters) ? providerSnap.observedSeasonRosters.map(object) : [];
+    // An imported draft records provider user ids (each pick's picked_by, each roster's owner_id that season)
+    // and usually no names, so the table read "100561289762" under Selected by and a bare roster number as
+    // the team (live /core, 2026-11-06). Those ids are matched to this league's managers: the person is the
+    // season's own owner, only the display name is current. Native drafts keep their recorded names.
+    const providerManagers = native ? new Map<string, { ownerName: string; teamName: string }>() : new Map((await prisma.leagueTeam.findMany({ where: { leagueId, platformUserId: { not: null } }, select: { platformUserId: true, ownerName: true, teamName: true }, take: 501 })).flatMap(t => t.platformUserId ? [[t.platformUserId, t] as const] : []));
+    // A pick imported with no metadata at all (Fantrax, ESPN, Yahoo, MFL, older Sleeper imports) records only the
+    // provider's team id in managerId. That id is this league's team externalId, so the team is named from it;
+    // without this the Receiving team column was blank for the whole draft. The name is the team's current one.
+    const teamsByExternalId = native ? new Map<string, { ownerName: string; teamName: string }>() : new Map((await prisma.leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, ownerName: true, teamName: true }, take: 501 })).map(t => [t.externalId, t] as const));
+    const bareTeamName = (managerId: string | null) => { const team = managerId ? teamsByExternalId.get(managerId) ?? providerManagers.get(managerId) : undefined; return string(team?.teamName) ?? string(team?.ownerName); };
+    const providerTeamName = (rosterId: string | null) => {
+        const owner = rosterId ? string(providerRosters.find(t => string(t.roster_id) === rosterId)?.owner_id) : null;
+        const team = owner ? providerManagers.get(owner) : undefined;
+        return string(team?.teamName) ?? string(team?.ownerName);
+    };
     const picks: ArchivePick[] = rows.map(r => {
         const meta = object(r.metadata), archive = object(object(r.pickMetadata).archive), player = object(meta.playerSnapshot), timing = object(archive.timing);
         const overall = number(native ? r.overall : r.pickNumber) ?? 0, round = number(r.round) ?? 0;
         const slot = choice.format === 'auction' ? null : number(native ? r.slot : meta.originalDraftSlot);
         const original = string(native ? r.originalRosterId : sourceSlotMap[String(slot)]) ?? (native ? string(archive.originalRosterId) : null);
-        const roster = string(native ? r.rosterId : meta.selectionRosterId);
+        // "Bare": the provider's team id in managerId is all that says who picked. True for a pick with no metadata, and
+        // for one whose metadata carries no selection roster (a Fantrax pick stores only the player's name there). A
+        // Sleeper pick with metadata is never bare: its roster comes from the recorded draft or not at all.
+        const bare = !native && string(meta.selectionRosterId) == null && (r.metadata == null || string(meta.provider) !== 'sleeper');
+        const roster = string(native ? r.rosterId : meta.selectionRosterId) ?? (bare ? string(r.managerId) : null);
         const id = string(r.playerId), resolved = id ? names.get(id) : null;
         const name = string(native ? r.playerName : player.name);
         const providerTeam = providerRosters.find(t => string(t.roster_id) === roster);
-        return { id: String(native ? r.id : r.draftId), overall, round, slot, originalRosterId: original, rosterId: roster, teamName: string(r.displayName) ?? (native ? string(order.find(e => String(e.rosterId) === roster)?.displayName) : string(object(providerTeam?.metadata).team_name)), actor: string(native ? r.ownerUserId : meta.providerPickedBy), playerId: id, playerName: name ?? resolved?.name ?? ('Player ' + (id ?? 'unknown')), position: string(native ? r.position : player.position) ?? resolved?.position ?? 'Unknown', club: string(native ? r.team : player.team), selectedAt: native ? iso(r.pickedAt) : null, source: string(r.source) ?? (native ? null : platform), keeper: r.source === 'keeper' || meta.isKeeper === true, amount: number(native ? r.amount : meta.auctionAmount), allowanceSeconds: number(archive.clockAllowanceSeconds), activeMs: number(timing.activeMs), ownerTime: timing.byOwner && typeof timing.byOwner === 'object' ? timing.byOwner as Record<string, number> : null, identityBasis: name ? 'Recorded at selection' : native ? 'Recorded native ID; display identity unavailable' : 'Current identity mapping by provider ID and sport' };
+        return { id: String(native ? r.id : r.draftId), overall, round, slot, originalRosterId: original, rosterId: roster, teamName: string(r.displayName) ?? (native ? string(order.find(e => String(e.rosterId) === roster)?.displayName) : string(object(providerTeam?.metadata).team_name)) ?? (bare ? bareTeamName(roster) : null), actor: string(native ? r.ownerUserId : meta.providerPickedBy), playerId: id, playerName: name ?? resolved?.name ?? ('Player ' + (id ?? 'unknown')), position: string(native ? r.position : player.position) ?? resolved?.position ?? 'Unknown', club: string(native ? r.team : player.team), selectedAt: native ? iso(r.pickedAt) : null, source: string(r.source) ?? (native ? null : platform), keeper: r.source === 'keeper' || meta.isKeeper === true, amount: number(native ? r.amount : meta.auctionAmount), allowanceSeconds: number(archive.clockAllowanceSeconds), activeMs: number(timing.activeMs), ownerTime: timing.byOwner && typeof timing.byOwner === 'object' ? timing.byOwner as Record<string, number> : null, identityBasis: name ? 'Recorded at selection' : native ? 'Recorded native ID; display identity unavailable' : 'Current identity mapping by provider ID and sport' };
     });
     const frozen = object(nativeSnap.context);
     const context = typeof frozen.sport === 'string' && typeof frozen.season === 'number' && Array.isArray(frozen.rosterSlots) ? frozen as unknown as PreparationContext : null;
@@ -176,9 +195,13 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         pick.onClockAt = iso(timing.openedAt);
         pick.originalTeamName = native
             ? string(order.find(t => string(t.rosterId) === pick.originalRosterId)?.displayName)
-            : string(object(providerRosters.find(t => string(t.roster_id) === pick.originalRosterId)?.metadata).team_name);
+            : string(object(providerRosters.find(t => string(t.roster_id) === pick.originalRosterId)?.metadata).team_name) ?? providerTeamName(pick.originalRosterId);
+        if (!native)
+            pick.teamName ??= providerTeamName(pick.rosterId);
         const recordedTeams = Array.isArray(nativeSnap.teams) ? nativeSnap.teams.map(object) : [];
-        pick.actorName = native && pick.actor ? string(recordedTeams.find(t => string(t.claimedByUserId) === pick.actor || string(t.platformUserId) === pick.actor)?.ownerName) : null;
+        pick.actorName = !pick.actor ? null : native
+            ? string(recordedTeams.find(t => string(t.claimedByUserId) === pick.actor || string(t.platformUserId) === pick.actor)?.ownerName)
+            : string(providerManagers.get(pick.actor)?.ownerName);
         const entry = pick.playerId ? entries.get(preparationPlayerKey(pick.playerName, pick.position, pick.playerId)) : null;
         pick.adp = entry?.adp ?? null;
         pick.adpDifference = entry ? pick.overall - entry.adp : null;
@@ -304,7 +327,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     let resultsObservedAt: string | null = null;
     let weeklyOutcomes:ReturnType<typeof import('./weeklyOutcomeModel').weeklyOutcomes>|undefined;
     if (choice.source === 'imported' && choice.sport === 'NFL') {
-        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
+        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = { ...observation.report, teams: observation.report.teams.map(t => t.name === 'Team ' + t.rosterId ? { ...t, name: providerTeamName(t.rosterId) ?? t.name } : t) }; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);

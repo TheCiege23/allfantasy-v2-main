@@ -1,5 +1,6 @@
 import { leagueForbidsTrades, tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import type { ChimmyDecisionKind } from './decisionAnswerContract'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 
 /**
  * Decisions a league's FORMAT rules out, before any engine runs.
@@ -33,14 +34,16 @@ import type { ChimmyDecisionKind } from './decisionAnswerContract'
  * maps `survivor_guillotine` onto its `guillotine` chassis. `resolveLeagueRules` keeps the
  * confirmed concept, so it can. It was caught before merge, by a cross-check against the catalog.
  */
-export type DecisionFormatInput = {
+type DecisionFormatInput = {
   leagueType: string | null
   isDynasty: boolean
   settings: unknown
   bestBallMode: boolean | null
+  leagueVariant?: string | null
+  guillotineMode?: boolean | null
 }
 
-export type DecisionFormatBlock = {
+type DecisionFormatBlock = {
   code: 'best_ball_auto_lineup' | 'trades_not_allowed'
   detail: string
   remedy: string
@@ -50,10 +53,13 @@ export type DecisionFormatBlock = {
  * The trade rule lives in `lib/league-rules/tradeLegality.ts`, shared with the Player Finder so the two
  * surfaces cannot disagree about whether a league trades. Re-exported for this module's callers.
  */
-export { leagueForbidsTrades, tradeBanReason }
+export { leagueForbidsTrades }
 
 export function decisionFormatBlock(league: DecisionFormatInput, kind: ChimmyDecisionKind): DecisionFormatBlock | null {
-  if (kind === 'lineup' && league.bestBallMode === true) {
+  // Classic Best Ball (the column) OR best ball Guilly (`guillotineMode`/`leagueType: 'guillotine'` +
+  // `settings.best_ball`). The column alone answered "start/sit is yours" in a Guilly league whose lineup
+  // the optimizer picks and whose lineup saves are refused (lib/bestball/bestBallLeagueState.ts).
+  if (kind === 'lineup' && bestBallLineupSetsItself(league)) {
     return {
       code: 'best_ball_auto_lineup',
       detail: 'This is a Best Ball league: your highest-scoring players count automatically each week, so there is no start/sit or lineup move to make.',

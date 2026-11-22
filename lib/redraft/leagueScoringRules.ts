@@ -21,6 +21,7 @@ import {
 import type { ScoringCategory } from '@/lib/sportConfig/types'
 import { bridgeUiRulesToEngineCategoryPoints } from '@/lib/nfl-scoring/scoringKeyBridge'
 import { importedNcaafScoring } from './importedNcaafScoring'
+import { parseFantraxSoccerScoring, type FantraxSoccerScoring } from '@/lib/league-import/fantrax/fantraxScoring'
 import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 
 export function applyScoringPresetToRecPoints(
@@ -71,13 +72,18 @@ export type LeagueScoringRules = {
   categories: ScoringCategory[]
   /** Per-category point overrides; a category absent here scores its `defaultPoints`. */
   overrides: Record<string, number>
+  fantraxSoccer?: FantraxSoccerScoring
 }
 
 /**
  * The scoring `buildLeagueStatScorer` applies. Null when the sport has no config.
  * `settings: null` resolves the sport's defaults (no league).
  */
-export function resolveLeagueScoringRules(league: { sport: string; settings: unknown }): LeagueScoringRules | null {
+export function resolveLeagueScoringRules(league: {
+  sport: string
+  settings: unknown
+  verifiedSoccerOwnGoals?: boolean
+}): LeagueScoringRules | null {
   const sport = resolveSportConfigKey(String(league.sport))
   const cfg = tryGetSportConfig(sport)
   if (!cfg) return null
@@ -96,6 +102,17 @@ export function resolveLeagueScoringRules(league: { sport: string; settings: unk
       : {}
   if (Object.keys(overrides).length === 0) {
     const settings = league.settings as Record<string, unknown> | null
+    const fantrax = settings?.fantrax_settings as { scoringSystem?: Record<string, unknown> | null } | undefined
+    if (cfg.sport === 'SOCCER' && fantrax && !storeSavedByPerson(settings?.soccer_scoring_config)) {
+      const scoring = parseFantraxSoccerScoring(fantrax.scoringSystem, league.verifiedSoccerOwnGoals)
+      if (scoring) {
+        const groups = Object.values(scoring.positionWeights)
+        categories = categories.filter(({ key }) => groups.some((weights) => weights[key] !== undefined))
+        // Any stat absent from a Fantrax position group scores zero, regardless of native defaults.
+        const zeroes = Object.fromEntries(categories.map(({ key }) => [key, 0]))
+        return { categories, overrides: zeroes, fantraxSoccer: scoring }
+      }
+    }
     const savedPanel = storeSavedByPerson(settings?.ncaaf_scoring_config)
     const imported = savedPanel ? null : importedNcaafScoring(cfg.sport, settings, cfg.scoringCategories)
     // Explicit commissioner edits retain precedence. Untouched seeded panel defaults cannot

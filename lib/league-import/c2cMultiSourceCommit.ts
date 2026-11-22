@@ -20,7 +20,7 @@ function collegeSportFor(primary: 'NFL' | 'NBA'): 'NCAAF' | 'NCAAB' {
   return primary === 'NFL' ? 'NCAAF' : 'NCAAB'
 }
 
-export interface C2CCommitInput {
+interface C2CCommitInput {
   appUserId: string
   leagueName: string
   sport: 'NFL' | 'NBA'
@@ -31,7 +31,7 @@ export interface C2CCommitInput {
   collegeSource: C2CImportSource
 }
 
-export interface C2CCommitResult {
+interface C2CCommitResult {
   leagueId: string
   rostersCreated: number
   playerStatesCreated: number

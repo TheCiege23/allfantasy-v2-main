@@ -43,7 +43,9 @@ describe('R3.1 — IDP/kicker value slice', () => {
     // must cost nothing — checked on ROSTER SLOTS, before any load.
     const s = await loadIdpKickerValueSlice({ ...base, rosterPositions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'BN'] })
     expect(s.present).toBe(false)
-    expect(s.gap?.reason).toBe('no_producer')
+    // `not_requested`, not `no_producer`: a league that rosters neither could never want them, and a listed gap
+    // costs every answer confidence (re-score 2026-11-17).
+    expect(s.gap?.reason).toBe('not_requested')
     expect(loadVorp).not.toHaveBeenCalled()
     expect(resolveKicker).not.toHaveBeenCalled()
     expect(loadValues).not.toHaveBeenCalled()
@@ -151,6 +153,8 @@ describe('R3.1 — roster extractors', () => {
       sport: 'NFL', leagueId: 'L1', rosterPlayerIds: ['p1'],
       rosterPositions: rosterPositionsFrom(null), numTeams: 12, isDynasty: false,
     })
-    expect(s.gap?.reason).toBe('no_producer')
+    // `not_requested`, not `no_producer`: a league that rosters neither could never want them, and a listed gap
+    // costs every answer confidence (re-score 2026-11-17).
+    expect(s.gap?.reason).toBe('not_requested')
   })
 })

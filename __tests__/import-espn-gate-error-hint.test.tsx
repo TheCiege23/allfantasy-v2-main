@@ -68,7 +68,9 @@ describe('ImportV4 — ESPN gate error hint', () => {
     expect(hint.textContent).toMatch(/Save ESPN cookies/)
     expect(hint.textContent).not.toMatch(/Connect ESPN/)
     // The label the hint names must be on screen.
-    expect(await screen.findByRole('button', { name: /Manual fallback/ })).toBeTruthy()
+    // The panel re-reads its status after the failed preview remounts it; 1s (the default) ran out
+    // under a loaded parallel run once the import screen gained its guide column.
+    expect(await screen.findByRole('button', { name: /Manual fallback/ }, { timeout: 5000 })).toBeTruthy()
   })
 
   it('names "Update cookies" when ESPN is already connected', async () => {
@@ -85,7 +87,7 @@ describe('ImportV4 — ESPN gate error hint', () => {
     const hint = document.querySelector('.af-im-error-here')!
     expect(hint.textContent).toMatch(/Update cookies/)
     // The panel re-checks its status after an error; the control returns once that check ends.
-    expect(await screen.findByRole('button', { name: 'Update cookies' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Update cookies' }, { timeout: 5000 })).toBeTruthy()
     expect(captureMock).toHaveBeenCalledWith('import_gate_result', {
       provider: 'espn',
       stage: 'preview',

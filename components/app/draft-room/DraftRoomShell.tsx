@@ -1,12 +1,13 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar, MoreHorizontal } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
 import type { TraySnap } from '@/lib/draft-room/mobileTraySnap'
 import { DraftMobileTray } from './DraftMobileTray'
 import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
+import type { LeagueAccent } from '@/lib/draft-room/leagueAccent'
 import './draft-mobile.css'
 import './draft-desktop.css'
 import './draft-workspace.css'
@@ -20,27 +21,49 @@ const DOCK_SIZE_PREF_KEY = 'af:draft-premium-dock-size'
  * - `half`: board and panel split the screen (default).
  * - `tall`: the panel takes most of the screen, the board keeps a strip at the top.
  */
-export type DraftDockSize = 'min' | 'half' | 'tall'
+type DraftDockSize = 'min' | 'half' | 'tall'
 
 const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
   min: 'min-h-0 max-h-[unset] flex-1',
-  half: 'max-h-[min(50vh,600px)]',
+  // Board gets the larger share by default (2026-11-19): it was capped at 50vh and the tray
+  // under it took most of the screen.
+  half: 'max-h-[min(58vh,760px)]',
   tall: 'max-h-[min(28vh,320px)]',
 }
 
 export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' | 'roster' | 'keepers' | 'chat'
 
-export type DraftRoomShellProps = {
+type DraftRoomShellProps = {
   /**
    * Premium ambient gradient for `/draft/[id]/snake` redraft room. `dynasty` is the dynasty
    * skin: the same layout on the ink/vault ground. Redraft rooms never receive it.
    */
   surfaceVariant?: 'default' | 'redraft_snake' | 'dynasty'
+  /**
+   * Room v2 league-type accent. Sets `--af-league-accent` on the room (the on-the-clock tile reads
+   * it) and draws a thin accent stripe under the header. Omitted: the room's cyan, no stripe.
+   */
+  leagueAccent?: LeagueAccent | null
   /** Reserve usable desktop pool space for drafts with a pick-order board. */
   playerSpacePriority?: boolean
   topBar: ReactNode
   managerStrip: ReactNode
   auctionStrip?: ReactNode
+  /**
+   * Offline / auto-pick / mock explanation. Rendered OUTSIDE the board's scroll zone: the board
+   * scrolls itself to the pick on the clock, which pushed a banner placed inside it above the
+   * visible area on desktop (measured 2026-11-15: top at -28px with scrollTop 146).
+   */
+  modeBanner?: ReactNode
+  /** Keeper roll call. Same placement and reason as `modeBanner`: outside the board's scroll zone. */
+  keeperStrip?: ReactNode
+  /** Long-pick-clock / quiet-hours planning cards. Same placement and reason as `modeBanner`. */
+  pickClockStrip?: ReactNode
+  /**
+   * Phone only: auction bid controls pinned above the tray on the Board tab, so Bid is never
+   * scrolled off-screen or under a floating button (2026-11-15).
+   */
+  mobileBidDock?: ReactNode
   draftBoard: ReactNode
   playerPanel: ReactNode
   queuePanel: ReactNode
@@ -60,7 +83,7 @@ export type DraftRoomShellProps = {
    * Optional bottom dock when `bottomBar` is provided.
    */
   layout?: 'classic' | 'premium'
-  /** Left column — your team / AI badges (desktop premium) */
+  /** Left column — your team / Chimmy badges (desktop premium) */
   teamPanel?: ReactNode
   /** Center column — usually player pool + queue stacked */
   centerColumn?: ReactNode
@@ -92,6 +115,7 @@ const MOBILE_TABS = [
 
 export function DraftRoomShell({
   surfaceVariant = 'default',
+  leagueAccent = null,
   playerSpacePriority = false,
   topBar,
   managerStrip,
@@ -106,6 +130,10 @@ export function DraftRoomShell({
   mobileStickyBar,
   mobileDockAccessory,
   auctionStrip,
+  modeBanner,
+  keeperStrip,
+  pickClockStrip,
+  mobileBidDock,
   mobileTab,
   onMobileTabChange,
   layout = 'classic',
@@ -114,9 +142,22 @@ export function DraftRoomShell({
   bottomBar,
 }: DraftRoomShellProps) {
   const { t } = useLanguage()
-  const [dockSize, setDockSize] = useState<DraftDockSize>(playerSpacePriority ? 'tall' : 'half')
+  // Split by default everywhere (2026-11-19). Snake rooms used to open on 'tall', which left the
+  // board a ~270px strip at 1440x960 (reported: the tray took most of the screen). A saved
+  // choice still wins; `playerSpacePriority` only marks the surface now.
+  const [dockSize, setDockSize] = useState<DraftDockSize>('half')
   const bottomDockExpanded = dockSize !== 'min'
   const [boardHidden, setBoardHidden] = useState(false)
+  const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const viewMenuRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!viewMenuOpen) return
+    const onDown = (e: PointerEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) setViewMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [viewMenuOpen])
   const boardSize = boardHidden ? 'hidden' : dockSize === 'tall' ? 'compact' : 'balanced'
   // iOS's keyboard changes the visual viewport independently of layout viewport units.
   // Keep the bottom navigation above it, without blocking pinch zoom.
@@ -220,8 +261,11 @@ export function DraftRoomShell({
       (tab.id !== 'roster' || rosterPanel) &&
       (tab.id !== 'keepers' || keeperPanel)
   )
-  const primaryMobileTabs = ['players', 'board', 'queue', 'roster', 'chat'].flatMap(id => visibleTabs.filter(tab => tab.id === id))
-  const secondaryMobileTabs = visibleTabs.filter((tab) => !['board', 'players', 'queue', 'roster', 'chat'].includes(tab.id))
+  /* Chimmy is a tab of its own on phones (2026-11-19), as in the desktop dock; "More" now appears
+     only when a league has extra tabs (keepers). */
+  const PRIMARY_MOBILE = ['players', 'board', 'queue', 'roster', 'helper', 'chat']
+  const primaryMobileTabs = PRIMARY_MOBILE.flatMap(id => visibleTabs.filter(tab => tab.id === id))
+  const secondaryMobileTabs = visibleTabs.filter((tab) => !PRIMARY_MOBILE.includes(tab.id))
 
   /**
    * D.6 — when `layout='premium'` is set, we render the premium grid even if
@@ -250,11 +294,23 @@ export function DraftRoomShell({
       data-board-size={boardSize}
       data-player-space-priority={playerSpacePriority ? 'true' : 'false'}
       className={`draft-touch-room af-draft-dark ${surfaceClass}`}
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        ...(leagueAccent ? ({ '--af-league-accent': leagueAccent.color } as CSSProperties) : null),
+      }}
       data-testid="draft-room-shell"
       data-dynasty-skin={surfaceVariant === 'dynasty' ? 'true' : undefined}
+      data-league-type={leagueAccent?.concept}
     >
       {topBar}
+      {leagueAccent ? (
+        <div
+          aria-hidden
+          className="h-0.5 shrink-0"
+          style={{ background: `linear-gradient(90deg, ${leagueAccent.color}, color-mix(in srgb, ${leagueAccent.color} 30%, transparent) 55%, transparent)` }}
+          data-testid="draft-league-accent-strip"
+        />
+      ) : null}
       {managerStrip}
 
       {/* Desktop — premium 4-zone + bottom dock */}
@@ -272,24 +328,20 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>
           )}
-          <div className="draft-board-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0a1425] px-3"
-            data-testid="draft-board-size-controls">
-            <span className="text-sm font-semibold text-slate-200">Draft workspace</span>
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              Board
-              <select aria-label="Draft board size" data-testid="draft-board-size"
-                value={boardSize} onChange={event => {
-                  const value = event.target.value as 'compact' | 'balanced' | 'hidden'
-                  persistDockSize(value === 'balanced' ? 'half' : 'tall')
-                  if (value === 'hidden') {
-                    setBoardHidden(true)
-                    try { localStorage.setItem('af:draft-board-size', value) } catch { /* optional */ }
-                  }
-                }} className="min-h-9 rounded-lg border border-white/20 bg-[#111f34] px-2 text-sm text-white">
-                <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="hidden">Hidden</option>
-              </select>
-            </label>
-          </div>
+          {/*
+            Room v2 (2026-11): the "Draft workspace" row and its Compact / Balanced / Hidden picker
+            are gone. They duplicated the Board / Half / Players control under the board; "Hidden"
+            lives there now as "Hide board", saved under the same key.
+          */}
+          {modeBanner ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
+          ) : null}
+          {pickClockStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-pick-clock-slot">{pickClockStrip}</div>
+          ) : null}
+          {keeperStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-keeper-strip-slot">{keeperStrip}</div>
+          ) : null}
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
               Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
@@ -322,14 +374,46 @@ export function DraftRoomShell({
           {/* D.6.2 — collapse arrow toggle between the board and the dock.
               Two stacked chevrons that flip direction based on state. Click → toggle. */}
           {allowPremiumDockCollapse ? (
-            <div className="flex shrink-0 items-center justify-center border-b border-white/[0.06] bg-[#081022] py-1">
+            /*
+              ⚠ WITH THE BOARD HIDDEN THIS BAR SITS RIGHT UNDER THE HEADER, where the on-the-clock
+              "You're up" alert floats (fixed, centred, lg:top-24). Centred, the alert covered Board /
+              Half / Players, so the board could not be brought back until the alert was dismissed —
+              e2e/draft-room-visual caught it. The control moves to the right end while the board is
+              hidden; with the board showing it stays centred.
+            */
+            <div
+              className={cn(
+                'relative flex h-6 shrink-0 items-center border-b border-white/[0.06] bg-[#081022]',
+                boardHidden ? 'justify-end pr-3' : 'justify-center',
+              )}
+              data-testid="draft-dock-size-bar"
+              data-board-hidden={boardHidden ? 'true' : 'false'}
+            >
               {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
                   own divider bar; floating across the edge, the panel below clipped it. */}
+              {/* One small "View" menu on a 20px divider (2026-11-19). The four buttons used to sit
+                  on their own 38px bar, which came straight out of the board. */}
+              <div className="relative" ref={viewMenuRef}>
+              <button
+                type="button"
+                onClick={() => setViewMenuOpen((v) => !v)}
+                aria-expanded={viewMenuOpen}
+                aria-haspopup="true"
+                data-testid="draft-dock-view-menu"
+                title="Change how much of the screen the board and the player panel get"
+                className="inline-flex h-5 items-center gap-1 rounded-full border border-white/15 bg-[#0a1228] px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+              >
+                <span className="h-[3px] w-5 rounded-full bg-white/30" aria-hidden />
+                {boardHidden ? 'Players only' : dockSize === 'min' ? 'Board only' : dockSize === 'tall' ? 'More players' : 'Split'}
+                <ChevronDown className={cn('h-3 w-3 transition-transform', viewMenuOpen && 'rotate-180')} aria-hidden />
+              </button>
+              {viewMenuOpen ? (
               <div
                 role="group"
                 aria-label="Player panel size"
-                className="inline-flex items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]"
+                className="absolute left-1/2 top-6 z-[70] inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/15 bg-[#0a1228] p-0.5 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
                 data-testid="draft-dock-size-control"
+                onClick={() => setViewMenuOpen(false)}
               >
                 <button
                   type="button"
@@ -364,16 +448,35 @@ export function DraftRoomShell({
                   type="button"
                   onClick={() => persistDockSize('tall')}
                   data-testid="draft-dock-size-tall"
-                  aria-pressed={dockSize === 'tall'}
+                  aria-pressed={dockSize === 'tall' && !boardHidden}
                   title="Give the player pool and chat most of the screen"
                   className={cn(
                     'inline-flex h-7 items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
-                    dockSize === 'tall' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                    dockSize === 'tall' && !boardHidden ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
                   )}
                 >
                   <ChevronUp className="h-3.5 w-3.5" aria-hidden />
                   Players
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    persistDockSize('tall')
+                    setBoardHidden(true)
+                    try { window.localStorage.setItem('af:draft-board-size', 'hidden') } catch { /* optional */ }
+                  }}
+                  data-testid="draft-board-hide"
+                  aria-pressed={boardHidden}
+                  title="Hide the board and give the whole screen to the players"
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    boardHidden ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  Hide board
+                </button>
+              </div>
+              ) : null}
               </div>
             </div>
           ) : null}
@@ -478,6 +581,15 @@ export function DraftRoomShell({
       ) : (
         <div className="hidden min-h-0 flex-1 flex-col overflow-hidden md:flex" data-testid="draft-desktop-layout">
           {auctionStrip && <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>}
+          {modeBanner ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
+          ) : null}
+          {pickClockStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-pick-clock-slot">{pickClockStrip}</div>
+          ) : null}
+          {keeperStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-keeper-strip-slot">{keeperStrip}</div>
+          ) : null}
           <div className="min-h-[180px] flex-[2] overflow-auto overscroll-contain [overflow-anchor:none] border-b border-white/8 bg-[#050c1d]">
             {draftBoard}
           </div>
@@ -511,7 +623,10 @@ export function DraftRoomShell({
           children like the snake draft board can't bleed horizontal scroll out to
           the whole page. The board wraps its own children in `overflow-x-auto`.
         */}
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth" data-testid="draft-mobile-scroll-root">
+        <div
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth ${mobileBidDock && mobileTab === 'board' ? 'pb-20' : ''}`}
+          data-testid="draft-mobile-scroll-root"
+        >
           {mobileStickyBar && (
             <div className="sticky top-0 z-10 shrink-0 border-b border-white/10 bg-[#040915]/95 backdrop-blur-sm">
               {mobileStickyBar}
@@ -520,6 +635,9 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/10 bg-[#050c1d]">{auctionStrip}</div>
           )}
+          {modeBanner ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{modeBanner}</div> : null}
+          {pickClockStrip ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{pickClockStrip}</div> : null}
+          {keeperStrip ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{keeperStrip}</div> : null}
           <div
             className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth p-2 sm:p-3"
             data-testid="draft-mobile-board-scroll"
@@ -538,6 +656,7 @@ export function DraftRoomShell({
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
+          dock={mobileTab === 'board' ? mobileBidDock : null}
           onSnapChange={setTraySnap}
           chrome={
             <>

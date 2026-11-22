@@ -8,6 +8,7 @@ import {
   type ImportProvider,
   type C2CImportSide,
 } from '@/lib/league-import/types'
+import { getImportProviderLabel, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 
 const PRO_PROVIDERS: ImportProvider[] = ['sleeper', 'espn', 'yahoo', 'fleaflicker', 'mfl']
 const COLLEGE_PROVIDERS: ImportProvider[] = ['fantrax']
@@ -261,7 +262,8 @@ export function C2CImportClient() {
     }
   }
 
-  const validProviders = IMPORT_PROVIDERS
+  // Only platforms a real user can import from today (provider-ui-config) — Yahoo is coming soon.
+  const validProviders = IMPORT_PROVIDERS.filter((p) => isImportProviderAvailable(p))
 
   return (
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">
@@ -272,8 +274,8 @@ export function C2CImportClient() {
           </p>
           <h1 className="mt-1 text-2xl font-black">Import a Campus to Canton league</h1>
           <p className="mt-2 max-w-2xl text-sm text-white/60">
-            Import pro rosters from one platform (Sleeper, ESPN, Yahoo…) and college rosters from
-            another (Fantrax). We match managers by email and display name. You can cap how many
+            Import pro rosters from one platform ({PRO_PROVIDERS.filter((p) => isImportProviderAvailable(p)).map((p) => getImportProviderLabel(p)).join(', ')}) and college rosters from
+            another ({COLLEGE_PROVIDERS.filter((p) => isImportProviderAvailable(p)).map((p) => getImportProviderLabel(p)).join(', ')}). We match managers by email and display name. You can cap how many
             roster spots to bring in from each side before committing.
           </p>
         </header>

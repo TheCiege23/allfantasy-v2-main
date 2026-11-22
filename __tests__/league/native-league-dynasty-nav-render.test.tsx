@@ -58,9 +58,9 @@ describe('native league sidebar: Dynasty group', () => {
     expect(new Set(icons).size).toBe(3)
     expect(icons.join(' ')).not.toContain('circle-help')
     expect(buttons[1].getAttribute('aria-current')).toBe('page')
-    // Nothing dynasty is left in More tools.
-    const more = root.querySelector('.nl-sidebar [data-nav-group=more]')!
-    expect(more.textContent).not.toMatch(/Dynasty|Taxi|Picks/)
+    // Nothing dynasty is repeated among the league's own tabs.
+    const main = root.querySelector('.nl-sidebar [data-nav-group=league]')!
+    expect(main.textContent).not.toMatch(/Dynasty|Taxi|Picks/)
     // The section picker uses the same group.
     expect(root.querySelector('optgroup[label=Dynasty]')!.querySelectorAll('option')).toHaveLength(3)
   })
@@ -69,6 +69,6 @@ describe('native league sidebar: Dynasty group', () => {
     const root = sidebar(false)
     expect(root.querySelector('[data-nav-group=dynasty]')).toBeNull()
     expect(root.querySelector('optgroup[label=Dynasty]')).toBeNull()
-    expect([...root.querySelectorAll('.nl-sidebar .nl-nav-group h2')].map(h => h.textContent)).toEqual(['This league', 'More tools', 'Your record'])
+    expect([...root.querySelectorAll('.nl-sidebar .nl-nav-group h2')].map(h => h.textContent)).toEqual(['This league', 'Your record'])
   })
 })

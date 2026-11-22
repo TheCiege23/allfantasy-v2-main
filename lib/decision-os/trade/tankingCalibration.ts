@@ -12,7 +12,7 @@
 import type { TradeEvaluationReceipt } from './evaluateTrade'
 import { TANK_BENCH_VALUE_SHARE, TANK_LINEUP_DROP_SHARE } from './tradeReview'
 
-export type TankingSide = {
+type TankingSide = {
   /** Share of its starting lineup this side loses, 0..1. Zero or less when it gains. */
   dropShare: number
   /** The points behind that share — the live check compares `drop >= line * before`, so this does too. */
@@ -70,9 +70,9 @@ export function tankingSidesFromReceipt(
   return out
 }
 
-export const CANDIDATE_DROP_SHARES = [0.05, 0.1, 0.15, 0.2, 0.25] as const
+const CANDIDATE_DROP_SHARES = [0.05, 0.1, 0.15, 0.2, 0.25] as const
 
-export type TankingCalibration = {
+type TankingCalibration = {
   sides: number
   /** Sides that would receive mostly bench value — the half of the check that is not a threshold. */
   benchHeavy: number

@@ -12,12 +12,7 @@ import type {
   ChimmyAlertUserPreferences,
 } from './types'
 import { detectAlertCandidates } from './ChimmyAlertDetectors'
-import {
-  loadAlertDeliveryHistory,
-  routeAlertDelivery,
-  type ChimmyAlertDeliveryHistory,
-  type ChimmyAlertDeliveryPlan,
-} from './ChimmyAlertDeliveryRouter'
+import { loadAlertDeliveryHistory, routeAlertDelivery, type ChimmyAlertDeliveryHistory } from './ChimmyAlertDeliveryRouter'
 import { loadChimmyAlertPreferences } from './ChimmyAlertPreferencesService'
 import {
   evaluateAlertSuppression,
@@ -32,13 +27,13 @@ function toSeverity(signal: number): ChimmyAlertSeverity {
   return 'informational'
 }
 
-export function scoreAlertUrgency(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
+function scoreAlertUrgency(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
   const sensitivity = context.userPreferences?.sensitivity ?? 'normal'
   const modifier = sensitivity === 'high' ? 1.08 : sensitivity === 'low' ? 0.9 : 1
   return Math.max(1, Math.min(100, Math.round(candidate.urgencySignal * modifier)))
 }
 
-export function scoreAlertRelevance(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
+function scoreAlertRelevance(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
   let score = candidate.confidenceScore
   if (candidate.roleScope === 'commissioner' && context.role === 'commissioner') score += 4
   if (candidate.roleScope === 'admin' && context.role === 'admin') score += 5
@@ -46,7 +41,7 @@ export function scoreAlertRelevance(candidate: ChimmyAlertCandidate, context: Ch
   return Math.max(1, Math.min(100, score))
 }
 
-export function chooseAlertChannel(severity: ChimmyAlertSeverity, context: ChimmyAlertContext, roleScope: ChimmyAlertCandidate['roleScope']): ChimmyAlertChannel[] {
+function chooseAlertChannel(severity: ChimmyAlertSeverity, context: ChimmyAlertContext, roleScope: ChimmyAlertCandidate['roleScope']): ChimmyAlertChannel[] {
   const override = context.userPreferences?.channelOverrides?.[severity]
   if (override && override.length > 0) return override
 
@@ -67,7 +62,7 @@ export function chooseAlertChannel(severity: ChimmyAlertSeverity, context: Chimm
   return ['dashboard_card']
 }
 
-export function bindAlertActions(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): ChimmyAlert['actions'] {
+function bindAlertActions(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): ChimmyAlert['actions'] {
   const leagueHref = context.leagueId ? `/leagues/${context.leagueId}` : '/dashboard'
 
   switch (candidate.type) {
@@ -133,7 +128,7 @@ export function renderAlertPayload(candidate: ChimmyAlertCandidate, context: Chi
   }
 }
 
-export async function suppressDuplicateAlerts(
+async function suppressDuplicateAlerts(
   alerts: ChimmyAlert[],
   context: ChimmyAlertContext,
   prefs?: ChimmyAlertUserPreferences,
@@ -180,14 +175,10 @@ export async function suppressDuplicateAlerts(
   return kept
 }
 
-export async function dedupeAlerts(alerts: ChimmyAlert[], context: ChimmyAlertContext): Promise<ChimmyAlert[]> {
-  return suppressDuplicateAlerts(alerts, context)
-}
-
 /**
  * Strip channels that the user has opted out of in their channel preferences.
  */
-export function applyChannelPrefs(
+function applyChannelPrefs(
   channels: ChimmyAlertChannel[],
   prefs: ChimmyAlertUserPreferences,
 ): ChimmyAlertChannel[] {
@@ -222,16 +213,6 @@ export async function logAlertLifecycle(input: {
   })
 }
 
-export async function logAlertEvent(input: {
-  userId: string
-  alertId: string
-  dedupeKey: string
-  event: ChimmyAlertLifecycleEvent
-  metadata?: Record<string, unknown>
-}): Promise<void> {
-  await logAlertLifecycle(input)
-}
-
 function toNotificationSeverity(severity: ChimmyAlertSeverity): 'low' | 'medium' | 'high' {
   if (severity === 'critical' || severity === 'urgent') return 'high'
   if (severity === 'action_recommended') return 'medium'
@@ -240,23 +221,6 @@ function toNotificationSeverity(severity: ChimmyAlertSeverity): 'low' | 'medium'
 
 function toNotificationCategory(alert: ChimmyAlert): 'ai_alerts' | 'commissioner_alerts' {
   return alert.roleScope === 'commissioner' || alert.roleScope === 'admin' ? 'commissioner_alerts' : 'ai_alerts'
-}
-
-export async function chooseAlertDeliverySurface(
-  alert: ChimmyAlert,
-  context: ChimmyAlertContext,
-  history?: ChimmyAlertDeliveryHistory,
-): Promise<ChimmyAlertChannel[]> {
-  const plan = routeAlertDelivery(alert, context, history)
-  return [...plan.surfaces, ...plan.transportChannels]
-}
-
-export function routeAlertDeliveryPlan(
-  alert: ChimmyAlert,
-  context: ChimmyAlertContext,
-  history?: ChimmyAlertDeliveryHistory,
-): ChimmyAlertDeliveryPlan {
-  return routeAlertDelivery(alert, context, history)
 }
 
 export async function deliverAlert(

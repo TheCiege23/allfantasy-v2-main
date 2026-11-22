@@ -43,6 +43,8 @@ const TABLE: Row[] = [
   // One NBA athlete ingested twice with identical name/position/team.
   row({ id: 'je-1', canonicalName: 'Jon Elmore', sport: 'NBA', position: 'SG', currentTeam: 'SAN ANTONIO SPURS' }),
   row({ id: 'je-2', canonicalName: 'Jon Elmore', sport: 'NBA', position: 'SG', currentTeam: 'SAN ANTONIO SPURS' }),
+  // An in-name hyphen: normalizedName keeps it (lib/team-abbrev.ts normalizePlayerName), the slug cannot tell.
+  row({ id: 'ars-nfl', canonicalName: 'Amon-Ra St. Brown', normalizedName: 'amon-ra st brown', sport: 'NFL', position: 'WR', currentTeam: 'DET', sleeperId: '7547' }),
   // Ten distinct MLB namesakes — more than the chooser shows.
   ...Array.from({ length: 10 }, (_, i) =>
     row({ id: `js-${i}`, canonicalName: 'John Smith', sport: 'MLB', position: 'P', currentTeam: `T${i}` }),
@@ -76,11 +78,18 @@ import {
   orderChooserCandidates,
   readPlayerPageLookup,
   resolvePlayerPageIdentity,
+  slugNameCandidates,
 } from '@/app/player/[playerId]/resolvePlayerIdentity'
+import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
 import PlayerProfilePage, { generateMetadata } from '@/app/player/[playerId]/page'
 
 function matches(r: Row, where: Record<string, unknown>): boolean {
-  return Object.entries(where).every(([k, v]) => (r as Record<string, unknown>)[k] === v)
+  return Object.entries(where).every(([k, v]) => {
+    const actual = (r as Record<string, unknown>)[k]
+    // Prisma's `{ in: [...] }` — the name slug asks for every reading of its hyphens.
+    if (v && typeof v === 'object' && Array.isArray((v as { in?: unknown }).in)) return (v as { in: unknown[] }).in.includes(actual)
+    return actual === v
+  })
 }
 
 beforeEach(() => {
@@ -237,5 +246,34 @@ describe('the page and its metadata share the resolver', () => {
       searchParams: Promise.resolve({ position: 'WR' }),
     })
     expect(scoped.description).toMatch(/\(WR, MIN\)/)
+  })
+})
+
+describe('a hyphen in the slug is tried as a separator AND as a hyphen (2026-11-12)', () => {
+  it('amon-ra-st-brown finds the row whose key keeps the hyphen', async () => {
+    expect((await resolve('amon-ra-st-brown')).identity?.id).toBe('ars-nfl')
+  })
+
+  it('the readings, all-spaces first; a pathological slug falls back to all-spaces only', () => {
+    expect(slugNameCandidates('amon-ra-st-brown')).toEqual([
+      'amon ra st brown',
+      'amon ra st-brown',
+      'amon ra-st brown',
+      'amon ra-st-brown',
+      'amon-ra st brown',
+      'amon-ra st-brown',
+      'amon-ra-st brown',
+      'amon-ra-st-brown',
+    ])
+    expect(slugNameCandidates('cam-ward')).toEqual(['cam ward', 'cam-ward'])
+    expect(slugNameCandidates('a-b-c-d-e-f')).toEqual(['a b c d e f'])
+  })
+
+  it('playerProfileHref builds a slug the page resolves — "St." and "Jr." included', async () => {
+    const href = playerProfileHref({ name: 'Amon-Ra St. Brown', sport: 'nfl', position: 'WR', team: 'DET' })
+    expect(href).toBe('/player/amon-ra-st-brown?sport=NFL&position=WR&team=DET')
+    expect((await resolve('amon-ra-st-brown', { sport: 'NFL', position: 'WR', team: 'DET' })).identity?.id).toBe('ars-nfl')
+    expect(playerProfileHref({ name: 'Marvin Harrison Jr.' })).toBe('/player/marvin-harrison')
+    expect(playerProfileHref({ name: '  ' })).toBeNull()
   })
 })

@@ -241,6 +241,7 @@ export function ZombiePaidPanel({ leagueId, canEdit }: { leagueId: string; canEd
             <SettingsSection id="zm-free" title="Free mode">
               <SettingsRow
                 label="Cosmetic currency label"
+                description="The name your league's rules document uses for free-mode points."
                 control={
                   <Input
                     value={currencyLabel}

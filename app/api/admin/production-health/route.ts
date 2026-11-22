@@ -11,16 +11,18 @@ import {
 } from "@/lib/production-health/ProductionHealthService"
 import { getSportsWarehouseHealth } from "@/lib/data-warehouse/warehouseDataState"
 import { getTradeOsHealth } from '@/lib/trade-monitoring/tradeOsHealth'
+import { isSupportedSport } from '@/lib/sport-scope'
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const maxDuration = 180
 
 /**
  * GET /api/admin/production-health
  * Protected via `requireAdminOrBearer` (admin cookie, bearer token, or cron secret).
  *
  * Query params:
- *   ?view=system|crons|providers|cache|imports|warehouse|trades  (default: system)
+ *   ?view=system|crons|providers|cache|imports|warehouse|trades|projection-coverage  (default: system)
  *   ?sport=NFL                                   (returns a single sport's health)
  */
 export async function GET(request: Request) {
@@ -31,6 +33,22 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const view = (url.searchParams.get("view") ?? "system").toLowerCase()
     const sport = url.searchParams.get("sport")
+
+    if (view === "projection-coverage") {
+      const leagueId = url.searchParams.get("leagueId")?.trim() || undefined
+      const selectedSport = sport?.toUpperCase()
+      if ((selectedSport != null && !isSupportedSport(selectedSport)) || (leagueId && !selectedSport)) {
+        return NextResponse.json({ error: "Provide a supported sport when selecting a league" }, { status: 400 })
+      }
+      const { buildProjectionCoverageReport } = await import("@/lib/production-health/projectionCoverageReport")
+      const report = await buildProjectionCoverageReport({ sport: selectedSport, leagueId })
+      const headers = { "Cache-Control": "private, no-store" }
+      if (url.searchParams.get("format") === "text") {
+        const { formatProjectionCoverage } = await import("@/lib/production-health/formatProjectionCoverage")
+        return new Response(formatProjectionCoverage(report), { headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" } })
+      }
+      return NextResponse.json(report, { headers })
+    }
 
     if (sport) {
       return NextResponse.json(await getSportHealth(sport))

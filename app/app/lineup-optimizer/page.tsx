@@ -12,7 +12,7 @@ export default function LineupOptimizerPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">AllFantasy Tools</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">Lineup Optimizer</h1>
         <p className="mt-2 max-w-2xl text-sm text-white/55">
-          Real-time decision dashboard: optimal starters, explainable AI, matchup context, and injury-only auto-sub
+          Real-time decision dashboard: optimal starters, explainable Chimmy, matchup context, and injury-only auto-sub
           — tuned for mobile-first daily engagement.
         </p>
       </header>

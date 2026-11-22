@@ -8,7 +8,6 @@ import {
   runFleaflickerMatchupParity,
   runMflMatchupParity,
 } from '@/lib/import-os/collector'
-import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
 import { refreshRedraftRosterPlayersAfterSync } from '@/lib/import-os/collector/refreshRedraftRosterPlayersAfterSync'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
@@ -209,42 +208,13 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Psychological profiles are refreshed AFTER a sync lands, never at import:
-        // a freshly imported league has no drafts, trades or rosters yet, so
-        // profiling it would characterise every manager from nothing. Once the sync
-        // has written real history there is something to observe.
-        //
-        // Bounded and swallowed — profiling is enrichment and must never take down
-        // the collector it rides along with. `manager_psych_profiles` sat at 0 rows
-        // because the engine had no caller; this is that caller.
-        let profiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
-        try {
-          const syncedExternalIds = (summary.results ?? [])
-            .filter((r) => r.executed && !r.error)
-            // runKey is `<provider>:<externalLeagueId>:<season>`.
-            .map((r) => String(r.runKey ?? '').split(':')[1] ?? '')
-            .filter(Boolean)
-
-          if (syncedExternalIds.length > 0) {
-            const refreshed = await refreshProfilesForExternalLeagues({
-              externalLeagueIds: syncedExternalIds,
-              maxLeagues: 10,
-            })
-            profiles = {
-              leaguesProfiled: refreshed.leaguesProfiled,
-              managersProfiled: refreshed.managersProfiled,
-            }
-          }
-        } catch (profileErr) {
-          profiles = {
-            error: profileErr instanceof Error ? profileErr.message.slice(0, 160) : 'profile refresh failed',
-          }
-        }
+        // Psychological profiles were refreshed here after each sync until 2026-11-19, when the profile engine
+        // was retired (re-score build item 10): its scores were labels about people, and every reader is gone.
 
         // Draft materialization rides the same heartbeat: a Sleeper league whose synced
         // status has reached pre_draft/drafting gets a DraftSession + sleeperDraftId here,
         // so the draft-tick mirror can populate its board without anyone visiting the page.
-        // Bounded and swallowed — same contract as the profile refresh above.
+        // Bounded and swallowed — enrichment must never take down the collector it rides along with.
         let draftSessions: unknown = null
         try {
           draftSessions = await materializeSleeperDraftSessions({ maxLeagues: 25 })
@@ -261,8 +231,7 @@ export async function GET(req: NextRequest) {
         // keeps its own 6h per-league cadence in SportsDataCache (full provider
         // reads are heavier than Sleeper's), tries each importing user's stored
         // credentials, and skips a league honestly when none work. Bounded and
-        // swallowed — same contract as the profile refresh and draft
-        // materialization above.
+        // swallowed — same contract as the draft materialization above.
         let externalMatchups: unknown = null
         try {
           externalMatchups = await runExternalMatchupParity({ now, maxLeagues: parityLeagues })
@@ -347,7 +316,6 @@ export async function GET(req: NextRequest) {
         return {
           summary,
           redraftRosterPlayers,
-          profiles,
           draftSessions,
           externalMatchups,
           fantraxMatchups,

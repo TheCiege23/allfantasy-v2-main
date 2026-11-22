@@ -154,6 +154,13 @@ export function suggestInactiveTeams(rows: readonly SuggestionInput[], managed: 
 export const CHIMMY_MANAGER_LIMIT = 4
 
 /**
+ * The limit in a league a site admin owns: effectively none (the largest league AllFantasy runs).
+ * The owner tests whole seasons alone — a 12-player survivor league needs twelve Chimmy teams — and
+ * no customer league is owned by a site admin. Decided by the service (`chimmyTeamLimitFor`).
+ */
+export const CHIMMY_SITE_ADMIN_LIMIT = 32
+
+/**
  * Teams Chimmy runs in a league whose owner has no AF Commissioner plan: a taste of Chimmy as a
  * manager. The plan raises it to `CHIMMY_MANAGER_LIMIT`.
  */

@@ -41,12 +41,31 @@ describe('the sign-up screen promises only what happens', () => {
 
   it('does not claim a 3-step journey it does not route', () => {
     expect(auth).not.toContain('Step 1 of 3 · free forever for players.')
-    expect(auth).toContain('Next: verify your email, then choose how to start.')
   })
 
-  it('says the one-click Sleeper import comes after the email is verified', () => {
-    expect(auth).not.toContain('your Sleeper leagues import in one click after signup')
-    expect(auth).toContain('once your email is verified, your Sleeper leagues import in one click')
+  /*
+   * 🛑 2026-11-15 (owner's call, "import before confirmation is fine"): the import no longer refuses an
+   * unverified account (lib/auth-guard.ts requireAgeConfirmedUser), and sign-up already signs the new
+   * account in. So the screen says the league comes next — and must NOT say it waits on the email.
+   */
+  it('says the league comes next, and never that the import waits on the email', () => {
+    expect(auth).toContain('Next: bring in your league. We’ll email you a link to confirm your address.')
+    expect(auth).not.toContain('Next: verify your email, then choose how to start.')
+    expect(auth).not.toContain('once your email is verified, your Sleeper leagues import')
+    expect(auth).toContain('your Sleeper leagues import in one click, right after you sign up.')
+  })
+
+  it('the import routes take an unverified account — the copy above is only true while they do', () => {
+    for (const route of [
+      'app/api/leagues/import/discover/route.ts',
+      'app/api/leagues/import/preview/route.ts',
+      'app/api/leagues/import/commit/route.ts',
+      'app/api/import-sleeper/route.ts',
+    ]) {
+      const src = read(route)
+      expect(src, route).toMatch(/await requireAgeConfirmedUser\(\)/)
+      expect(src, route).not.toMatch(/await requireVerifiedUser\(\)/)
+    }
   })
 })
 

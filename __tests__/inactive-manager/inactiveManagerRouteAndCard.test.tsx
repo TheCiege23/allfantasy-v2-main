@@ -7,6 +7,8 @@ vi.mock('next-auth', () => ({ getServerSession: m.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/server/services/permissionService', () => ({ isElevatedCommissioner: m.elevated }))
 vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ readInactiveManagerView: m.view, setInactiveManagerMode: m.set }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, POST } from '@/app/api/leagues/[leagueId]/inactive-managers/handler'
 import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
@@ -96,14 +98,14 @@ describe('the commissioner card', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body(false) })))
     render(<InactiveManagerCommissioner leagueId="L" />)
     await screen.findByText('Chimmy runs 0 of 1 free team')
-    expect(screen.getByTestId('chimmy-free-upsell').textContent).toBe('Let Chimmy run up to 4 teams (AF Commissioner)')
+    expect(screen.getByTestId('chimmy-free-upsell').textContent).toBe('Let Chimmy run up to 4 teams (AF Pro)')
     const selects = () => screen.getAllByTestId('chimmy-manager-team').map((li) => li.querySelector('select') as HTMLSelectElement)
     expect(selects().map((x) => x.disabled)).toEqual([false, false])
     cleanup()
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body(true) })))
     render(<InactiveManagerCommissioner leagueId="L" />)
     await screen.findByText('Chimmy runs 1 of 1 free team')
-    expect(screen.getByTestId('chimmy-manager-limit').textContent).toBe('Your free Chimmy team is in use. AF Commissioner lets Chimmy run up to 4 teams.')
+    expect(screen.getByTestId('chimmy-manager-limit').textContent).toBe('Your free Chimmy team is in use. AF Pro or AF Supreme lets Chimmy run up to 4 teams.')
     // The free team can still change style or be switched off; the other is locked.
     expect(selects().map((x) => x.disabled)).toEqual([false, true])
   })

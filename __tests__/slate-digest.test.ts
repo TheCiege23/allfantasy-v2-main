@@ -221,6 +221,13 @@ describe('sendSlateDigests', () => {
     expect(loadState).toHaveBeenCalledTimes(2)
   })
 
+  it('hands the league sport to the state read, so its projection read is sport-scoped', async () => {
+    const { deps, loadState } = harness()
+    const leagues = await deps.loadLeagues()
+    await sendSlateDigests({ now: NOW, season: 2026 }, { ...deps, loadLeagues: async () => leagues.map((l) => ({ ...l, sport: 'NFL' })) })
+    for (const [args] of loadState.mock.calls) expect((args as { sport?: string }).sport).toBe('NFL')
+  })
+
   it('🛑 asked every two minutes, sent once: a manager who already has it is skipped before anything is built', async () => {
     const slate = closedNflSlate(SUNDAY, NOW)!
     const { deps, ingest, loadState } = harness({

@@ -9,9 +9,9 @@
  */
 import type { LeagueHistoryPoint } from './snapshots'
 
-export type TrendDirection = 'up' | 'down' | 'flat'
+type TrendDirection = 'up' | 'down' | 'flat'
 
-export interface LeagueTrend {
+interface LeagueTrend {
   direction: TrendDirection
   /** Absolute point change in leagueEngagementScore. */
   magnitude: number
@@ -25,7 +25,7 @@ export interface LeagueTrend {
   comparedToCapturedAt: string
 }
 
-export type LeagueTrendResult =
+type LeagueTrendResult =
   | { available: true; trend: LeagueTrend }
   | { available: false; reason: 'insufficient_historical_data'; snapshotCount: number }
 

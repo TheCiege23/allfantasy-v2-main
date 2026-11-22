@@ -1,3 +1,4 @@
+import { listHeldTeams } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -28,13 +29,16 @@ export async function appendWeatherRiskLineupActions(
   for (const block of perLeague) {
     if (block.sport !== 'NFL') continue
 
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId: block.leagueId, platformUserId: userId },
-      select: { playerData: true },
-    })
-    if (!roster?.playerData) continue
+    // Every team the manager runs in this league, not just one of them (lib/league/viewerTeams.ts).
+    const held = await listHeldTeams(block.leagueId, userId)
+    const idSet = new Set<string>()
+    for (const team of held) {
+      const roster = await prisma.roster.findFirst({ where: { id: team.rosterId, leagueId: block.leagueId }, select: { playerData: true } })
+      if (roster?.playerData) for (const id of getRosterPlayerIds(roster.playerData).slice(0, 28)) idSet.add(id)
+    }
+    const ids = [...idSet]
+    if (ids.length === 0) continue
 
-    const ids = getRosterPlayerIds(roster.playerData).slice(0, 28)
     const teams = new Set<string>()
     for (const id of ids) {
       const rec = await prisma.sportsPlayerRecord.findUnique({

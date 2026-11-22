@@ -40,7 +40,7 @@ function insufficientTokenResponse(preview: TokenSpendPreview, upgradePath: stri
     {
       error: "Insufficient token balance",
       code: "insufficient_token_balance",
-      message: `Need ${preview.tokenCost} token${preview.tokenCost === 1 ? "" : "s"} for this one-time World Cup AI action.`,
+      message: `Need ${preview.tokenCost} token${preview.tokenCost === 1 ? "" : "s"} for this one-time World Cup Chimmy action.`,
       upgrade: true,
       upgradePath,
       preview,
@@ -52,7 +52,7 @@ function insufficientTokenResponse(preview: TokenSpendPreview, upgradePath: stri
 function missingRuleResponse(ruleCode: string, upgradePath: string) {
   return NextResponse.json(
     {
-      error: "Token fallback is temporarily unavailable for this World Cup AI action.",
+      error: "Token fallback is temporarily unavailable for this World Cup Chimmy action.",
       code: "token_spend_rule_missing",
       ruleCode,
       upgrade: true,

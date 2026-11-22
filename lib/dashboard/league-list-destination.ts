@@ -5,7 +5,7 @@ import type { UserLeague } from '@/app/dashboard/types'
  * Minimal row shape from `/api/league/list` (native, imported, or tournament hub).
  * Uses `navigationLeagueId` / `unifiedLeagueId` when the row `id` is a platform surrogate.
  */
-export type LeagueListNavInput = {
+type LeagueListNavInput = {
   id: string
   platform?: string | null
   settings?: Record<string, unknown> | null

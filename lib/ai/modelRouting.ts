@@ -1,9 +1,9 @@
-export type AiModelRouteIntent =
+type AiModelRouteIntent =
   | 'grounded_answer'
   | 'complex_trade'
   | 'commissioner_report'
 
-export type AiModelRoute = {
+type AiModelRoute = {
   intent: AiModelRouteIntent
   model: string | null
   profile: 'cheap_fast' | 'strong'

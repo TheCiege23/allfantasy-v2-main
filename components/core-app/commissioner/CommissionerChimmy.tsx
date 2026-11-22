@@ -86,7 +86,7 @@ export function CommissionerChimmy({ leagueId }: { leagueId: string }) {
           {answer.actions.map((a) => <Link key={a.href} className="af-btn af-ch-step-link" href={a.href}>{t(a.label)}</Link>)}
         </nav>
       ) : null}
-      <p className="af-ch-os-stamp">{answer.source === 'template' ? t('Template guidance') : t('AI guidance')} · {t('review evidence before acting.')}</p></div>}
+      <p className="af-ch-os-stamp">{answer.source === 'template' ? t('Template guidance') : t('Chimmy guidance')} · {t('review evidence before acting.')}</p></div>}
     {answer?.error && <p className="af-ch-os-note" data-tone="bad" role="alert">{t(answer.error)}</p>}
   </div>
 }

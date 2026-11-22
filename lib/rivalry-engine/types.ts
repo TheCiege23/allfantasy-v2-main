@@ -16,7 +16,7 @@ export const DEFAULT_TIER_THRESHOLDS: Record<RivalryTier, { min: number; max?: n
   'League Classic': { min: 85 },
 }
 
-export const RIVALRY_EVENT_TYPES = [
+const RIVALRY_EVENT_TYPES = [
   'h2h_matchup',
   'playoff_matchup',
   'elimination',
@@ -28,26 +28,6 @@ export const RIVALRY_EVENT_TYPES = [
   'drama',
 ] as const
 export type RivalryEventType = (typeof RIVALRY_EVENT_TYPES)[number]
-
-export interface RivalryRecordPayload {
-  leagueId: string
-  sport: string
-  managerAId: string
-  managerBId: string
-  rivalryScore: number
-  rivalryTier: RivalryTier
-  firstDetectedAt?: Date
-  updatedAt?: Date
-}
-
-export interface RivalryEventPayload {
-  rivalryId: string
-  eventType: RivalryEventType
-  season?: number | null
-  matchupId?: string | null
-  tradeId?: string | null
-  description?: string | null
-}
 
 export interface RivalryScoreInput {
   totalMatchups: number

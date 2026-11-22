@@ -34,7 +34,7 @@ export default function DiscoverPage() {
       </div>
       <LeagueDiscoveryClientUnified />
       <section className="mt-10 pt-8 border-t border-white/10">
-        <h2 className="mb-4 text-lg font-semibold text-white">League Discovery AI</h2>
+        <h2 className="mb-4 text-lg font-semibold text-white">League Discovery Chimmy</h2>
         <p className="mb-4 text-sm text-white/60">
           Get personalized suggestions by sport, skill level, and activity—from public pools or your Sleeper leagues.
         </p>

@@ -65,6 +65,12 @@ export interface NormalizedTradeFact {
   /** player id -> the roster id that gave them up. */
   drops: Record<string, string> | null;
   draftPicks: Array<{ season: string; round: number; rosterId: string; previousOwnerId: string; ownerId: string }>;
+  /**
+   * Waiver budget (FAAB) moved, sender and receiver as roster ids. Present only when the source READ the whole
+   * trade's budget — then an empty list means none moved and each side's `LeagueTrade.budgetGiven/Received` is
+   * written (0 included). Absent: those columns are left untouched (NULL = never read).
+   */
+  waiverBudget?: Array<{ sender: string; receiver: string; amount: number }> | null;
   created: number;
   creator: string;
 }

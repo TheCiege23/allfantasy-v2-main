@@ -3,7 +3,7 @@ import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
-export type WarRoomLeagueSnapshot = {
+type WarRoomLeagueSnapshot = {
   leagueId: string
   sport: SupportedSport
   season: number | null
@@ -24,7 +24,7 @@ export type WarRoomLeagueSnapshot = {
 /**
  * Resolve or create `DraftSession` (existing `draft_sessions` table) for War Room.
  */
-export async function resolveWarRoomDraftSession(args: {
+async function resolveWarRoomDraftSession(args: {
   leagueId: string
   sport: SupportedSport
   createIfMissing: boolean

@@ -99,9 +99,21 @@ describe('the hub evaluator', () => {
     // No manager yet: Team B shows no face rather than a placeholder one.
     expect(side('get').querySelector('.af-tc-team-avatar')).toBeNull()
     fireEvent.change(select, { target: { value: 'r2' } })
-    expect(side('get').querySelector('.af-tc-team-name')!.textContent).toBe('Matt Jones')
+    // Team B's name is the dropdown itself: the chosen option names the manager.
+    expect(select.selectedOptions[0]?.textContent).toContain('Matt Jones')
     expect(side('get').querySelector('.af-tc-team-avatar img')?.getAttribute('src')).toBe('https://img.test/matt.png')
     expect(side('get').textContent).toContain('Christian McCaffrey')
+  })
+
+  it('names Team B once: the dropdown sits in the team head, with no second name above or below it', async () => {
+    hub()
+    const select = await partnerSelect()
+    fireEvent.change(select, { target: { value: 'r2' } })
+    const head = side('get').querySelector('.af-tc-team-head') as HTMLElement
+    expect(head.contains(select)).toBe(true)
+    expect(side('get').querySelector('.af-tc-team-name')).toBeNull()
+    // Team A has no dropdown — it is always you.
+    expect(side('give').querySelector('select')).toBeNull()
   })
 
   it('a manager with no league image gets their initial, not an empty circle', async () => {
@@ -158,5 +170,70 @@ describe('the league Trade Center keeps its page', () => {
     await waitFor(() =>
       expect(container.querySelector(".af-tc-team[data-side='give'] .af-tc-team-avatar img")?.getAttribute('src')).toBe('https://img.test/me.png'),
     )
+  })
+})
+
+describe('batch 2: lighter cards', () => {
+  const phoneWidth = () =>
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('max-width: 720px'), media: query, addEventListener: () => {}, removeEventListener: () => {},
+        addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false,
+      }),
+    })
+
+  it('on a phone each roster starts folded behind "Browse roster"; search still reaches it', async () => {
+    phoneWidth()
+    hub()
+    await waitFor(() => expect(side('give').querySelector('details.af-tc-roster')).not.toBeNull())
+    const fold = side('give').querySelector('details.af-tc-roster') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')!.textContent).toContain('Browse roster')
+  })
+
+  it('on a wider screen the rosters start open', async () => {
+    hub()
+    await waitFor(() => expect(side('give').querySelector('details.af-tc-roster')).not.toBeNull())
+    expect((side('give').querySelector('details.af-tc-roster') as HTMLDetailsElement).open).toBe(true)
+  })
+
+  it('a player with no headshot shows their position in its colour, not the first letter of the name', async () => {
+    hub()
+    await waitFor(() => expect(side('give').textContent).toContain('DK Metcalf'))
+    const shot = side('give').querySelector('.af-tc-roster .af-tc-headshot') as HTMLElement
+    expect(shot.getAttribute('data-pos')).toBe('wr')
+    expect(shot.textContent).toBe('WR')
+  })
+
+  it('the team cards no longer repeat the league platform chip', async () => {
+    hub()
+    await waitFor(() => expect(side('give').textContent).toContain('DK Metcalf'))
+    expect(side('give').querySelector('.af-tc-team-head .af-tc-mark')).toBeNull()
+  })
+
+  it('the value balance is one bar with the lean in words, not a red half and a green half', async () => {
+    hub()
+    const select = await partnerSelect()
+    fireEvent.change(select, { target: { value: 'r2' } })
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    await waitFor(() => expect(side('get').textContent).toContain('Christian McCaffrey'))
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    const balance = evaluator().querySelector('.af-tc-balance') as HTMLElement
+    expect(balance.querySelector('.af-tc-balance-give')).toBeNull()
+    expect(balance.querySelector('.af-tc-balance-meter')?.getAttribute('data-tone')).toBe('good')
+    expect(balance.querySelector('.af-tc-meter-label')?.textContent).toBe('Leans your way')
+  })
+})
+
+describe('batch 2: a player in the deal', () => {
+  it('without a headshot, wears the same position chip as in the roster list', async () => {
+    hub()
+    await waitFor(() => expect(side('give').textContent).toContain('DK Metcalf'))
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    const line = side('give').querySelector('div.af-tc-row[data-kind]') as HTMLElement
+    expect(line.querySelector('.af-tc-headshot')?.getAttribute('data-pos')).toBe('wr')
+    expect(line.querySelector('.af-tc-glyph')).toBeNull()
   })
 })

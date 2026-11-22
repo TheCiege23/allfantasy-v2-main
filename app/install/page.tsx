@@ -28,7 +28,7 @@ export default function InstallPage() {
     getSoftwareApplicationSchema({
       name: "AllFantasy",
       description:
-        "AI-powered fantasy sports platform with trade analysis, waiver recommendations, mock drafts, bracket challenges, and league management.",
+        "Chimmy-powered fantasy sports platform with trade analysis, waiver recommendations, mock drafts, bracket challenges, and league management.",
       url: "https://allfantasy.ai/install",
       applicationCategory: "SportsApplication",
     }),

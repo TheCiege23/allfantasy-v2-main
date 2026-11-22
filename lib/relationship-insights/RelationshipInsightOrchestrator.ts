@@ -2,8 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
 import { runRivalryEngine } from '@/lib/rivalry-engine/RivalryEngine'
 import { runLeagueDramaEngine } from '@/lib/drama-engine/LeagueDramaEngine'
-import { runPsychologicalProfileEngine } from '@/lib/psychological-profiles/PsychologicalProfileEngine'
-import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 import { normalizeSportForRelationship } from './SportRelationshipResolver'
 import { syncRivalryEdgesIntoGraph } from './GraphRivalryBridge'
 
@@ -14,7 +12,6 @@ export interface RelationshipInsightOrchestratorInput {
   rebuildGraph?: boolean
   runRivalry?: boolean
   runDrama?: boolean
-  runProfiles?: boolean
   syncGraphRivalryEdges?: boolean
 }
 
@@ -25,7 +22,6 @@ export interface RelationshipInsightOrchestratorResult {
   graphRebuilt: boolean
   rivalry?: { processed: number; created: number; updated: number }
   drama?: { created: number; updated: number; eventIds: string[] }
-  profiles?: { total: number; success: number; failed: number }
   graphRivalryBridge?: { linkedRivalries: number; upsertedEdges: number; skipped: number }
 }
 
@@ -34,7 +30,7 @@ export async function runRelationshipInsightOrchestrator(
 ): Promise<RelationshipInsightOrchestratorResult> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
-    include: { teams: true },
+    select: { sport: true, season: true },
   })
   if (!league) {
     throw new Error('League not found')
@@ -83,30 +79,8 @@ export async function runRelationshipInsightOrchestrator(
     out.drama = result
   }
 
-  if (input.runProfiles) {
-    let success = 0
-    let failed = 0
-    for (const team of league.teams) {
-      try {
-        await runPsychologicalProfileEngine({
-          leagueId: input.leagueId,
-          managerId: team.externalId || team.id,
-          sport,
-          season,
-          format: deriveLeagueFormat(league),
-          sleeperUsername: team.ownerName,
-        })
-        success += 1
-      } catch {
-        failed += 1
-      }
-    }
-    out.profiles = {
-      total: league.teams.length,
-      success,
-      failed,
-    }
-  }
+  // `runProfiles` (the personality-profile engine, run per team) was removed 2026-11-19 with that engine — re-score
+  // build item 10. A request that still sends it is ignored.
 
   if (input.syncGraphRivalryEdges) {
     out.graphRivalryBridge = await syncRivalryEdgesIntoGraph({

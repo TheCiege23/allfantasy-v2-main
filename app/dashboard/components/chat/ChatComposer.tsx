@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart3, Film, ImageIcon, Mic, Plus, Send, Smile, Video as VideoIcon } from 'lucide-react'
+import { BarChart3, Film, ImageIcon, ImagePlus, Mic, Plus, Send, Smile, Video, Video as VideoIcon } from 'lucide-react'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -101,6 +101,8 @@ type ChatComposerProps = {
     poll?: string
     photo?: string
     video?: string
+    /** The "+" that shows the rest of the tools in `compactTools` mode. */
+    more?: string
   }
   /**
    * Where the GIF / emoji / poll pickers open. `inline` (the default) opens them straight above
@@ -110,6 +112,11 @@ type ChatComposerProps = {
    * instead, so it is never cut off by the panel it was opened from.
    */
   pickerPlacement?: 'inline' | 'auto'
+  /**
+   * One short tool row (draft room, 2026-11-19): GIF, emoji and photo stay; poll, voice note and
+   * video sit behind "+". The full row wrapped to two lines in the draft dock.
+   */
+  compactTools?: boolean
   /**
    * League chat only: offers "Predict a matchup" in the poll picker. The picker asks the server
    * which matchups are open and hides the tab when there are none (or the league is imported).
@@ -200,6 +207,7 @@ export function ChatComposer({
   mentionMembers,
   testIds,
   pickerPlacement = 'inline',
+  compactTools = false,
   predictions,
   toolsLayout = 'row',
 }: ChatComposerProps) {
@@ -209,6 +217,7 @@ export function ChatComposer({
   const appliedPrefillKey = useRef<string | null>(null)
   const appliedReviewedDraft = useRef<string | null>(null)
   const [activePicker, setActivePicker] = useState<Picker>(null)
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false)
   const pickerAnchorRef = useRef<HTMLDivElement | null>(null)
   const floatingRef = useRef<HTMLDivElement | null>(null)
   /** `auto` placement only: null until measured, then 'inline' or where to float. */
@@ -1042,8 +1051,10 @@ export function ChatComposer({
                   aria-pressed={activePicker === 'emoji'}
                   data-testid={testIds?.emoji}
                 >
-                  😀
+                  <Smile size={17} strokeWidth={2} aria-hidden />
                 </button>
+                {!compactTools || moreToolsOpen ? (
+                  <>
                 <button
                   type="button"
                   className={toolBtn(activePicker === 'poll')}
@@ -1051,7 +1062,7 @@ export function ChatComposer({
                   aria-label="Poll"
                   data-testid={testIds?.poll}
                 >
-                  📊
+                  <BarChart3 size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <button
                   type="button"
@@ -1059,8 +1070,10 @@ export function ChatComposer({
                   onClick={() => setIsRecording(true)}
                   aria-label="Voice note"
                 >
-                  🎤
+                  <Mic size={17} strokeWidth={2} aria-hidden />
                 </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className={toolBtn(false)}
@@ -1069,7 +1082,7 @@ export function ChatComposer({
                   data-testid={testIds?.photo}
                   title="Add photos — or drop / paste them into the chat"
                 >
-                  📷
+                  <ImagePlus size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <input
                   ref={imageInputRef}
@@ -1079,6 +1092,7 @@ export function ChatComposer({
                   className="hidden"
                   onChange={onImageChange}
                 />
+                {!compactTools || moreToolsOpen ? (
                 <button
                   type="button"
                   className={toolBtn(false)}
@@ -1086,8 +1100,21 @@ export function ChatComposer({
                   aria-label="Video"
                   data-testid={testIds?.video}
                 >
-                  🎥
+                  <Video size={17} strokeWidth={2} aria-hidden />
                 </button>
+                ) : null}
+                {compactTools ? (
+                  <button
+                    type="button"
+                    className={toolBtn(moreToolsOpen)}
+                    onClick={() => setMoreToolsOpen((v) => !v)}
+                    aria-label={moreToolsOpen ? 'Fewer tools' : 'More: poll, voice note, video'}
+                    aria-expanded={moreToolsOpen}
+                    data-testid={testIds?.more}
+                  >
+                    <Plus size={17} strokeWidth={2} aria-hidden className={moreToolsOpen ? 'rotate-45 transition-transform' : 'transition-transform'} />
+                  </button>
+                ) : null}
                 <input
                   ref={videoInputRef}
                   type="file"
@@ -1107,7 +1134,7 @@ export function ChatComposer({
                   aria-label={chatType === 'league' ? 'Send league message' : 'Send message'}
                   data-testid={testIds?.send ?? 'league-chat-send'}
                 >
-                  <Send size={14} strokeWidth={2} />
+                  <Send size={16} strokeWidth={2.2} />
                 </button>
                 {onAskChimmy ? (
                   <button

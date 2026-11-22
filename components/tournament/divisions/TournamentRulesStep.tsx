@@ -39,7 +39,7 @@ export function TournamentRulesStep({ sport, rules, onRules, locked = false, loc
   }
   const blocked = scoringId === 'custom' && !customValid
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
       <div className="min-w-0 space-y-6">
         <section className={panel}>
           <RulesLabelPicker kind="scoring" legend="Scoring" options={scoringChoices(sport)}

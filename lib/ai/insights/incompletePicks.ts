@@ -9,7 +9,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type IncompleteEntry = {
+type IncompleteEntry = {
   entryId: string
   displayName: string
   totalPicksSubmitted: number
@@ -20,7 +20,7 @@ export type IncompleteEntry = {
   completionPercent: number
 }
 
-export type IncompletePicksResult = {
+type IncompletePicksResult = {
   incompleteEntries: IncompleteEntry[]
   completeEntries: number
   totalEntries: number

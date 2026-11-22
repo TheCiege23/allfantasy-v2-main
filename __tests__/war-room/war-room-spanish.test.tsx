@@ -85,7 +85,7 @@ const scout = (data: unknown, extra: Record<string, unknown> = {}) =>
   )
 
 const SCOUT_ENGLISH = [
-  'Where every manager',
+  'Who you’re up against',
   "Every league's game plan",
   'This week',
   'You are 1-0 against them',
@@ -110,7 +110,7 @@ describe('Scout in Spanish', () => {
   it('translates the head, the opponent banner, the basis, every card and Competitive Edge — loader text included', () => {
     const t = scout(H2H, { edge: EDGE })
     for (const english of SCOUT_ENGLISH) expect(t, english).not.toContain(english)
-    expect(t).toContain('Dónde está cada mánager')
+    expect(t).toContain('Contra quién juegas')
     expect(t).toContain('Vas 1-0 contra ellos esta temporada.')
     expect(t).toContain('Clasificación hasta la semana 3 de 2026.')
     expect(t).toContain('El orden es porcentaje de victorias, luego puntos a favor y luego enfrentamientos directos: la regla de Sleeper.')

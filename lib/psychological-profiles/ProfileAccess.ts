@@ -11,13 +11,13 @@ import type { ManagerPsychProfileView } from './ManagerBehaviorQueryService'
 /** Membership and feature entitlement for internal decision support. Neither grants raw profile access. */
 const OPPONENT_FEATURE: SubscriptionFeatureId = 'manager_psychology'
 
-export type ProfileAccessDenied = {
+type ProfileAccessDenied = {
   ok: false
   status: 401 | 403 | 404
   reason: string
 }
 
-export type ProfileAccessGranted = {
+type ProfileAccessGranted = {
   ok: true
   userId: string
   /** Manager ids belonging to the caller. Used when scoping decision evidence. */
@@ -25,7 +25,7 @@ export type ProfileAccessGranted = {
   canSeeOpponents: boolean
 }
 
-export type ProfileAccess = ProfileAccessDenied | ProfileAccessGranted
+type ProfileAccess = ProfileAccessDenied | ProfileAccessGranted
 
 export async function resolveProfileAccess(leagueId: string): Promise<ProfileAccess> {
   const session = (await getServerSession(authOptions as never)) as
@@ -68,10 +68,10 @@ export async function resolveProfileAccessForUser(
   }
 }
 
-export type LockedProfile = ReturnType<typeof redactForLock>
+type LockedProfile = ReturnType<typeof redactForLock>
 
 /** What a locked profile still reveals: that it exists, and how much was observed. */
-export function redactForLock(profile: ManagerPsychProfileView) {
+function redactForLock(profile: ManagerPsychProfileView) {
   return {
     id: profile.id,
     leagueId: profile.leagueId,
@@ -98,14 +98,8 @@ export function presentProfile(
   return redactForLock(profile)
 }
 
-/** Compatibility boundary: unrestricted profiles must not enter model context. */
-export async function buildPsychologyGroundingLines(input: {
-  leagueId: string
-  userId: string | undefined | null
-  email?: string | null
-  limit?: number
-}): Promise<string[]> {
-  // Profile labels and scores must not enter model context where they can be repeated.
-  // Decision-scoped evidence is supplied separately after validating the selected action.
-  return []
-}
+/*
+ * `buildPsychologyGroundingLines` was removed 2026-11-20: it returned [] (profile labels and scores must not enter
+ * model context) and its only caller, the chat route, has gone. Manager FACTS reach the model through
+ * `lib/chimmy/managerRecordGrounding.ts`.
+ */

@@ -109,7 +109,7 @@ export async function openaiChatText(args: {
   skipCache?: boolean
   signal?: AbortSignal
 }): Promise<
-  | { ok: true; text: string; model: string; baseUrl: string }
+  | { ok: true; text: string; model: string; baseUrl: string; finishReason?: string | null }
   | { ok: false; status: number; details: string; model: string; baseUrl: string }
 > {
   const key = cacheKey('openai-text', args.messages, args.model, args.temperature)
@@ -124,7 +124,7 @@ async function _openaiChatTextUncached(args: {
   maxTokens?: number
   signal?: AbortSignal
 }): Promise<
-  | { ok: true; text: string; model: string; baseUrl: string }
+  | { ok: true; text: string; model: string; baseUrl: string; finishReason?: string | null }
   | { ok: false; status: number; details: string; model: string; baseUrl: string }
 > {
   let model = 'unavailable'
@@ -158,7 +158,8 @@ async function _openaiChatTextUncached(args: {
 
     const content = response.choices?.[0]?.message?.content
     if (typeof content === 'string') {
-      return { ok: true, text: content, model, baseUrl }
+      // `length` = the reply hit max_completion_tokens and stops mid-answer.
+      return { ok: true, text: content, model, baseUrl, finishReason: response.choices?.[0]?.finish_reason ?? null }
     }
     return { ok: false, status: 200, details: 'No content in response', model, baseUrl }
   } catch (e: any) {

@@ -21,6 +21,6 @@ export async function assertLeagueAiAllowed(leagueId: string): Promise<{ ok: boo
   })
   if (!league) return { ok: false, reason: "League not found" }
   const s = getAiOpponentsSettings(league.settings)
-  if (!s.enabled) return { ok: false, reason: "AI opponents not enabled for this league" }
+  if (!s.enabled) return { ok: false, reason: "Chimmy opponents not enabled for this league" }
   return { ok: true }
 }

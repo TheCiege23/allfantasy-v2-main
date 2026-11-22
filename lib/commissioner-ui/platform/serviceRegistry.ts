@@ -15,7 +15,7 @@
 
 export type CommissionerPlatformServiceId = 'search' | 'notifications' | 'activity-stream' | 'help-center'
 
-export interface CommissionerPlatformServiceContract {
+interface CommissionerPlatformServiceContract {
   id: CommissionerPlatformServiceId
   displayName: string
   /**

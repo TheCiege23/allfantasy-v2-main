@@ -36,9 +36,6 @@
 import type { FormatAdjustment, FormatValueInput, FormatValueModel, TradeLegality } from './types'
 import { isPastTradeDeadline, stashCapacity } from '../leagueShape'
 
-/** Rules §9: "Trades are prohibited from after 13 through 17." */
-export const FOUR_HORSEMEN_DEADLINE_WEEK = 13
-
 /**
  * Rules §4: taxi is "for players with 3 years or less experience".
  *
@@ -65,7 +62,7 @@ export const STASH_OPTIONALITY_BONUS = 1.05
 export const ELIMINATOR_STRIKES_TO_ELIMINATION = 4
 
 /** Team state this model understands. Absent members simply switch the relevant effect off. */
-export interface FourHorsemenTeamState {
+interface FourHorsemenTeamState {
   /** Eliminator strikes accrued. 0–4. */
   eliminatorStrikes?: number | null
   /** True once the team is out of the Eliminator — its scores no longer count toward that pot. */
@@ -166,11 +163,10 @@ export const fourHorsemenModel: FormatValueModel = {
   /**
    * Rules §9, two separate prohibitions, both legality rather than valuation.
    *
-   * ⚠ THE DEADLINE IS READ FROM THE SHAPE, NOT FROM THE CONSTANT. `FOUR_HORSEMEN_DEADLINE_WEEK`
-   * documents what the rulebook says; the shape carries what the league is actually configured
-   * with. If they disagree the configuration wins, because that is what will enforce it — and a
-   * model that trusted its own constant would tell a manager a trade is legal while the platform
-   * refuses it.
+   * ⚠ THE DEADLINE IS READ FROM THE SHAPE, NOT FROM A CONSTANT. The rulebook names a week; the
+   * shape carries what the league is actually configured with. If they disagree the configuration
+   * wins, because that is what will enforce it — and a model that trusted a constant would tell a
+   * manager a trade is legal while the platform refuses it.
    */
   canTrade(input: FormatValueInput): TradeLegality {
     if (isPastTradeDeadline(input.shape, input.currentWeek)) {

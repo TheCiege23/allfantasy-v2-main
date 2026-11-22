@@ -1,4 +1,4 @@
-export type RedraftPositiveIntegerParseResult =
+type RedraftPositiveIntegerParseResult =
   | { ok: true; value: number | null }
   | { ok: false; error: string }
 

@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { SettingsLockPanel } from '@/components/league-settings/home/SettingsLockPanel'
 
 const groups = (locked: string[], unlocked: Record<string, string> = {}) =>
-  ['scoring', 'rosters', 'keepers', 'trades', 'waivers', 'playoffs'].map((g) => ({ group: g, locked: locked.includes(g), unlockedUntil: unlocked[g] ?? null }))
+  ['scoring', 'rosters', 'keepers', 'trades', 'waivers', 'playoffs', 'format'].map((g) => ({ group: g, locked: locked.includes(g), unlockedUntil: unlocked[g] ?? null }))
 
 let view: Record<string, unknown>
 let calls: Array<{ method: string; body: unknown }>

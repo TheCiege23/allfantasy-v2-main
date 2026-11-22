@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useCallback, useRef, useEffect, type JSX } from "react"
-import { Timer, Trophy, Sparkles } from "lucide-react"
+import { Timer, Trophy } from "lucide-react"
 import { useBracketLive } from "@/lib/hooks/useBracketLive"
 import { PickWizard } from "./PickWizard"
 import { PickAssistCard } from "./PickAssistCard"
@@ -166,7 +166,6 @@ function MiniCell({
   const homePicked = !!homeName && picked === homeName
   const awayPicked = !!awayName && picked === awayName
   const isR1 = node.round === 1
-  const hasBothTeams = !!homeName && !!awayName
 
   let borderColor = 'rgba(255,255,255,0.08)'
   if (homePicked || awayPicked) borderColor = 'rgba(59,130,246,0.4)'
@@ -251,7 +250,7 @@ export function BracketProView({ tournamentId, leagueId, entryId, nodes, initial
   const effective = useMemo(() => computeEffectiveTeams(nodesWithLive, picks), [nodesWithLive, picks])
   const bracketReleased = useMemo(() => isBracketReleased(nodesWithLive), [nodesWithLive])
 
-  const { byRegion, finals, firstFour } = useMemo(() => {
+  const { byRegion, finals } = useMemo(() => {
     const reg: Record<string, Node[]> = {}
     const fin: Node[] = []
     const ff: Node[] = []

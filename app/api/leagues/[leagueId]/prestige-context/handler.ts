@@ -4,10 +4,10 @@
  * Query: sport (optional). If user is commissioner, includes commissionerTrustContext.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { buildAIPrestigeContext } from '@/lib/prestige-governance/AIPrestigeContextResolver'
 import { buildCommissionerTrustContext } from '@/lib/prestige-governance/CommissionerTrustBridge'
 import { buildPrestigeGovernanceSnapshot } from '@/lib/prestige-governance/PrestigeGovernanceOrchestrator'
@@ -39,7 +39,7 @@ export async function GET(
     const includeSnapshot = parseBoolean(url.searchParams?.get('includeSnapshot'), false)
     const summaryLimit = Number.parseInt(url.searchParams?.get('summaryLimit') ?? '12', 10)
 
-    const isComm = await isCommissioner(leagueId, userId)
+    const isComm = await canCommissionerAct(leagueId, userId, 'view')
 
     const commissionerContext = isComm
       ? await buildCommissionerTrustContext(leagueId, { sport })

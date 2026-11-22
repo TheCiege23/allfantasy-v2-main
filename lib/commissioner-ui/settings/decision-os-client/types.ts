@@ -46,7 +46,7 @@ export interface LeagueScoringRule {
   points: number
 }
 
-export interface LeagueScoringSummary {
+interface LeagueScoringSummary {
   /** e.g. 'custom', 'ppr' — as captured, not inferred. */
   format: string | null
   /** The provider's template id where one was captured, e.g. `fb_half_ppr`. */
@@ -64,7 +64,7 @@ export interface LeagueScoringSummary {
 }
 
 /** Where these values came from, so a commissioner can tell captured fact from platform default. */
-export interface LeagueSettingsProvenance {
+interface LeagueSettingsProvenance {
   /** e.g. 'sleeper'. Null when the league carries no import metadata. */
   source: string | null
   /** The league's id on that platform, when captured. */

@@ -1,9 +1,9 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
-import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { formatLeagueEventRow } from '@/lib/league-feed/leagueFeedFormatter'
 import { getLeagueFeedSettings } from '@/lib/league-feed/leagueFeedSettings'
 
@@ -44,7 +44,7 @@ export async function GET(
   const access = await resolveLeagueAccess(leagueId, userId)
   if (!access?.isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const elevated = await isElevatedCommissioner(leagueId, userId)
+  const elevated = await canCommissionerAct(leagueId, userId, 'view')
 
   const leagueRow = await prisma.league.findUnique({
     where: { id: leagueId },

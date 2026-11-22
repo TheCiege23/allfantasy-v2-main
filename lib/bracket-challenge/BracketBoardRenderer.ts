@@ -2,13 +2,12 @@
  * BracketBoardRenderer — pure helpers for bracket board: round labels, region order, cell keys.
  */
 
-export const DEFAULT_REGION_ORDER = ['West', 'East', 'South', 'Midwest'] as const
-export const CLASSIC_REGION_SET = new Set(DEFAULT_REGION_ORDER)
+const DEFAULT_REGION_ORDER = ['West', 'East', 'South', 'Midwest'] as const
 
 /**
  * Round display label (e.g. "Round of 64", "Championship").
  */
-export function getRoundLabel(round: number): string {
+function getRoundLabel(round: number): string {
   const labels: Record<number, string> = {
     0: 'First Four',
     1: 'Round of 64',
@@ -24,7 +23,7 @@ export function getRoundLabel(round: number): string {
 /**
  * Short round label for compact UI.
  */
-export function getRoundShortLabel(round: number): string {
+function getRoundShortLabel(round: number): string {
   const labels: Record<number, string> = {
     0: 'FF',
     1: 'R64',
@@ -70,7 +69,7 @@ export function getAdaptiveRoundShortLabel(round: number, maxRound: number): str
   return getRoundShortLabel(round)
 }
 
-export type BracketBoardNodeLike = {
+type BracketBoardNodeLike = {
   round: number
   region?: string | null
 }
@@ -88,9 +87,3 @@ export function isClassicRegionalBoard(nodes: BracketBoardNodeLike[]): boolean {
   return hasClassicRegions && rounds.includes(5) && rounds.includes(6)
 }
 
-/**
- * Cell key for React list (round + slot or node id).
- */
-export function getBracketCellKey(round: number, slotOrId: string): string {
-  return `r${round}-${slotOrId}`
-}

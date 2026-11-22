@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
-import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import '@/components/dynasty/dynasty-details.css'
@@ -36,6 +35,8 @@ import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
+import { Crest, TradeProposeGrid } from '@/components/league/TradeProposeGrid'
+import { useTradeInterest } from '@/components/league/useTradeInterest'
 import {
   groupTradeTimelineBySeason,
   tradeSeasonFromIso,
@@ -82,7 +83,7 @@ import {
  * leagues can build an explicitly labelled shadow plan for their source app.
  */
 
-export type TradesTabProps = {
+type TradesTabProps = {
   league: UserLeague
   teams: LeagueTeamSlot[]
 }
@@ -114,7 +115,7 @@ type PanelResponse = {
   error?: string
 }
 
-export type BuilderOfferAsset = {
+type BuilderOfferAsset = {
   playerId: string | null
   name: string
   position: string | null
@@ -125,7 +126,7 @@ export type BuilderOfferAsset = {
   faabAmount: number | null
 }
 
-export type BuilderOffer = {
+type BuilderOffer = {
   provider: 'sleeper' | 'yahoo'
   transactionId: string
   direction: 'incoming' | 'outgoing'
@@ -212,18 +213,19 @@ function shortDisplayName(full: string): string {
 }
 
 /** Position colour — the same assignment the Core Trade Center rows use. */
-function positionAccent(pos: string): { border: string; label: string } {
+/** `strip` tints the trade-block card's owner strip in the position's colour. */
+function positionAccent(pos: string): { border: string; label: string; strip: string } {
   const p = pos.toUpperCase()
-  if (p === 'QB') return { border: 'border-pink-400/65', label: 'text-pink-300/90' }
-  if (p === 'RB') return { border: 'border-emerald-400/65', label: 'text-emerald-300/90' }
-  if (p === 'WR') return { border: 'border-sky-400/70', label: 'text-sky-300/90' }
-  if (p === 'TE') return { border: 'border-orange-400/65', label: 'text-orange-300/90' }
-  if (['DL', 'DE', 'DT', 'NT'].includes(p)) return { border: 'border-amber-500/65', label: 'text-amber-300/90' }
-  if (p === 'LB') return { border: 'border-lime-400/55', label: 'text-lime-300/85' }
-  if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return { border: 'border-indigo-400/65', label: 'text-indigo-300/90' }
-  if (p === 'K') return { border: 'border-yellow-400/55', label: 'text-yellow-200/85' }
-  if (p === 'DEF' || p === 'DST') return { border: 'border-slate-400/60', label: 'text-slate-300/90' }
-  return { border: 'border-[var(--line2)]', label: 'text-[#ff9ec0]/85' }
+  if (p === 'QB') return { border: 'border-pink-400/65', label: 'text-pink-300/90', strip: 'bg-pink-400/15' }
+  if (p === 'RB') return { border: 'border-emerald-400/65', label: 'text-emerald-300/90', strip: 'bg-emerald-400/15' }
+  if (p === 'WR') return { border: 'border-sky-400/70', label: 'text-sky-300/90', strip: 'bg-sky-400/15' }
+  if (p === 'TE') return { border: 'border-orange-400/65', label: 'text-orange-300/90', strip: 'bg-orange-400/15' }
+  if (['DL', 'DE', 'DT', 'NT'].includes(p)) return { border: 'border-amber-500/65', label: 'text-amber-300/90', strip: 'bg-amber-500/15' }
+  if (p === 'LB') return { border: 'border-lime-400/55', label: 'text-lime-300/85', strip: 'bg-lime-400/15' }
+  if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return { border: 'border-indigo-400/65', label: 'text-indigo-300/90', strip: 'bg-indigo-400/15' }
+  if (p === 'K') return { border: 'border-yellow-400/55', label: 'text-yellow-200/85', strip: 'bg-yellow-400/15' }
+  if (p === 'DEF' || p === 'DST') return { border: 'border-slate-400/60', label: 'text-slate-300/90', strip: 'bg-slate-400/15' }
+  return { border: 'border-[var(--line2)]', label: 'text-[var(--muted)]', strip: 'bg-[var(--surface2)]' }
 }
 
 const PLATFORM_MARK: Record<string, string> = {
@@ -625,7 +627,7 @@ export function toAnalyzeAssets(
   return { assets: out, dropped }
 }
 
-export type PendingVerdict =
+type PendingVerdict =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'skipped'; why: string }
@@ -1130,6 +1132,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [err, setErr] = useState<string | null>(null)
   const [watch, setWatch] = useState<Set<string>>(() => readWatchSet(league.id))
   const [proposeOpen, setProposeOpen] = useState(false)
+  /** Set when the trade window is opened from the Propose grid: that manager and player, preselected. */
+  const [proposeFor, setProposeFor] = useState<{ rosterId: string; playerId: string } | null>(null)
+  const tradeBlockPlayerIds = useMemo(() => new Set(tradeBlock.map((t) => t.playerId)), [tradeBlock])
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
   const [reversing, setReversing] = useState<LeagueTradeHistoryItem | null>(null)
@@ -1159,6 +1164,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     },
     [watch, persistWatch],
   )
+
+  // The AF crest: league-wide interest (marks + anonymous counts) once the interest table exists;
+  // until then, and if that read fails, the per-browser watch set above.
+  const interest = useTradeInterest(league.id)
+  const interestMarks = interest.available ? interest.mine : watch
+  const toggleInterest = interest.available ? interest.toggle : toggleWatch
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
     const background = opts?.background === true
@@ -1428,7 +1439,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               className="rounded-xl border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-violet-100 hover:bg-violet-500/20"
               data-testid="trades-tab-chimmy-analyze"
             >
-              AI trade analysis
+              Chimmy trade analysis
             </button>
           ) : null}
             <button
@@ -1943,43 +1954,54 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {tradeBlock.map((item) => {
                 const accent = positionAccent(item.position)
-                const teamLine = item.team && item.team.length ? `${item.position} · ${item.team}` : `${item.position} · —`
-                const watched = watch.has(item.playerId)
+                const watched = interestMarks.has(item.playerId)
                 return (
+                  // Compact card (owner's reference, 2026-11-17): position · club and the short name on
+                  // the left, the photo top-right, the owner on a strip tinted in the position colour.
                   <div
                     key={item.id}
-                    className={`relative flex flex-col gap-2 rounded-xl border-2 ${accent.border} bg-[var(--surface)] p-2.5 shadow-sm`}
+                    className={`relative flex flex-col overflow-hidden rounded-xl border-2 ${accent.border} bg-[var(--surface)] shadow-sm`}
+                    data-testid="trade-block-card"
                   >
-                    <div className="flex items-start justify-between gap-1">
-                      <span className={`text-[11px] font-bold leading-tight ${accent.label}`}>{teamLine}</span>
-                      <button
-                        type="button"
-                        onClick={() => toggleWatch(item.playerId)}
-                        className={`rounded-full p-1 transition ${
-                          watched ? 'text-rose-400' : 'text-[var(--muted)] hover:text-rose-400/80'
-                        }`}
-                        aria-label={watched ? 'Remove from watch' : 'Watch player'}
-                      >
-                        <Heart className={`h-3.5 w-3.5 ${watched ? 'fill-current' : ''}`} strokeWidth={2} />
-                      </button>
+                    <div className="flex items-start justify-between gap-2 px-3 pt-3 pb-2.5">
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-extrabold leading-tight tracking-wide">
+                          <span className={accent.label}>{item.position}</span>
+                          <span className="text-[var(--muted)]"> · {item.team && item.team.length ? item.team : '—'}</span>
+                        </p>
+                        <p className="mt-1 truncate text-[16px] font-extrabold leading-tight text-[var(--text)]">
+                          {shortDisplayName(item.name)}
+                        </p>
+                      </div>
+                      <div className="relative shrink-0">
+                        <PlayerImage
+                          sleeperId={item.playerId}
+                          sport={sport}
+                          name={item.name}
+                          position={item.position}
+                          size={38}
+                          variant="round"
+                        />
+                        {/* The AF crest in place of the heart: the viewer's interest mark and how many
+                            managers marked this player (owner's page review #9). */}
+                        <button
+                          type="button"
+                          onClick={() => toggleInterest(item.playerId)}
+                          className="absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center"
+                          aria-pressed={watched}
+                          aria-label={`${watched ? 'Remove interest in' : 'Mark interest in'} ${item.name}${interest.counts[item.playerId] ? `, ${interest.counts[item.playerId]} interested` : ''}`}
+                          data-testid="trade-block-crest"
+                        >
+                          <Crest on={watched} count={interest.counts[item.playerId] ?? 0} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <PlayerImage
-                        sleeperId={item.playerId}
-                        sport={sport}
-                        name={item.name}
-                        position={item.position}
-                        size={30}
-                        variant="round"
-                      />
-                      <p className="truncate text-[12px] font-bold leading-tight text-[var(--text)]">
-                        {shortDisplayName(item.name)}
-                      </p>
-                    </div>
-                    <p className="truncate text-[11px] text-[#ffb8d1]/45">{item.ownerName}</p>
+                    <p className={`truncate px-3 py-1.5 text-center text-[13px] font-bold text-[var(--text)] ${accent.strip}`}>
+                      {item.ownerName}
+                    </p>
                   </div>
                 )
               })}
@@ -1991,6 +2013,23 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             </p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* ── Propose a trade: every manager's players as tiles (owner's page review #9) ── */}
+      {!loading && !err ? (
+        <TradeProposeGrid
+          leagueId={league.id}
+          platform={league.platform}
+          tradeBlockPlayerIds={tradeBlockPlayerIds}
+          watched={interestMarks}
+          onToggleWatch={toggleInterest}
+          interestCounts={interest.counts}
+          onProposeFor={(rosterId, playerId) => {
+            setProposeFor({ rosterId, playerId })
+            setProposeOpen(true)
+          }}
+          onBlockChanged={() => void load({ background: true })}
+        />
       ) : null}
 
       {/* ── Actions ──────────────────────────────────────────────────── */}
@@ -2012,13 +2051,19 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
       <ProposeTradeModal
         open={proposeOpen}
-        onClose={() => setProposeOpen(false)}
+        onClose={() => {
+          setProposeOpen(false)
+          setProposeFor(null)
+        }}
         leagueId={league.id}
         teams={teams}
         platform={league.platform}
         sport={league.sport}
+        initialPartnerRosterId={proposeFor?.rosterId ?? null}
+        initialGetPlayerId={proposeFor?.playerId ?? null}
         onSubmitted={() => {
           setProposeOpen(false)
+          setProposeFor(null)
           void load()
         }}
       />

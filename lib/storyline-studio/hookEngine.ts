@@ -28,7 +28,7 @@ import type {
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 /** How a numeric fact appears in text. One rule, so the guard can recognise it. */
-export function formatFactNumber(n: number): string {
+function formatFactNumber(n: number): string {
   if (!Number.isFinite(n)) return ''
   const r = round1(n)
   return Number.isInteger(r) ? String(r) : r.toFixed(1)
@@ -41,7 +41,7 @@ type TemplateSet = Record<HookLanguage, string>
 /**
  * Spanish uses «reclamo» for waiver concepts, never «waiver» — the house rule for every string.
  */
-export const HOOK_TEMPLATES: Record<string, TemplateSet> = {
+const HOOK_TEMPLATES: Record<string, TemplateSet> = {
   rivalry_lead: {
     en: '{leaderTeam} leads the all-time series with {trailerTeam} {leaderWins}-{trailerWins}. Last time out, in week {lastWeek} of {lastSeason}, {lastWinnerTeam} won {lastWinnerScore}-{lastLoserScore}.',
     es: '{leaderTeam} domina la serie histórica ante {trailerTeam} {leaderWins}-{trailerWins}. La última vez, en la semana {lastWeek} de {lastSeason}, {lastWinnerTeam} ganó {lastWinnerScore}-{lastLoserScore}.',
@@ -173,7 +173,7 @@ function pairKey(a: TeamKey, b: TeamKey): string {
 }
 
 /** Completed games between two teams, oldest first, from a's point of view. */
-export function headToHead(fixtures: readonly StoryFixture[], a: TeamKey, b: TeamKey) {
+function headToHead(fixtures: readonly StoryFixture[], a: TeamKey, b: TeamKey) {
   return fixtures
     .filter((f) => f.final && ((f.a === a && f.b === b) || (f.a === b && f.b === a)))
     .map((f) => {

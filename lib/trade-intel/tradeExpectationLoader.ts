@@ -29,10 +29,90 @@ function priorSeasonOf(trade: GradedTrade): string {
   return Number.isFinite(n) ? String(n - 1) : trade.season
 }
 
+/**
+ * League-scoped inputs shared by every trade in one read — see `tradeExpectationShared`.
+ * Opaque on purpose: a caller creates one and passes it; only this module reads it.
+ */
+export type TradeExpectationShared = { readonly memo: Map<string, unknown> }
+
+/**
+ * One memo for a batch of `loadTradeExpectation` calls on the SAME league (a history of sixty trades).
+ *
+ * ⚠ EVERY INPUT BELOW IS LEAGUE- OR SEASON-SCOPED, NOT TRADE-SCOPED (2026-11-06). Without this, each
+ * trade re-read the league context, the market chart, the DynastyProcess chart and a whole season's
+ * stat board (multi-MB JSON out of `sportsDataCache`), re-scored that board with the league's weights,
+ * re-blended the AF values, and made its OWN live Sleeper roster call — once per trade, sixty times for
+ * a sixty-trade history. The values were the same every time; only the cost was multiplied.
+ *
+ * Scope it to ONE read. It is not a cache: nothing in it outlives the request that made it, so it never
+ * serves a roster or a chart older than that read. A failed input is shared too — it fails once for the
+ * batch instead of being retried per trade, and still reads as that input missing.
+ */
+export function tradeExpectationShared(): TradeExpectationShared {
+  return { memo: new Map() }
+}
+
+function once<T>(shared: TradeExpectationShared | undefined, key: string, run: () => T): T {
+  if (!shared) return run()
+  if (shared.memo.has(key)) return shared.memo.get(key) as T
+  const value = run()
+  shared.memo.set(key, value)
+  return value
+}
+
+type AfBlend = {
+  afValues: ReturnType<typeof buildAfValues> | null
+  afPickValues: ReturnType<typeof buildAfPickValues> | null
+}
+
+type MarketValuesOf = NonNullable<Awaited<ReturnType<typeof getMarketValues>>>
+type DynastyValuesOf = Awaited<ReturnType<typeof getDynastyProcessValues>>
+
+/** AF Value: blend the two independently-derived sources in rank space. */
+function blendAfValues(marketValues: MarketValuesOf, dynastyProcess: DynastyValuesOf): AfBlend {
+  // FantasyCalc is the reference scale because every existing consumer already
+  // reads its units, and it is the source that also prices picks.
+  const sources: SourceEntries[] = [
+    {
+      source: 'fantasycalc',
+      entries: Object.entries(marketValues.bySleeperId).map(([sleeperId, e]) => ({
+        sleeperId,
+        value: e.value,
+      })),
+    },
+  ]
+  if (dynastyProcess) {
+    sources.push({
+      source: 'dynastyprocess',
+      entries: Object.entries(dynastyProcess.bySleeperId).map(([sleeperId, value]) => ({
+        sleeperId,
+        value,
+      })),
+    })
+  }
+  const built = buildAfValues(sources, 'fantasycalc')
+
+  // Picks get the same treatment, ranked among themselves rather than against
+  // players — a 2026 2nd is not "the 140th most valuable player" in either feed.
+  const pickSources: PickEntries[] = [
+    { source: 'fantasycalc', byRound: marketValues.pickByRound },
+  ]
+  if (dynastyProcess) {
+    pickSources.push({ source: 'dynastyprocess', byRound: dynastyProcess.pickByRound })
+  }
+  const builtPicks = buildAfPickValues(pickSources, 'fantasycalc')
+  return {
+    afValues: built.size > 0 ? built : null,
+    afPickValues: builtPicks.size > 0 ? builtPicks : null,
+  }
+}
+
 export async function loadTradeExpectation(
   sleeperLeagueId: string,
   trade: GradedTrade,
   opts: {
+    /** Share league-scoped reads across a batch of trades on this league — see `tradeExpectationShared`. */
+    shared?: TradeExpectationShared
     /**
      * The VIEWER'S copy of the league. One Sleeper league is one AF row per importer, and each row
      * carries its own settings and confirmed league type, so the letter depends on which row is read.
@@ -43,9 +123,10 @@ export async function loadTradeExpectation(
     afLeagueId?: string | null
   } = {},
 ): Promise<TradeExpectation | null> {
+  const shared = opts.shared
   const [context, leagueRow] = await Promise.all([
-    getLeagueContext(sleeperLeagueId).catch(() => null),
-    prisma.league.findFirst({
+    once(shared, `context:${sleeperLeagueId}`, () => getLeagueContext(sleeperLeagueId).catch(() => null)),
+    once(shared, `row:${opts.afLeagueId ?? ''}:${sleeperLeagueId}`, () => prisma.league.findFirst({
       where: opts.afLeagueId
         ? { id: opts.afLeagueId, platformLeagueId: sleeperLeagueId }
         : { platformLeagueId: sleeperLeagueId },
@@ -73,7 +154,7 @@ export async function loadTradeExpectation(
         },
         legacyTournamentLeague: { select: { id: true } },
       },
-    }).catch(() => null),
+    }).catch(() => null)),
   ])
   if (!context) return null
 
@@ -117,51 +198,21 @@ export async function loadTradeExpectation(
 
   const numQbs: 1 | 2 = context.variant.superflex ? 2 : 1
 
+  /*
+   * Keyed on the league id rather than on `context`: a batch shares one league, and `context` is the
+   * memoised read of that id. `historical` decides only WHETHER a read happens, never its arguments.
+   */
   const [marketValues, dynastyProcess, statsBoard, rosters] = await Promise.all([
-    historical ? Promise.resolve(null) : getMarketValues(context).catch(() => null),
-    historical ? Promise.resolve(null) : getDynastyProcessValues(numQbs).catch(() => null),
-    getSeasonStatsBoard(priorSeason, true).catch(() => null),
-    historical ? Promise.resolve(null) : fetchLeagueRosters(sleeperLeagueId),
+    historical ? Promise.resolve(null) : once(shared, `market:${sleeperLeagueId}`, () => getMarketValues(context).catch(() => null)),
+    historical ? Promise.resolve(null) : once(shared, `dynasty:${numQbs}`, () => getDynastyProcessValues(numQbs).catch(() => null)),
+    once(shared, `stats:${priorSeason}`, () => getSeasonStatsBoard(priorSeason, true).catch(() => null)),
+    historical ? Promise.resolve(null) : once(shared, `rosters:${sleeperLeagueId}`, () => fetchLeagueRosters(sleeperLeagueId)),
   ])
 
-  // AF Value: blend the two independently-derived sources in rank space.
-  // FantasyCalc is the reference scale because every existing consumer already
-  // reads its units, and it is the source that also prices picks.
-  let afValues: ReturnType<typeof buildAfValues> | null = null
-  let afPickValues: ReturnType<typeof buildAfPickValues> | null = null
-  if (marketValues) {
-    const sources: SourceEntries[] = [
-      {
-        source: 'fantasycalc',
-        entries: Object.entries(marketValues.bySleeperId).map(([sleeperId, e]) => ({
-          sleeperId,
-          value: e.value,
-        })),
-      },
-    ]
-    if (dynastyProcess) {
-      sources.push({
-        source: 'dynastyprocess',
-        entries: Object.entries(dynastyProcess.bySleeperId).map(([sleeperId, value]) => ({
-          sleeperId,
-          value,
-        })),
-      })
-    }
-    const built = buildAfValues(sources, 'fantasycalc')
-    afValues = built.size > 0 ? built : null
-
-    // Picks get the same treatment, ranked among themselves rather than against
-    // players — a 2026 2nd is not "the 140th most valuable player" in either feed.
-    const pickSources: PickEntries[] = [
-      { source: 'fantasycalc', byRound: marketValues.pickByRound },
-    ]
-    if (dynastyProcess) {
-      pickSources.push({ source: 'dynastyprocess', byRound: dynastyProcess.pickByRound })
-    }
-    const builtPicks = buildAfPickValues(pickSources, 'fantasycalc')
-    afPickValues = builtPicks.size > 0 ? builtPicks : null
-  }
+  // Built once per batch: both inputs are the memoised reads above, so the blend is the same every time.
+  const { afValues, afPickValues }: AfBlend = marketValues
+    ? once(shared, `af:${sleeperLeagueId}:${numQbs}`, () => blendAfValues(marketValues, dynastyProcess))
+    : { afValues: null, afPickValues: null }
 
   // Rescore last season with the league's own weights. scoreStatLine reports
   // whether it truly used them or fell back to a format approximation, and we
@@ -174,16 +225,19 @@ export async function loadTradeExpectation(
     // actually traded — labelling genuinely league-scored numbers as
     // approximations. buildTradeExpectation decides the mode from the assets in
     // the trade instead.
-    const byPlayerId: Record<
-      string,
-      { points: number; games: number | null; mode: 'league-scored' | 'format-approx' }
-    > = {}
-    for (const [playerId, row] of Object.entries(statsBoard.players)) {
-      const scored = scoreStatLine(row.stats, context.scoring.settings, context.scoring.format)
-      const games = typeof row.stats.gp === 'number' ? row.stats.gp : null
-      byPlayerId[playerId] = { points: scored.points, games, mode: scored.mode }
-    }
-    prior = { season: statsBoard.season, byPlayerId }
+    // Once per league and season per batch: the board and the league's weights are both memoised above.
+    prior = once(shared, `prior:${sleeperLeagueId}:${priorSeason}`, () => {
+      const byPlayerId: Record<
+        string,
+        { points: number; games: number | null; mode: 'league-scored' | 'format-approx' }
+      > = {}
+      for (const [playerId, row] of Object.entries(statsBoard.players)) {
+        const scored = scoreStatLine(row.stats, context.scoring.settings, context.scoring.format)
+        const games = typeof row.stats.gp === 'number' ? row.stats.gp : null
+        byPlayerId[playerId] = { points: scored.points, games, mode: scored.mode }
+      }
+      return { season: statsBoard.season, byPlayerId }
+    })
   }
 
   // Roster composition by position, as rosters stand now.

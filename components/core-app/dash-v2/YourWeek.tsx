@@ -80,4 +80,3 @@ export function YourWeek({ data }: { data: WeekAllData | null }) {
   )
 }
 
-export default YourWeek

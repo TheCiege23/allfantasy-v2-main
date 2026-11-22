@@ -14,7 +14,7 @@ import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
 import { isSingleGameSeries } from "./singleGame"
 import type { PlayoffSport } from "./types"
 
-export type PlayoffSeriesSyncGame = {
+type PlayoffSeriesSyncGame = {
   gameId?: string | null
   homeTeam: string
   awayTeam: string
@@ -77,7 +77,7 @@ type ProviderSeriesGroup = {
   games: PlayoffSeriesSyncGame[]
 }
 
-export type PlayoffSeriesSyncProvider = (input: {
+type PlayoffSeriesSyncProvider = (input: {
   sport: PlayoffSport
   seasonYear: number
   providerPreference?: PlayoffSeriesSyncProviderPreference
@@ -89,7 +89,7 @@ export type PlayoffSeriesSyncProvider = (input: {
   diagnostics?: PlayoffSyncDiagnostics
 }>
 
-export type PlayoffSeriesScheduleSupplementProvider = (input: {
+type PlayoffSeriesScheduleSupplementProvider = (input: {
   sport: PlayoffSport
   seasonYear: number
 }) => Promise<{
@@ -98,7 +98,7 @@ export type PlayoffSeriesScheduleSupplementProvider = (input: {
   warnings?: string[]
 }>
 
-export type PlayoffSeriesFinalScoreSupplementProvider = (input: {
+type PlayoffSeriesFinalScoreSupplementProvider = (input: {
   sport: PlayoffSport
   seasonYear: number
   dates: string[]
@@ -181,7 +181,7 @@ type SlotAssignmentWarning = {
   slot?: number | null
 }
 
-export type PlayoffSyncDiagnostics = {
+type PlayoffSyncDiagnostics = {
   seasonYear: number
   challengeSeasonYear: number
   selectedProviderSeason: number | null
@@ -230,7 +230,7 @@ export type PlayoffSyncDiagnostics = {
   noMatchReason?: string | null
 }
 
-export type SyncPlayoffChallengeSeriesResult = {
+type SyncPlayoffChallengeSeriesResult = {
   ok: boolean
   challengeId: string
   sport: PlayoffSport
@@ -253,7 +253,7 @@ export type SyncPlayoffChallengeSeriesResult = {
   diagnostics: PlayoffSyncDiagnostics
 }
 
-export type RefreshPlayoffScheduleMetadataResult = {
+type RefreshPlayoffScheduleMetadataResult = {
   ok: boolean
   challengeId: string
   sport: PlayoffSport

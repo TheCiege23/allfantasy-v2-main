@@ -12,7 +12,7 @@ import { SEVERITY_RANK, type AttentionSignalSeverity, type DecisionOsAttentionSi
  * ⚠ LEAGUE IDS ONLY, NEVER NAMES. ⚠ SPOILER-SAFE: a swap signal says a swap is coming, never the draw.
  */
 
-export interface SurvivorAttentionInputs {
+interface SurvivorAttentionInputs {
   leagueId: string
   now: Date
   /** 'es' writes the signal in Spanish (League.language); anything else is English. */

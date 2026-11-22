@@ -91,7 +91,7 @@ async function memberLeagueIds(userId: string): Promise<string[]> {
       .catch(() => []),
     prisma.roster
       .findMany({
-        where: { platformUserId: userId },
+        where: { OR: [{ platformUserId: userId }, { managerUserId: userId }] },
         select: { leagueId: true },
         distinct: ['leagueId'],
         take: MAX_LEAGUES,

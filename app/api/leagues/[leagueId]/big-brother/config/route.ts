@@ -1,18 +1,22 @@
 /**
- * [NEW] GET/PATCH: Big Brother league config. Commissioner or member can read; only commissioner can PATCH.
- * PROMPT 2/6.
+ * GET/PATCH: Big Brother league config. Commissioner or member can read; only commissioner can PATCH.
+ * PATCH takes only the settings the game reads, each validated (lib/big-brother/configPatch.ts), behind the
+ * league's "Format rules" lock, and every change is written to the league log.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   isBigBrotherLeague,
   getBigBrotherConfig,
   upsertBigBrotherConfig,
 } from '@/lib/big-brother/BigBrotherLeagueConfig'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
+import { parseBigBrotherConfigPatch } from '@/lib/big-brother/configPatch'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +39,8 @@ export async function GET(
 
   const config = await getBigBrotherConfig(leagueId)
   if (!config) return NextResponse.json({ config: null })
+  // Jury and finale are fixed once anyone is evicted (lib/big-brother/configPatch.ts); the editor says so up front.
+  const evictionsSoFar = await prisma.bigBrotherCycle.count({ where: { leagueId, evictedRosterId: { not: null } } })
 
   return NextResponse.json({
     config: {
@@ -72,6 +78,7 @@ export async function GET(
       weekProgressionPaused: config.weekProgressionPaused,
       premiumEngineSpec: config.premiumEngineSpec ?? null,
     },
+    juryAndFinaleOpen: evictionsSoFar === 0,
   })
 }
 
@@ -86,45 +93,25 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isBB = await isBigBrotherLeague(leagueId)
   if (!isBB) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
-  const body = await req.json().catch(() => ({}))
-  const updated = await upsertBigBrotherConfig(leagueId, {
-    ...(body.hohChallengeDayOfWeek !== undefined && { hohChallengeDayOfWeek: body.hohChallengeDayOfWeek == null ? null : Number(body.hohChallengeDayOfWeek) }),
-    ...(body.hohChallengeTimeUtc !== undefined && { hohChallengeTimeUtc: body.hohChallengeTimeUtc == null ? null : String(body.hohChallengeTimeUtc) }),
-    ...(body.nominationDeadlineDayOfWeek !== undefined && { nominationDeadlineDayOfWeek: body.nominationDeadlineDayOfWeek == null ? null : Number(body.nominationDeadlineDayOfWeek) }),
-    ...(body.nominationDeadlineTimeUtc !== undefined && { nominationDeadlineTimeUtc: body.nominationDeadlineTimeUtc == null ? null : String(body.nominationDeadlineTimeUtc) }),
-    ...(body.vetoDrawDayOfWeek !== undefined && { vetoDrawDayOfWeek: body.vetoDrawDayOfWeek == null ? null : Number(body.vetoDrawDayOfWeek) }),
-    ...(body.vetoDrawTimeUtc !== undefined && { vetoDrawTimeUtc: body.vetoDrawTimeUtc == null ? null : String(body.vetoDrawTimeUtc) }),
-    ...(body.vetoDecisionDeadlineDayOfWeek !== undefined && { vetoDecisionDeadlineDayOfWeek: body.vetoDecisionDeadlineDayOfWeek == null ? null : Number(body.vetoDecisionDeadlineDayOfWeek) }),
-    ...(body.vetoDecisionDeadlineTimeUtc !== undefined && { vetoDecisionDeadlineTimeUtc: body.vetoDecisionDeadlineTimeUtc == null ? null : String(body.vetoDecisionDeadlineTimeUtc) }),
-    ...(body.replacementNomineeDeadlineDayOfWeek !== undefined && { replacementNomineeDeadlineDayOfWeek: body.replacementNomineeDeadlineDayOfWeek == null ? null : Number(body.replacementNomineeDeadlineDayOfWeek) }),
-    ...(body.replacementNomineeDeadlineTimeUtc !== undefined && { replacementNomineeDeadlineTimeUtc: body.replacementNomineeDeadlineTimeUtc == null ? null : String(body.replacementNomineeDeadlineTimeUtc) }),
-    ...(body.evictionVoteOpenDayOfWeek !== undefined && { evictionVoteOpenDayOfWeek: body.evictionVoteOpenDayOfWeek == null ? null : Number(body.evictionVoteOpenDayOfWeek) }),
-    ...(body.evictionVoteOpenTimeUtc !== undefined && { evictionVoteOpenTimeUtc: body.evictionVoteOpenTimeUtc == null ? null : String(body.evictionVoteOpenTimeUtc) }),
-    ...(body.evictionVoteCloseDayOfWeek !== undefined && { evictionVoteCloseDayOfWeek: body.evictionVoteCloseDayOfWeek == null ? null : Number(body.evictionVoteCloseDayOfWeek) }),
-    ...(body.evictionVoteCloseTimeUtc !== undefined && { evictionVoteCloseTimeUtc: body.evictionVoteCloseTimeUtc == null ? null : String(body.evictionVoteCloseTimeUtc) }),
-    ...(body.finalNomineeCount !== undefined && { finalNomineeCount: Number(body.finalNomineeCount) }),
-    ...(body.vetoCompetitorCount !== undefined && { vetoCompetitorCount: Number(body.vetoCompetitorCount) }),
-    ...(body.consecutiveHohAllowed !== undefined && { consecutiveHohAllowed: Boolean(body.consecutiveHohAllowed) }),
-    ...(body.hohVotesOnlyInTie !== undefined && { hohVotesOnlyInTie: Boolean(body.hohVotesOnlyInTie) }),
-    ...(body.juryStartMode !== undefined && { juryStartMode: String(body.juryStartMode) }),
-    ...(body.juryStartAfterEliminations !== undefined && { juryStartAfterEliminations: body.juryStartAfterEliminations == null ? null : Number(body.juryStartAfterEliminations) }),
-    ...(body.juryStartWhenRemaining !== undefined && { juryStartWhenRemaining: body.juryStartWhenRemaining == null ? null : Number(body.juryStartWhenRemaining) }),
-    ...(body.juryStartWeek !== undefined && { juryStartWeek: body.juryStartWeek == null ? null : Number(body.juryStartWeek) }),
-    ...(body.finaleFormat !== undefined && { finaleFormat: String(body.finaleFormat) }),
-    ...(body.waiverReleaseTiming !== undefined && { waiverReleaseTiming: String(body.waiverReleaseTiming) }),
-    ...(body.publicVoteTotalsVisibility !== undefined && { publicVoteTotalsVisibility: String(body.publicVoteTotalsVisibility) }),
-    ...(body.challengeMode !== undefined && { challengeMode: String(body.challengeMode) }),
-    ...(body.antiCollusionLogging !== undefined && { antiCollusionLogging: Boolean(body.antiCollusionLogging) }),
-    ...(body.inactivePlayerHandling !== undefined && { inactivePlayerHandling: String(body.inactivePlayerHandling) }),
-    ...(body.autoNominationFallback !== undefined && { autoNominationFallback: String(body.autoNominationFallback) }),
-    ...(body.evictionTieBreakMode !== undefined && { evictionTieBreakMode: String(body.evictionTieBreakMode) }),
-    ...(body.weekProgressionPaused !== undefined && { weekProgressionPaused: Boolean(body.weekProgressionPaused) }),
-  })
+  const body = await req.json().catch(() => null)
+  // One rule for every write path (lib/big-brother/configPatch.ts): live settings only, each value checked, and jury
+  // and finale fixed once anyone has been evicted.
+  const [current, evictionsSoFar] = await Promise.all([
+    getBigBrotherConfig(leagueId),
+    prisma.bigBrotherCycle.count({ where: { leagueId, evictedRosterId: { not: null } } }),
+  ])
+  const parsed = parseBigBrotherConfigPatch(body, { evictionsSoFar, current: current ?? {} })
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error, field: parsed.field }, { status: parsed.status })
+
+  const updated = await upsertBigBrotherConfig(leagueId, parsed.input)
+  await logFormatRulesChange({ leagueId, userId, format: 'big_brother', fields: parsed.fields })
   return NextResponse.json({ ok: true, config: updated })
 }

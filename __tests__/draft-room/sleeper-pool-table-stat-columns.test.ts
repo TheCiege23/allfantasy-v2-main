@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { applyPoolSort, sortValueForKey, type PoolSortPlayer } from '@/components/app/draft-room/SleeperPoolSort'
 import {
@@ -166,5 +168,28 @@ describe('buildSleeperPoolTableLayout — LEFT @ column', () => {
     expect(keys.indexOf('leftAt')).toBe(keys.indexOf('afAdp') + 1)
     expect(withLeft.columns.find((c) => c.key === 'leftAt')?.label).toBe('LEFT @ 4.16')
     expect(withLeft.minWidth).toBe(plain.minWidth + 76)
+  })
+})
+
+describe('room v2: the pool row leads with its actions', () => {
+  it('puts the actions column first, left-aligned, in every sport', () => {
+    for (const sport of ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'MLB', 'NHL', 'SOCCER']) {
+      const cols = buildSleeperPoolTableLayout(sport).columns
+      expect(cols[0]).toMatchObject({ key: 'actions', align: 'left' })
+      expect(cols.filter((c) => c.key === 'actions')).toHaveLength(1)
+    }
+  })
+
+  it('renders Draft (or Nominate) before queue and compare inside the cell', () => {
+    const src = readFileSync(resolve(__dirname, '..', '..', 'components/app/draft-room/SleeperPoolTable.tsx'), 'utf8')
+    const cell = src.slice(src.indexOf("case 'actions':"), src.indexOf('default: {', src.indexOf("case 'actions':")))
+    const nominate = cell.indexOf('-nominate`}')
+    const draft = cell.indexOf('-draft`}')
+    const queue = cell.indexOf('-queue`}')
+    const compare = cell.indexOf('-compare`}')
+    expect(nominate).toBeGreaterThan(-1)
+    expect(Math.max(nominate, draft)).toBeLessThan(queue)
+    expect(queue).toBeLessThan(compare)
+    expect(cell).toMatch(/<Cell key=\{col\.key\} width=\{col\.width\} align=\{col\.align\}/)
   })
 })

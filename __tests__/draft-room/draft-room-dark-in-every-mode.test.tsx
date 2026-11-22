@@ -96,9 +96,14 @@ describe('the room roots opt out', () => {
     expect(screen.getByTestId('draft-room-shell').className.split(/\s+/)).toContain('af-draft-dark')
   })
 
-  it('the Sleeper-style mock room and the top-bar menu portal carry it too', () => {
+  it('the mock room and the top-bar menu portal carry it too', () => {
     const mock = readFileSync(resolve(process.cwd(), 'components/mock-draft/MockDraftSleeperRoomClient.tsx'), 'utf8')
-    expect(mock.match(/className="af-draft-dark min-h-screen/g)?.length).toBe(5)
+    // Four screens own their root (league gate, open setup, entry, recap). Room v2 (phase 5): the
+    // draft itself renders in the live room's DraftRoomShell, whose root carries the opt-out.
+    expect(mock.match(/className="af-draft-dark min-h-screen/g)?.length).toBe(4)
+    expect(mock).toMatch(/<DraftRoomShell\b/)
+    const shell = readFileSync(resolve(process.cwd(), 'components/app/draft-room/DraftRoomShell.tsx'), 'utf8')
+    expect(shell).toMatch(/className=\{`draft-touch-room af-draft-dark /)
     const topBar = readFileSync(resolve(process.cwd(), 'components/app/draft-room/DraftTopBar.tsx'), 'utf8')
     expect(topBar).toMatch(/className="fixed z-\[9999\][^"]* af-draft-dark"/)
   })

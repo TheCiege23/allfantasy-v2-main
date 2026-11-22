@@ -4,10 +4,10 @@
  * Pre-draft validation report for commissioner UI (`PreDraftWizard`).
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { DraftValidationOrchestrator } from '@/lib/draft/validation/DraftValidationOrchestrator'
 import { prisma } from '@/lib/prisma'
 
@@ -27,7 +27,7 @@ export async function GET(
     }
 
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'view')
     } catch {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

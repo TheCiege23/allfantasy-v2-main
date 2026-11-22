@@ -1,4 +1,4 @@
-export type WorldCupTeamSeedRow = {
+type WorldCupTeamSeedRow = {
   fifaCode?: string | null
   countryCode?: string | null
   abbreviation?: string | null
@@ -11,18 +11,6 @@ export type WorldCupTeamSeedRow = {
   groupName?: string | null
   seed?: number | null
   ranking?: number | null
-}
-
-export type WorldCupFixtureSeedRow = {
-  round: string
-  matchNumber: number
-  startsAt?: string | null
-  homeSlotKey: string
-  awaySlotKey: string
-  homeTeamCode?: string | null
-  awayTeamCode?: string | null
-  venueName?: string | null
-  venueCity?: string | null
 }
 
 const COUNTRY_ALIASES: Record<string, string> = {
@@ -76,7 +64,7 @@ export function normalizeFifaTeamCode(code?: string | null): string | null {
   return normalized
 }
 
-export function normalizeCountryName(name: string): string {
+function normalizeCountryName(name: string): string {
   const raw = name.trim()
   if (!raw) return ""
   const alias = COUNTRY_ALIASES[raw.toLowerCase()]
@@ -135,20 +123,6 @@ export function validateTeamSeedRow(row: WorldCupTeamSeedRow): { ok: boolean; er
   }
   if (row.seed != null && (!Number.isInteger(row.seed) || row.seed < 1)) errors.push("seed must be a positive integer")
   if (row.ranking != null && (!Number.isInteger(row.ranking) || row.ranking < 1)) errors.push("ranking must be a positive integer")
-  return { ok: errors.length === 0, errors }
-}
-
-export function validateFixtureSeedRow(row: WorldCupFixtureSeedRow): { ok: boolean; errors: string[] } {
-  const errors: string[] = []
-  if (!row.round?.trim()) errors.push("round is required")
-  if (!Number.isInteger(row.matchNumber) || row.matchNumber < 1) {
-    errors.push("matchNumber must be a positive integer")
-  }
-  if (!row.homeSlotKey?.trim()) errors.push("homeSlotKey is required")
-  if (!row.awaySlotKey?.trim()) errors.push("awaySlotKey is required")
-  if (row.startsAt && Number.isNaN(new Date(row.startsAt).getTime())) {
-    errors.push("startsAt must be a valid ISO date")
-  }
   return { ok: errors.length === 0, errors }
 }
 

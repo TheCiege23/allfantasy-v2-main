@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { createOsStore, safeRead, safeWrite, type OsStore } from './store'
-import type { OsDomain, OsFactEnvelope, OsScopeLevel } from './types'
+import type { OsDomain, OsScopeLevel } from './types'
 
 /**
  * Domain OS kernel — the read-through feed.
@@ -31,7 +31,7 @@ export interface OsFactSource<TArgs, TFacts> {
   measure?: (facts: TFacts) => { confidence?: number | null; sampleSize?: number | null }
 }
 
-export interface OsFeedOutcome {
+interface OsFeedOutcome {
   servedFrom: 'store' | 'live' | 'unavailable'
   level: OsScopeLevel
   ageMs: number | null
@@ -56,13 +56,19 @@ export interface OsFeedOutcome {
  * Measured 2026-09-01: with `domain_os_facts` absent from production, every refresh in this
  * codebase was a `write_failed` and every one of them reported `written`.
  */
-export type OsRefreshOutcome = 'written' | 'unavailable' | 'write_failed'
+type OsRefreshOutcome = 'written' | 'unavailable' | 'write_failed'
 
 export interface OsFeed {
   /** Read one fact family, preferring maintained state. Never throws. */
   get<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<TFacts | null>
   /** Populate one fact family without reading. This is the "gathering" half; it needs a scheduler. */
   refresh<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<OsRefreshOutcome>
+  /**
+   * Store a fact the CALLER already derived — the same derivation, run by a screen that needed it anyway — so the
+   * next `get` serves what that screen showed instead of deriving again. True only when the store took it; never
+   * throws. A null fact is never stored (see `get`: unavailable is a fact about the source, not the scope).
+   */
+  prime<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs, facts: TFacts | null): Promise<boolean>
   /** How each family was sourced on this pass — for telemetry and for judging whether the feed earns its keep. */
   drainOutcomes(): Record<string, OsFeedOutcome>
 }
@@ -142,6 +148,15 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
       return persisted ? 'written' : 'write_failed'
     },
 
+    async prime(source, args, facts) {
+      if (facts == null) return false
+      try {
+        return (await put(source, args, facts)).persisted
+      } catch {
+        return false
+      }
+    },
+
     drainOutcomes() {
       const copy = { ...outcomes }
       for (const k of Object.keys(outcomes)) delete outcomes[k]
@@ -150,4 +165,3 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
   }
 }
 
-export type { OsFactEnvelope, OsScopeLevel, OsDomain }

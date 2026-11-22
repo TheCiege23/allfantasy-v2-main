@@ -1,3 +1,4 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -5,10 +6,11 @@ import { randomUUID } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { handOpenSeatsToChimmy } from '@/lib/inactive-manager/handOpenSeatsToChimmy'
+import { updateDraftUISettings } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getRandomStrategy } from '@/lib/draft-strategies/strategyDefinitions'
 import { createStrategyLog, initializeDraftStrategyTracking } from '@/lib/draft-strategies/strategyTracker'
-import { getOrCreateDraftSession, buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
+import { getOrCreateDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { transitionLeagueState } from '@/server/services/leagueLifecycleService'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { updateDraftConfigForLeague } from '@/lib/draft-defaults/DraftVariantSettingsHub'
@@ -39,7 +41,7 @@ export async function POST(
   const { leagueId } = await params
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'rosters')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -72,10 +74,30 @@ export async function POST(
     const emptySlotCount = teamCount - existingTeams.length
 
     if (emptySlotCount <= 0) {
+      // Every seat has a team. The empty ones (no account behind them) go to Chimmy: see
+      // lib/inactive-manager/handOpenSeatsToChimmy.ts for why this used to answer "already filled".
+      const chimmy = await handOpenSeatsToChimmy(leagueId, userId)
+      if (chimmy.openSeats === 0) {
+        return NextResponse.json({ ok: true, message: 'All slots are already filled', teamsCreated: 0 })
+      }
+      if (chimmy.handed.length === 0 && chimmy.stoppedBy) {
+        return NextResponse.json({ error: chimmy.stoppedBy.error, openSeats: chimmy.openSeats, chimmyTeams: chimmy.alreadyChimmy }, { status: chimmy.stoppedBy.status })
+      }
+      if (chimmy.handed.length > 0) {
+        // Chimmy drafts the seats it runs (the switch the draft room's own Chimmy setting flips).
+        await updateDraftUISettings(leagueId, { orphanTeamAiManagerEnabled: true, orphanDrafterMode: 'ai' })
+      }
+      const running = chimmy.handed.length + chimmy.alreadyChimmy
+      const left = chimmy.openSeats - running
       return NextResponse.json({
         ok: true,
-        message: 'All slots are already filled',
         teamsCreated: 0,
+        chimmyTeamsAdded: chimmy.handed.length,
+        chimmyTeams: running,
+        openSeatsLeft: left,
+        message: chimmy.handed.length === 0
+          ? `Chimmy already runs the ${running} empty team${running === 1 ? '' : 's'} in this league`
+          : `Chimmy now runs ${running} empty team${running === 1 ? '' : 's'}` + (left > 0 && chimmy.stoppedBy ? `. ${left} still empty: ${chimmy.stoppedBy.error}` : ''),
       })
     }
 

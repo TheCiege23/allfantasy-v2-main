@@ -25,7 +25,7 @@ export async function POST(
   const { leagueId } = params
   const denied = await survivorHostGuard(leagueId, userId)
   if (denied) return denied
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: gate.status ?? 403 })
 
   let body: { idolId?: string; toUserId?: string; powerType?: string; week?: number }

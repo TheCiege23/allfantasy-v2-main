@@ -13,7 +13,7 @@ describe('teamLogoUrl', () => {
     expect(teamLogoUrl('NFL', 'BUF')).toBe('https://a.espncdn.com/i/teamlogos/nfl/500/buf.png')
     expect(teamLogoUrl('nfl', 'jac')).toBe('https://a.espncdn.com/i/teamlogos/nfl/500/jax.png')
     expect(teamLogoUrl('NFL', 'Buffalo Bills')).toBe('https://a.espncdn.com/i/teamlogos/nfl/500/buf.png')
-    expect(teamLogoUrl('NFL', 'Washington Commanders')).toBe('https://a.espncdn.com/i/teamlogos/nfl/500/was.png')
+    expect(teamLogoUrl('NFL', 'Washington Commanders')).toBe('https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png')
   })
 
   /* ⚠ NULL BEATS A GUESS: "FA" is not a club and gets no crest. */

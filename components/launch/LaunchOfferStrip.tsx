@@ -92,4 +92,3 @@ export function LaunchOfferStrip({
   )
 }
 
-export default LaunchOfferStrip

@@ -11,7 +11,7 @@
 /** The board's name, in one place so a rename is one edit. */
 export const CLUBHOUSE_NAME = 'Clubhouse'
 
-export type CommunityChannel = {
+type CommunityChannel = {
   slug: string
   label: string
   emoji: string
@@ -83,14 +83,12 @@ export const COMMUNITY_CHANNELS: readonly CommunityChannel[] = [
 ] as const
 
 export const SPORT_TAGS = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
-export type SportTag = (typeof SPORT_TAGS)[number]
 
 /**
  * The reaction set. Deliberately small: a fixed handful is a vocabulary people learn,
  * an open emoji picker is noise. The stored value is the emoji itself.
  */
 export const COMMUNITY_REACTIONS = ['👍', '🔥', '😂', '🧠'] as const
-export type CommunityReactionEmoji = (typeof COMMUNITY_REACTIONS)[number]
 
 export function getChannel(slug: string | null | undefined): CommunityChannel | null {
   if (!slug) return null

@@ -13,7 +13,7 @@ import type {
   MissingDataBlock,
 } from '../schema'
 
-export interface WaiverEnvelopeInput {
+interface WaiverEnvelopeInput {
   sport?: string | null
   leagueId?: string | null
   userId?: string | null

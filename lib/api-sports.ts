@@ -1900,6 +1900,37 @@ export interface APISportsOddsSyncSummary {
  * Failures are per game and never abort the run — the same lesson
  * `syncAPISportsStandingsToDb` records after one malformed row lost an entire sync.
  */
+/**
+ * Default odds window per sport.
+ *
+ * NFL: 7 days is the vendor's documented pre-match odds window ("between 1 and 7 days before the
+ * game"), and a full NFL week is ~16 games, so 24 covers the slate with room.
+ *
+ * NCAAF is SHORTER AND WIDER on purpose. API-Sports carries every college division: 177 NCAAF
+ * games sat inside the 7-day window on 2026-11-22. With the NFL defaults only the first 24 by
+ * kickoff would be fetched, so most of a Saturday slate would never get a line. 48 hours still
+ * covers the one surface that shows college odds (the Today strip looks 24h ahead) and keeps a
+ * Saturday to one bounded sweep an hour; the cap is sized to a full Saturday.
+ *
+ * Budget, measured 2026-11-22 from `api_rate_limits`: ~17 API-Sports calls/hour baseline against
+ * the 300/hour guard in `lib/workers/rate-limit-manager.ts`, so a full college sweep fits.
+ */
+export const API_SPORTS_ODDS_WINDOW = {
+  NFL: { withinDays: 7, maxGames: 24 },
+  NCAAF: { withinDays: 2, maxGames: 160 },
+} as const;
+
+/**
+ * Sports the hourly `?odds=1` cron syncs. No `sport` param means both, NFL first so a tight run
+ * budget cuts college rather than the NFL. An explicit param narrows it: `NFL`, `NCAAF`, or `all`.
+ */
+export function apiSportsOddsSportsFor(param: string | null | undefined): Array<'NFL' | 'NCAAF'> {
+  const p = (param ?? '').trim().toUpperCase();
+  if (p === '' || p === 'ALL') return ['NFL', 'NCAAF'];
+  if (p === 'NCAAF') return ['NCAAF'];
+  return ['NFL'];
+}
+
 export async function syncAPISportsGameOddsToDb(opts?: {
   season?: string;
   sport?: 'NFL' | 'NCAAF';
@@ -1908,9 +1939,9 @@ export async function syncAPISportsGameOddsToDb(opts?: {
 }): Promise<APISportsOddsSyncSummary> {
   const dbSport = resolveDbSport(opts?.sport);
   const season = opts?.season || getCurrentNFLSeasonForAPISports();
-  // 7 = the vendor's documented pre-match odds window, not a round number.
-  const withinDays = opts?.withinDays && opts.withinDays > 0 ? opts.withinDays : 7;
-  const maxGames = opts?.maxGames && opts.maxGames > 0 ? opts.maxGames : 24;
+  const defaults = API_SPORTS_ODDS_WINDOW[dbSport === 'NCAAF' ? 'NCAAF' : 'NFL'];
+  const withinDays = opts?.withinDays && opts.withinDays > 0 ? opts.withinDays : defaults.withinDays;
+  const maxGames = opts?.maxGames && opts.maxGames > 0 ? opts.maxGames : defaults.maxGames;
 
   const summary: APISportsOddsSyncSummary = {
     sport: dbSport,

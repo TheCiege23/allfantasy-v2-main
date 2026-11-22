@@ -112,7 +112,7 @@ export function rosterPickAsset(p: RosterPick, leagueId: string | null | undefin
 }
 
 export function UnpricedValue(props: { reason?: UnpricedReason | null }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy}=useTradeVisualCopy()
 
   const label = props.reason ? `No value: ${props.reason.label}` : 'No value'
   return (
@@ -184,6 +184,40 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
  * component rather than two copies for the same reason `StockMark` is: the same player must not
  * look different in the list and in the deal.
  */
+/**
+ * Position colour, the same assignment the league Trades tab uses for its
+ * trade-block cards, so a WR reads the same colour on every trade surface.
+ */
+const POSITION_TONE: Record<string, string> = {
+  QB: 'qb',
+  RB: 'rb',
+  WR: 'wr',
+  TE: 'te',
+  DL: 'dl',
+  DE: 'dl',
+  DT: 'dl',
+  NT: 'dl',
+  LB: 'lb',
+  DB: 'db',
+  CB: 'db',
+  S: 'db',
+  SS: 'db',
+  FS: 'db',
+  K: 'k',
+  DEF: 'def',
+  DST: 'def',
+}
+export function positionTone(position: string): string {
+  return POSITION_TONE[position.toUpperCase()] ?? 'other'
+}
+
+/** What the headshot circle says when there is no headshot: the position, short enough to fit. */
+export function positionGlyph(position: string | null | undefined, name: string): string {
+  const p = (position ?? '').toUpperCase()
+  if (!p) return name.slice(0, 1)
+  return p.length <= 2 ? p : p.slice(0, 2)
+}
+
 export function RosterPlayerRow(props: {
   player: RosterPlayer
   sport?: string | null
@@ -205,19 +239,20 @@ export function RosterPlayerRow(props: {
       aria-label={copy(props.added ? `${p.name} is already in this trade` : `Add ${p.name}`)}
     >
       {/*
-        A headshot is optional and often absent. The initial keeps row height and alignment
-        identical either way, so a roster does not look ragged.
+        A headshot is optional and often absent. Without one the circle carries the POSITION in its
+        colour rather than the first letter of the name: "B" said nothing a manager could use, and
+        a grey letter beside every row read as unfinished. Row height is identical either way.
       */}
-      <span className="af-tc-headshot" aria-hidden="true">
+      <span className="af-tc-headshot" aria-hidden="true" data-pos={p.position ? positionTone(p.position) : undefined}>
         {p.imageUrl ? (
           <FallbackImg
             src={p.imageUrl}
             alt={copy("")}
             loading="lazy"
-            fallback={<span className="af-tc-headshot-fallback">{copy(p.name.slice(0, 1))}</span>}
+            fallback={<span className="af-tc-headshot-fallback">{copy(positionGlyph(p.position, p.name))}</span>}
           />
         ) : (
-          <span className="af-tc-headshot-fallback">{copy(p.name.slice(0, 1))}</span>
+          <span className="af-tc-headshot-fallback">{copy(positionGlyph(p.position, p.name))}</span>
         )}
       </span>
 
@@ -231,7 +266,7 @@ export function RosterPlayerRow(props: {
           ) : null}
         </span>
         <span className="af-tc-row-sub">
-          {p.position ? <span className="af-tc-pos">{copy(p.position)}</span> : null}
+          {p.position ? <span className="af-tc-pos" data-pos={positionTone(p.position)}>{copy(p.position)}</span> : null}
           {/*
             ⚠ `af-tc-row-team`, NOT `af-tc-team` — the latter is the TEAM CARD in TradeCenter.
             Carrying it here inherited `flex-direction: column`, 14px of padding and a border from
@@ -389,14 +424,6 @@ export function TradeAssetPicker(props: {
    * the displayed value, the disabled state and the submitted amount cannot disagree.
    */
   const effectiveFaab = props.faabAvailable != null ? Math.min(faab, props.faabAvailable) : faab
-
-  /**
-   * Team logo, resolved on the client from the abbreviation.
-   *
-   * Returns null for an unknown team or sport, and the row then shows the abbreviation alone —
-   * which is why the abbreviation is rendered beside the logo rather than replaced by it.
-   */
-  const teamLogoFor = (team: string | null): string | null => teamLogoUrl(team, props.sport)
 
   const search = useCallback(
     async (q: string) => {

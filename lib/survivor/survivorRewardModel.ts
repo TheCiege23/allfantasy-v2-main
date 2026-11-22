@@ -33,7 +33,7 @@ export const SURVIVOR_REWARD_TYPES = [
 ] as const
 export type SurvivorRewardType = (typeof SURVIVOR_REWARD_TYPES)[number]
 
-export const SURVIVOR_REWARD_SOURCE_KINDS = ['challenge', 'weekly_prize', 'auction', 'pool', 'exile', 'commissioner', 'other'] as const
+const SURVIVOR_REWARD_SOURCE_KINDS = ['challenge', 'weekly_prize', 'auction', 'pool', 'exile', 'commissioner', 'other'] as const
 export type SurvivorRewardSourceKind = (typeof SURVIVOR_REWARD_SOURCE_KINDS)[number]
 
 /** Advantages a reward may hand out (the playable powers of the idol catalog). */
@@ -108,7 +108,7 @@ export type SurvivorRewardSpec =
    */
   | { type: 'forced_bench'; chooserRosterId: string; targetRosterId?: string | null; playerId?: string | null; targetWeek?: number | null }
 
-export interface SurvivorRewardSource {
+interface SurvivorRewardSource {
   kind: SurvivorRewardSourceKind
   /** Challenge id, auction id, pool id… */
   id?: string | null
@@ -165,7 +165,7 @@ export const SURVIVOR_REWARD_ACTIONS = {
 export const SURVIVOR_REWARD_ENTITY = 'survivor_reward'
 export const SURVIVOR_REWARD_CATEGORY = 'reward'
 
-export interface SurvivorRewardLedgerRow {
+interface SurvivorRewardLedgerRow {
   action: string
   relatedEntityId: string | null
   week?: number | null
@@ -306,7 +306,7 @@ export function rewardNeedsChoice(spec: SurvivorRewardSpec): boolean {
   return (spec.type === 'tribemate_points' || spec.type === 'steal' || spec.type === 'opponent_penalty' || spec.type === 'vote_taken' || spec.type === 'forced_bench') && !spec.targetRosterId
 }
 
-export interface FaabTransferPlan {
+interface FaabTransferPlan {
   debits: { rosterId: string; amount: number }[]
   credits: { rosterId: string; amount: number }[]
   collected: number

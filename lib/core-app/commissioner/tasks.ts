@@ -45,7 +45,7 @@ export type TaskCard = {
   action: { label: string; href: string; external: boolean } | null
 }
 
-export type WorkspaceFinding = {
+type WorkspaceFinding = {
   id: string
   sourceKey: string
   title: string

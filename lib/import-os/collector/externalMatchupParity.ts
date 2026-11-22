@@ -60,9 +60,9 @@ export function externalMatchupSeasonActive(sport: string, season: number, now: 
   }
 }
 
-export type ExternalMatchupProvider = 'espn' | 'yahoo'
+type ExternalMatchupProvider = 'espn' | 'yahoo'
 
-export interface ExternalMatchupConnection {
+interface ExternalMatchupConnection {
   provider: ExternalMatchupProvider
   /** The provider's league id — ESPN numeric id / Yahoo league key. Matches `League.platformLeagueId`. */
   externalLeagueId: string
@@ -203,10 +203,25 @@ export async function applySchedule(
     const rows: Array<{
       rosterId: string
       matchupId: number
+      /** Which of this roster's games in the week the row is; 1 unless the league plays several. */
+      game: number
       pointsFor: number
       pointsAgainst: number
       win: number
     }> = []
+    /*
+     * A league whose teams play several games a week (Fantrax: 3 or 5) lists a roster once per
+     * game. Each game is its own row, numbered in the order the provider lists them; the pairing
+     * stays on `matchupId`, which every reader already groups by. Before `game` existed the
+     * roster-week key kept the first game and `skipDuplicates` silently dropped the rest, leaving
+     * the survivors as half-pairs.
+     */
+    const gamesSeen = new Map<string, number>()
+    const nextGame = (rosterId: string): number => {
+      const game = (gamesSeen.get(rosterId) ?? 0) + 1
+      gamesSeen.set(rosterId, game)
+      return game
+    }
     weekEntry.matchups.forEach((m, index) => {
       const roster1 = toRoster(m.teamId1)
       if (roster1 == null) return
@@ -230,7 +245,7 @@ export async function applySchedule(
        * standings screen.
        */
       if (m.teamId2 == null || m.teamId2 === '') {
-        rows.push({ rosterId: roster1, matchupId, pointsFor: p1, pointsAgainst: 0, win: 0 })
+        rows.push({ rosterId: roster1, matchupId, game: nextGame(roster1), pointsFor: p1, pointsAgainst: 0, win: 0 })
         soloRowsWritten += 1
         return
       }
@@ -238,20 +253,21 @@ export async function applySchedule(
       const roster2 = toRoster(m.teamId2)
       if (roster2 == null) return
       const p2 = typeof m.points2 === 'number' && Number.isFinite(m.points2) ? m.points2 : 0
-      rows.push({ rosterId: roster1, matchupId, pointsFor: p1, pointsAgainst: p2, win: p1 > p2 ? 1 : 0 })
-      rows.push({ rosterId: roster2, matchupId, pointsFor: p2, pointsAgainst: p1, win: p2 > p1 ? 1 : 0 })
+      rows.push({ rosterId: roster1, matchupId, game: nextGame(roster1), pointsFor: p1, pointsAgainst: p2, win: p1 > p2 ? 1 : 0 })
+      rows.push({ rosterId: roster2, matchupId, game: nextGame(roster2), pointsFor: p2, pointsAgainst: p1, win: p2 > p1 ? 1 : 0 })
     })
     if (rows.length === 0) continue
 
     const existing = await prisma.weeklyMatchup.findMany({
       where: { leagueId: externalLeagueId, seasonYear: weekEntry.season, week: weekEntry.week },
-      select: { rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true, win: true },
+      select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
     })
-    const byRoster = new Map(existing.map((r) => [r.rosterId, r]))
+    // Keyed by roster AND game: a roster has one row per game it plays in the week.
+    const byRoster = new Map(existing.map((r) => [`${r.rosterId}#${r.game ?? 1}`, r]))
     const unchanged =
       existing.length === rows.length &&
       rows.every((r) => {
-        const prev = byRoster.get(r.rosterId)
+        const prev = byRoster.get(`${r.rosterId}#${r.game}`)
         return (
           prev != null &&
           prev.matchupId === r.matchupId &&

@@ -21,7 +21,7 @@ export type WeekLineups = {
   projectionWeek: { season: string; week: number } | null
 }
 
-export type LineupProjectionView = {
+type LineupProjectionView = {
   /** AF totals, you and them. `them` is null in an elimination week or when unpriced. */
   af: { you: number | null; them: number | null } | null
   /** The provider's totals under the league's rules. */

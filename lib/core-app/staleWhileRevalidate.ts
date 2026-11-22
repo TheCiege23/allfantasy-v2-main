@@ -16,9 +16,9 @@
  * out when it is next evicted. Pure over `now`, so the tests need no clock.
  */
 
-export type SwrStats = { hits: number; staleHits: number; misses: number; refreshes: number; failures: number }
+type SwrStats = { hits: number; staleHits: number; misses: number; refreshes: number; failures: number }
 
-export type SwrCache<T> = {
+type SwrCache<T> = {
   get(key: string, load: () => Promise<T>, now?: number): Promise<T>
   /** The cached value if any, fresh or stale, without loading. */
   peek(key: string): T | undefined

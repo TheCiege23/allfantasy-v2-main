@@ -12,8 +12,7 @@ import { coreLang } from './messages/coreLocale'
  * pricing page prints them in Spanish too ("AF Pro", "AF Commissioner"), and so does the product name
  * "Competitive Edge" (launchCopy.ts PRO_DEPTH_ES, the help topics).
  *
- * The English is the component's English BYTE FOR BYTE — including the "is"/"are" guess on the
- * subject's last letter — so English mode is unchanged (__tests__/core-depth-lock-spanish.test.tsx).
+ * English uses the subject's last letter to choose "is" or "are".
  *
  * Spanish avoids agreeing with the subject: a subject arrives already in Spanish from its caller, and
  * its gender and number are not known here, so the head is "{subject}: parte de AF Pro" rather than a
@@ -24,10 +23,10 @@ import { coreLang } from './messages/coreLocale'
  * PURE, client- and server-safe (CommissionerHub is a server component).
  */
 
-export type CoreDepthLockLang = 'en' | 'es'
+type CoreDepthLockLang = 'en' | 'es'
 
 /** Anything that is not Spanish reads English — the same rule every /core copy module uses. */
-export function lockLang(language: string | null | undefined): CoreDepthLockLang {
+function lockLang(language: string | null | undefined): CoreDepthLockLang {
   return coreLang(language)
 }
 
@@ -39,6 +38,10 @@ export type CoreDepthLockCopy = {
   body: string
   bodyAlt: string
   cta: (planName: string) => string
+  tradeBreakdownBenefit: string
+  tradeReviewWithTokens: string
+  fullTradeReview: string
+  tradeDraftStorageError: string
   /** "Free until Oct 15 — then AF Pro". */
   freeUntil: (startsAtIso: string, planName: string) => string
 }
@@ -70,6 +73,8 @@ export function depthLabelText(depth: CoreDepth, english: string, language: stri
  * there rather than shipping half Spanish.
  */
 const SUBJECT_ES: Record<string, string> = {
+  // The manager card (components/core-app/manager-record/ManagerRecordSheet.tsx), 2026-11-16
+  'A manager’s full record': 'El historial completo de un mánager',
   // Player Finder (components/core-app/screens/PlayerFinder.tsx and player-finder/)
   'Side-by-side compare': 'Comparación lado a lado',
   'Recommended moves': 'Movimientos recomendados',
@@ -83,6 +88,7 @@ const SUBJECT_ES: Record<string, string> = {
   'Who to trade with': 'Con quién intercambiar',
   'The full trade breakdown': 'Desglose completo de cambios',
   'The trade finder': 'Buscador de intercambios',
+  'Your rebuild plan': 'Tu plan de reconstrucción',
   // Competitive Edge (Draft HQ, Trade Center) — the product name stays
   'Competitive Edge': 'Competitive Edge',
 }

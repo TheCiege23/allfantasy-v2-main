@@ -142,6 +142,14 @@
   --tournament-safe: #22c55e;
   --tournament-elim: #6b7280;
   --tournament-accent: #3b82f6;
+  /* As RGB channels for the `tournament-*` Tailwind palette, which needs channels to apply an opacity:
+     `bg-[var(--tournament-x)]/15` compiles to NOTHING in Tailwind 3. */
+  --tournament-gold-rgb: 245 184 0;
+  --tournament-panel-rgb: 12 18 25;
+  --tournament-bubble-rgb: 245 158 11;
+  --tournament-bg-rgb: 6 10 16;
+  --tournament-active-rgb: 0 198 255;
+  --tournament-accent-rgb: 59 130 246;
   --tournament-text-dim: rgba(255, 255, 255, 0.45);
   --tournament-text-mid: rgba(255, 255, 255, 0.7);
   --tournament-text-full: rgba(255, 255, 255, 0.95);
@@ -160,6 +168,16 @@
   --zombie-gold: #f59e0b;
   --zombie-amber: #fbbf24;
   --zombie-gray: #4b5563;
+  /* As RGB channels for the `zombie-*` Tailwind palette, which needs channels to apply an opacity:
+     `bg-[var(--zombie-x)]/15` compiles to NOTHING in Tailwind 3. */
+  --zombie-crimson-rgb: 155 28 28;
+  --zombie-green-rgb: 22 163 74;
+  --zombie-toxic-rgb: 74 222 128;
+  --zombie-red-rgb: 239 68 68;
+  --zombie-purple-rgb: 124 58 237;
+  --zombie-gold-rgb: 245 158 11;
+  --zombie-panel-rgb: 10 12 18;
+  --zombie-gray-rgb: 75 85 99;
   --zombie-text-dim: rgba(255, 255, 255, 0.42);
   --zombie-text-mid: rgba(255, 255, 255, 0.68);
   --zombie-text-full: rgba(255, 255, 255, 0.94);
@@ -176,6 +194,15 @@
   --idp-sack: #ef4444;
   --idp-int: #10b981;
   --idp-td: #f5b800;
+  /* As RGB channels for the `idp-*` Tailwind palette, which needs channels to apply an opacity (see the
+     --cap-*-rgb note below). */
+  --idp-defense-rgb: 220 38 38;
+  --idp-offense-rgb: 37 99 235;
+  --idp-combined-rgb: 124 58 237;
+  --idp-tackle-rgb: 245 158 11;
+  --idp-sack-rgb: 239 68 68;
+  --idp-int-rgb: 16 185 129;
+  --idp-td-rgb: 245 184 0;
   --idp-panel: #0b0d14;
   --idp-border: rgba(255, 255, 255, 0.06);
   --idp-creator-glow: 0 0 8px rgba(99, 102, 241, 0.6), 0 0 20px rgba(99, 102, 241, 0.3);
@@ -186,6 +213,14 @@
   --cap-red: #dc2626;
   --cap-dead: #6b7280;
   --cap-contract: #2563eb;
+  /* The same five colours as RGB channels, for the `cap-*` Tailwind palette (tailwind.config.js), which
+     needs channels to apply an opacity: `bg-[color:var(--cap-green)]/25` compiles to NOTHING, which is
+     why the contract timeline, the cap bar's open segment and every cap chip tint were invisible. */
+  --cap-green-rgb: 22 163 74;
+  --cap-amber-rgb: 245 158 11;
+  --cap-red-rgb: 220 38 38;
+  --cap-dead-rgb: 107 114 128;
+  --cap-contract-rgb: 37 99 235;
   --cap-bar-bg: rgba(255, 255, 255, 0.08);
 
   /* Devy League — roster buckets & surfaces */
@@ -605,6 +640,21 @@ html[data-mode="legacy"] .af-world-cup-promo-card:where(:not(.af-draft-dark, .af
 
 html[data-mode="light"] .af-world-cup-atmosphere:where(:not(.af-draft-dark, .af-draft-dark *)) {
   display: none !important;
+}
+
+/* World Cup pages are written dark-first and lean on the light clamp, whose colour table stops at
+   text-cyan-300 / -400. The pale accents below it rendered near-white on the light page: the "How it works"
+   step numbers vanished and the Create / Join icons washed out. Scoped to the World Cup page so the wider
+   table is unchanged. */
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .af-world-cup-page :is(.text-cyan-100, .text-cyan-200):where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .af-world-cup-page :is(.text-cyan-100, .text-cyan-200):where(:not(.af-draft-dark, .af-draft-dark *)) { color: #0e7490; }
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .af-world-cup-page .text-violet-200:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .af-world-cup-page .text-violet-200:where(:not(.af-draft-dark, .af-draft-dark *)) { color: #6d28d9; }
+/* A translucent-white secondary button has no fill on a light page; give it an outline there. */
+html:not([data-mode="dark"]):not([data-mode="legacy"]) .af-world-cup-page .af-wc-secondary-btn:where(:not(.af-draft-dark, .af-draft-dark *)),
+html[data-mode="light"] .af-world-cup-page .af-wc-secondary-btn:where(:not(.af-draft-dark, .af-draft-dark *)) {
+  background: rgba(15, 23, 42, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.16);
 }
 
 .mode-image-safe {
@@ -1514,15 +1564,28 @@ html[data-mode="light"] .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark
   50% { transform: scale(1.1); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* Room v2: the pick on the clock glows in the league-type accent (`--af-league-accent`, set by
+   DraftRoomShell); cyan when no accent is set. */
+/*
+ * Room v2 league signatures: a board tile is an inline-size container (DraftBoardCell), and a
+ * tile carrying a signature chip drops its ADP gap below 120px, where the two no longer fit on the
+ * info line's single row. A top-level @container rule, never nested in a @media block.
+ */
+@container (max-width: 119px) {
+  .af-tile-squeezable {
+    display: none;
+  }
+}
+
 @keyframes draft-current-pick-pulse {
   0%,
   100% {
     transform: translateZ(0) scale(1);
-    box-shadow: 0 0 0 rgba(246, 196, 69, 0), 0 0 20px rgba(246, 196, 69, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-league-accent, #22d3ee) 12%, transparent), 0 0 18px color-mix(in srgb, var(--af-league-accent, #22d3ee) 30%, transparent);
   }
   45% {
     transform: translateZ(0) scale(1.01);
-    box-shadow: 0 0 0 1px rgba(246, 196, 69, 0.32), 0 0 34px rgba(246, 196, 69, 0.42);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-league-accent, #22d3ee) 22%, transparent), 0 0 30px color-mix(in srgb, var(--af-league-accent, #22d3ee) 50%, transparent);
   }
 }
 
@@ -3445,7 +3508,9 @@ html[data-mode='light'] .af-atmo-guillotine-embers:where(:not(.af-draft-dark, .a
  * and tokens through Apple, so links to those pages, and copy marked
  * `data-ios-purchase`, are hidden only in a build WITHOUT it. Donations, the
  * Stripe billing portal and anything marked data-hide-in-ios-app stay hidden in
- * every build. Keep those four hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
+ * every build. Keep those hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
+ * /pro and /all-access are matched exactly (`='/pro'`, `^='/pro?'`, `^='/pro/'`), never by a bare
+ * `^='/pro'` prefix, which would also hide every link to /profile and /projections.
  */
 html[data-ios-app] [data-hide-in-ios-app],
 html[data-ios-app]:not([data-ios-iap]) [data-ios-purchase],
@@ -3466,6 +3531,17 @@ html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
    is an <a> straight to an API that IOS_APP_PURCHASE_API_PREFIXES refuses in
    the app, so a subscriber who tapped it got a raw 403 body. An Apple
    subscriber manages it through "Manage Subscriptions" on the plan pages. */
+/* /pro (AF Pro) and /all-access (AF Supreme) are purchase pages too (IOS_APP_IAP_PAGE_PREFIXES, 2026-11-17).
+   Exact forms only: a bare ^='/pro' would also hide every link to /profile and /projections. */
+html[data-ios-app]:not([data-ios-iap]) a[href='/pro'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro?'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro/'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro#'],
+html[data-ios-app]:not([data-ios-iap]) a[href='/all-access'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/all-access?'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/all-access/'] {
+  display: none !important;
+}
 
 /*
  * The other half: copy that exists ONLY in the app, for a spot where hiding

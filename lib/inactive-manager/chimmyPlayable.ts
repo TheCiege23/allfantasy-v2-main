@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { isSiteAdminLeagueOwner } from './siteAdminLeague'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import {
   autopilotRosterIds,
@@ -10,7 +11,7 @@ import {
   type ManagedLineups,
 } from './inactiveManagerMode'
 
-/** The plan that lets Chimmy run more than its free team(s): the league owner's AF Commissioner. */
+/** The plan that lets Chimmy run more than its free team(s): the league owner's AF Pro or AF Supreme. */
 const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot'
 
 /**
@@ -30,11 +31,13 @@ async function ownerEntitled(ownerUserId: string | null | undefined, now: number
   if (!ownerUserId) return false
   const hit = planCache.get(ownerUserId)
   if (hit && now - hit.at < CHIMMY_PLAN_CACHE_MS) return hit.entitled
-  let entitled = false
-  try {
-    entitled = Boolean((await new EntitlementResolver().resolveForUser(ownerUserId, AUTOPILOT_FEATURE)).hasAccess)
-  } catch {
-    entitled = false
+  let entitled = await isSiteAdminLeagueOwner(ownerUserId)
+  if (!entitled) {
+    try {
+      entitled = Boolean((await new EntitlementResolver().resolveForUser(ownerUserId, AUTOPILOT_FEATURE)).hasAccess)
+    } catch {
+      entitled = false
+    }
   }
   planCache.set(ownerUserId, { entitled, at: now })
   return entitled

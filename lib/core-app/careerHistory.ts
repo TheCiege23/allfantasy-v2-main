@@ -42,7 +42,7 @@ const DRAFT_REPORT_PREFIX = 'draft-report:v1:'
  */
 const MAX_TRADE_EVENTS = 1000
 
-export type CareerDraftEvent = {
+type CareerDraftEvent = {
   season: number
   leagueName: string
   leagueKey: string

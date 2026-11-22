@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LeagueContext } from '@/lib/core-app/leagueContext'
 
 vi.mock('server-only', () => ({}))
+const metricRead = vi.hoisted(() => vi.fn(async () => ({ season: 2026, week: 3, unit: 'fantasy points', rows: [] })))
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: metricRead }))
 
 const db = vi.hoisted(() => ({
   sport: 'NBA',
@@ -35,6 +37,12 @@ const sportsPlayerFindMany = vi.hoisted(() =>
   ),
 )
 
+const projectionFindMany = vi.hoisted(() =>
+  vi.fn((args: { where: { playerId: { in: string[] } } }) =>
+    args.where.playerId.in.map((playerId: string) => ({ playerId, stats: { stats: { pts: 10 } } })),
+  ),
+)
+
 vi.mock('@/lib/prisma', () => {
   const fallback = (method: string) =>
     method === 'count' ? 0 : method === 'findMany' || method === 'groupBy' ? [] : null
@@ -53,8 +61,7 @@ vi.mock('@/lib/prisma', () => {
       { platformUserId: 'you', playerData: { starters: ['1001', '2002'] } },
       { platformUserId: 'them', playerData: { starters: ['2002'] } },
     ],
-    'fantasyProjection.findMany': (args) =>
-      args.where.playerId.in.map((playerId: string) => ({ playerId, stats: { stats: { pts: 10 } } })),
+    'fantasyProjection.findMany': (args) => projectionFindMany(args),
     'sportsInjury.findMany': (args) => db.injuries.filter((i) => args.where.playerName.in.includes(i.playerName)),
   }
   const modelProxy = (model: string) =>
@@ -148,6 +155,15 @@ describe('Matchup pricing — an NFL namesake’s injury never zeroes an NBA sta
     await load()
     expect(sportsPlayerFindMany).toHaveBeenCalled()
     for (const [args] of sportsPlayerFindMany.mock.calls) expect(args.where.sport).toBe('NBA')
+  })
+
+  it.each(['NBA', 'NFL'])('reads %s projections through the league and its roster identity space', async sport => {
+    db.sport = sport
+    projectionFindMany.mockClear()
+    metricRead.mockClear()
+    await load()
+    expect(metricRead).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', week: 3, rosterIds: expect.arrayContaining(['1001', '2002']) }))
+    expect(projectionFindMany).not.toHaveBeenCalled()
   })
 
   it('🛑 and so does the Best Ball position read', async () => {

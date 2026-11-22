@@ -31,7 +31,7 @@ export interface TokenPoolPickInput {
   pick: Record<string, unknown>
 }
 
-export interface TokenPoolPickResult {
+interface TokenPoolPickResult {
   pickId: string
   isCorrect: boolean
   tokensEarned: number

@@ -26,7 +26,8 @@ function range(seasons: number[]): string {
   return seasons[0] === seasons[seasons.length - 1] ? `${seasons[0]}` : `${seasons[0]}–${seasons[seasons.length - 1]}`
 }
 
-function factCopy(fact: EdgeFact, language: string): string {
+/** A draft-history fact in the reader's language — also the manager card's (ManagerRecordSheet.tsx). */
+export function draftFactText(fact: EdgeFact, language: string): string {
   if (language !== 'es') return fact.text
   if (fact.key === 'draft.record') {
     if (fact.text.endsWith("has no picks on file in this league's drafts.")) {
@@ -52,7 +53,7 @@ function factCopy(fact: EdgeFact, language: string): string {
   return fact.text
 }
 
-function reasonCopy(reason: string, language: string): string {
+export function draftReasonText(reason: string, language: string): string {
   if (language !== 'es') return reason
   const platform = reason.match(/^Competitive Edge reads Sleeper draft history today\. (.+) leagues aren't connected yet\.$/)
   if (platform) return `Competitive Edge utiliza el historial de drafts de Sleeper. Las ligas de ${platform[1]} todavía no están conectadas.`
@@ -83,7 +84,7 @@ export function DraftCompetitiveEdge({
     return (
       <section className="af-frame af-dh-section af-dh-edge" data-testid="draft-competitive-edge">
         {head}
-        <p className="af-dh-unavailable">{reasonCopy(edge.reason, language)}</p>
+        <p className="af-dh-unavailable">{draftReasonText(edge.reason, language)}</p>
       </section>
     )
   }
@@ -103,7 +104,7 @@ export function DraftCompetitiveEdge({
               <div className="af-dh-edge-name">{r.manager.name}</div>
               <ul className="af-dh-edge-facts">
                 {r.facts.map((f) => (
-                  <li key={f.key}>{factCopy(f, language)}</li>
+                  <li key={f.key}>{draftFactText(f, language)}</li>
                 ))}
               </ul>
             </li>

@@ -138,16 +138,3 @@ export function evaluateLineupLock(args: {
   return footballWeeklyLock(now)
 }
 
-export function describeLockPolicySummary(sport: string): string {
-  const u = sport.toUpperCase()
-  if (u === 'NFL' || u === 'NCAAF') {
-    return 'Weekly: locks Sun 1:00 PM ET onward and Mon–Tue; Thu night after ~8:15 PM ET; open Wed–Sat for prep.'
-  }
-  if (u === 'NBA' || u === 'NCAAB' || u === 'MLB' || u === 'NHL') {
-    return 'Daily: locks after 6:00 PM ET until the next calendar day.'
-  }
-  if (u === 'SOCCER') {
-    return 'Weekend matchdays: locks from 11:00 AM ET (approximate).'
-  }
-  return 'Lineups lock around game time for the active scoring period.'
-}

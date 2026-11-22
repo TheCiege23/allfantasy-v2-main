@@ -44,7 +44,7 @@ export const STANDARD_IDOL_LAST_WEEK = 10
 /** Gauntlet idols cannot be played after this week. */
 export const GAUNTLET_IDOL_LAST_WEEK = 13
 
-export type LineupState = {
+type LineupState = {
   starters: number
   /** The next expansion, if one is still ahead. */
   nextAt: number | null
@@ -126,7 +126,7 @@ export function superflexInflectionNote(args: { currentWeek: number }): string |
   } away. A second quarterback is an unstartable bench body until then and a weekly starter after — and the whole league can read the same schedule, so the bidding moves before the slot does.`
 }
 
-export type EliminationStyle = 'match_play' | 'tribe_champion' | 'gauntlet_double' | 'standard'
+type EliminationStyle = 'match_play' | 'tribe_champion' | 'gauntlet_double' | 'standard'
 
 /**
  * What actually keeps you alive this week, which is not the same every week.

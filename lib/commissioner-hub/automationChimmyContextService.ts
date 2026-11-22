@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 /** Reads what `automationContextForChimmy` (./automationChimmyContext.ts) needs, for one asker in one league. */
@@ -27,7 +28,8 @@ export async function buildAutomationContextForChimmy(leagueId: string, userId: 
   const [role, myTeam, roster] = await Promise.all([
     getLeagueRole(leagueId, userId).catch(() => null),
     readMyTeamAutomations(leagueId, userId).catch(() => null),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    // The manager's team, or their first when they run several (a read: lib/league/viewerTeams.ts).
+    resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false }).then((v) => (v ? { id: v.rosterId } : null)),
   ])
   const commissioner = role === 'commissioner' || role === 'co_commissioner'
   let recent: RecentAutomaticChange[] = []

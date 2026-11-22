@@ -62,7 +62,7 @@ function parseLockFromGameTime(raw: unknown): Date | null {
   return null
 }
 
-export type NativeLineupScanArgs = {
+type NativeLineupScanArgs = {
   leagueId: string
   leagueName: string
   sport: LeagueSport

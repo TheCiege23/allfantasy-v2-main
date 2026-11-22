@@ -22,9 +22,3 @@ export interface UnifiedRosterSection {
   slots: Record<string, number>
 }
 
-export interface UnifiedRosterApiConfig {
-  rosterWarnings?: string[]
-  rosterConfig?: {
-    sections?: UnifiedRosterSection[]
-  }
-}

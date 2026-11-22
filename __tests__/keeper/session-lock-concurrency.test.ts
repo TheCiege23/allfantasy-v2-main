@@ -24,8 +24,10 @@ const h = vi.hoisted(() => {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.records.push(data); return data }),
       deleteMany: vi.fn(async () => ({ count: 0 })), updateMany: vi.fn(async () => ({ count: state.records.length })),
     },
-    leagueAuditLog: { create: vi.fn(async () => ({})) },
-    redraftSeason: { findFirst: vi.fn(async () => ({ id: 'previous' })) },
+    leagueAuditLog: { create: vi.fn(async () => ({})), findMany: vi.fn(async () => []) },
+    // Season 'S' (the window) is not looked up as a season here, so submissions read roster 'R' itself;
+    // every other lookup (the lock's outgoing season) still finds 'previous'.
+    redraftSeason: { findFirst: vi.fn(async (args?: { where?: { id?: string } }) => (args?.where?.id === 'S' ? null : { id: 'previous' })) },
   }
   const keys: unknown[] = []
   const client = {

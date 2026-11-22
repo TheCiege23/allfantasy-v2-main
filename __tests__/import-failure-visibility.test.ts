@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { leagueDestinationHidden } from '@/lib/core-app/leagueDestinations'
 
 /**
  * Import OS items 0–2: a failure must be explainable, work must survive the response,
@@ -225,11 +226,18 @@ describe('item 1 — a partial import says so', () => {
    * of them. Only an explicit `false` may hide a tab.
    */
   it('hides a tab only on an explicit false, never on undefined', () => {
+    // The gate is lib/core-app/leagueDestinations.ts's, shared by the rail and the tab row.
+    for (const key of ['trades', 'draft-hq'] as const) {
+      const gate = key === 'trades' ? 'trades' : 'draft'
+      expect(leagueDestinationHidden(key, { [gate]: undefined })).toBe(false)
+      expect(leagueDestinationHidden(key, null)).toBe(false)
+      expect(leagueDestinationHidden(key, { [gate]: true })).toBe(false)
+      expect(leagueDestinationHidden(key, { [gate]: false })).toBe(true)
+    }
+    // …and the shell routes its gated entries through it rather than a truthiness check of its own.
     const shell = code('components/core-app/AfCoreShell.tsx')
-    expect(shell).toMatch(/ifImported/)
-    expect(shell).toMatch(/flag === false \? \[\] : \[item\]/)
-    // The truthiness spelling is the bug; make sure it is not what is there.
-    expect(shell).not.toMatch(/const ifImported[\s\S]{0,120}flag \? \[item\] : \[\]/)
+    expect(shell).toMatch(/leagueDestinationHidden\(item\.key, caps\)/)
+    expect(shell).toMatch(/trades: props\.importCapabilities\?\.trades/)
   })
 
   it('degrades to showing everything when the league cannot be read', () => {

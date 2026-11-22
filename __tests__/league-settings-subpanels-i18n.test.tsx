@@ -43,8 +43,6 @@ vi.mock('@/components/league-settings/DraftSettingsCommissionerPanel', () => stu
 vi.mock('@/components/league-settings/DivisionSettingsCommissionerPanel', () => stub('DivisionSettingsCommissionerPanel'))
 vi.mock('@/components/league-settings/MemberSettingsCommissionerPanel', () => stub('MemberSettingsCommissionerPanel'))
 vi.mock('@/app/idp/components/settings/IDPRosterPanel', () => stub('IDPRosterPanel'))
-vi.mock('@/app/idp/components/settings/IDPScoringPanel', () => stub('IDPScoringPanel'))
-vi.mock('@/app/idp/components/settings/IDPDisplayPanel', () => stub('IDPDisplayPanel'))
 vi.mock('@/app/idp/components/settings/IDPAIPanel', () => stub('IDPAIPanel'))
 vi.mock('@/app/league/[leagueId]/components/DeleteLeagueFromAfPanel', () => stub('DeleteLeagueFromAfPanel'))
 vi.mock('@/components/monetization/PlanRefusalNotice', () => stub('PlanRefusalNotice'))
@@ -171,7 +169,8 @@ describe('🛑 the panels read Spanish in Spanish', () => {
     ['commish-general', 'Liga pública', ['Nombre de la liga', 'Actualiza AllFantasy']],
     ['commish-note', 'Generar con Chimmy', ['Semana de enfoque (opcional)', 'Publicar / Actualizar']],
     ['commish-controls', 'Zona de peligro', ['Editar bracket de playoffs', 'Bloquear plantilla', 'Programar matchups', 'Reiniciar liga', 'Eliminar / quitar']],
-    ['league-dues', 'Seguimiento de cuotas', ['Seguimiento de Cuotas de Liga', 'Guardar']],
+    // The modal renders the real tracker now (it was a browser-only toggle); its commissioner controls are pinned in league-settings-panels-i18n.
+    ['league-dues', 'Seguimiento de Cuotas de Liga', ['Seguimiento del estado de pagos de la liga', 'miembros pagaron']],
     ['ai-trade', 'Revisión de salud de trades', ['Jugadores que das (separados por comas)', 'Jugadores que recibes', 'Ejecutar']],
     ['ai-trash', 'Idea de rivalidad', ['Nombre visible del objetivo', 'Intensidad', 'Brutal']],
     ['my-team', 'Nombre del equipo', ['Esta liga está importada']],

@@ -11,7 +11,7 @@
  */
 import { readReactions, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 
-export type FeedLine = { verb: 'add' | 'drop'; name: string; meta: string | null }
+type FeedLine = { verb: 'add' | 'drop'; name: string; meta: string | null }
 
 export type FeedItem = {
   id: string

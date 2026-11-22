@@ -12,6 +12,8 @@ import { DynastyAgeKey, DynastyMarkersScope, DynastyRowMarkers } from './Dynasty
 import '@/components/core-app/af-my-team.css'
 /* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
+// The head-to-head row look (wide pages only); after the base and redraft sheets so it sizes over them.
+import '@/components/core-app/af-my-team-h2h.css'
 import { statusShorthand } from '@/lib/core-app/myTeamStatusShorthand'
 import { lineupPeriodLabel, noGameBadge, redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { lineupDecision } from '@/lib/core-app/lineupDecision'
@@ -20,6 +22,7 @@ import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/
 import { DISTANT_LOCK_DAYS } from '@/lib/core-app/lockLabel'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
+import type { LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
 import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'
@@ -29,16 +32,38 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
+import {
+  defaultProjectionKind,
+  emptyProjectionColumns,
+  projectionSourceKind,
+  type ProjectionSourceKind,
+} from '@/lib/core-app/projectionSourceLabel'
+import { summarizeLineupChanges } from '@/lib/core-app/lineupChangeSummary'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
-import { messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { EvidenceLine } from '@/components/core-app/primitives'
 import { useMessages } from '@/components/i18n/useMessages'
 import { myTeamScreenMessages } from '@/lib/core-app/messages/myTeamScreen'
+import { myTeamGuideMessages } from '@/lib/core-app/messages/myTeamGuide'
+import {
+  futurePicksSummary, kickoffCountdown, myTeamHeadline, showBenchCheck, showGradeDetail, winPercent, type MyTeamHeadline,
+} from '@/lib/core-app/myTeamGuide'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/myteam/af-my-team-guide.css'
 
 type MyTeamScreenMessages = typeof myTeamScreenMessages extends Catalog<infer M> ? M : never
+
+/* The one "More detail" fold's note line (2026-11-20): what the side column used to show open. */
+const myTeamMoreDetailMessages = defineMessages({
+  en: { note: 'Byes · scoring basis · positions · recent moves' },
+  es: { note: 'Descansos · base de puntuación · posiciones · movimientos recientes' },
+})
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -61,128 +86,6 @@ function UnidentifiedNote({ count }: { count: number }) {
     <p className="af-mt-footnote af-mt-unidentified">
       {m.unidentifiedNote(count)}
     </p>
-  )
-}
-
-/**
- * Live countdown to the lineup lock.
- *
- * ⚠ IT USED TO PRINT "2321:15:08". Hours were the largest unit, so a lock 97
- * days out rendered as a four-digit hour count that read like a stopwatch. The
- * number was accurate and completely unreadable, and it hid the real problem —
- * that it was counting down to the wrong game entirely.
- *
- * Days now lead when there are days. Past a week the countdown stops being a
- * deadline at all and the banner says what it actually knows.
- */
-function LockCountdown({
-  at,
-  anyEmptySlot,
-  platform,
-  fixHref = null,
-  week,
-  daysAway,
-  next = false,
-  asOf,
-}: {
-  at: Date
-  anyEmptySlot: boolean
-  platform: string
-  /** The provider's lineup screen, when the loader resolved one. Null renders the line as text. */
-  fixHref?: string | null
-  week: number | null
-  daysAway: number
-  next?: boolean
-  asOf?: number
-}) {
-  const { language } = useOptionalLanguage()
-  const copy = (english: string) => coreUiCopy(english, language)
-  const { lockTimeLocale } = messagesFor(myTeamScreenMessages, language)
-  const [now, setNow] = useState<number>(() => asOf ?? Date.now())
-  /*
-   * ⚠ THE LOCK TIME WAS ALWAYS PRINTED IN UTC — a Sunday 1pm Eastern kickoff read "17:00 UTC".
-   * UTC is the one zone server and browser agree on, so it is what the server renders and what
-   * hydration matches; the reader's own zone replaces it after mount, when it is knowable.
-   */
-  const [localTime, setLocalTime] = useState<string | null>(null)
-  const atMs = at.getTime()
-  useEffect(() => {
-    try {
-      setLocalTime(
-        new Intl.DateTimeFormat(lockTimeLocale || undefined, {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZoneName: 'short',
-        }).format(new Date(atMs)),
-      )
-    } catch {
-      setLocalTime(null)
-    }
-  }, [atMs, lockTimeLocale])
-
-  useEffect(() => {
-    setNow(Date.now())
-    // A ticking second hand on a deadline eight days out is noise; it only
-    // earns the re-render when the number is actually moving for the reader.
-    const period = daysAway >= 1 ? 60_000 : 1_000
-    const t = setInterval(() => setNow(Date.now()), period)
-    return () => clearInterval(t)
-  }, [daysAway])
-
-  const ms = at.getTime() - now
-  const locked = ms <= 0
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const d = Math.floor(total / 86_400)
-  const h = Math.floor((total % 86_400) / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-
-  const label = locked
-    ? copy('Games started')
-    : d > 0
-      ? `${d}d ${h}h ${m}m`
-      : `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-
-  const urgent = !locked && (ms <= 3_600_000 || anyEmptySlot)
-
-  return (
-    <div className="af-mt-lock" data-urgent={urgent} data-locked={locked}>
-      {/*
-        ⚠ STAYS A SPAN WHILE THE SECTIONS BELOW BECAME HEADINGS. The lock strip
-        renders ABOVE the team name, so promoting it puts an h2 in front of the
-        page's h1 and the outline starts one level too deep. It is a status
-        banner rather than a section, and it carries its own text ("Week 1
-        locks", the time, the reason) which a screen reader reads in document
-        order regardless. The matchup, byes and roster lists below ARE sections
-        and are headings.
-      */}
-      <span className="af-label af-mt-lock-label">
-        {week != null ? `${copy('Week')} ${week} · ${copy(next ? 'next player kickoff' : 'first kickoff')}` : copy(next ? 'Next player kickoff' : 'First kickoff')}
-      </span>
-      <span className="af-num af-mt-lock-time">{label}</span>
-      <span className="af-mt-lock-note">
-        {localTime ?? `${at.toUTCString().slice(0, 22)} UTC`}
-        {` · ${copy('confirm individual locks and AutoSubs on your platform')}`}
-        {anyEmptySlot ? ` · ${copy('a starting slot is still empty')}` : null}
-      </span>
-      {/*
-        ⚠ IT LOOKED LIKE A LINK AND WAS A SPAN. Accent caps under an urgent banner read as a
-        control; tapping it did nothing. Now it IS the provider's lineup screen when we have one.
-      */}
-      {anyEmptySlot && !locked ? (
-        fixHref ? (
-          /* A real button now: the most urgent action on the page was 11px caps (audit 2026-10-02). */
-          <a className="af-btn af-mt-lock-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
-            {copy('Fix it in')} {platform} <span aria-hidden>↗</span>
-          </a>
-        ) : (
-          <span className="af-mt-lock-fix">{copy('Fix it in')} {platform}</span>
-        )
-      ) : null}
-    </div>
   )
 }
 
@@ -508,106 +411,9 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
 }
 
 
-/**
- * Your chance to win, from the shared forecast the Matchup screen and the all-leagues board use —
- * so this card can never say 70% beside a Matchup tab that says 55%. When the forecast declines it
- * says why, in the forecast's own words, instead of printing a number it does not stand behind.
- */
-function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast']> }) {
-  const { language } = useOptionalLanguage()
-  const m = useMessages(myTeamScreenMessages)
-  if (!forecast.available) {
-    return (
-      <p className="af-mt-mu-win" data-available="false">
-        {m.noWinProbability} — {myTeamCardReasonText(forecast.reason, language)}.
-      </p>
-    )
-  }
-  const pct = Math.round(forecast.pWin * 100)
-  const margin = forecast.projectedMargin
-  const marginText = `${margin >= 0 ? '+' : '−'}${Math.abs(margin).toFixed(1)}`
-  return (
-    <p className="af-mt-mu-win" data-available="true" data-favoured={pct >= 50}>
-      <span className="af-mt-mu-win-pct af-num">{pct}%</span>{' '}
-      {m.toWin}
-      <span className="af-mt-mu-win-meta">
-        {' · '}
-        {m.projectedMargin} <span className="af-num">{marginText}</span>
-        {' · '}
-        {m.confidence}{' '}
-        {m.confidenceLevel(forecast.confidence)}
-      </span>
-    </p>
-  )
-}
-
 /** One side of the projected matchup. */
-const FantraxCollegeProjectionContext = createContext(false)
-
-function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
-  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
-  const { language } = useOptionalLanguage()
-  const copy = (english: string) => coreUiCopy(english, language)
-  const m = useMessages(myTeamScreenMessages)
-  return (
-    <div className="af-mt-mu-side">
-      <div className="af-mt-mu-who">
-        {side.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="af-mt-mu-av" src={side.avatarUrl} alt="" width={26} height={26} />
-        ) : null}
-        <div>
-          <div className="af-mt-mu-name">{side.teamName ?? side.managerName ?? label}</div>
-          {side.managerName && side.teamName ? (
-            <div className="af-mt-mu-sub">{side.managerName}</div>
-          ) : null}
-        </div>
-      </div>
-      <div className="af-mt-mu-pts af-num">
-        {side.projected != null ? `${fantraxCollege ? 'AF ' : ''}${side.projected.toFixed(1)}` : '—'}
-      </div>
-      {/* AllFantasy's own engine for the same lineup, beside the provider total. */}
-      {!fantraxCollege && side.afProjected != null ? (
-        <div className="af-mt-mu-af af-num" title={copy("AllFantasy engine projection, adjusted to this league's scoring")}>
-          AF {side.afProjected.toFixed(1)}
-        </div>
-      ) : null}
-      {/*
-        Coverage sits with the number, not in a footnote. A total built from
-        five of nine starters always reads LOW, and a manager comparing two
-        low-in-different-ways totals is being misled by the gap between them.
-      */}
-      {side.projected != null && side.projectedFrom < side.starterCount ? (
-        <div className="af-mt-mu-cov">
-          {m.projectedFromOf(side.projectedFrom, side.starterCount)}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-/**
- * The one-line read on the matchup, or nothing.
- *
- * ⚠ SILENT WHEN EITHER SIDE IS PARTIALLY PRICED. A margin between two totals
- * built from different numbers of starters is not a margin, it is an artefact
- * of coverage — and "you are favoured by 12" is exactly the sentence someone
- * would act on.
- */
-function edge(nm: NextMatchup, bestBall: boolean, m: MyTeamScreenMessages): string | null {
-  const you = nm.you
-  const them = nm.opponent
-  if (!them || you.projected == null || them.projected == null) return null
-  if (you.projectedFrom < you.starterCount || them.projectedFrom < them.starterCount) return null
-
-  const diff = Math.round((you.projected - them.projected) * 10) / 10
-  const by = Math.abs(diff).toFixed(1)
-  if (bestBall) {
-    return m.edgeBestBall(by, diff >= 0)
-  }
-  if (Math.abs(diff) < 3) return m.edgeCoinFlip
-  return diff > 0 ? m.edgeAhead(by) : m.edgeBehind(by)
-}
+/** Whose projection the provider column shows — decided from the rows (projectionSourceLabel.ts). */
+const ProjectionSourceContext = createContext<ProjectionSourceKind>('sleeper')
 
 function PlayerCell({ player }: { player: LineupPlayer }) {
   const { language } = useOptionalLanguage()
@@ -774,9 +580,11 @@ function StatusChip({ status }: { status: string | null }) {
  * own scoring could not be applied, and the caveat under the roster says so.
  */
 function Projections({ player }: { player: LineupPlayer }) {
-  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
+  const sourceKind = useContext(ProjectionSourceContext)
+  const afProvider = sourceKind === 'af'
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(myTeamScreenMessages)
   const fmt = (v: number | null) =>
     v == null ? <span className="af-mt-proj--none">&mdash;</span> : v.toFixed(1)
   const pct = (v: number | null | undefined) =>
@@ -793,7 +601,7 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--af af-num"
-        title={fantraxCollege ? copy("AllFantasy's own projection engine, adjusted to your league's scoring") : `${copy("Provider (Sleeper) projection scored under YOUR league's rules")}${
+        title={afProvider ? copy("AllFantasy's own projection engine, adjusted to your league's scoring") : `${sourceKind === 'neutral' ? m.projNeutralTitle : copy("Provider (Sleeper) projection scored under YOUR league's rules")}${
           player.projectedPoints != null ? ` · ${copy('standard PPR')} ${player.projectedPoints.toFixed(1)}` : ''
         }`}
       >
@@ -808,7 +616,7 @@ function Projections({ player }: { player: LineupPlayer }) {
         className="af-mt-proj af-mt-proj--engine af-num"
         title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}
       >
-        {fantraxCollege ? null : fmt(player.afEngineProjectedPoints ?? null)}
+        {afProvider ? null : fmt(player.afEngineProjectedPoints ?? null)}
       </span>
       {/*
         OWN and START are the app's own market, read from every roster we hold.
@@ -845,13 +653,6 @@ const AF_PTS_EXPLAINER =
   'defenders are priced by AllFantasy’s IDP model instead. ' +
   'AF is AllFantasy’s own projection engine, adjusted to the same settings.'
 
-/** The matchup card's two figures per side. The AF line explained itself only by a hover title. */
-const MATCHUP_NUMBERS_EXPLAINER =
-  'The large number is Sleeper’s projection for each lineup, re-scored under your league’s settings. ' +
-  'AF beneath it is AllFantasy’s own engine on the same lineup and the same settings.'
-const MATCHUP_COVERAGE_EXPLAINER =
-  '“from 5 of 9” means only five starters have a projection yet, so that total reads low.'
-
 /** The two market columns' headings, per language — one source for the header and the key. */
 export const MARKET_COLUMN_LABELS = {
   en: { own: myTeamScreenMessages.en.marketOwn, start: myTeamScreenMessages.en.marketStart },
@@ -864,7 +665,8 @@ const MARKET_COLUMNS_EXPLAINER =
   'start him this week — byes and injuries move it on their own. Both show on wide screens.'
 
 function ProjHeader() {
-  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
+  const sourceKind = useContext(ProjectionSourceContext)
+  const afProvider = sourceKind === 'af'
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -875,7 +677,7 @@ function ProjHeader() {
         second, hover-only copy of the same text over the popover itself.
       */}
       <span className="af-label af-mt-projhead--af">
-        {fantraxCollege ? 'AF' : PROJECTION_PROVIDER_LABEL}
+        {afProvider ? 'AF' : sourceKind === 'neutral' ? m.projNeutralColumn : PROJECTION_PROVIDER_LABEL}
         {/*
           The question mark is the point: two numbers sitting side by side with
           no explanation reads as a bug, not a feature.
@@ -886,13 +688,13 @@ function ProjHeader() {
           its own wrapper — so the narrow page's `nth-child` rules still hide OWN and START, not AF.
           It explains all four columns: one "?" per header, never one per row.
         */}
-        <InfoTip label={copy(fantraxCollege ? 'What these columns mean' : 'What Sleeper, AF, OWN and START mean')} title={copy('What these columns mean')}>
-          <span className="af-info-para">{copy(fantraxCollege ? "AllFantasy's own projection engine, adjusted to your league's scoring" : AF_PTS_EXPLAINER)}</span>
+        <InfoTip label={sourceKind === 'neutral' ? m.projNeutralKeyAria : copy(afProvider ? 'What these columns mean' : 'What Sleeper, AF, OWN and START mean')} title={copy('What these columns mean')}>
+          <span className="af-info-para">{sourceKind === 'neutral' ? m.projNeutralExplainer : copy(afProvider ? "AllFantasy's own projection engine, adjusted to your league's scoring" : AF_PTS_EXPLAINER)}</span>
           <span className="af-info-para">{copy(MARKET_COLUMNS_EXPLAINER)}</span>
         </InfoTip>
       </span>
       <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
-        {fantraxCollege ? null : 'AF'}
+        {afProvider ? null : 'AF'}
       </span>
       {/*
         «PROP.» (propiedad) and «TIT.» (titular) in Spanish — the abbreviations Spanish fantasy
@@ -900,11 +702,11 @@ function ProjHeader() {
         44px and 46px, and on production at 1280px «TIENEN» needed 48px, «TITUL.» 48 and «TITULAR»
         55 (2026-10-03). The "?" above and the key below spell both out.
       */}
-      <span className="af-label" title={copy('Share of AllFantasy leagues rostering this player')}>
+      <span className="af-label af-mt-projhead--market" title={copy('Share of AllFantasy leagues rostering this player')}>
         {m.marketOwn}
       </span>
       <span
-        className="af-label"
+        className="af-label af-mt-projhead--market"
         title={copy('Of the leagues rostering him, how many start him this week')}
       >
         {m.marketStart}
@@ -923,7 +725,8 @@ function ProjHeader() {
  * key cannot drift from the tooltips it stands in for.
  */
 function RosterKey() {
-  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
+  const sourceKind = useContext(ProjectionSourceContext)
+  const afProvider = sourceKind === 'af'
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -943,8 +746,8 @@ function RosterKey() {
           </div>
         ))}
         <div>
-          <dt>{fantraxCollege ? 'AF' : `${PROJECTION_PROVIDER_LABEL} · AF`}</dt>
-          <dd>{copy(fantraxCollege ? "AllFantasy's own projection engine, adjusted to your league's scoring" : AF_PTS_EXPLAINER)}</dd>
+          <dt>{afProvider ? 'AF' : `${sourceKind === 'neutral' ? m.projNeutralColumn : PROJECTION_PROVIDER_LABEL} · AF`}</dt>
+          <dd>{sourceKind === 'neutral' ? m.projNeutralExplainer : copy(afProvider ? "AllFantasy's own projection engine, adjusted to your league's scoring" : AF_PTS_EXPLAINER)}</dd>
         </div>
         <div>
           <dt>{m.marketOwn} · {m.marketStart}</dt>
@@ -973,44 +776,66 @@ function RosterKey() {
  * three seasons, which this page never showed. See `dynastyOutlook.ts`. Each half degrades on its
  * own: no picks synced says so, no ages on file says so, neither hides the other.
  */
-function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> }) {
+/**
+ * A dynasty team's future draft picks (2026-11-14, owner's ask): their own section in the roster
+ * column, under Taxi — picks are part of a dynasty roster. Each year's picks, with the team a
+ * traded-in pick came from, how many and how many are first-rounders, and the way to trade them.
+ */
+function FutureDraftPicks({ outlook, leagueId }: { outlook: NonNullable<MyTeamData['dynasty']>; leagueId: string }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(myTeamScreenMessages)
-  const { picks, ages } = outlook
+  const g = useMessages(myTeamGuideMessages)
+  const { picks } = outlook
+  const summary = picks.available ? futurePicksSummary(picks.bySeason) : null
   return (
-    <section className="af-frame af-mt-dynasty" aria-label={m.dynastyOutlook}>
-      <h2 className="af-label">{m.dynastyOutlook}</h2>
-
-      <h3 className="af-mt-dynasty-h">{m.draftCapital}</h3>
+    <section className="af-frame af-mt-section af-mt-picks" aria-labelledby="af-mt-picks-title" data-testid="my-team-future-picks">
+      <header className="af-mt-section-head af-mt-picks-head">
+        <h2 id="af-mt-picks-title" className="af-label">{g.futurePicks}</h2>
+        {summary && summary.total > 0 ? (
+          <span className="af-mt-section-note" data-testid="my-team-picks-count">{g.picksCount(summary.total, summary.firstRounders)}</span>
+        ) : null}
+        <Link className="af-mt-picks-trade" href={`/core/trades?league=${encodeURIComponent(leagueId)}`}>
+          {g.tradePicks} <span aria-hidden>→</span>
+        </Link>
+      </header>
       {picks.available ? (
-        picks.bySeason.length === 0 ? (
+        summary && summary.total === 0 ? (
           <p className="af-mt-dynasty-note">{m.noPicks}</p>
         ) : (
           <>
-            <ul className="af-mt-dynasty-picks">
-              {picks.bySeason.map((s) => (
+            <ul className="af-mt-picks-list">
+              {picks.bySeason.filter((s) => s.picks.length > 0).map((s) => (
                 <li key={s.season}>
-                  <span className="af-mt-dynasty-season af-num">{s.season}</span>
-                  <span className="af-mt-dynasty-list">
-                    {s.picks
-                      .map((p) => (p.fromTeamName ? `${p.label} (${m.pickVia} ${myTeamReasonText(p.fromTeamName, language)})` : p.label))
-                      .join(' · ')}
+                  <span className="af-mt-picks-season af-num">{s.season}</span>
+                  <span className="af-mt-picks-chips">
+                    {s.picks.map((p, i) => (
+                      <span key={`${p.round}-${i}`} className="af-mt-pick" data-round={p.round} data-via={p.fromTeamName ? 'true' : undefined}>
+                        {p.label}
+                        {p.fromTeamName ? <small>{m.pickVia} {myTeamReasonText(p.fromTeamName, language)}</small> : null}
+                      </span>
+                    ))}
                   </span>
                 </li>
               ))}
             </ul>
-            {picks.coverage === 'traded_only' ? (
-              <p className="af-mt-dynasty-note">
-                {m.tradedPicksOnly}
-              </p>
-            ) : null}
+            {picks.coverage === 'traded_only' ? <p className="af-mt-dynasty-note">{m.tradedPicksOnly}</p> : null}
           </>
         )
       ) : (
         <p className="af-mt-dynasty-note">{myTeamReasonText(picks.reason, language)}.</p>
       )}
+    </section>
+  )
+}
 
-      <h3 className="af-mt-dynasty-h">{m.lineupAge}</h3>
+function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> }) {
+  const { language } = useOptionalLanguage()
+  const m = useMessages(myTeamScreenMessages)
+  const { ages } = outlook
+  return (
+    <section className="af-frame af-mt-dynasty" aria-label={m.lineupAge}>
+
+      <h2 className="af-label">{m.lineupAge}</h2>
       {ages.available ? (
         <>
           <p className="af-mt-dynasty-line">
@@ -1159,12 +984,21 @@ function checkLine(item: LineupCheckItem, m: MyTeamScreenMessages): string {
  * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
-function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string }) {
+/** Whether LineupCheckCard draws its own "Fix in <platform>" button — the same rule it renders by. */
+export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: string | null | undefined): boolean {
+  return Boolean(check && fixHref && check.items.length > 0 && check.items.some((i) => i.kind !== 'questionable'))
+}
+
+function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
   const m = useMessages(myTeamScreenMessages)
   const certain = check.items.some((i) => i.kind !== 'questionable')
   const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
-    <section className="af-frame af-mt-check" aria-label={m.lineupCheck} data-clear={check.items.length === 0 && !check.unresolved}>
+    <section
+      className={embedded ? 'af-mt-check af-mt-check--embedded' : 'af-frame af-mt-check'}
+      aria-label={m.lineupCheck}
+      data-clear={check.items.length === 0 && !check.unresolved}
+    >
       <h2 className="af-label">
         {/* Shown only under the redraft stamp (af-core-redraft-myteam.css); the words carry the meaning. */}
         <span className="af-mt-check-icon" aria-hidden>
@@ -1176,7 +1010,7 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
         {m.lineupCheck}
       </h2>
       {check.unresolved ? <p role="status">{m.unresolvedSlots(check.unresolved)}</p> : null}
-      <p className="af-mt-footnote">{m.lineupCheckFootnote}</p>
+      {embedded ? null : <p className="af-mt-footnote">{m.lineupCheckFootnote}</p>}
       {check.items.length === 0 ? (
         <p className="af-mt-check-clear">
           {m.lineupCheckClear}
@@ -1209,6 +1043,80 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
 }
 
 /**
+ * The whole-lineup best answer (lib/core-app/lineupOptimizer.ts): the total gain once, then each
+ * seat that changes. Recommendation only; the platform link is where the lineup is actually set.
+ */
+function LineupOptimizerCard({ result, platform, fixHref }: { result: LineupOptimization; platform: string; fixHref: string | null }) {
+  const m = useMessages(myTeamScreenMessages)
+  const g = useMessages(myTeamGuideMessages)
+  const pts = (n: number) => n.toFixed(1)
+  return (
+    <section className="af-frame af-mt-opt" aria-label={m.optimizerTitle} data-state={result.state} data-testid="mt-optimizer">
+      <header className="af-mt-opt-head">
+        <h2 className="af-label">{m.optimizerTitle}</h2>
+        {result.state === 'improve' ? (
+          <span className="af-mt-opt-gain af-num" data-verdict={result.verdict}>{m.optimizerGain(pts(result.gain))}</span>
+        ) : null}
+      </header>
+      {result.state === 'optimal' ? (
+        <p className="af-mt-opt-clear">{g.bestAlready}</p>
+      ) : (
+        <>
+          <p className="af-mt-opt-totals af-num">{m.optimizerTotals(pts(result.currentTotal), pts(result.bestTotal))}</p>
+          {result.verdict === 'close' ? <p className="af-mt-opt-close">{m.optimizerClose}</p> : null}
+          {(() => {
+            /* Seat-by-seat changes regrouped into what you do: who starts, who sits, who only
+               switches seats (lineupChangeSummary.ts). */
+            const { starts, benches, moves } = summarizeLineupChanges(result.changes)
+            return (
+              <>
+                <ul className="af-mt-opt-list">
+                  {starts.map((s) => (
+                    <li key={`in-${s.name}`} data-kind="start" data-testid="mt-optimizer-change">
+                      <span className="af-mt-opt-tag">{m.optimizerStart}</span>
+                      <span className="af-mt-opt-in">
+                        <strong>{s.name}</strong>
+                        <span className="af-num"> {pts(s.projected)}</span>
+                      </span>
+                      <span className="af-mt-opt-slot af-num">{s.emptySeat ? m.optimizerEmptySeatAt(s.slotLabel) : s.slotLabel}</span>
+                    </li>
+                  ))}
+                  {benches.map((b) => (
+                    <li key={`out-${b.name}`} data-kind="bench" data-testid="mt-optimizer-change">
+                      <span className="af-mt-opt-tag">{m.optimizerBench}</span>
+                      <span className="af-mt-opt-out">
+                        {b.name}
+                        {b.projected != null ? <span className="af-num"> {pts(b.projected)}</span> : null}
+                      </span>
+                      <span aria-hidden />
+                    </li>
+                  ))}
+                </ul>
+                {moves.length > 0 ? (
+                  /* Seat-only shuffles ("Geno Smith QB → QB", twenty of them) folded: they change no score. */
+                  <details className="af-mt-opt-moves-fold">
+                    <summary>{g.everySeat(moves.length)}</summary>
+                    <p className="af-mt-opt-moves">
+                      {m.optimizerMoves(moves.map((mv) => m.optimizerMove(mv.name, mv.fromSlot, mv.toSlot)).join(', '))}
+                    </p>
+                  </details>
+                ) : null}
+              </>
+            )
+          })()}
+          {fixHref ? (
+            <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+              {m.fixInPlatform(platform)}
+            </a>
+          ) : null}
+        </>
+      )}
+      {result.lockedSeats > 0 ? <p className="af-mt-footnote">{m.optimizerLocked(result.lockedSeats)}</p> : null}
+    </section>
+  )
+}
+
+/**
  * A catalog sentence with `{token}` placeholders, each replaced by its node. The bench-check
  * sentences put the bench name in a <strong> and both projections in number spans, and the two
  * languages order those pieces differently — so the order lives in the catalog, not here.
@@ -1220,7 +1128,6 @@ function fillTokens(template: string, nodes: Record<string, React.ReactNode>): R
 }
 
 function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
-  const gap = check.benchProjected - check.starterProjected
   const m = useMessages(myTeamScreenMessages)
   return (
     <div className="af-mt-bench-check" data-verdict={check.verdict}>
@@ -1238,6 +1145,20 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
           starter: check.starterName,
           starterPts: <span className="af-num">{check.starterProjected.toFixed(1)}</span>,
         })}
+        {/* The bench check's graded record for a swap of this size — said beside the call, never changing it. */}
+        {check.verdict === 'swap' && check.record ? (
+          /* The shared measured line (primitives/EvidenceLine.tsx) — inline, because it sits inside the call's own span. */
+          <EvidenceLine
+            inline
+            className="af-mt-bench-check-record"
+            label={m.benchCheckRecordLabel}
+            tone={check.record.level === 'low' ? 'low' : undefined}
+            lines={[{
+              text: m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low'),
+              data: { level: check.record.level },
+            }]}
+          />
+        ) : null}
       </span>
       <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
         tab: 'chimmy', leagueId,
@@ -1246,9 +1167,6 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
         // In the reader's language too: it lands in their own composer as the question they send.
         prefill: m.benchAskPrefill(check.benchName, check.starterName),
       } }))}>{m.benchAskChimmy}</button>
-      <span className="af-mt-bench-caveat">
-        {m.benchCaveat}
-      </span>
     </div>
   )
 }
@@ -1342,7 +1260,10 @@ function SlotRow({
         player rather than under the slot gutter is what makes it read as
         attached to THIS row in a table layout.
       */}
-      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
+      {/* ⚠ NOT ON AN AUTOMATIC LINEUP. Best ball scores the strongest eligible lineup by itself, so
+          "the stronger play" and "ask about this swap" advise a move nobody can make. */}
+      {/* Only a swap earns a row between starters; "fine as-is" said nothing (2026-11-14). */}
+      {slot.benchCheck && !automatic && showBenchCheck(slot.benchCheck) ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
     </li>
   )
 }
@@ -1478,6 +1399,7 @@ function OffseasonView({ data }: MyTeamProps) {
       </section>
       <div className="af-mt-body">
         <div className="af-mt-main">
+          {data.dynasty ? <FutureDraftPicks outlook={data.dynasty} leagueId={data.league.id} /> : null}
           {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
           {showStrength && grade ? <PositionStrengthCard grade={grade} /> : null}
         </div>
@@ -1537,7 +1459,8 @@ function LineupPeriodChip({ period }: { period: MyTeamData['lineupPeriod'] }) {
 }
 
 function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; bestBall: boolean }) {
-  const fantraxCollege = useContext(FantraxCollegeProjectionContext)
+  const sourceKind = useContext(ProjectionSourceContext)
+  const afProvider = sourceKind === 'af'
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -1557,7 +1480,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
   }
   const engineId = useId()
   const standardId = useId()
-  const canCompare = !fantraxCollege && proj != null && (proj.afEngineTotal != null || proj.standardComparable)
+  const canCompare = !afProvider && proj != null && (proj.afEngineTotal != null || proj.standardComparable)
 
   return (
     <div className="af-mt-projgroup" data-compare={compare ? 'true' : 'false'}>
@@ -1571,8 +1494,8 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
           numbers Sleeper never published.
         */}
         <div className="af-label">
-          {copy(
-            fantraxCollege ? 'Projected · AF · your league' : proj?.defendersModelled
+          {sourceKind === 'neutral' ? (bestBall ? m.projNeutralTileBestBall : m.projNeutralTile) : copy(
+            afProvider ? 'Projected · AF · your league' : proj?.defendersModelled
               ? bestBall ? 'Listed starters · Sleeper + AF IDP · your league' : 'Projected · Sleeper + AF IDP · your league'
               : bestBall ? 'Listed starters · Sleeper · your league' : 'Projected · Sleeper · your league',
           )}
@@ -1593,7 +1516,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
         AllFantasy's own engine over the same starters — the second projection, at
         the same weight as the provider's so neither reads as the footnote once shown.
       */}
-      <div id={engineId} hidden={!compare || fantraxCollege} className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
+      <div id={engineId} hidden={!compare || afProvider} className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
         <div className="af-mt-tile-value af-num">
           {proj?.afEngineTotal != null ? proj.afEngineTotal.toFixed(1) : '—'}
         </div>
@@ -1608,7 +1531,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
       */}
       <div
         id={standardId}
-        hidden={!compare || fantraxCollege}
+        hidden={!compare || afProvider}
         className="af-mt-tile af-mt-tile--proj"
         data-missing={proj ? !proj.standardComparable : undefined}
       >
@@ -1626,10 +1549,131 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
   )
 }
 
+/** Weekday and clock time in the reader's own zone — after hydration only, as the rest of /core does. */
+function useLocalWhen(iso: string | null, language?: string | null): string | null {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    if (!iso) return setText(null)
+    try {
+      /* In the page's language (it read "Sun 12:00 PM" on the Spanish page); the reader's own zone. */
+      setText(new Intl.DateTimeFormat(language || undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)))
+    } catch {
+      setText(null)
+    }
+  }, [iso, language])
+  return text
+}
+
+/**
+ * The top of My team (2026-11-13, owner: "users should know exactly what they need to do"). One
+ * sentence that answers "is my lineup OK?", one line on what the page is for, and up to three numbers
+ * that each jump to the section explaining them. It replaced a "Chimmy's moves" card that listed the
+ * same questionable starters the lineup check lists again below.
+ */
+function MyTeamGuide({
+  head,
+  leagueName,
+  leagueId,
+  kickoffAt,
+  projected,
+  winPct,
+}: {
+  head: MyTeamHeadline
+  leagueName: string
+  leagueId: string
+  kickoffAt: string | null
+  projected: { you: number; them: number | null } | null
+  winPct: number | null
+}) {
+  const g = useMessages(myTeamGuideMessages)
+  const { language } = useOptionalLanguage()
+  const when = useLocalWhen(kickoffAt, language)
+  /* Time left, after hydration only (the server cannot know the reader's clock). Whole minutes. */
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => {
+    setNow(Date.now())
+    const t = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const title =
+    head.kind === 'auto'
+      ? g.headAuto
+      : head.kind === 'fix'
+        ? g.headFix(head.count)
+        : head.kind === 'questionable'
+          ? g.headQuestionable(head.count)
+          : head.kind === 'better'
+            ? g.headBetter(head.gain.toFixed(1))
+            : head.kind === 'set'
+              ? g.headSet
+              : g.headUnknown
+  /*
+   * 2026-11-14: two numbers, each said once. The intro ("… Lineup changes are made on Sleeper") is gone
+   * — the banner above every league tab says where changes happen — and so is "Starters to check",
+   * which the headline already counts. The kickoff carries its time left, so the countdown card that
+   * repeated it is gone; the projection carries the win chance and opens Matchup, so the matchup card
+   * that repeated it (with a second, different margin) is gone.
+   */
+  const left = kickoffAt && now != null ? kickoffCountdown(Date.parse(kickoffAt), now) : null
+  const kickoffLabel = !left
+    ? g.chipKickoff
+    : left.kind === 'started'
+      ? g.kickoffStarted
+      : g.kickoffIn(left.days > 0 ? g.spanDays(left.days, left.hours) : left.hours > 0 ? g.spanHours(left.hours, left.minutes) : g.spanMinutes(Math.max(1, left.minutes)))
+  const chips: Array<{ key: string; value: string; label: string; href: string | null; tone: 'warn' | 'info' | 'ok' }> = []
+  if (kickoffAt) chips.push({ key: 'kickoff', value: when ?? '—', label: kickoffLabel, href: null, tone: 'ok' })
+  if (projected) {
+    chips.push({
+      key: 'projected',
+      value: projected.them != null ? `${projected.you.toFixed(1)} vs ${projected.them.toFixed(1)}` : projected.you.toFixed(1),
+      label: winPct != null ? g.projectedWin(winPct) : g.chipProjected,
+      href: `/core/matchup?league=${encodeURIComponent(leagueId)}`,
+      tone: projected.them != null && projected.you < projected.them ? 'warn' : 'ok',
+    })
+  }
+  return (
+    <section className="af-hg-head af-mtg-head" aria-labelledby="af-mtg-title" data-testid="my-team-guide">
+      <div className="af-hg-head-top">
+        <p className="af-hg-eyebrow">{g.eyebrow(leagueName)}</p>
+      </div>
+      <h2 id="af-mtg-title" className="af-hg-title" suppressHydrationWarning>
+        {title}
+      </h2>
+      {chips.length > 0 ? (
+        <ul className="af-hg-chips">
+          {chips.map((c) => {
+            const body = (
+              <>
+                <b suppressHydrationWarning>{c.value}</b>
+                <span suppressHydrationWarning>{c.label}</span>
+              </>
+            )
+            return (
+              <li key={c.key}>
+                {c.href ? (
+                  <a className="af-hg-chip" data-tone={c.tone} data-chip={c.key} href={c.href}>
+                    {body}
+                  </a>
+                ) : (
+                  <span className="af-hg-chip af-mtg-chip" data-tone={c.tone} data-chip={c.key}>
+                    {body}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </section>
+  )
+}
+
 export function MyTeam({ data }: MyTeamProps) {
+  const g = useMessages(myTeamGuideMessages)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
+  const md = useMessages(myTeamMoreDetailMessages)
   const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
   useEffect(() => {
     setDecisionNow(Date.now())
@@ -1660,7 +1704,28 @@ export function MyTeam({ data }: MyTeamProps) {
   }, [data.league.id])
 
   // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
-  const fantraxCollege = data.league.platform.toLowerCase() === 'fantrax' && data.league.sport?.toUpperCase() === 'NCAAF'
+  /*
+   * Whose projection the provider column shows, from the rows themselves: Sleeper's NFL feed, or
+   * AllFantasy's own models (NBA/NHL/MLB daily form, college snapshots), or neutral when mixed.
+   * It said Sleeper on every hockey player of a Fantrax NHL league (live check 2026-11-05).
+   */
+  const rosterPlayers = [
+    // Optional reads: a preseason screen can arrive without starters or bench at all.
+    ...(data.starters?.available ? data.starters.data.map((slot) => slot.player) : []),
+    ...(data.bench?.available ? data.bench.data : []),
+    ...(data.ir?.available ? data.ir.data : []),
+    ...(data.taxi?.available ? data.taxi.data : []),
+  ]
+  const sourceKind = projectionSourceKind(
+    rosterPlayers.map((p) => (p?.afProjectedPoints != null ? p.projectionSource : null)),
+    defaultProjectionKind(data.league.sport, data.league.platform),
+  )
+  const afProvider = sourceKind === 'af'
+  /** Per table: a projection column no row has a value in leaves the grid, header and all. */
+  const offColumns = (players: ReadonlyArray<LineupPlayer | null | undefined>) => {
+    const off = emptyProjectionColumns(players)
+    return { 'data-proj-engine': off.engine ? 'off' : undefined, 'data-proj-market': off.market ? 'off' : undefined }
+  }
   const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
   const footballScoring = ['NFL', 'NCAAF'].includes((data.league.sport ?? '').toUpperCase())
@@ -1674,6 +1739,27 @@ export function MyTeam({ data }: MyTeamProps) {
     data.bench.available ? data.bench.data : [],
     decisionNow,
   )
+  /*
+   * ONE LINEUP CARD, NOT TWO. "Lineup decision" named the most urgent slot and "Lineup check" sat
+   * directly below it listing every slot, the first of which was the same one — so a bye read
+   * "Cover Logan Kowalski's bye" and then "Logan Kowalski is on bye — find a replacement". The
+   * check now renders inside the decision card as its list. Both were already shown only outside
+   * Best Ball, so no league loses either.
+   */
+  const lineupCheck = !bestBall && data.starters.available ? summariseLineupCheck(data.starters.data, decisionNow) : null
+  /*
+   * The guide reads the check's items from the SERVER-time pass (lock asOf), not the ticking clock, so
+   * the server render and the first client render agree on the headline.
+   */
+  const guideCheck = !bestBall && data.starters.available
+    ? summariseLineupCheck(data.starters.data, data.lock?.available ? data.lock.data.asOf ?? decisionNow : decisionNow)
+    : null
+  const guideHead = myTeamHeadline({ bestBall, check: guideCheck, optimizer: data.lineupOptimizer ?? null })
+  const guideKickoff = data.lock?.available && data.lock.data.daysAway < DISTANT_LOCK_DAYS ? new Date(data.lock.data.at).toISOString() : null
+  const guideProjected =
+    data.nextMatchup.available && data.nextMatchup.data.you.projected != null
+      ? { you: data.nextMatchup.data.you.projected, them: data.nextMatchup.data.opponent?.projected ?? null }
+      : null
 
 
 
@@ -1686,6 +1772,25 @@ export function MyTeam({ data }: MyTeamProps) {
    *
    * What replaced it is app-wide: see lib/core-app/rosteredMarket.ts.
    */
+
+  const coverageFootnote = afProvider && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
+        <p className="af-mt-footnote">
+          {data.projections.data.unprojected === 0
+            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
+            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
+        </p>
+      ) : (
+        <p className="af-mt-footnote">
+          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
+        </p>
+      )
+  const hasMoreDetail =
+    data.upcomingByes.length > 0 ||
+    !!proj ||
+    (data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1) ||
+    !!data.teamActivity ||
+    !!data.dynasty ||
+    coverageFootnote != null
 
   function askChimmy() {
     window.dispatchEvent(
@@ -1706,10 +1811,18 @@ export function MyTeam({ data }: MyTeamProps) {
       prop threaded through PlayerCell, BenchRow and three call sites —
       which is the version somebody silently half-applies.
     */
-    <FantraxCollegeProjectionContext.Provider value={fantraxCollege}>
+    <ProjectionSourceContext.Provider value={sourceKind}>
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <DynastyMarkersScope markers={data.dynastyMarkers}>
     <div className="af-mt">
+      <MyTeamGuide
+        head={guideHead}
+        leagueName={data.league.name}
+        leagueId={data.league.id}
+        kickoffAt={guideKickoff}
+        projected={guideProjected}
+        winPct={data.nextMatchup.available ? winPercent(data.nextMatchup.data.forecast ?? null) : null}
+      />
       <header className="af-frame af-mt-head">
         {data.team.available ? (
           <>
@@ -1741,6 +1854,10 @@ export function MyTeam({ data }: MyTeamProps) {
                   ? ` · ${data.team.data.rank} ${m.of} ${data.team.data.teamCount}`
                   : ` · ${data.team.data.teamCount} ${m.teams}`}
               </div>
+              {/* One line where the Sleeper card took three (2026-11-14). */}
+              {platform.toLowerCase() === 'sleeper' ? (
+                <LineupVerification compact platform={platform} verification={data.lineupVerification} />
+              ) : null}
             </div>
 
             {/*
@@ -1777,7 +1894,7 @@ export function MyTeam({ data }: MyTeamProps) {
                 they differ. Your league's total leads at full size; standard
                 sits beside it, smaller, as the thing being compared against.
               */}
-              <ProjectionTiles proj={proj} bestBall={bestBall} />
+              {/* The projection is said once, at the top; the league-vs-standard comparison lives in the scoring card. */}
               {/*
                 ⚠ THE ABSENT RECORD IS PROSE AND MUST NOT SIT IN THE VALUE SLOT.
                 `af-mt-tile-value` is a 24px tabular figure; the preseason string
@@ -1803,9 +1920,12 @@ export function MyTeam({ data }: MyTeamProps) {
                     <span className="af-mt-grade-of"> {copy('of')} {data.rosterGrade.data.outOf}</span>
                   </div>
                   <div className="af-label">{copy('Roster value in this league')}</div>
-                  <div className="af-mt-tile-why">
-                    {gradeSubtitle(data.rosterGrade.data, language)}
-                  </div>
+                  {/* The detail line repeated Positional strength; it stays only where that card is not drawn. */}
+                  {showGradeDetail(data.rosterGrade.data) ? (
+                    <div className="af-mt-tile-why">
+                      {gradeSubtitle(data.rosterGrade.data, language)}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="af-mt-tile" data-missing="true">
@@ -1817,15 +1937,23 @@ export function MyTeam({ data }: MyTeamProps) {
             </div>
           </>
         ) : (
-          <Unavailable reason={data.team.reason} />
+          <>
+            <Unavailable reason={data.team.reason} />
+            {/* The Sleeper check still shows when the team row could not be read. */}
+            {platform.toLowerCase() === 'sleeper' ? (
+              <LineupVerification compact platform={platform} verification={data.lineupVerification} />
+            ) : null}
+          </>
         )}
       </header>
 
-      {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {bestBall ? <div className="af-mt-lock" data-urgent={false}>
         <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
-        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
+        {/* A league AllFantasy hosts is scored by AllFantasy, not by "your provider". */}
+        <span className="af-mt-lock-note">{isNativePlatform(data.league.platform)
+          ? copy('AllFantasy counts your highest-scoring legal lineup each week automatically. Review injuries and roster depth; no lineup changes are needed.')
+          : copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
       </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
@@ -1840,16 +1968,8 @@ export function MyTeam({ data }: MyTeamProps) {
             </span>
           </div>
         ) : (
-          <LockCountdown
-            at={new Date(data.lock.data.at)}
-            anyEmptySlot={data.lock.data.anyEmptySlot}
-            platform={platform}
-            fixHref={data.league.sourceLink?.href ?? null}
-            week={data.lock.data.week}
-            daysAway={data.lock.data.daysAway}
-            next={data.lock.data.next}
-            asOf={data.lock.data.asOf}
-          />
+          /* The next kickoff and its time left are the top number now (2026-11-14). */
+          null
         )
       ) : (
         <div className="af-mt-lock" data-urgent={false} data-locked={false}>
@@ -1861,7 +1981,8 @@ export function MyTeam({ data }: MyTeamProps) {
       {!bestBall ? (
         <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">
           <div>
-            <span className="af-label">{copy('Lineup decision')}</span>
+            {/* "Lineup decision" → "What to do" (2026-11-13 guide): the label says what the card is FOR. */}
+            <span className="af-label">{g.whatToDo}</span>
             <h2 id="af-mt-decision-title">
               {decisionStarted
                 ? m.decisionReviewLock(decisionSlot?.player?.name)
@@ -1873,7 +1994,9 @@ export function MyTeam({ data }: MyTeamProps) {
                     ? m.decisionCoverBye(decisionSlot.player.name)
                     : decisionSlot?.benchCheck?.verdict === 'swap'
                       ? m.decisionReviewSwap(decisionSlot.benchCheck.starterName, decisionSlot.benchCheck.benchName)
-                      : copy('Review your starting lineup')}
+                      : lineupCheck && lineupCheck.items.length > 0
+                        ? g.checkStarters(lineupCheck.items.length)
+                        : copy('Review your starting lineup')}
             </h2>
             <p>
               {decisionStarted || replacementStarted
@@ -1889,7 +2012,9 @@ export function MyTeam({ data }: MyTeamProps) {
                         ? m.decisionScoringDisfavors
                         : m.decisionUnconfirmed
                     : data.starters.available
-                      ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
+                      ? lineupCheck && lineupCheck.items.length > 0
+                        ? null
+                        : copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
                       : myTeamReasonText(data.starters.reason, language)}
             </p>
             <small>
@@ -1897,16 +2022,46 @@ export function MyTeam({ data }: MyTeamProps) {
                 ? m.decisionCoverage(proj.week, proj.afProjected, proj.projected + proj.unprojected)
                 : copy('Projection coverage unavailable')}
             </small>
+            {lineupCheck ? (
+              <LineupCheckCard
+                embedded
+                check={lineupCheck}
+                platform={platform}
+                leagueId={data.league.id}
+                fixHref={data.league.sourceLink?.href ?? null}
+              />
+            ) : null}
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
-            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+            {/*
+              One platform link per card (2026-11-06 phone pass). The embedded check already draws
+              "Fix in <platform>" whenever it names a certain problem, and the same href here made two
+              identical buttons a few lines apart. Kept only when the check does not draw its own.
+            */}
+            {/*
+              The platform link is the team card's (2026-11-14): it was on the page twice. Here only when
+              the team card cannot draw it (no team row read), so the page is never left without one.
+            */}
+            {data.league.sourceLink && !data.team.available && !checkDrawsFix(lineupCheck, data.league.sourceLink.href) ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+            {/* Chimmy's per-player moves card was folded into this list; its question lives here. */}
+            <button
+              type="button"
+              className="af-btn af-btn--ghost af-mtg-ask"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent(COMMS_OPEN_EVENT, {
+                    detail: { tab: 'chimmy', leagueId: data.league.id, prefill: g.chimmyPrompt(data.league.name) },
+                  }),
+                )
+              }
+            >
+              {g.askChimmy}
+            </button>
           </div>
         </section>
       ) : null}
 
-
-      <TeamRosterWorkspace data={data} />
      {/* ── Team header ─────────────────────────────────────────────── */}
 
 
@@ -1927,59 +2082,32 @@ export function MyTeam({ data }: MyTeamProps) {
         dashes for the entire preseason. What a manager wants in that window is
         not the points they have scored; it is the points they are about to.
       */}
-      {data.nextMatchup.available ? (
-        <section className="af-frame af-mt-matchup">
-          <div className="af-mt-mu-head">
-            <h2 className="af-label">
-              {copy('Week')} {data.nextMatchup.data.week} · {copy(bestBall ? 'listed starter projections' : 'projected matchup')}
-              {/*
-                One "?" for the card, not one per side: both sides carry the same two numbers. Only
-                when there ARE numbers — explaining two dashes is noise.
-              */}
-              {data.nextMatchup.data.you.projected != null ? (
-                <InfoTip label={copy('What the matchup numbers mean')} title={copy(fantraxCollege ? 'What the matchup numbers mean' : 'The two numbers')}>
-                  <span className="af-info-para">{copy(fantraxCollege ? "AllFantasy engine projection, adjusted to this league's scoring" : MATCHUP_NUMBERS_EXPLAINER)}</span>
-                  <span className="af-info-para">{copy(MATCHUP_COVERAGE_EXPLAINER)}</span>
-                </InfoTip>
-              ) : null}
-            </h2>
-            {data.nextMatchup.data.bye ? (
-              <span className="af-mt-mu-bye">{copy('no opponent recorded — bye')}</span>
-            ) : null}
-          </div>
-          <div className="af-mt-mu-body">
-            <MatchupSideView side={data.nextMatchup.data.you} label={copy('You')} />
-            <span className="af-mt-mu-v" aria-hidden>
-              v
-            </span>
-            {data.nextMatchup.data.opponent ? (
-              <MatchupSideView side={data.nextMatchup.data.opponent} label={copy('Them')} />
-            ) : (
-              <div className="af-mt-mu-side af-mt-mu-side--none">
-                <div className="af-mt-mu-name">{copy('Opponent not set')}</div>
-                <div className="af-mt-mu-sub">
-                  {copy('The league recorded this week without pairing teams.')}
-                </div>
-              </div>
-            )}
-          </div>
-          {edge(data.nextMatchup.data, bestBall, m) ? (
-            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall, m)}</p>
-          ) : data.nextMatchup.data.unpricedReason ? (
-            // Two dashes and nothing else read as a broken screen; say why, where the read goes.
-            <p className="af-mt-mu-edge">
-              {copy('No projected totals')} — {myTeamCardReasonText(data.nextMatchup.data.unpricedReason, language)}.
-            </p>
-          ) : null}
-          {data.nextMatchup.data.forecast ? <WinForecast forecast={data.nextMatchup.data.forecast} /> : null}
-          <Link className="af-mt-mu-go" href={`/core/matchup?league=${encodeURIComponent(data.league.id)}`}>
-            {m.goToMatchup}
-          </Link>
-        </section>
-      ) : (
-        <p className="af-mt-footnote">{myTeamCardReasonText(data.nextMatchup.reason, language)}</p>
-      )}
+      {/*
+        The matchup card that sat here is gone (2026-11-14). The projection and the win chance are the
+        top number, which opens Matchup; the card said them again, with a second margin ("behind by
+        44.9" beside "margin −46.0"). What stays is the one thing the top number cannot say: why there
+        is no projection to show.
+      */}
+      {!data.nextMatchup.available ? (
+        <p className="af-mt-footnote" data-testid="my-team-matchup-note">{myTeamCardReasonText(data.nextMatchup.reason, language)}</p>
+      ) : data.nextMatchup.data.bye ? (
+        <p className="af-mt-footnote" data-testid="my-team-matchup-note">{copy('no opponent recorded — bye')}</p>
+      ) : data.nextMatchup.data.you.projected == null && data.nextMatchup.data.unpricedReason ? (
+        <p className="af-mt-footnote" data-testid="my-team-matchup-note">
+          {copy('No projected totals')} — {myTeamCardReasonText(data.nextMatchup.data.unpricedReason, language)}.
+        </p>
+      ) : null}
 
+      {/*
+        ⚠ ONE "More detail" FOLD FOR THE PAGE (2026-11-20, owner: "the core site is confusing"). Byes,
+        why the two projections differ, positional strength, recent moves, lineup age and the coverage
+        footnote moved in here unchanged; the lineup and what to fix stay open. It stays in the side
+        column on a wide page (where byes and basis already sat) and, like them, drops below the roster
+        on a narrow one (`.af-mt-more { order: 1 }`, af-my-team.css). The column-heading key stays under
+        Starters: it is the table's own key, not the page's.
+      */}
+      {hasMoreDetail ? (
+      <MoreDetail className="af-mt-more" testId="my-team-more" note={md.note}>
       {/* ── Byes forming ────────────────────────────────────────────── */}
       {/*
         Shown ahead of time on purpose. Discovering in week 6 that four
@@ -1993,9 +2121,11 @@ export function MyTeam({ data }: MyTeamProps) {
             {data.upcomingByes.map((b) => (
               <li key={b.week} data-stack={b.names.length >= 3}>
                 <span className="af-mt-byes-wk af-num">{copy('Week')} {b.week}</span>
-                <span className="af-mt-byes-who">
-                  {b.names.length} {copy('off')} · {b.names.join(', ')}
-                </span>
+                {/* The count is the fact; the names are one tap away (sixteen of them ran four lines). */}
+                <details className="af-mt-byes-who">
+                  <summary>{g.byesNames(b.names.length)}</summary>
+                  <span>{b.names.join(', ')}</span>
+                </details>
               </li>
             ))}
           </ul>
@@ -2006,6 +2136,7 @@ export function MyTeam({ data }: MyTeamProps) {
       {proj ? (
         <section className="af-frame af-mt-basis">
           <div className="af-mt-basis-text">
+            <ProjectionTiles proj={proj} bestBall={bestBall} />
             {data.projectionBasis.scoringKnown && !footballScoring ? (
               <p className="af-mt-basis-lead">
                 {copy('This league’s scoring rules are saved. Projection totals appear when a compatible player stat feed is available.')}
@@ -2055,26 +2186,35 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Dynasty outlook: the next three seasons, not this week ────── */}
       {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
 
+      {/* ── Coverage footnote ───────────────────────────────────────── */}
+      {/*
+        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
+        league the standard tile reads "—" and explains why, but this footnote
+        still said "Standard total built from 7 of 16 starters … so it reads low"
+        — a total the page had just declined to show, and a count inflated by
+        every defender standard scoring cannot price. The tile carries the
+        explanation; the footnote stays out of it.
+      */}
+      {coverageFootnote}
+      </MoreDetail>
+      ) : null}
+
       </div>
       <div className="af-mt-main">
-      {/* ── Lineup check: the whole roster's verdict in one place ─────── */}
-      {!bestBall && data.starters.available ? (
-        <LineupCheckCard
-          check={summariseLineupCheck(data.starters.data, decisionNow)}
-          platform={platform}
-          leagueId={data.league.id}
-          fixHref={data.league.sourceLink?.href ?? null}
-        />
+      {/* ── Lineup check: rendered inside the decision card above. ─────── */}
+      {/* ── Best lineup: every open seat solved at once ──────────────── */}
+      {!bestBall && data.lineupOptimizer ? (
+        <LineupOptimizerCard result={data.lineupOptimizer} platform={platform} fixHref={data.league.sourceLink?.href ?? null} />
       ) : null}
       {/* ── Starters ────────────────────────────────────────────────── */}
-      <section id="af-mt-starters" className="af-frame af-mt-section">
+      <section id="af-mt-starters" className="af-frame af-mt-section" {...offColumns(data.starters?.available ? data.starters.data.map((slot) => slot.player) : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
           <LineupPeriodChip period={data.lineupPeriod} />
           <span className="af-mt-section-note">
             {data.nativeLineup ? m.startersNoteNative : bestBall
               ? m.startersNoteBestBall(platform)
-              : m.startersNoteImported(platform)}
+              : g.startersNote(platform)}
           </span>
           <ProjHeader />
         </header>
@@ -2084,7 +2224,7 @@ export function MyTeam({ data }: MyTeamProps) {
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
         {data.starters.available ? (
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.starters.data.map((slot, i) => (
               <SlotRow
                 key={`${slot.slotLabel}-${i}`}
@@ -2118,14 +2258,14 @@ export function MyTeam({ data }: MyTeamProps) {
       </section>
 
       {/* ── Bench ───────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section">
+      <section className="af-frame af-mt-section af-mt-bench" {...offColumns(data.bench?.available ? data.bench.data : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Bench')}</h2>
           <ProjHeader />
         </header>
         {data.bench.available ? (
           <>
-            <ul className="af-mt-list">
+            <ul className="af-mt-list" data-look="h2h">
               {data.bench.data.map((p) => (
                 <BenchRow key={p.sleeperId} player={p} slotLabel="BN" />
               ))}
@@ -2139,11 +2279,11 @@ export function MyTeam({ data }: MyTeamProps) {
 
       {/* ── Injured reserve ─────────────────────────────────────────── */}
       {data.ir.available ? (
-        <section className="af-frame af-mt-section">
+        <section className="af-frame af-mt-section af-mt-ir" {...offColumns(data.ir.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.ir.data.map((p) => (
               <BenchRow key={p.sleeperId} player={p} slotLabel="IR" />
             ))}
@@ -2158,14 +2298,14 @@ export function MyTeam({ data }: MyTeamProps) {
         was labelled "IR", which says a healthy taxi rookie is injured.
       */}
       {data.taxi.available ? (
-        <section className="af-frame af-mt-section">
+        <section className="af-frame af-mt-section af-mt-taxi" {...offColumns(data.taxi.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">
               {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
             </span>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.taxi.data.map((p) => (
               <BenchRow
                 key={p.sleeperId}
@@ -2179,35 +2319,24 @@ export function MyTeam({ data }: MyTeamProps) {
         </section>
       ) : null}
 
+      {data.dynasty ? <FutureDraftPicks outlook={data.dynasty} leagueId={data.league.id} /> : null}
+
+      {/*
+        ⚠ ROSTER DECISIONS COME AFTER THE ROSTER (owner, 2026-11-05). Above the tables, its seven
+        panels put the starters about three screens down on a 1440px desktop; the lineup is what
+        this page is opened for, and the panels compare players the tables have just shown.
+      */}
+      <TeamRosterWorkspace data={data} />
+
       <MyTeamRecentClips data={data} />
       <MyTeamHighlights data={data} />
 
-      {/* ── Coverage footnote ───────────────────────────────────────── */}
-      {/*
-        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
-        league the standard tile reads "—" and explains why, but this footnote
-        still said "Standard total built from 7 of 16 starters … so it reads low"
-        — a total the page had just declined to show, and a count inflated by
-        every defender standard scoring cannot price. The tile carries the
-        explanation; the footnote stays out of it.
-      */}
-      {fantraxCollege && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
-        <p className="af-mt-footnote">
-          {data.projections.data.unprojected === 0
-            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
-            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
-        </p>
-      ) : (
-        <p className="af-mt-footnote">
-          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
-        </p>
-      )}
       </div>
       </div>
     </div>
     </DynastyMarkersScope>
     </PlayerCardLeagueScope>
-    </FantraxCollegeProjectionContext.Provider>
+    </ProjectionSourceContext.Provider>
   )
 }
 

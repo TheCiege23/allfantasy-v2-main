@@ -12,7 +12,7 @@
  */
 import type { InsightEntry } from "./types"
 
-export type ChampionLeverage = {
+type ChampionLeverage = {
   teamName: string
   entriesPicked: number
   pickPercent: number
@@ -27,7 +27,7 @@ export type ChampionLeverage = {
   isCurrentUserPick: boolean
 }
 
-export type ChampionPickLeverageResult = {
+type ChampionPickLeverageResult = {
   picks: ChampionLeverage[]
   topPickTeam: string | null
   rarestPick: string | null

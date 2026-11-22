@@ -7,14 +7,14 @@ import {
   type WorldCupTeamSyncResult,
 } from "./worldCupDataSyncService"
 
-export type WorldCupImportMode = "teams" | "fixtures" | "all"
+type WorldCupImportMode = "teams" | "fixtures" | "all"
 
-export type WorldCupImportReadinessInput = WorldCupSyncOptions & {
+type WorldCupImportReadinessInput = WorldCupSyncOptions & {
   challengeId?: string | null
   mode?: WorldCupImportMode
 }
 
-export type WorldCupImportReadinessResult = {
+type WorldCupImportReadinessResult = {
   ok: true
   mode: WorldCupImportMode
   dryRun: boolean

@@ -2,7 +2,7 @@
  * AI reliability layer types (Prompt 127).
  */
 
-export type ProviderStatus = 'ok' | 'failed' | 'timeout' | 'invalid_response';
+type ProviderStatus = 'ok' | 'failed' | 'timeout' | 'invalid_response';
 
 export interface ProviderResultMeta {
   provider: string;
@@ -26,11 +26,3 @@ export interface ReliabilityMetadata {
   hardViolation: boolean;
 }
 
-export interface DeterministicFallbackPayload {
-  verdict: string;
-  winner?: string;
-  confidence: number;
-  reasons: string[];
-  warnings: string[];
-  dataQualityTier: 'FULL' | 'PARTIAL' | 'MINIMAL';
-}

@@ -46,7 +46,7 @@ import { appLinkHintMessages } from './messages/appLinkHint'
 export const APP_LINKS_MEASURED_ON = '2026-09-06'
 
 export type AppLinkLanding = 'app' | 'web' | 'unknown'
-export type PhoneOs = 'ios' | 'android'
+type PhoneOs = 'ios' | 'android'
 type Screen = 'lineup' | 'waivers' | 'trade' | 'league'
 
 const IOS: Record<string, Record<Screen, AppLinkLanding>> = {

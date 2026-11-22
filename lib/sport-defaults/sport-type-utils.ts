@@ -13,6 +13,3 @@ export function toSportType(s: string): SportType {
   return 'NFL'
 }
 
-export function isSportType(s: string): s is SportType {
-  return SPORT_TYPES.includes(s as SportType)
-}

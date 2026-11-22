@@ -60,11 +60,11 @@ import {
  */
 
 export const MIGRATION_MODES = ['dry-run', 'apply', 'delete-public'] as const
-export type MigrationMode = (typeof MIGRATION_MODES)[number]
+type MigrationMode = (typeof MIGRATION_MODES)[number]
 
 /** The only public prefixes the old chat uploaders wrote. Nothing outside them is moved or deleted. */
-export const PUBLIC_CHAT_PREFIXES = ['chat/', 'shared-chat/', 'bracket-chat/'] as const
-export type PublicChatPrefix = (typeof PUBLIC_CHAT_PREFIXES)[number]
+const PUBLIC_CHAT_PREFIXES = ['chat/', 'shared-chat/', 'bracket-chat/'] as const
+type PublicChatPrefix = (typeof PUBLIC_CHAT_PREFIXES)[number]
 
 const PUBLIC_HOST_SUFFIX = '.public.blob.vercel-storage.com'
 /** Case-insensitive SQL prefilter for "this row mentions a public Blob URL". JS does the exact parse. */
@@ -100,9 +100,9 @@ const LIMITS: Record<MigrationMode, { def: number; max: number }> = {
 
 // ─── tables ─────────────────────────────────────────────────────────────────────────────────────
 
-export type TableName = 'league_chat_messages' | 'platform_chat_messages' | 'bracket_league_messages'
+type TableName = 'league_chat_messages' | 'platform_chat_messages' | 'bracket_league_messages'
 type TextField = 'message' | 'imageUrl' | 'body'
-export type FieldName = TextField | 'metadata'
+type FieldName = TextField | 'metadata'
 
 type TableSpec = {
   table: TableName
@@ -119,7 +119,7 @@ const TABLES: readonly TableSpec[] = [
   { table: 'bracket_league_messages', scopeKind: 'bracket', scopeColumn: 'leagueId', textFields: ['message', 'imageUrl'], keepUpdatedAt: false },
 ]
 
-export const TABLE_FIELDS: ReadonlyArray<`${TableName}.${FieldName}`> = TABLES.flatMap((spec) =>
+const TABLE_FIELDS: ReadonlyArray<`${TableName}.${FieldName}`> = TABLES.flatMap((spec) =>
   [...spec.textFields, 'metadata' as const].map((field) => `${spec.table}.${field}` as const),
 )
 
@@ -143,7 +143,7 @@ type Row = {
  * cursor and nothing else are bound parameters. `strpos`, not LIKE: pathnames contain `_`, which
  * LIKE would read as a wildcard.
  */
-export function buildRowSearchSql(table: TableName, needleCount: number, limit: number): string {
+function buildRowSearchSql(table: TableName, needleCount: number, limit: number): string {
   const spec = TABLES.find((t) => t.table === table)
   if (!spec) throw new Error('unknown table')
   if (!Number.isInteger(needleCount) || needleCount < 1) throw new Error('needleCount must be a positive integer')
@@ -201,7 +201,7 @@ function safeDecode(value: string): string | null {
 }
 
 /** Every public Blob URL in a string. `matched` is the exact text, so a rewrite replaces only it. */
-export function findPublicBlobUrls(text: string): FoundUrl[] {
+function findPublicBlobUrls(text: string): FoundUrl[] {
   const out: FoundUrl[] = []
   for (const m of text.matchAll(PUBLIC_URL_IN_TEXT)) {
     const matched = m[0].replace(/[.,;:!?]+$/, '')
@@ -335,7 +335,7 @@ const STORED_TYPES: Record<string, { media: ChatUploadMedia; ext: string }> = {
 type Target = { path: string; contentType: string }
 
 /** Where a public blob lands for one chat: `chat/<leagueId>/image/<blobId>.jpg` and its siblings. */
-export function privateTargetFor(scope: ChatUploadScope, pathname: string, contentType: string | null | undefined): Target | null {
+function privateTargetFor(scope: ChatUploadScope, pathname: string, contentType: string | null | undefined): Target | null {
   if (!CHAT_UPLOAD_SCOPE_ID.test(scope.id)) return null
   const type = (contentType ?? '').split(';')[0].trim().toLowerCase()
   const known = STORED_TYPES[type]
@@ -448,7 +448,7 @@ async function moveOne(store: PublicStore, scope: ChatUploadScope, pathname: str
 
 // ─── reports ────────────────────────────────────────────────────────────────────────────────────
 
-export type ReferenceItem = {
+type ReferenceItem = {
   table: TableName
   rowId: string
   field: FieldName
@@ -463,7 +463,7 @@ export type ReferenceItem = {
   errorKind?: string
 }
 
-export type BlobVerdict =
+type BlobVerdict =
   | 'still_referenced'
   | 'moved'
   | 'orphan'
@@ -471,7 +471,7 @@ export type BlobVerdict =
   | 'private_check_failed'
   | 'not_public_store'
 
-export type BlobItem = {
+type BlobItem = {
   blobId: string
   prefix: PublicChatPrefix
   size: number
@@ -482,11 +482,11 @@ export type BlobItem = {
 
 type StorageStatus = { publicStore: 'configured' | 'missing'; privateStore: 's3' | 'blob' | 'none' }
 
-export type MigrationResult = { status: number; body: Record<string, unknown> }
+type MigrationResult = { status: number; body: Record<string, unknown> }
 
 type Clock = () => number
 
-export type MigrationOptions = {
+type MigrationOptions = {
   mode: MigrationMode
   limit?: number
   cursor?: string | null

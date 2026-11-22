@@ -30,9 +30,13 @@ export default async function DraftRoomPage({
     redirect(`/drafts/${encodeURIComponent(context.draftId)}`)
   }
 
-  // Mock draft — render inline (unchanged behavior)
+  /*
+   * Mock draft — render inline. A solid room ground and `.af-draft-dark` (2026-11-05): the board is
+   * translucent black over whatever sits behind it, so in light mode it drew white text on a light
+   * page. On its own dark ground it can opt out of the light-mode clamp like the other rooms do.
+   */
   return (
-    <div className="min-h-screen">
+    <div className="af-draft-dark min-h-screen bg-[#070b16] text-white">
       <div className="mx-auto max-w-6xl p-4">
         <DraftBoard kind="mock" draftId={context.draftId} canManage />
       </div>

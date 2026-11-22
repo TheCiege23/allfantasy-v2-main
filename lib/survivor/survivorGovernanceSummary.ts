@@ -6,7 +6,7 @@ import type { SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 import type { SurvivorTradeWindowStatus } from './survivorTradeRules'
 import { crossTribeWindowsLabel } from './survivorGovernanceCopy'
 
-export interface GovernanceGrounding {
+interface GovernanceGrounding {
   settings: SurvivorGovernanceSettings
   tradeWindow: SurvivorTradeWindowStatus | null
   currentWeek: number

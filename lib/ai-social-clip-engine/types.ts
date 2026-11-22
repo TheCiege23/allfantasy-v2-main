@@ -93,17 +93,3 @@ export interface AIClipResult {
   factCheckPassed?: boolean;
 }
 
-export interface AISocialClipAuditMeta {
-  inputType: ClipInputType;
-  outputType: ClipOutputType;
-  sport: string;
-  providersUsed: ProviderRole[];
-  providerStatus?: {
-    xai: boolean;
-    openai: boolean;
-    deepseek: boolean;
-  };
-  factCheckPassed?: boolean;
-  moderationPassed: boolean;
-  generatedAt: string;
-}

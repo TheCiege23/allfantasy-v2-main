@@ -12,14 +12,14 @@
  * Pure and client-safe: the caller supplies the fixtures it already read.
  */
 
-export type WeekFixture = {
+type WeekFixture = {
   startTime: Date | null
   homeTeam: string | null
   awayTeam: string | null
   week: number | null
 }
 
-export type WeekFixtureIndex = {
+type WeekFixtureIndex = {
   /**
    * True when at least one upcoming fixture carries a week number. Production stores each game
    * from two sources, one with `week` and one without; if NONE carry it, we cannot tell a finished
@@ -54,7 +54,7 @@ export function indexFixturesByWeek(fixtures: WeekFixture[]): WeekFixtureIndex {
   return { labelled, byWeek }
 }
 
-export type WeekVerdict =
+type WeekVerdict =
   /** The club plays again in this week; `kickoff` is that game. */
   | { verdict: 'plays'; kickoff: Date }
   /** The club has no game left in this week — already played, or on bye. The slot is settled. */

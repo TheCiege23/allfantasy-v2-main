@@ -51,7 +51,7 @@ export function AiInsightsPanel({
   if (!engine) {
     return (
       <div className="rounded-2xl border border-dashed border-white/15 bg-[#0a1228]/40 p-6 text-center text-sm text-white/55">
-        Run <span className="text-cyan-200">Optimize Lineup</span> to generate AI insights, start/sit callouts, and
+        Run <span className="text-cyan-200">Optimize Lineup</span> to generate Chimmy insights, start/sit callouts, and
         explanations.
       </div>
     )
@@ -79,7 +79,7 @@ export function AiInsightsPanel({
             <p className="text-lg font-semibold text-white">{engine.lineupMode}</p>
           </div>
           <div className="text-right">
-            <p className="text-[11px] text-white/45">AI confidence</p>
+            <p className="text-[11px] text-white/45">Chimmy confidence</p>
             <p className="text-xl font-semibold tabular-nums text-cyan-200">{aiConfidencePct}%</p>
           </div>
         </div>

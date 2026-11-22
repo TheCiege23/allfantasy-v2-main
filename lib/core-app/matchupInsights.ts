@@ -13,7 +13,7 @@ import type { MatchupData, MatchupPlayerCell, MatchupSlot } from '@/lib/core-app
 export type WeekState = 'final' | 'live' | 'upcoming'
 
 /** A position family for the slot chip's tint. Null when the label is not one we know for the sport. */
-export type SlotFamily = 'qb' | 'rb' | 'wr' | 'te' | 'flex' | 'k'
+type SlotFamily = 'qb' | 'rb' | 'wr' | 'te' | 'flex' | 'k'
 
 const NFL: Record<string, SlotFamily> = {
   QB: 'qb',
@@ -135,7 +135,7 @@ function stillToScore(c: MatchupPlayerCell | null): c is MatchupPlayerCell {
   return c != null && !c.empty && !c.unavailable && (c.gameState === 'live' || c.gameState === 'upcoming')
 }
 
-export type SwingGame = {
+type SwingGame = {
   /** "CIN @ BAL" when home is known, "CIN vs BAL" when it is not. */
   label: string
   /** Earliest kickoff among the starters in it, ISO — formatted by the browser. */
@@ -209,7 +209,7 @@ export function swingGame(data: MatchupData, weekState: WeekState): SwingGame | 
   }
 }
 
-export type LineupHole = {
+type LineupHole = {
   slot: string
   name: string | null
   reason: 'empty' | 'bye' | 'out'
@@ -232,7 +232,7 @@ export function lineupHoles(data: MatchupData, weekState: WeekState): LineupHole
   return out
 }
 
-export type ToWin = {
+type ToWin = {
   /** Points you still need to pass their projected final; 0 when you already have. */
   needed: number
   theirProjected: number
@@ -241,6 +241,13 @@ export type ToWin = {
   yourLeft: number
   /** What those starters project for — null when any of them has no projection. */
   yourLeftProjected: number | null
+  /**
+   * How far short of their projected final you finish on projection; 0 when you get there (2026-11-14).
+   * Read off the scoreboard's own projected finals, so the card agrees with the scoreboard — it counts
+   * players already in a live game too, which `yourLeftProjected` (starters yet to kick off) does not.
+   * Null when a starter yet to play has no projection.
+   */
+  short: number | null
 }
 
 /**
@@ -274,11 +281,13 @@ export function toWin(
   } else {
     priced = false
   }
+  const yourLeftProjected = priced && data.lineups.available ? Math.round(sum * 10) / 10 : null
   return {
     needed,
     theirProjected,
     yourScore: scored.you,
     yourLeft,
-    yourLeftProjected: priced && data.lineups.available ? Math.round(sum * 10) / 10 : null,
+    yourLeftProjected,
+    short: yourLeftProjected == null ? null : Math.max(0, Math.round((theirProjected - data.projectedFinal.data.you) * 10) / 10),
   }
 }

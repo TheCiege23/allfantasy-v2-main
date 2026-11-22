@@ -6,13 +6,7 @@
  * Pure functions — no IO, no side effects.
  */
 
-import type {
-  ManagerApiPresentation, LeagueApiPresentation,
-  PlatformApiPresentation, CompanyApiPresentation,
-  ManagerPresentationResult, LeaguePresentationResult,
-  PlatformPresentationResult, CompanyPresentationResult,
-  ColorToken,
-} from './types'
+import type { ManagerApiPresentation, LeagueApiPresentation, PlatformApiPresentation, ManagerPresentationResult, LeaguePresentationResult, PlatformPresentationResult, ColorToken } from './types'
 import { PRESENTATION_VERSION, scoreToSeverity, SEVERITY_DEFINITIONS, archetypeToColorToken } from './tokens'
 
 // ── Manager API presentation ──────────────────────────────────────────────────
@@ -169,45 +163,3 @@ export function buildPlatformApiPresentation(
 
 // ── Company API presentation ──────────────────────────────────────────────────
 
-export function buildCompanyApiPresentation(
-  result: Pick<
-    CompanyPresentationResult,
-    | 'platformId'
-    | 'platformLabel'
-    | 'cards'
-    | 'completeness'
-  >,
-  input: {
-    platformHealthScore: number
-    healthTier: string
-    dataQuality: number
-    topRetentionDriver?: string | null
-    topChurnFactor?: string | null
-    cohortRecommendations?: Array<{
-      targetArchetypeLabel: string
-      recommendation: string
-      priority: string
-      expectedImpact: string
-    }>
-  },
-): CompanyApiPresentation {
-  const sevToken = scoreToSeverity(input.platformHealthScore)
-  return {
-    entityId: result.platformId,
-    entityType: 'company',
-    platformHealthScore: input.platformHealthScore,
-    healthTier: input.healthTier,
-    healthSeverity: SEVERITY_DEFINITIONS[sevToken],
-    retentionDriverSummary: input.topRetentionDriver ?? null,
-    churnRiskSummary: input.topChurnFactor ?? null,
-    cohortRecommendations: (input.cohortRecommendations ?? []).map((c) => ({
-      targetArchetype: c.targetArchetypeLabel,
-      recommendation: c.recommendation,
-      priority: c.priority,
-      impact: c.expectedImpact,
-    })),
-    dataQuality: input.dataQuality,
-    completeness: result.completeness,
-    version: PRESENTATION_VERSION,
-  }
-}

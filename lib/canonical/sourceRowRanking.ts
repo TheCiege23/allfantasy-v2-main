@@ -28,6 +28,8 @@ export interface SourcePlayer {
   status: string | null
   fetchedAt: Date
   expiresAt: Date | null
+  /** `SportsPlayer.dob`. Only the backfill's NFL twin guard reads it; ranking ignores it. */
+  dob?: string | null
 }
 
 /**

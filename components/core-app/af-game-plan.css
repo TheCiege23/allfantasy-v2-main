@@ -54,6 +54,49 @@
   color: var(--muted);
 }
 
+/*
+ * Every league not checked, grouped by why (SkippedLeagues). Collapsed by default so a long list
+ * never pushes the flagged starters below the fold; the summary line keeps the count visible.
+ */
+.af-core .af-gp-skips {
+  margin: 0;
+  padding: 9px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.af-core .af-gp-skips > summary {
+  cursor: pointer;
+  color: var(--text, inherit);
+  min-height: 24px;
+  line-height: 24px;
+}
+
+.af-core .af-gp-skips dl {
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-core .af-gp-skips dt {
+  color: var(--text, inherit);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.af-core .af-gp-skips dd {
+  margin: 2px 0 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.af-core .af-gp-skips a {
+  color: var(--accent);
+}
+
 /* ── Summary strip ───────────────────────────────────────────────────── */
 
 .af-core .af-gp-summary {

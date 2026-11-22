@@ -71,9 +71,9 @@ export default function HeroMetricAI({
                   "text-[11px] px-2 py-0.5 rounded-full border",
                   confidenceClasses(confidence)
                 )}
-                title="Confidence applies to AI narrative only. Deterministic engine still drives rankings."
+                title="Confidence applies to Chimmy narrative only. Deterministic engine still drives rankings."
               >
-                {confidenceLabel(confidence) ?? "AI Notes"}
+                {confidenceLabel(confidence) ?? "Chimmy Notes"}
               </span>
 
               {bullets.length > 0 ? (
@@ -99,7 +99,7 @@ export default function HeroMetricAI({
         {open && bullets.length > 0 ? (
           <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3">
             <div className="text-[11px] uppercase tracking-wide text-white/50">
-              AI reasoning (Grok)
+              Chimmy reasoning (Grok)
             </div>
             <ul className="mt-2 space-y-1">
               {bullets.map((b, i) => (

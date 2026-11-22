@@ -34,7 +34,3 @@ export function ceilingValue(p: BestBallPlayerFact): { value: number; source: Va
   return { value: 0, source: 'none' }
 }
 
-/** Best base position group for counting depth (FLEX-eligible skill positions collapse to themselves). */
-export function basePosition(position: string): string {
-  return String(position ?? 'UNK').toUpperCase()
-}

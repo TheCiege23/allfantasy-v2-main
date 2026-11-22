@@ -26,7 +26,7 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: "blocked", label: "Blocked Users", icon: Slash },
 ]
 
-export interface SettingsModalProps {
+interface SettingsModalProps {
   open: boolean
   onClose: () => void
   username?: string | null
@@ -56,7 +56,7 @@ export default function SettingsModal({ open, onClose, username }: SettingsModal
               Settings
             </h2>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Manage your AllFantasy profile, account, privacy, and AI preferences.{" "}
+              Manage your AllFantasy profile, account, privacy, and Chimmy preferences.{" "}
               <Link href="/settings" className="underline" onClick={onClose}>Full settings →</Link>
             </p>
           </div>

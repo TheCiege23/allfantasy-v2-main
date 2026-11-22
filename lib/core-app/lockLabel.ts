@@ -30,7 +30,7 @@ import { kickoffDayLabel } from './kickoffLabel'
  */
 export const DISTANT_LOCK_DAYS = 8
 
-export type LockLabel = {
+type LockLabel = {
   /** "3d 4h", "02:14:39", "Locked", or a plain date when it is far out. */
   text: string
   locked: boolean

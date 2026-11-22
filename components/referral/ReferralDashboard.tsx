@@ -8,6 +8,7 @@ import { ReferralCTACard } from "./ReferralCTACard"
 import { ReferralLeaderboard } from "./ReferralLeaderboard"
 import { ReferralProgressWidget } from "./ReferralProgressWidget"
 import { ReferralShareBar } from "./ReferralShareBar"
+import { ProWeekOfferCard } from "./ProWeekOfferCard"
 // Shared with Settings › Referrals: async clipboard first, the legacy copy command as fallback.
 import { copyText } from "@/lib/clipboard/copyText"
 import type { ReferralDashboardData, ReferralRewardView } from "@/lib/referral"
@@ -247,6 +248,8 @@ export function ReferralDashboard() {
 
             <ReferralShareBar referralLink={dashboard.link} onShare={shareHandler} />
           </div>
+
+          <ProWeekOfferCard />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>

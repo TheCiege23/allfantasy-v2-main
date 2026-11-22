@@ -5,7 +5,7 @@ import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
 import { useAFProjection } from '@/components/weather/useAFProjection'
 
-export type PlayerStatCardProps = {
+type PlayerStatCardProps = {
   playerId: string
   leagueId: string
   sport: string

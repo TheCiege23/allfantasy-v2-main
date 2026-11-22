@@ -13,34 +13,15 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export const RivalryModeEnum = z.enum([
+const RivalryModeEnum = z.enum([
   'automatic_detection', 'matchup_focus', 'leaguewide_report',
   'playoff_history', 'story_generation', 'commissioner_highlight',
 ])
 
-export type RivalryType =
+type RivalryType =
   | 'head_to_head' | 'division' | 'playoff_revenge' | 'championship_rematch'
   | 'trade_driven' | 'commissioner_challenger' | 'dynasty_long_arc'
   | 'cross_season_grudge' | 'social_cluster'
-
-export interface HistoricalMatchup {
-  managerA: string
-  managerB: string
-  season: number
-  week: number
-  scoreA: number
-  scoreB: number
-  isPlayoff: boolean
-  isChampionship: boolean
-}
-
-export interface TradeInteraction {
-  managerA: string
-  managerB: string
-  season: number
-  wasBlocked: boolean
-  wasControversial: boolean
-}
 
 export const RivalryInputSchema = z.object({
   leagueId: z.string(),
@@ -65,9 +46,9 @@ export const RivalryInputSchema = z.object({
   focusManagerA: z.string().optional(),
   focusManagerB: z.string().optional(),
 })
-export type RivalryInput = z.infer<typeof RivalryInputSchema>
+type RivalryInput = z.infer<typeof RivalryInputSchema>
 
-export interface RivalryPair {
+interface RivalryPair {
   rivalryId: string
   managerA: string
   managerB: string
@@ -82,7 +63,7 @@ export interface RivalryPair {
   nextChapterHook: string
 }
 
-export interface RivalryResult {
+interface RivalryResult {
   rivalryMode: string
   rivalryPairs: RivalryPair[]
   topRivalryHeadline: string
@@ -193,8 +174,6 @@ function detectRivalries(input: RivalryInput): RivalryPair[] {
     // Label
     const label = intensity >= 75 ? 'Heated Rivalry' : intensity >= 50 ? 'Growing Rivalry' : 'Budding Rivalry'
 
-    // Origin story
-    const earliest = pair.keyMoments[0] ?? 'Multiple close matchups over time'
     const originStory = pair.championshipMeetings >= 1
       ? `Born in the championship — ${pair.managerA} and ${pair.managerB} have met on the biggest stage.`
       : pair.eliminationCount >= 1

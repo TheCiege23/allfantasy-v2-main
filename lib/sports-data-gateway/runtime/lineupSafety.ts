@@ -9,7 +9,7 @@ import type { SportsDataContext } from '../contracts'
 import { computeLockStatus } from './lock'
 import type { PlayerGameResolution } from './playerGameResolution'
 
-export type SportsDataLockEvidence = 'before_start' | 'at_or_after_start' | 'postponed' | 'suspended' | 'final' | 'unknown'
+type SportsDataLockEvidence = 'before_start' | 'at_or_after_start' | 'postponed' | 'suspended' | 'final' | 'unknown'
 
 export function lockEvidenceFrom(res: PlayerGameResolution, now: Date): SportsDataLockEvidence {
   if (res.status !== 'resolved') return 'unknown'
@@ -83,7 +83,7 @@ export function evaluateAutoSwitchSafety(input: { authorized: boolean; rosterLeg
   return { allowed: false, reason: 'schedule_unavailable', evidence: ['lock evidence unknown'] }
 }
 
-export type LineupLockEvidence = {
+type LineupLockEvidence = {
   canonicalPlayerId: string
   canonicalGameId: string | null
   scheduleSnapshotVersion: string | null

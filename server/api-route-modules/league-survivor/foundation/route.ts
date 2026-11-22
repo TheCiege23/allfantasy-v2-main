@@ -1,3 +1,5 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { setCouncilPaused } from '@/lib/survivor/survivorCouncilPause'
 import { readSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { noEliminationWeeksFor, spreadEliminationWeeks } from '@/lib/survivor/survivorEliminationSchedule'
@@ -252,22 +254,36 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!access.decisions.canUpdateSettings) {
       return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
     }
+    // Survivor setup is league setup: a co-commissioner also needs that area (lib/league/commissionerAccess.ts).
+    const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league')
+    if (refusedScope) return refusedScope
+    // The commissioner's "Format rules" lock and the league log (lib/league/formatRulesGuard.ts), like every other
+    // Survivor rules write.
+    const formatLocked = await formatRulesLockedResponse(leagueId)
+    if (formatLocked) return formatLocked
     if (action === 'set-commissioner-participation-mode') {
       const mode =
         body.mode === 'participating_player' || body.commissionerParticipationMode === 'participating_player'
           ? 'participating_player'
           : 'non_participating_host'
-      return updateFoundationSettings(leagueId, {
+      const saved = await updateFoundationSettings(leagueId, {
         settings: { ...access.settings, commissionerParticipationMode: mode },
       }, userId)
+      if (saved.ok) await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: ['commissionerParticipationMode'] })
+      return saved
     }
-    return updateFoundationSettings(leagueId, body, userId)
+    const saved = await updateFoundationSettings(leagueId, body, userId)
+    if (saved.ok) await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: Object.keys({ ...asRecord(body.settings), ...body }).filter((k) => k !== 'action' && k !== 'settings') })
+    return saved
   }
 
   if (action === 'apply-twist-preset') {
     if (!access.decisions.canUpdateSettings) {
       return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
     }
+    // Survivor setup is league setup: a co-commissioner also needs that area (lib/league/commissionerAccess.ts).
+    const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league')
+    if (refusedScope) return refusedScope
     const preset = body.preset
     if (!isSurvivorTwistPresetId(preset)) return NextResponse.json({ error: 'Choose Simple, Classic or Full twists.' }, { status: 400 })
     if (await isSurvivorDraftStarted(leagueId)) return NextResponse.json({ error: 'Twists lock when the draft starts.' }, { status: 409 })

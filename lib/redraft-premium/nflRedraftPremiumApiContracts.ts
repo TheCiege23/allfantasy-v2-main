@@ -20,7 +20,7 @@ import type {
   NflRedraftPremiumEvidenceHealth,
 } from '@/lib/redraft-premium/nflRedraftPremiumObservability'
 
-export const NFL_REDRAFT_PREMIUM_API_CONTRACT_MODEL_VERSION = 'nfl-redraft-premium-api-contract-v1' as const
+const NFL_REDRAFT_PREMIUM_API_CONTRACT_MODEL_VERSION = 'nfl-redraft-premium-api-contract-v1' as const
 
 const SERVICE_IDS: readonly NflRedraftPremiumServiceId[] = [
   'basic_runtime_facts',
@@ -53,7 +53,7 @@ const TOP_LEVEL_REQUEST_FIELDS = new Set([
 ])
 const ENTITLEMENT_FIELDS = new Set(['status', 'plans'])
 
-export type NflRedraftPremiumServiceContractRequest = {
+type NflRedraftPremiumServiceContractRequest = {
   serviceType?: string | null
   serviceId?: string | null
   serviceVariant?: string | null
@@ -82,7 +82,7 @@ export type NflRedraftPremiumApiCanonicalIds = {
   season: number | null
 }
 
-export type NflRedraftPremiumApiAccessStatus = {
+type NflRedraftPremiumApiAccessStatus = {
   allowed: boolean
   requiredTier: NflRedraftPremiumTier
   requestedTier: NflRedraftPremiumTier
@@ -122,7 +122,7 @@ export type NflRedraftPremiumProductPacket = {
   generatedAtIso: string
 }
 
-export type NflRedraftPremiumProductError = {
+type NflRedraftPremiumProductError = {
   modelVersion: typeof NFL_REDRAFT_PREMIUM_API_CONTRACT_MODEL_VERSION
   ok: false
   error: {
@@ -146,7 +146,7 @@ export type NflRedraftPremiumProductContractResult =
   | NflRedraftPremiumProductPacket
   | NflRedraftPremiumProductError
 
-export type NflRedraftPremiumProductContractDependencies = {
+type NflRedraftPremiumProductContractDependencies = {
   evidencePackets?: NflRedraftProviderEvidencePacket[]
   resolverStatus?: NflRedraftPremiumEvidenceResolverStatus | null
   evidenceCounts?: NflRedraftPremiumEvidenceCounts | null

@@ -14,6 +14,8 @@ vi.mock('@/lib/devy', () => ({ isDevyLeague: vi.fn(async () => true), getDevyCon
 vi.mock('@/lib/devy/lifecycle/DevyLifecycleAutomation', () => ({ getPromotionWindowStatus: vi.fn() }))
 vi.mock('@/lib/league/dispersal-draft-route-helpers', () => ({ requireDispersalDraftForLeague: h.requireDraft }))
 vi.mock('@/lib/dispersal-draft/DispersalDraftEngine', () => ({ DispersalDraftEngine: { makePick: h.makePick } }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 import { POST as promote } from '@/app/api/leagues/[leagueId]/devy/promotion/route'
 import { POST as pass } from '@/app/api/leagues/[leagueId]/dispersal-draft/[draftId]/pass/route'
 

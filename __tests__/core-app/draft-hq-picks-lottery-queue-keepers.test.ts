@@ -48,6 +48,10 @@ vi.mock('@/lib/prisma', () => {
 // Graders reach Sleeper for a Sleeper league; neither is under test here.
 vi.mock('@/lib/draft-intel/draftReportService', () => ({ getDraftReport: vi.fn(async () => null) }))
 vi.mock('@/lib/draft-intel/importedDraftReport', () => ({ buildImportedDraftReport: vi.fn(async () => null) }))
+// The dynasty rookie room reads the future-pick inventory (which re-reads the league row) on its own;
+// its reads are tested in draft-hq-rookie-room.test.tsx. This file counts the lottery's reads, so the
+// room is stubbed out here rather than letting it move those counts.
+vi.mock('@/lib/core-app/draftHqRookieRoomLoad', () => ({ loadRookieDraftRoom: vi.fn(async () => null) }))
 
 import { computePickInventory, getDraftHqData, getDraftLotteryOdds } from '@/lib/core-app/draftHq'
 

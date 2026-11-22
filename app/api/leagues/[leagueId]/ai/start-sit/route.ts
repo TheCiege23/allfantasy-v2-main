@@ -1,3 +1,4 @@
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -92,10 +93,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     highlightedPlayerIds: string[]
   } | null = null
   if (body.includeRosterLegality) {
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: session.user.id },
-      select: { id: true, leagueId: true, playerData: true },
-    })
+    // The named team when the manager holds it, else their first. Own teams only, as before.
+    const viewing = await resolveViewingRoster(leagueId, session.user.id, requestedRosterIdFrom(req), { allowCoOwner: false })
+    const roster = viewing
+      ? await prisma.roster.findFirst({ where: { leagueId, id: viewing.rosterId }, select: { id: true, leagueId: true, playerData: true } })
+      : null
     if (roster) {
       const ev = await evaluateLegalityForPersistedRoster(roster)
       if (ev) {

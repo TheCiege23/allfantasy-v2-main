@@ -31,7 +31,7 @@ function getPreviousWeekKey(): string {
   return getWeekKey(d)
 }
 
-export interface BoardDriftPlayer {
+interface BoardDriftPlayer {
   name: string
   position: string
   team: string | null
@@ -43,7 +43,7 @@ export interface BoardDriftPlayer {
   reasons: string[]
 }
 
-export interface ManagerTendencyChange {
+interface ManagerTendencyChange {
   manager: string
   archetype: string
   previousArchetype: string | null
@@ -55,7 +55,7 @@ export interface ManagerTendencyChange {
   }>
 }
 
-export interface NextRoundsImpact {
+interface NextRoundsImpact {
   round: number
   risersInWindow: Array<{ name: string; position: string; drift: number }>
   fallersInWindow: Array<{ name: string; position: string; drift: number }>
@@ -63,7 +63,7 @@ export interface NextRoundsImpact {
   summary: string
 }
 
-export interface BoardDriftReport {
+interface BoardDriftReport {
   weekLabel: string
   previousWeekLabel: string
   generatedAt: string

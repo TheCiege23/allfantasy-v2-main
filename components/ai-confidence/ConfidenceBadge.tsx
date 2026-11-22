@@ -70,7 +70,7 @@ const stateConfig: Record<TrustState, {
   },
   learning: {
     label: 'Learning',
-    microcopy: 'The AI is still learning from limited data in this scenario.',
+    microcopy: 'Chimmy is still learning from limited data in this scenario.',
     icon: Brain,
     bg: 'bg-purple-500/10',
     text: 'text-purple-300',

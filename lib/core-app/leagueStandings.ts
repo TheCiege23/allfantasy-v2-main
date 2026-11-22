@@ -9,6 +9,7 @@ import {
   chainStamps,
   isScoredRow,
   readStandingsRules,
+  standingsSeasonComplete,
   weekStamp,
   type RemainingGame,
   type StandingsBoard,
@@ -18,6 +19,7 @@ import {
 } from './standingsModel'
 import { readStandingsSnapshots, writeStandingsSnapshots } from './standingsSnapshots'
 import { parseStandingsDivisions } from '@/lib/league-import/standingsDivisions'
+import { createRenderTimer } from './renderTiming'
 
 /**
  * Standings — this league's table (38a·7), official and power.
@@ -336,18 +338,56 @@ export async function getLeagueStandings(
   ctx?: LeagueContext | null,
 ): Promise<LeagueStandingsResult> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  const timer = createRenderTimer('standings')
   const league = await lc.league()
 
   const leagueName = leagueDisplayName(league?.name)
 
   /*
-   * Fetched before any early return, because every one of them is a state where the
-   * live board cannot be drawn and the imported seasons are exactly what the screen
-   * should show instead.
+   * ⚠ THE SEASON HISTORY AND THE BOARD'S THREE FIRST READS START NOW, TOGETHER (2026-11-14). They
+   * used to run in two steps — the history (its own three reads), THEN week stats, teams and claimed
+   * teams — although the second step reads nothing the first produces: both need only the league row.
+   * Each is still awaited where it was used, so what the screen shows is unchanged; only the waiting
+   * overlaps. The board reads start only when there is a platform id, exactly as they did before.
+   * What follows them (stored snapshots → the weeks to fold → the snapshot write) stays in order: each
+   * step reads the one before it. `renderTiming` logs per-read durations for any render over 1.5s.
+   *
+   * ⚠ A read started here and awaited later must never reject unobserved: `timer.time` attaches
+   * a handler, which is why every early read goes through it.
+   *
+   * The history is fetched before any early return, because every one of them is a state where the
+   * live board cannot be drawn and the imported seasons are exactly what the screen should show instead.
    */
-  const history = league ? await loadSeasonHistory(lc) : []
+  const historyRead = timer.time('history', league ? loadSeasonHistory(lc) : Promise.resolve([] as SeasonHistoryRow[]))
+  const boardReads = timer.time('board', league?.platformLeagueId
+    ? Promise.all([
+        timer.time('weekStats', readWeekStats(league.platformLeagueId).catch(() => [] as WeekStat[])),
+        timer.time('teams', prisma.leagueTeam
+          .findMany({
+            where: { leagueId: league.id },
+            select: {
+              externalId: true,
+              teamName: true,
+              ownerName: true,
+              avatarUrl: true,
+              wins: true,
+              losses: true,
+              ties: true,
+              pointsFor: true,
+              pointsAgainst: true,
+              currentRank: true,
+            },
+          })
+          .catch(() => [])),
+        // The same claimed-team read the season history uses (memoised on `lc`), not a second one.
+        timer.time('claimedTeams', lc.claimedTeams().catch(() => [])),
+      ])
+    : Promise.resolve(null))
+
+  const history = await historyRead
 
   if (!league?.platformLeagueId) {
+    timer.done({ available: false })
     return {
       available: false,
       leagueName,
@@ -360,30 +400,11 @@ export async function getLeagueStandings(
 
   const pid = league.platformLeagueId
 
-  const [weekStats, leagueTeams, mine] = await Promise.all([
-    readWeekStats(pid).catch(() => [] as WeekStat[]),
-    prisma.leagueTeam
-      .findMany({
-        where: { leagueId: league.id },
-        select: {
-          externalId: true,
-          teamName: true,
-          ownerName: true,
-          avatarUrl: true,
-          wins: true,
-          losses: true,
-          ties: true,
-          pointsFor: true,
-          pointsAgainst: true,
-          currentRank: true,
-        },
-      })
-      .catch(() => []),
-    // The same claimed-team read the season history used above, not a second one.
-    lc.claimedTeams().catch(() => []),
-  ])
+  // Started above under the same `platformLeagueId` condition this point has just passed, so never null here.
+  const [weekStats, leagueTeams, mine] = (await boardReads)!
 
   if (weekStats.length === 0) {
+    timer.done({ platform: String(league.platform ?? ''), available: false })
     return {
       available: false,
       leagueName,
@@ -402,7 +423,6 @@ export async function getLeagueStandings(
    */
   const firstUnplayed = seasonWeeks.find((w) => w.scored < w.rows)
   const week = firstUnplayed?.week ?? seasonWeeks[seasonWeeks.length - 1].week
-  const seasonComplete = firstUnplayed == null
 
   /*
    * ⚠ THE REFUSAL. Nothing scored means every roster sits on 0.0, and a ranking of twelve zeroes is an
@@ -410,6 +430,7 @@ export async function getLeagueStandings(
    * season having started.
    */
   if (scoredWeekCount === 0) {
+    timer.done({ platform: String(league.platform ?? ''), available: false })
     return {
       available: false,
       leagueName,
@@ -420,6 +441,8 @@ export async function getLeagueStandings(
 
   const teamCount = new Set(leagueTeams.map((t) => t.externalId)).size || seasonWeeks[0].rows
   const rules = readStandingsRules(league.settings, teamCount, league.platform, `${league.id}:${season}`, league.playoffTeams)
+  // Over only when the league's last regular-season week is on file and scored (standingsModel.ts).
+  const seasonComplete = standingsSeasonComplete(seasonWeeks, rules.regularSeasonEnd)
   /*
    * Playoff weeks are not standings. If the league's regular season would exclude every scored week, the
    * setting is wrong for this data and is ignored rather than emptying the board.
@@ -433,11 +456,11 @@ export async function getLeagueStandings(
   const stamps = chainStamps(scored.map(weekStamp))
 
   // Stored weeks, trusted for as long as the leading run of them still matches its stamp.
-  const stored = await readStandingsSnapshots(
+  const stored = await timer.time('snapshots', readStandingsSnapshots(
     pid,
     season,
     scored.map((w) => w.week),
-  ).catch(() => new Map<number, WeekSnapshot>())
+  ).catch(() => new Map<number, WeekSnapshot>()))
   let kept = 0
   while (kept < scored.length && stored.get(scored[kept].week)?.stamp === stamps[kept]) kept += 1
   const foldFrom = kept > 0 ? scored[kept - 1].week : null
@@ -445,7 +468,7 @@ export async function getLeagueStandings(
   const weekFilter: { gt?: number; lte?: number } = {}
   if (foldFrom != null) weekFilter.gt = foldFrom
   if (regularEnd != null) weekFilter.lte = regularEnd
-  const rows: WeekRow[] = await prisma.weeklyMatchup
+  const rows: WeekRow[] = await timer.time('weekRows', prisma.weeklyMatchup
     .findMany({
       where: {
         leagueId: pid,
@@ -454,7 +477,7 @@ export async function getLeagueStandings(
       },
       select: { week: true, rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true },
     })
-    .catch(() => [] as WeekRow[])
+    .catch(() => [] as WeekRow[]))
 
   const rosterIds = [
     ...new Set([
@@ -526,7 +549,7 @@ export async function getLeagueStandings(
   const toStore = snapshots
     .slice(kept)
     .filter((s) => board.settledThrough != null && s.week <= board.settledThrough)
-  if (toStore.length > 0) await writeStandingsSnapshots(pid, toStore).catch(() => 0)
+  if (toStore.length > 0) await timer.time('snapshotWrite', writeStandingsSnapshots(pid, toStore).catch(() => 0))
 
   // ── The points-for list, your trend, recent weeks and pace — the screen's "your season" half ──
 
@@ -646,6 +669,7 @@ export async function getLeagueStandings(
               }
             })()
 
+  timer.done({ platform: String(league.platform ?? ''), available: true })
   return {
     available: true,
     league: {

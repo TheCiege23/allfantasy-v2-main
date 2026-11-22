@@ -1,3 +1,5 @@
+import { fetchNflWeekPlayerMap } from '@/lib/workers/providers/survivorSleeper'
+export { fetchNflWeekPlayerMap } from '@/lib/workers/providers/survivorSleeper'
 /**
  * NFL live-stats provider (G11 Phase 3b) — concrete `LiveStatsProvider` for NFL.
  *
@@ -31,7 +33,10 @@ import {
 import {
   normalizeNflWeeklyStats,
   normalizeNflTeamDefenseWeeklyStats,
+  teamAbbrevFromDefPlayerId,
 } from '@/lib/redraft/playerWeeklyScoreService'
+import { getAllCanonicalTeams } from '@/lib/team-abbrev'
+import { recordNflWeeklyCoverage } from '@/lib/sports-data/statCoverage'
 import { buildTeamDefensePlayerId } from '@/lib/redraft/teamDefenseStatsIngest'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
@@ -108,7 +113,7 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
   }
 
   async fetchPlayerStatsForGames(
-    query: LiveStatsQuery & { games: readonly LiveGameLite[]; playerIds: readonly string[] },
+    query: LiveStatsQuery & { games: readonly LiveGameLite[]; playerIds: readonly string[]; certifyAbsentPlayers?: boolean },
   ): Promise<Map<string, Record<string, number>>> {
     const out = new Map<string, Record<string, number>>()
     if (query.playerIds.length === 0) return out
@@ -121,49 +126,29 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
      * empty payload that is indistinguishable from "nobody has scored yet".
      */
     const seasonType = resolveSeasonType(query)
-    const url = `https://api.sleeper.com/stats/nfl/${encodeURIComponent(query.season)}/${encodeURIComponent(query.week)}?season_type=${encodeURIComponent(seasonType)}`
-    let payload: unknown = null
-    try {
-      const { rateLimitManager } = await import('@/lib/workers/rate-limit-manager')
-      const endpoint = 'stats/nfl/week'
-      const canCall = await rateLimitManager.canCall('sleeper', endpoint).catch(() => true)
-      if (!canCall) return out
-      const res = await fetch(url, { headers: { accept: 'application/json' } })
-      await rateLimitManager.recordCall('sleeper', endpoint, res.ok ? 1 : 0, 0, { cached: false }).catch(() => undefined)
-      if (!res.ok) return out
-      payload = await res.json()
-    } catch {
-      return out // no fabrication on failure
-    }
-
-    const byId = asPlayerStatMap(payload)
+    const byId = await fetchNflWeekPlayerMap(query.season, query.week, seasonType)
     if (!byId) return out
     const want = new Set(query.playerIds)
+    const strict = query.certifyAbsentPlayers === true
+    if (strict && (seasonType !== 'regular' || !await recordNflWeeklyCoverage(this.prisma, query.season, query.week, byId))) return out
+    const absent = strict
+      ? new Set((await this.prisma.playerIdentityMap.findMany({
+        where: { sport: 'NFL', sleeperId: { in: [...want].filter(id => !byId.has(id)) } },
+        select: { sleeperId: true },
+      })).map(row => row.sleeperId))
+      : new Set<string | null>()
     for (const playerId of want) {
-      const raw = byId.get(playerId)
-      if (!raw) continue
-      const normalized = normalizeNflWeeklyStats(raw)
+      const defense = strict ? teamAbbrevFromDefPlayerId(playerId) : null
+      const raw = byId.get(defense ?? playerId)
+      if (!raw) {
+        if (absent.has(playerId) || (defense && getAllCanonicalTeams().some(team => team.abbrev === defense))) out.set(playerId, {})
+        continue
+      }
+      const normalized = defense ? normalizeNflTeamDefenseWeeklyStats(raw) : normalizeNflWeeklyStats(raw)
       if (Object.keys(normalized).length > 0) out.set(playerId, normalized)
     }
     return out
   }
 }
 
-/** Sleeper week-wide payload may be an object keyed by id, or an array of rows. */
-function asPlayerStatMap(payload: unknown): Map<string, unknown> | null {
-  if (!payload || typeof payload !== 'object') return null
-  const map = new Map<string, unknown>()
-  if (Array.isArray(payload)) {
-    for (const row of payload) {
-      const id = row && typeof row === 'object' ? String((row as { player_id?: unknown }).player_id ?? '') : ''
-      const stats = row && typeof row === 'object' ? (row as { stats?: unknown }).stats ?? row : row
-      if (id) map.set(id, stats)
-    }
-    return map
-  }
-  for (const [id, row] of Object.entries(payload as Record<string, unknown>)) {
-    const stats = row && typeof row === 'object' ? (row as { stats?: unknown }).stats ?? row : row
-    map.set(id, stats)
-  }
-  return map
-}
+/** One measured week-wide response; callers own atomic persistence and coverage. */

@@ -1,7 +1,7 @@
 import { POSITION_COLORS, getRosterLabel } from '@/lib/league-labels/catalog'
 import type { LabelSize } from './ScoringLabel'
 
-export function PositionChip({ position, count = 1 }: { position: string; count?: number }) {
+function PositionChip({ position, count = 1 }: { position: string; count?: number }) {
   const c = POSITION_COLORS[position] ?? { fill: '#1d2130', text: '#ffffff' }
   return (
     <span

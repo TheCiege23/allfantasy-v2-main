@@ -343,8 +343,10 @@ describe('the grade is the one every surface shows', () => {
     expect(grade).toHaveBeenCalledWith({
       leagueId: 'league-1',
       userId: 'viewer-1',
-      give: { assets: [{ kind: 'player', name: 'Bijan Robinson' }], unpriceable: [] },
-      get: { assets: [{ kind: 'player', name: 'Puka Nacua' }], unpriceable: [] },
+      give: { assets: [{ kind: 'player', name: 'Bijan Robinson', rosterPlayerId: 'p-bijan',
+        providerIdentity: { provider: 'sleeper', id: 'p-bijan', position: 'RB' } }], unpriceable: [] },
+      get: { assets: [{ kind: 'player', name: 'Puka Nacua', rosterPlayerId: 'p-puka',
+        providerIdentity: { provider: 'sleeper', id: 'p-puka', position: 'WR' } }], unpriceable: [] },
     })
   })
 
@@ -418,7 +420,7 @@ describe('draft picks in a dynasty league', () => {
     expect(s.picks).toBe(1)
     // The one grade prices the pick too, by season and round.
     expect(grade.mock.calls[0]![0].give.assets).toEqual([
-      { kind: 'player', name: 'Bijan Robinson' },
+      expect.objectContaining({ kind: 'player', name: 'Bijan Robinson', rosterPlayerId: 'p-bijan' }),
       { kind: 'pick', year: 2027, round: 1 },
     ])
   })
@@ -528,5 +530,49 @@ describe('the Sleeper DM card', () => {
     ]))
     const s = await run('Should I trade B. Allen for Puka Nacua?')
     expect(s?.status).not.toBe('ready')
+  })
+})
+
+/*
+ * Chimmy cites the market evidence (owner's call, 2026-11-22): the reasons in the grade that were MEASURED from
+ * completed trades reach the prompt verbatim, so an answer can say why the letter is what it is without inventing one.
+ */
+describe('the market evidence behind the grade', () => {
+  const MARKET = 'AllFantasy trade market +6%: what managers actually paid for him across 41 completed Dynasty · 1QB trades in AllFantasy-connected leagues'
+  const POSTURE = 'teams at .600 or better paid +8% for players 27 or older over middle-of-the-table teams across 210 completed trades'
+  const PICK = 'AllFantasy pick market +15%: what managers paid for picks like this (next draft) across 88 completed trades, against the standard pick curve'
+
+  it('reaches the scenario and the prompt block, verbatim, and only the measured reasons', async () => {
+    grade.mockResolvedValue({
+      ...ONE_GRADE,
+      moves: [{ side: 'get', name: 'Puka Nacua', base: 7400, leagueValue: 7900, reasons: [MARKET, 'PPR scoring: receivers +2%'] }],
+      rosterFit: { giveValue: 8450, getValue: 8500, percentDiff: 1, moves: [{ side: 'get', name: 'Puka Nacua', base: 7900, leagueValue: 8500, reasons: [`you cannot fill 1 WR slot; ${POSTURE}`] }] },
+    } as TradeGradeView)
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    if (s?.status !== 'ready') throw new Error('not ready')
+    expect(s.value.marketEvidence).toEqual([`Puka Nacua: ${MARKET}`, `Puka Nacua: ${POSTURE}`])
+    const block = renderTradeScenarioBlock(s)
+    expect(block).toContain('Why values moved, measured from completed trades on AllFantasy')
+    expect(block).toContain(`  • Puka Nacua: ${POSTURE}`)
+    // Scoring and the hand-set need rule are not trade evidence.
+    expect(block).not.toContain('PPR scoring')
+    expect(block).not.toContain('you cannot fill 1 WR slot')
+  })
+
+  it('no measured reason: no evidence line at all', async () => {
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    if (s?.status !== 'ready') throw new Error('not ready')
+    expect(s.value.marketEvidence).toEqual([])
+    expect(renderTradeScenarioBlock(s)).not.toContain('Why values moved')
+  })
+
+  it('a pick repriced on the AllFantasy pick market is not described as the FantasyCalc average alone', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, league: { ...WORLD.league, isDynasty: true } } as unknown as CanonicalWorld)
+    grade.mockResolvedValue({ ...ONE_GRADE, moves: [{ side: 'give', name: '2027 1st-round pick', base: 4000, leagueValue: 4600, reasons: [PICK] }] } as TradeGradeView)
+    const s = await run('Should I trade Bijan Robinson and my 2027 1st for Puka Nacua?')
+    const block = renderTradeScenarioBlock(s!)
+    expect(block).toContain(`2027 1st-round pick: ${PICK}`)
+    expect(block).toMatch(/on the AllFantasy pick market where shown above/)
+    expect(block).not.toMatch(/valued as the giving team's own pick at that round's average/)
   })
 })

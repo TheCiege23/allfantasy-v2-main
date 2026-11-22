@@ -48,6 +48,8 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { POST } from '@/app/api/shared/chat/threads/[threadId]/broadcast/route'
 

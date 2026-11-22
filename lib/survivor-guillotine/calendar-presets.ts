@@ -1,7 +1,7 @@
 import type { SGCalendarEntry } from './operations'
 import type { SGPeriod } from './types'
 
-export type SGCalendarPreset = {
+type SGCalendarPreset = {
   firstStart: string
   daysPerPeriod: number
   extendedPeriods?: number[]

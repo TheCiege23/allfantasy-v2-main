@@ -3,43 +3,7 @@ export * from './DraftIntelStateStore'
 export * from './DraftLookaheadService'
 export * from './ChimmyDraftIntelService'
 
-// --- Premium Draft Decision Engine ---
-export {
-  computeDraftDecision,
-} from './draft-decision-engine'
-
-export type {
-  DraftDecisionInput,
-  DraftDecisionResult,
-  DraftPickRecommendation,
-  DraftAlert,
-  DraftAlertType,
-  DraftAvailablePlayer,
-  DraftedPlayer,
-  DraftRosterPlayer,
-  PickType,
-} from './draft-decision-engine'
-
-export {
-  analyzeDraftBoard,
-  computePositionalScarcity,
-  detectPositionalRuns,
-  findStackOpportunities,
-  detectValueCliffs,
-  identifyValuePlayers,
-  identifyFades,
-} from './draft-board-analyzer'
-
-export type {
-  DraftBoardInput,
-  DraftBoardAnalysis,
-  PositionalRun,
-  StackOpportunity,
-  ValueCliff,
-} from './draft-board-analyzer'
-
-export {
-  DRAFT_DECISION_SYSTEM_PROMPT,
-  buildDraftDecisionUserPrompt,
-  formatAlertsForChat,
-} from './draft-decision-prompt'
+// The "Premium Draft Decision Engine" (computeDraftDecision, the board analyzer and its prompt)
+// was retired 2026-11-14. It was a second, independent draft ranker whose only caller was
+// /api/draft-war-room, which nothing in the app called. Draft advice has one engine:
+// lib/draft-helper/RecommendationEngine.ts, wrapped by lib/decision-os/draft/.

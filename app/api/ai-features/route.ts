@@ -64,10 +64,13 @@ export async function POST(req: Request) {
     }
 
     if (leagueId) {
+      // Owned, or a league the caller holds a claimed team in (see the dashboard signals route).
       const league = await prisma.league.findFirst({
         where: {
-          userId: session.user.id,
-          OR: [{ id: leagueId }, { platformLeagueId: leagueId }],
+          AND: [
+            { OR: [{ id: leagueId }, { platformLeagueId: leagueId }] },
+            { OR: [{ userId: session.user.id }, { teams: { some: { claimedByUserId: session.user.id } } }] },
+          ],
         },
         include: {
           teams: { orderBy: { currentRank: "asc" }, take: 20 },
@@ -77,9 +80,13 @@ export async function POST(req: Request) {
       if (league) {
         const userProfile = await prisma.userProfile.findUnique({ where: { userId: session.user.id } })
         const sleeperUsername = userProfile?.sleeperUsername || ""
-        const userTeam = league.teams.find(
-          (t) => t.ownerName?.toLowerCase() === sleeperUsername.toLowerCase()
-        ) || league.teams[0]
+        // The team the caller claimed first: a member of an imported league has no matching
+        // owner name, and falling to `teams[0]` described someone else's team as theirs.
+        const viewerId = session.user.id
+        const userTeam =
+          league.teams.find((t) => t.claimedByUserId === viewerId) ||
+          league.teams.find((t) => t.ownerName?.toLowerCase() === sleeperUsername.toLowerCase()) ||
+          league.teams[0]
 
         ctx = {
           leagueName: league.name || "Your League",
@@ -106,7 +113,7 @@ export async function POST(req: Request) {
       temperature: 0.8,
     })
 
-    const insight = completion.choices[0]?.message?.content?.trim() || "AI insight unavailable."
+    const insight = completion.choices[0]?.message?.content?.trim() || "Chimmy insight unavailable."
 
     return NextResponse.json({ ok: true, featureId, insight })
   } catch (err: any) {
