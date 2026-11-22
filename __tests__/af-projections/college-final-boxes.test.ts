@@ -54,6 +54,37 @@ describe('verified college box ingestion', () => {
     }) }))
   })
 
+  it('confirms a non-game date with the season schedule after a 304', async () => {
+    const schedule = ['20260905', '20261120', '20261128'].map(day => ({
+      game_ID: day + '-2-1', season_type: 'Regular Season',
+    }))
+    m.feed.mockImplementation(async (endpoint, { date }) => {
+      if (endpoint === 'schedule_season') return { rows: schedule, error: null }
+      return date === '2026-11-21' ? { rows: [], error: 'HTTP 304', notModified: true } : { rows: [] }
+    })
+    const result = await ingestCollegeFinalBoxes('NCAAF', 2026, [roster], now)
+    expect(result.noGameDates).toEqual(['2026-11-21'])
+    expect(result.warnings).toEqual([])
+    expect(result.written).toBe(0)
+  })
+
+  it.each(['scheduled', 'incomplete', 'logged', 'network'])('reports real feed uncertainty on a %s date', async mode => {
+    const schedule = (mode === 'incomplete' ? ['20261119', '20261128'] : ['20260905', '20261120', '20261128'])
+      .concat(mode === 'scheduled' ? ['20261121'] : []).map(day => ({
+        game_ID: day + '-2-1', season_type: 'Regular Season',
+      }))
+    m.feed.mockImplementation(async (endpoint, { date }) => {
+      if (endpoint === 'schedule_season') return { rows: schedule, error: null }
+      if (date !== '2026-11-21') return { rows: [] }
+      return mode === 'network' ? { rows: [], error: 'timeout' } : { rows: [], error: 'HTTP 304', notModified: true }
+    })
+    const watched = mode === 'logged' ? { ...roster, dates: [...roster.dates, '2026-11-21'] } : roster
+    const result = await ingestCollegeFinalBoxes('NCAAF', 2026, [watched], now)
+    expect(result.noGameDates).toEqual([])
+    expect(result.warnings).toEqual(['NCAAF final box feed unavailable for 2026-11-21'])
+    expect(result.written).toBe(0)
+  })
+
   it('rejects a live box, a namesake, a wrong school, and an unused player', async () => {
     m.feed.mockResolvedValue({ rows: [providerGame('In Progress'), providerGame('Final', { name: 'Another Player' }),
       providerGame('Final', { team: 'UVA' }), providerGame('Final', { attempts: 0, yards: 0 })] })
