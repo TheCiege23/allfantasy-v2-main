@@ -31,8 +31,10 @@ export function ComposerGradeLine({
   return (
     <span data-testid={testId} className="mt-1 block">
       <span className={compact ? 'text-[11px] font-semibold text-white/85' : 'text-[13px] font-bold text-white'}>
-        Grade: You {grade.letter} · {them} {grade.partnerLetter}
-        {grade.label ? <span className="font-normal text-white/60"> — {grade.label}</span> : null}
+        {grade.leagueValueLetter
+          ? <>For your roster: {grade.letter} · League value: You {grade.leagueValueLetter} · {them} {grade.partnerLetter}</>
+          : <>Grade: You {grade.letter} · {them} {grade.partnerLetter}</>}
+        {grade.label && !grade.leagueValueLetter ? <span className="font-normal text-white/60"> — {grade.label}</span> : null}
       </span>
       {compact ? null : (
         <span className="mt-0.5 block text-[11px] text-white/45">

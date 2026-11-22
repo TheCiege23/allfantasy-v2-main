@@ -3,6 +3,7 @@
  * Returns 404 when league is not a survivor league.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { loadImmunitySealed } from '@/lib/survivor/survivorSealedImmunityState'
 import { redactImmunityList } from '@/lib/survivor/survivorSealedImmunity'
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,7 +18,6 @@ import { getJuryMembers } from '@/lib/survivor/SurvivorJuryEngine'
 import { getExileLeagueId } from '@/lib/survivor/SurvivorExileEngine'
 import { getAllTokenStates } from '@/lib/survivor/SurvivorTokenEngine'
 import { getActiveIdolsForRoster } from '@/lib/survivor/SurvivorIdolRegistry'
-import { getSurvivorAuditLog } from '@/lib/survivor/SurvivorAuditLog'
 import { getTribeChatSource } from '@/lib/survivor/SurvivorChatMembershipService'
 import { isMergeTriggered } from '@/lib/survivor/SurvivorMergeEngine'
 import { getActiveEffectsForRoster } from '@/lib/survivor/SurvivorEffectEngine'
@@ -27,7 +27,6 @@ import { getCurrentlyEliminatedRosterIds } from '@/lib/survivor/SurvivorRosterSt
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 import { prisma } from '@/lib/prisma'
-import { getLeagueRole } from '@/lib/league/permissions'
 import {
   parseSurvivorFairPlayFromLeagueSettings,
   redactSurvivorSummaryPayloadForFairPlay,
@@ -312,8 +311,7 @@ export async function GET(
       ? (leagueSettingsRow.settings as Record<string, unknown>)
       : {}
   const { fairPlayLimited } = parseSurvivorFairPlayFromLeagueSettings(leagueSettingsJson)
-  const leagueRole = await getLeagueRole(leagueId, userId)
-  const isComm = leagueRole === 'commissioner' || leagueRole === 'co_commissioner'
+  const isComm = (await canCommissionerAct(leagueId, userId, 'view'))
   const fairPlayRedact = shouldApplySurvivorFairPlayRedaction(fairPlayLimited, isComm, Boolean(myRosterId))
 
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)
@@ -321,6 +319,15 @@ export async function GET(
   const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
   // Double-elimination weeks run two councils back to back; say which one this is.
   const councilWeekPosition = council ? await loadCouncilWeekPosition(leagueId, council, leagueSettingsRow?.settings) : null
+  // The viewer's OWN ballot only — whether it is in, never who for — so the home can say "your vote is in".
+  let myCouncilVoteSubmitted = false
+  if (council && myRosterId && !council.closedAt) {
+    try {
+      myCouncilVoteSubmitted = (await prisma.survivorVote.count({ where: { councilId: council.id, voterRosterId: myRosterId } })) > 0
+    } catch {
+      // Unknown reads as "not voted"; the council screen shows the real ballot.
+    }
+  }
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -394,6 +401,7 @@ export async function GET(
       // Voted-out castaways stay listed (struck through, "Out · Wk N") with a snuffed torch.
       outMembers: outMembersByTribe.get(t.id) ?? [],
     })),
+    myCouncilVoteSubmitted,
     council: publicCouncil
       ? {
           id: publicCouncil.id,

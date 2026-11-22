@@ -68,7 +68,7 @@ import { readStoredMaxPfFreeze } from '@/lib/commissioner-os/efl/freezeStore'
  * position" as their allowed list, and counting them as seats would let Max PF start the entire
  * roster — a number that is not a lineup and is trivially maximal.
  */
-export function starterSeatsFromTemplate(
+function starterSeatsFromTemplate(
   template: Awaited<ReturnType<typeof getEffectiveLeagueRosterTemplate>>,
 ): LineupSlotSpec[] {
   return template.template.slots
@@ -81,7 +81,7 @@ export function starterSeatsFromTemplate(
     }))
 }
 
-export type MaxPfDataProvenance = {
+type MaxPfDataProvenance = {
   /** `League.platformLeagueId` — the id the weekly tables actually key on. */
   platformLeagueId: string | null
   scoringSource: string
@@ -102,11 +102,11 @@ export type MaxPfDataProvenance = {
   idpEnabled: boolean
 }
 
-export type ReadMaxPfFreezeResult = MaxPfFreezeStatus & {
+type ReadMaxPfFreezeResult = MaxPfFreezeStatus & {
   provenance: MaxPfDataProvenance
 }
 
-export type ReadMaxPfInput = {
+type ReadMaxPfInput = {
   /** AllFantasy `League.id`. Translated to `platformLeagueId` inside. */
   leagueId: string
   season: number

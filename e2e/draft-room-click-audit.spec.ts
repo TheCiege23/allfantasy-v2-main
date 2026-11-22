@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clearPoolFilters } from './helpers/poolFilters'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
 import { computeUpcomingOwnedPicks } from '@/lib/live-draft-engine/draftPickTradeInventory'
@@ -1545,7 +1546,7 @@ test.describe('@draft-room click audit', () => {
 
     await desktop.getByTestId('draft-player-search-input').fill('Atlas')
     await desktop.getByTestId('draft-position-filter').getByRole('radio', { name: /RB/i }).click()
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clearPoolFilters(desktop)
 
     const atlasRow = desktop.getByRole('row', { name: /Atlas Runner/i }).first()
     await expect(atlasRow).toBeVisible({ timeout: 20_000 })
@@ -1573,7 +1574,7 @@ test.describe('@draft-room click audit', () => {
       const aiExplanationToggle = page.getByTestId('draft-helper-ai-explanation-toggle').first()
       await aiExplanationToggle.check()
       await helperRefresh.click()
-      await expect(page.getByTestId('draft-helper-execution-mode').first()).toContainText(/AI explanation/i)
+      await expect(page.getByTestId('draft-helper-execution-mode').first()).toContainText(/Chimmy explanation/i)
       await aiExplanationToggle.uncheck()
       await helperRefresh.click()
       await expect(page.getByTestId('draft-helper-execution-mode').first()).toContainText(/instant automated recommendation/i)
@@ -1892,11 +1893,11 @@ test.describe('@draft-room click audit', () => {
     await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
     await openDraftRoomHarness(page, { e2eRoom: true })
 
-    const intelligenceDetails = page.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-intelligence')
-    await expect(intelligenceDetails).toBeVisible()
-    await expect(intelligenceDetails).not.toHaveAttribute('open', '')
-    await intelligenceDetails.locator('summary').click()
-    const intelPanel = intelligenceDetails.getByTestId('draft-intel-queue-panel')
+    // Draft intelligence lives in the Chimmy tab since 2026-11-19 (it was a fold inside Queue).
+    await page.getByTestId('draft-right-dock-tab-chimmy').click()
+    const intelligence = page.getByTestId('draft-right-dock-panel-chimmy').getByTestId('draft-chimmy-suggestions')
+    await expect(intelligence).toBeVisible()
+    const intelPanel = intelligence.getByTestId('draft-intel-queue-panel')
     await expect(intelPanel).toBeVisible()
     const intelHeadline = page.locator('[data-testid="draft-intel-headline"]:visible').first()
     if (!(await intelHeadline.isVisible({ timeout: 1_000 }).catch(() => false))) {
@@ -1980,9 +1981,8 @@ test.describe('@draft-room click audit', () => {
     await openDraftRoomHarness(page, { e2eRoom: true })
     const mobile = page.getByTestId('draft-mobile-layout')
     await expect(page.getByTestId('draft-mobile-quick-dock')).toHaveCount(0)
-    await page.getByTestId('draft-mobile-more').click()
-    await expect(page.getByTestId('draft-mobile-quick-dock')).toBeVisible()
-    await page.getByTestId('draft-mobile-more').click()
+    // Phase 5 (2026-11-19): all six tabs sit in the tray, so "More" appears only for extra tabs (keepers).
+    await expect(page.getByTestId('draft-mobile-more')).toHaveCount(0)
 
     // Dismiss the on-turn suggestion with its real button before scrolling the board underneath it.
     const turnAlert = page.getByTestId('draft-youre-up-alert')
@@ -2018,7 +2018,6 @@ test.describe('@draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
-    await page.getByTestId('draft-mobile-more').click()
     const helperTab = page.getByTestId('draft-mobile-tab-helper')
     const helperWarRoomToggle = mobile.getByTestId('draft-open-war-room-button').first()
     const helperUpgradeLink = mobile.getByTestId('locked-feature-upgrade-link').first()
@@ -2043,21 +2042,17 @@ test.describe('@draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-chat-media-image')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-board')
     await expect(page.getByTestId('draft-mobile-current-pick')).toBeVisible()
-    await page.getByTestId('draft-mobile-quick-search').click()
+    // Room v2: the clock bar's quick chips are gone; the tray tabs reach the same panels.
+    await expect(page.getByTestId('draft-mobile-quick-actions')).toHaveCount(0)
+    await mobileTabClick('draft-mobile-tab-players')
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
-    await mobileTabClick('draft-mobile-tab-board')
-    await page.getByTestId('draft-mobile-quick-queue').click()
+    await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
-    await page.getByTestId('draft-mobile-quick-roster').click()
-    await expect(mobile.getByTestId('draft-team-panel')).toBeVisible()
-    await mobileTabClick('draft-mobile-tab-board')
-    await page.getByTestId('draft-mobile-quick-chat').click()
+    await mobileTabClick('draft-mobile-tab-roster')
+    // A plain redraft league's phone "My team" is the desktop dock's view.
+    await expect(mobile.getByTestId('results-roster-panel')).toBeVisible()
+    await mobileTabClick('draft-mobile-tab-chat')
     await expect(mobile.getByTestId('draft-chat-panel')).toBeVisible()
-    const quickHelperBtn = page.getByTestId('draft-mobile-quick-helper')
-    if (await quickHelperBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await mobileTabClick('draft-mobile-tab-board')
-      await quickHelperBtn.click()
-    }
     await openCommissionerControls(page)
     const commissionerClose = page.getByTestId('draft-commissioner-close')
     // The control center is a lazy client chunk; await its real controls after the overlay opens.

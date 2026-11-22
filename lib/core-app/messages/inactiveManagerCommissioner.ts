@@ -27,7 +27,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     team: 'Team',
     title: 'Inactive manager mode',
     intro:
-      "Hand an away manager's lineup to AllFantasy: it sets the projected-best lineup every week, from players whose games have not started. It stops by itself the moment the manager saves a lineup, and the league log shows every change. With AF Commissioner, Chimmy can run the whole team on autopilot, playing like a dynasty owner by default.",
+      "Hand an away manager's lineup to AllFantasy: it sets the projected-best lineup every week, from players whose games have not started. It stops by itself the moment the manager saves a lineup, and the league log shows every change. With AF Pro or AF Supreme, Chimmy can run the whole team on autopilot, playing like a dynasty owner by default.",
     draftAsMeToggle:
       'Draft as me: when a manager misses a pick, Chimmy drafts the way they usually draft instead of taking the best available player.',
     draftAsMeUpsell: 'Draft as me: missed picks made the way each manager drafts (AF Commissioner)',
@@ -45,7 +45,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     letAllFantasySet: 'Let AllFantasy set lineups',
     chimmyAutopilot: 'Chimmy autopilot',
     off: 'Off',
-    autopilotUpsell: 'Let Chimmy run this team (AF Commissioner)',
+    autopilotUpsell: 'Let Chimmy run this team (AF Pro)',
     otherTeams: 'Other teams',
     chimmyManagersTitle: 'Chimmy as a manager',
     chimmyManagersIntro:
@@ -55,8 +55,8 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     chimmyLimitReached: (limit: number) => `Chimmy already runs ${limit} teams. Take Chimmy off one to hand it another.`,
     chimmyReportsTitle: 'Chimmy’s weekly reports',
     chimmyFreeCount: (n: number, free: number) => `Chimmy runs ${n} of ${free} free team${free === 1 ? '' : 's'}`,
-    chimmyFreeLimitReached: (limit: number) => `Your free Chimmy team is in use. AF Commissioner lets Chimmy run up to ${limit} teams.`,
-    chimmyFreeUpsell: (limit: number) => `Let Chimmy run up to ${limit} teams (AF Commissioner)`,
+    chimmyFreeLimitReached: (limit: number) => `Your free Chimmy team is in use. AF Pro or AF Supreme lets Chimmy run up to ${limit} teams.`,
+    chimmyFreeUpsell: (limit: number) => `Let Chimmy run up to ${limit} teams (AF Pro)`,
   },
   es: {
     loadFailed: 'Se requiere permiso del comisionado o conexión.',
@@ -77,7 +77,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     team: 'Equipo',
     title: 'Modo mánager inactivo',
     intro:
-      'Deja la alineación de un mánager ausente a AllFantasy: pone la mejor alineación proyectada cada semana, con jugadores cuyos partidos no han empezado. Se detiene sola cuando el mánager guarda una alineación, y el registro de la liga muestra cada cambio. Con AF Commissioner, Chimmy puede dirigir todo el equipo en piloto automático, jugando como dueño dinastía por defecto.',
+      'Deja la alineación de un mánager ausente a AllFantasy: pone la mejor alineación proyectada cada semana, con jugadores cuyos partidos no han empezado. Se detiene sola cuando el mánager guarda una alineación, y el registro de la liga muestra cada cambio. Con AF Pro o AF Supreme, Chimmy puede dirigir todo el equipo en piloto automático, jugando como dueño dinastía por defecto.',
     draftAsMeToggle:
       'Draft as me: cuando un mánager pierde una selección, Chimmy elige como suele elegir ese mánager en vez de tomar al mejor jugador disponible.',
     draftAsMeUpsell: 'Draft as me: selecciones perdidas hechas como elige cada mánager (AF Commissioner)',
@@ -95,7 +95,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     letAllFantasySet: 'Que AllFantasy ponga alineaciones',
     chimmyAutopilot: 'Piloto automático de Chimmy',
     off: 'Apagado',
-    autopilotUpsell: 'Que Chimmy dirija este equipo (AF Commissioner)',
+    autopilotUpsell: 'Que Chimmy dirija este equipo (AF Pro)',
     otherTeams: 'Otros equipos',
     chimmyManagersTitle: 'Chimmy como mánager',
     chimmyManagersIntro:
@@ -105,7 +105,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     chimmyLimitReached: (limit) => `Chimmy ya dirige ${limit} equipos. Quítale uno para entregarle otro.`,
     chimmyReportsTitle: 'Informes semanales de Chimmy',
     chimmyFreeCount: (n, free) => `Chimmy dirige ${n} de ${free} equipo${free === 1 ? '' : 's'} gratis`,
-    chimmyFreeLimitReached: (limit) => `Tu equipo gratis de Chimmy ya está en uso. AF Commissioner permite que Chimmy dirija hasta ${limit} equipos.`,
-    chimmyFreeUpsell: (limit) => `Que Chimmy dirija hasta ${limit} equipos (AF Commissioner)`,
+    chimmyFreeLimitReached: (limit) => `Tu equipo gratis de Chimmy ya está en uso. AF Pro o AF Supreme permite que Chimmy dirija hasta ${limit} equipos.`,
+    chimmyFreeUpsell: (limit) => `Que Chimmy dirija hasta ${limit} equipos (AF Pro)`,
   },
 })

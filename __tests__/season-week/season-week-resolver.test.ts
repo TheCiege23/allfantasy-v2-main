@@ -169,6 +169,28 @@ describe('resolveSportWeekFromSchedule — answers', () => {
     expect(res.state).toBe('live')
   })
 
+  /*
+   * Production 2026-11-20. The labelled schedule is rewritten Mondays 03:00 UTC, mid Sunday Night Football, so
+   * that game's row said "in_progress" all week. A live week wins, so the app answered week 10 on the Friday of
+   * week 11. A live status twelve hours past kickoff is a stale reading, not a game in play.
+   */
+  it('does not let a game left "in progress" days ago hold the week back', () => {
+    const rows = [
+      game(10, '2026-11-13T01:15:00Z', 'final'),
+      game(10, '2026-11-16T01:20:00Z', 'in_progress'), // never refreshed after Monday 03:00
+      game(11, '2026-11-20T01:15:00Z', 'scheduled'), // kicked off Thursday; the label is stale too
+      game(11, '2026-11-22T18:00:00Z', 'scheduled'),
+    ]
+    const friday = resolveSportWeekFromSchedule(rows, new Date('2026-11-20T14:40:00Z'))
+    expect(friday.ok && friday.sportWeek).toBe(11)
+    expect(friday.ok && friday.state).not.toBe('live')
+
+    // While it really is being played, the same row still wins.
+    const sundayNight = resolveSportWeekFromSchedule(rows, new Date('2026-11-16T03:00:00Z'))
+    expect(sundayNight.ok && sundayNight.sportWeek).toBe(10)
+    expect(sundayNight.ok && sundayNight.state).toBe('live')
+  })
+
   it('stays on the played week through the gap before the next one', () => {
     const res = resolveSportWeekFromSchedule(
       nfl2026({ 1: 'final' }),

@@ -3,9 +3,8 @@
  */
 
 import { TOOL_CONFIG, type ToolSlug } from '@/lib/seo-landing/config'
-import { getToolCardsForSlugs } from './ToolCardResolver'
 
-export type RelatedToolLink = {
+type RelatedToolLink = {
   slug: ToolSlug
   headline: string
   href: string
@@ -35,11 +34,3 @@ export function getRelatedTools(forSlug: ToolSlug): RelatedToolLink[] {
     .filter((r): r is RelatedToolLink => r != null)
 }
 
-/**
- * Get related tool cards (full display) for a slug.
- */
-export function getRelatedToolCards(forSlug: ToolSlug) {
-  const c = TOOL_CONFIG[forSlug]
-  const related = c?.relatedToolSlugs ?? []
-  return getToolCardsForSlugs(related)
-}

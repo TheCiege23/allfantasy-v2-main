@@ -14,7 +14,7 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { loadCfbWeeksForNflWeek } from './campusWeeks'
 
-export type CampusLineupPlayer = { id: string; name: string; position: string; team: string | null }
+type CampusLineupPlayer = { id: string; name: string; position: string; team: string | null }
 
 export type CampusLineupView = {
   /** Football (NFL C2C) or basketball (NBA C2C): which seat rules and which "this week counts" line apply. */

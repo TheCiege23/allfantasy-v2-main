@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ZombieSettlementHoldCard } from './ZombieSettlementHoldCard'
 import clsx from 'clsx'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
 import { ZombieCorrectionRecovery } from '@/components/zombie/ZombieCorrectionRecovery'
@@ -77,6 +78,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
   return (
     <div className="px-6 py-5 text-[13px] text-white/85">
       {canEdit && league.sport === 'NFL' && <ZombieCorrectionRecovery leagueId={leagueId} />}
+      <ZombieSettlementHoldCard leagueId={leagueId} canEdit={canEdit} />
       {/* Status overview */}
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <StatusCard
@@ -93,7 +95,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
         />
         <StatusCard
           label="Resolution"
-          value={isResolved ? 'COMPLETE' : 'PENDING'}
+          value={isResolved ? 'COMPLETE' : latestResolution?.status === 'review_required' ? 'ON HOLD' : 'PENDING'}
           color={isResolved ? 'var(--zombie-green)' : 'var(--zombie-gold)'}
           icon={isResolved ? '✅' : '⏳'}
         />
@@ -201,7 +203,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
                         className={clsx(
                           'rounded px-1.5 py-0.5 text-[11px] font-bold',
                           r.status === 'complete'
-                            ? 'bg-[var(--zombie-green)]/15 text-[var(--zombie-green)]'
+                            ? 'bg-zombie-green/15 text-[var(--zombie-green)]'
                             : 'bg-amber-500/15 text-amber-300',
                         )}
                       >

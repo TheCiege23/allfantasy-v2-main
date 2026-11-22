@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type LeverageReport = {
+type LeverageReport = {
   uniquenessScore: number
   chalkyPlayers: { playerId: string; ownershipPct: number }[]
   differentiators: { playerId: string; ownershipPct: number }[]

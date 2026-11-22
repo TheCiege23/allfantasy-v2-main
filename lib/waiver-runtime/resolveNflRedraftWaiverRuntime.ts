@@ -2,6 +2,7 @@ import { assertStealThreeWaiverHoldCleared } from '@/lib/survivor/survivorStealT
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import { prisma } from '@/lib/prisma'
+import { WAIVER_RUN_IN_PROGRESS_MESSAGE, withLeagueWaiverLock } from '@/lib/waiver-wire/leagueWaiverLock'
 import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
@@ -257,6 +258,14 @@ function toRuntimeTransaction(row: {
   }
 }
 
+/**
+ * Where a READ path gets the league ruleset (2026-11-21 re-score: this read went around League OS). A GET route passes
+ * League OS's `loadRules` (`createLeagueOsLoaders`), which holds the ruleset for 60 s; every other caller — proposal
+ * validation, roster limits, move sync, matchup completion, anything that PERSISTS on the result — passes nothing and
+ * keeps reading it live, as League OS's own header requires.
+ */
+export type WaiverRuntimeRulesDeps = { loadRules?: (leagueId: string) => ReturnType<typeof resolveCanonicalLeagueRules> }
+
 export async function resolveNflRedraftWaiverRuntime(input: {
   seasonId?: string | null
   leagueId?: string | null
@@ -264,12 +273,12 @@ export async function resolveNflRedraftWaiverRuntime(input: {
   now?: Date
   includeFreeAgents?: boolean
   extraFreeAgents?: NflRedraftWaiverPlayerInput[]
-}): Promise<NflRedraftWaiverRuntimeResolved> {
+}, deps: WaiverRuntimeRulesDeps = {}): Promise<NflRedraftWaiverRuntimeResolved> {
   const season = await resolveSeason(input)
   if (!season) return { ok: false, reason: 'season_not_found' }
   if (String(season.sport).toUpperCase() !== 'NFL') return { ok: false, reason: 'not_nfl_redraft' }
 
-  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  const rules = await (deps.loadRules ?? resolveCanonicalLeagueRules)(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
@@ -780,13 +789,35 @@ async function applyProcessResult(input: {
   })
 }
 
-export async function processNflRedraftWaiverWindow(input: {
+type ProcessNflRedraftWaiverWindowInput = {
   seasonId?: string | null
   leagueId?: string | null
   week?: number | null
   actorUserId?: string | null
   commissionerOverride?: boolean
-}) {
+}
+
+/**
+ * 🛑 THE COMMISSIONER'S RUN AND THE INSTANT ADD HERE TOOK NO LOCK. Both read "who is rostered" from
+ * `RedraftRosterPlayer` and write from that read, so an add racing a run (or two adds) could put one
+ * player on two rosters. Both now hold the league's waiver lock (lib/waiver-wire/leagueWaiverLock.ts),
+ * the one every waiver run and the native add/drop hold. Busy past the short wait: refused, try again.
+ */
+async function leagueIdForWaiverLock(input: { seasonId?: string | null; leagueId?: string | null }): Promise<string> {
+  if (input.leagueId?.trim()) return input.leagueId.trim()
+  const season = await resolveSeason(input)
+  if (!season) throw new Error('season_not_found')
+  return season.leagueId
+}
+
+export async function processNflRedraftWaiverWindow(input: ProcessNflRedraftWaiverWindowInput) {
+  const leagueId = await leagueIdForWaiverLock(input)
+  const out = await withLeagueWaiverLock(leagueId, 'redraft-runtime-process', () => processNflRedraftWaiverWindowLocked(input))
+  if (!out.ran) throw new Error('Waivers are already processing for this league right now. Try again in a moment.')
+  return out.value
+}
+
+async function processNflRedraftWaiverWindowLocked(input: ProcessNflRedraftWaiverWindowInput) {
   const resolved = await resolveNflRedraftWaiverRuntime({
     seasonId: input.seasonId,
     leagueId: input.leagueId,
@@ -823,7 +854,7 @@ export async function processNflRedraftWaiverWindow(input: {
   return { state: next.state, results: processed.results, events: processed.events }
 }
 
-export async function addNflRedraftFreeAgent(input: {
+type AddNflRedraftFreeAgentInput = {
   seasonId?: string | null
   leagueId?: string | null
   rosterId: string
@@ -835,9 +866,26 @@ export async function addNflRedraftFreeAgent(input: {
   dropPlayerName?: string | null
   actorUserId?: string | null
   commissionerOverride?: boolean
-}) {
+  /**
+   * Runs INSIDE the league waiver lock, before anything is read or written: the native add's own
+   * eligibility check (`/api/redraft/waiver-runtime` passes `assertWaiverClaimEligibility`). Throws to refuse.
+   */
+  precheck?: () => Promise<void>
+}
+
+export async function addNflRedraftFreeAgent(input: AddNflRedraftFreeAgentInput) {
   const season = await resolveSeason(input)
   if (!season) throw new Error('season_not_found')
+  const out = await withLeagueWaiverLock(season.leagueId, 'redraft-runtime-add', () => addNflRedraftFreeAgentLocked(input, season))
+  if (!out.ran) throw new Error(WAIVER_RUN_IN_PROGRESS_MESSAGE)
+  return out.value
+}
+
+async function addNflRedraftFreeAgentLocked(
+  input: AddNflRedraftFreeAgentInput,
+  season: NonNullable<Awaited<ReturnType<typeof resolveSeason>>>,
+) {
+  if (input.precheck) await input.precheck()
   const meta = await resolvePlayerMeta({
     playerId: input.addPlayerId,
     playerName: input.addPlayerName,

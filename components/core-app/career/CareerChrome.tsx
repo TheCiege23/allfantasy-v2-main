@@ -19,7 +19,7 @@ import { platformLabel } from '@/lib/core-app/rankingsEngine'
  * height, and the current tab is scrolled into view on load.
  */
 
-export const CAREER_TABS: Array<{ key: string; label: string }> = [
+const CAREER_TABS: Array<{ key: string; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'timeline', label: 'Timeline' },
   { key: 'seasons', label: 'Seasons' },

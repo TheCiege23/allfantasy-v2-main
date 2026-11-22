@@ -18,7 +18,7 @@ const line = (over: Partial<RailGuillotineLine>): RailGuillotineLine => ({
 
 const matchup = (g: RailGuillotineLine): RailMatchupSummary => ({
   season: 2026, week: g.week ?? 0, yourTeam: 'Ciege Squad', yourAvatarUrl: null, yourScore: g.points ?? 0,
-  yourProjection: g.projected != null ? { projected: g.projected, afProjected: null, afEngine: null, afEngineFrom: 0, pricedFrom: 9, starterCount: 10 } : null,
+  yourProjection: g.projected != null ? { projected: g.projected, afProjected: g.projected, afEngine: g.projected, afEngineFrom: 9, pricedFrom: 9, starterCount: 10 } : null,
   opponentTeam: null, opponentAvatarUrl: null, opponentScore: 0, opponentProjection: null,
   unpaired: true, standing: null, scored: g.points != null, freshAt: '2026-10-18T12:00:00.000Z', source: 'live_cache',
   guillotine: g, native: true,
@@ -82,7 +82,7 @@ describe('RailRowBody — native guillotine line', () => {
     const live = { ...matchup(line({ points: 130.5, rank: 2, chopMargin: 43 })), yourScore: 130.5, season: 2026, week: 11, updatedAt: '2026-10-18T12:05:00.000Z', freshAt: '2026-10-18T12:04:00.000Z' }
     const merged = mergeRailMatchup(saved, live as never)
     expect(merged?.guillotine).toMatchObject({ points: 130.5, rank: 2 })
-    expect(merged?.yourProjection?.projected).toBe(120)
+    expect(merged?.yourProjection?.afEngine).toBe(120)
     expect(merged?.freshAt).toBe('2026-10-18T12:04:00.000Z')
   })
 })

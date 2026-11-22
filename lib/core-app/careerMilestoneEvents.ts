@@ -19,7 +19,7 @@ import type { CareerTradeCount } from './careerProfile'
  * Pure: two profiles in, events out. `careerMilestoneNotify.ts` does the I/O.
  */
 
-export type CareerMilestoneEvent = {
+type CareerMilestoneEvent = {
   /** Stable for the life of the account — the dedupe key. */
   key: string
   kind: 'title' | 'award' | 'wins'
@@ -27,7 +27,7 @@ export type CareerMilestoneEvent = {
   body: string
 }
 
-export type ProfileSlice = { rows: readonly CareerRow[]; trades: readonly CareerTradeCount[] }
+type ProfileSlice = { rows: readonly CareerRow[]; trades: readonly CareerTradeCount[] }
 
 const TIER_RANK: Record<AwardTier, number> = { bronze: 1, silver: 2, gold: 3, platinum: 4 }
 

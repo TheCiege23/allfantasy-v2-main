@@ -135,4 +135,3 @@ export function PlayerSeasonCard({ state, name }: { state: SectionState<PlayerSe
   )
 }
 
-export default PlayerSeasonCard

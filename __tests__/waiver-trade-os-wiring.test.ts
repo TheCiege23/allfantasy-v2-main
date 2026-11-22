@@ -91,13 +91,15 @@ describe('Trade OS wiring', () => {
     expect(typeof l.drainOutcomes).toBe('function')
   })
 
-  it('declares a much shorter TTL for rosters than for settings', () => {
-    const [settings, rosters] = tradeOsSources
-    expect(rosters.ttlMs).toBeLessThan(settings.ttlMs)
+  it('declares one source, the roster pair, held three minutes at most', () => {
+    // The league-level settings entry was deleted 2026-11-20: nothing read it.
+    expect(tradeOsSources).toHaveLength(1)
+    const [rosters] = tradeOsSources
+    expect(rosters.kind).toBe('rosters')
     expect(rosters.ttlMs).toBeLessThanOrEqual(3 * 60 * 1000)
   })
 
-  it('reads through the SHORT-TTL roster source, not the 2h settings one', async () => {
+  it('reads through the SHORT-TTL roster source, never a settings entry', async () => {
     const { store, kindsRead } = spyStore()
     const l = createTradeOsLoaders({ store: store as never })
     await l.loadWorldFacts(args as never).catch(() => null)
@@ -108,7 +110,7 @@ describe('Trade OS wiring', () => {
   })
 
   it('scopes the roster fact to BOTH sides of the proposal', () => {
-    const [, rosters] = tradeOsSources
+    const [rosters] = tradeOsSources
     const key = rosters.scopeKey(args as never)
     // Keyed on one side only, two different proposals would share a cache entry and one trade
     // would be evaluated against the other's rosters.

@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim()
     return NextResponse.json({ result: JSON.parse(cleaned) })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'AI error'
+    const msg = e instanceof Error ? e.message : 'Chimmy error'
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 }

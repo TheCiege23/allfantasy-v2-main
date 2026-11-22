@@ -218,3 +218,63 @@ describe('shares — bridged Fleaflicker leagues', () => {
     expect(v?.cells['100'].holder).toEqual({ kind: 'unknown' })
   })
 })
+
+/*
+ * The multi-sport home (2026-11-11): a Fantrax NBA league sits beside a Sleeper NFL league. Its
+ * Fantrax ids resolve through PlayerIdentityMap to the NBA catalog, injuries are read in EACH sport,
+ * and the NFL catalog read is scoped to NFL so a Sleeper number never lands on an NBA row.
+ */
+describe('shares — another sport’s leagues', () => {
+  beforeEach(() => {
+    db.teamFindMany.mockResolvedValue([
+      { leagueId: 'NFL1', platformUserId: 'me-n', externalId: '1' },
+      { leagueId: 'NBA1', platformUserId: 'me-b', externalId: 'fx-team' },
+    ])
+    db.leagueFindMany.mockResolvedValue([
+      { id: 'NFL1', platform: 'sleeper', sport: 'NFL', season: 2026, settings: {} },
+      { id: 'NBA1', platform: 'fantrax', sport: 'NBA', season: 2026, settings: {} },
+    ])
+    db.rosterFindMany.mockResolvedValue([
+      { leagueId: 'NFL1', platformUserId: 'me-n', playerData: { starters: ['100'], players: ['100'] } },
+      { leagueId: 'NBA1', platformUserId: 'me-b', playerData: { starters: ['05qu0'], players: ['05qu0', 'unknown1'] } },
+    ])
+    db.identityFindMany.mockImplementation(async ({ where }: any) =>
+      where.sport === 'NBA' && where.fantraxId?.in.includes('05qu0') ? [{ fantraxId: '05qu0', rollingInsightsId: '9001', cfbdId: null }] : [],
+    )
+    db.playerFindMany.mockImplementation(async ({ where }: any) => {
+      if (where.sport === 'NBA' && where.source === 'rolling_insights' && where.externalId?.in.includes('9001')) {
+        return [{ sport: 'NBA', source: 'rolling_insights', externalId: '9001', name: 'Anthony Davis', position: 'F', team: 'DAL', imageUrl: null }]
+      }
+      if (where.sleeperId) {
+        // An unscoped read would ALSO see an NBA row under Sleeper 100 — listed first, as the bug needs.
+        const rows = [
+          { sleeperId: '100', sport: 'NBA', externalId: 'nba-100', source: 'sleeper', name: 'Wrong Sport', position: 'G', team: 'MIA', imageUrl: null },
+          catalog('100', 'Gridiron Guy'),
+        ]
+        return rows.filter((r) => where.sleeperId.in.includes(r.sleeperId) && (where.sport == null || r.sport === where.sport))
+      }
+      return []
+    })
+    db.injuryFindMany.mockImplementation(async ({ where }: any) => {
+      const hurt: Record<string, string> = { NFL: 'Gridiron Guy', NBA: 'Anthony Davis' }
+      return where.playerName.in.includes(hurt[where.sport])
+        ? [{ playerName: hurt[where.sport], team: null, status: 'Out', description: 'x', date: new Date('2026-11-10T00:00:00Z'), fetchedAt: new Date('2026-11-11T00:00:00Z') }]
+        : []
+    })
+  })
+
+  it('reads the Fantrax NBA roster, flags each sport from its own feed, and counts the unidentified id', async () => {
+    const out = await loadPlayerShares('me', ['NFL1', 'NBA1'])
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.leaguesRead).toBe(2)
+    expect(out.data.unsupportedLeagues).toBe(0)
+    expect(out.data.unidentifiedPlayers).toBe(1)
+    const byName = Object.fromEntries(out.data.rows.map((r) => [r.player.name, r]))
+    expect(Object.keys(byName).sort()).toEqual(['Anthony Davis', 'Gridiron Guy'])
+    expect(byName['Anthony Davis']!.player).toMatchObject({ sport: 'NBA', source: 'rolling_insights', externalId: '9001', sleeperId: 'NBA|rolling_insights|9001' })
+    expect(byName['Anthony Davis']!.status?.label).toBeTruthy()
+    expect(byName['Gridiron Guy']!.status?.label).toBeTruthy()
+    expect(db.injuryFindMany.mock.calls.map(([a]: any[]) => a.where.sport).sort()).toEqual(['NBA', 'NFL'])
+    for (const [a] of db.playerFindMany.mock.calls as any[]) if (a.where.sleeperId) expect(a.where.sport).toBe('NFL')
+  })
+})

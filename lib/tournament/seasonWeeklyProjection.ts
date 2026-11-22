@@ -20,7 +20,7 @@ export const seasonWeeklyEvidenceSchema = z.object({
   })),
 }).strict()
 export type SeasonWeeklyEvidence = z.infer<typeof seasonWeeklyEvidenceSchema>
-export type SeasonTeamWeekProjection = {
+type SeasonTeamWeekProjection = {
   rosterId: string; points: number | null; knownPoints: number; countedStarts: number;
   excludedStarts: number; missing: string[]; provisional: string[];
 }

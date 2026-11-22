@@ -421,12 +421,9 @@ describe('DraftRoomPageClient — AI floating window is rendered', () => {
     expect(src).toMatch(/injuries: draftAssistantContext\.injuries/)
   })
 
-  it('floating bubble is shown when hasDraftHelperData is true', () => {
-    expect(src).toMatch(/hasDraftHelperData && \([\s\S]*?<DraftHelperFloatingBubble/)
-  })
-
-  it('DraftHelperFloatingBubble receives badgeCount from draftHelperBadgeCount', () => {
-    expect(src).toMatch(/badgeCount=\{draftHelperBadgeCount\}/)
+  it('has no floating Draft Helper bubble: the Chimmy tab opens the helper (2026-11-19)', () => {
+    expect(src).not.toMatch(/<DraftHelperFloatingBubble/)
+    expect(src).toMatch(/data-testid="draft-helper-docked-trigger"/)
   })
 })
 

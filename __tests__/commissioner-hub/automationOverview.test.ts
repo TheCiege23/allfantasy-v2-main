@@ -7,6 +7,7 @@ const facts = (over: Partial<AutomationFacts> = {}): AutomationFacts => ({
   settings: {},
   dynasty: true,
   commissionerPlan: true,
+  autopilotPlan: true,
   rookieDraftAutoOpen: true,
   liveRookieOrderOn: false,
   tankingMonitorOn: true,

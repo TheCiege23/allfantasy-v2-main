@@ -28,7 +28,7 @@ import {
  * whether or not the notification, chat post or audit row then succeeds.
  */
 
-export type DisputeViewer = { userId: string; isCommissioner: boolean }
+type DisputeViewer = { userId: string; isCommissioner: boolean }
 
 export async function resolveDisputeViewer(leagueId: string, userId: string): Promise<DisputeViewer> {
   const role = await getLeagueRole(leagueId, userId)

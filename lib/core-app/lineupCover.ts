@@ -40,7 +40,7 @@ export type CoverCandidate = {
   canPlay: boolean
 }
 
-export type CoverChain = {
+type CoverChain = {
   /** The starter who slides into the injured player's slot. */
   move: string
   /** The injured player's slot — where `move` goes. */

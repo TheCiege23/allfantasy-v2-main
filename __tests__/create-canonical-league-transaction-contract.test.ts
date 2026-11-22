@@ -14,6 +14,7 @@ function buildTx() {
     league: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'league-1' }),
+      update: vi.fn().mockResolvedValue({ id: 'league-1' }),
     },
     leagueSettings: {
       create: vi.fn().mockResolvedValue({ id: 'ls-1' }),
@@ -432,6 +433,33 @@ describe('dynasty commissioner choices reach the runtime', () => {
 
 
 /*
+ * ⚠ The league row's waiver type defaulted to "rolling" while the engine row ran FAAB, so the
+ * commissioner's waiver panel and the constitution described a different league from the one running.
+ */
+describe('the league row and the waiver engine agree on the waiver type', () => {
+  it('a FAAB redraft league writes FAAB and its budget to both', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody(), buildEngine())
+    expect(tx.leagueWaiverSettings.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'faab', faabBudget: 100 })
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'faab', waiverBudget: 100 })
+  })
+
+  it("a dynasty league's recommended rolling waivers reach the league row too", async () => {
+    const tx = buildTx()
+    const setup = { waiverTypeRecommended: 'rolling' }
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'dynasty', conceptSetup: setup }), buildEngine({ leagueFormatId: 'dynasty' }))
+    expect(tx.leagueWaiverSettings.create.mock.calls[0]?.[0].data.waiverType).toBe('rolling')
+    expect(tx.league.create.mock.calls[0]?.[0].data.waiverType).toBe('rolling')
+  })
+
+  it('[control] zombie keeps its first-come override on the league row', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'zombie', sport: 'NBA' }), buildEngine({ leagueFormatId: 'zombie' }))
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'fcfs', waiverHours: 0 })
+  })
+})
+
+/*
  * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`. The Zombie tab, its landing, the trades tab
  * and Chimmy's zombie context all key on the variant, so a new zombie league looked like plain redraft.
  */
@@ -475,6 +503,23 @@ describe('dynasty regular-season fallback is sport-aware', () => {
     expect(upsert.update.regularSeasonWeeks).toBe(weeks)
     // The stored length and the league's playoff start describe ONE season: playoffs follow it.
     if (sport !== 'NFL') expect(tx.league.create.mock.calls[0]?.[0].data.playoffStartWeek).toBe(weeks + 1)
+  })
+
+  // The taxi squad size has two stores; lineup validation and the rookie taxi placement read the column.
+  it.each([
+    ['NBA', {}, 4],
+    ['NFL', { taxiSlots: 6 }, 6],
+    ['NHL', { taxiSlots: 6 }, 0], // no prospect pool: 0 whatever the request carried
+  ])('%s dynasty writes the taxi squad size to the league column as well as the config', async (sport, conceptSetup, slots) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(
+      tx as any,
+      'app-user-1',
+      buildBody({ concept: 'dynasty', sport, scoringPreset: undefined, conceptSetup }),
+      buildEngine({ leagueFormatId: 'dynasty' }),
+    )
+    expect(tx.dynastyLeagueConfig.upsert.mock.calls[0]?.[0].create.taxiSlots).toBe(slots)
+    expect(tx.league.update).toHaveBeenCalledWith({ where: { id: 'league-1' }, data: { taxiSlots: slots } })
   })
 
   it('[control] a commissioner-chosen length still wins', async () => {

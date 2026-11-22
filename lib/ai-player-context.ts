@@ -1,4 +1,3 @@
-import { getRedraftAIContext } from './redraft-tiers';
 import { legacyPromptSeason, nflDraftClassReminder } from '@/lib/legacy/promptSeason';
 
 /*
@@ -146,7 +145,7 @@ If your analysis never says "this is unrealistic" or "this won't work", you lose
  * (fixed 2026-10-11, when that class had played two). A constant also froze "Today's date" at process start.
  * Built per call from the clock now, with no player list to go stale (`lib/legacy/promptSeason.ts`).
  */
-export function currentDateContext(now: Date = new Date()): string {
+function currentDateContext(now: Date = new Date()): string {
   return `
 ## CURRENT DATE & NFL CONTEXT
 
@@ -161,11 +160,3 @@ export function getUniversalAIContext(now: Date = new Date()): string {
   return `${currentDateContext(now)}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
 }
 
-export function getFormatAwareAIContext(format: 'dynasty' | 'keeper' | 'redraft' = 'dynasty'): string {
-  if (format === 'redraft') {
-    return `${currentDateContext()}\n\n${getRedraftAIContext()}`;
-  }
-  return getUniversalAIContext();
-}
-
-export { getRedraftAIContext };

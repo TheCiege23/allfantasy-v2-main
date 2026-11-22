@@ -6,7 +6,7 @@ export interface TimelineEntry {
   timestamp: string
 }
 
-export interface TimelineCardProps {
+interface TimelineCardProps {
   title: string
   entries: TimelineEntry[]
   emptyText: string

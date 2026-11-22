@@ -7,5 +7,4 @@ export {
   getTradeAnalyzerHref,
   getWaiverToolHref,
   getRankingsToolHref,
-  getPlayerPageHref,
 } from './CoachToolResolver';

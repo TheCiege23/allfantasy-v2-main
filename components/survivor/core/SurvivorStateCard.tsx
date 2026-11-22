@@ -26,7 +26,7 @@ export type SurvivorStateKey =
   | 'locked'
   | 'moment_private'
 
-export type SurvivorStateTone = 'empty' | 'loading' | 'error' | 'closed' | 'missed' | 'spectator' | 'paused' | 'locked'
+type SurvivorStateTone = 'empty' | 'loading' | 'error' | 'closed' | 'missed' | 'spectator' | 'paused' | 'locked'
 
 interface StateSpec { tone: SurvivorStateTone; icon: string; title: string; body: string; dim?: boolean }
 

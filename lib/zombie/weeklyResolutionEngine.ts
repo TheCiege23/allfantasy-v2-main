@@ -1,3 +1,4 @@
+import { describeHoldReason, recordSettlementHold } from './settlementHoldReasons'
 import { settleBetaItems } from './beta2025ItemSettlement'
 import { refreshItemScores, usesBeta2025Items, itemTransaction, lockItemLeague } from './beta2025ItemService'
 import type { ZombieWeeklyResolution } from '@prisma/client'
@@ -181,10 +182,15 @@ export async function runWeeklyResolution(
       where: { zombieLeagueId, week, requiresStatCorrection: false },
       data: { requiresStatCorrection: true },
     })
-    if (marked.count) await notifyCommissioner(z.leagueId, 'commissioner_override_required',
-      `Week ${week} rules policy needs review`,
-      'Review the saved policy, roles, item score receipts and opening balances before the 2025 rules settle this week.',
-      { urgency: 'critical', requiresAction: true, week }).catch(() => {})
+    // Say WHY (lib/zombie/settlementHoldReasons.ts): the code used to be thrown away with the hold.
+    const reason = describeHoldReason(error.message)
+    if (marked.count) {
+      await recordSettlementHold(zombieLeagueId, week, error.message)
+      await notifyCommissioner(z.leagueId, 'commissioner_override_required',
+        `Week ${week} settlement is on hold`,
+        `${reason.text} The commissioner Automation panel shows the hold and a Retry settlement button.`,
+        { urgency: 'critical', requiresAction: true, week }).catch(() => {})
+    }
     return { resolution: held, skipped: true, reason: 'winnings_policy_review_required' }
   }
   if (existing?.status === 'pending' && settlementSnapshot) {

@@ -6,6 +6,9 @@ import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 import { normalizeTheSportsDbImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 import { providerPositionCode } from '@/lib/sports-data/providerPositionCode'
 import { canonicalSeasonLabel, seasonStartYear } from '@/lib/sports-data/seasonLabel'
+import { proTeamCode } from '@/lib/player-identity/proFantraxIdentityPlan'
+import { eplGoalReceiptKey, EPL_GOAL_RECEIPT_PREFIX, parseEplGoalReceipt } from './soccerOwnGoalEvidence'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 /**
  * TheSportsDB ingestion — everything the provider actually serves.
@@ -110,13 +113,13 @@ const intOf = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null
 }
 
-async function v1<T>(path: string, params: Record<string, string>): Promise<T | null> {
+async function v1<T>(path: string, params: Record<string, string>, timeoutMs = 30_000): Promise<T | null> {
   const key = getTheSportsDbApiKeyOrFallback()
   const qs = new URLSearchParams(params).toString()
   try {
     // db-first-exception: provider ingestion writer — fetch -> sports_* tables, not a read path
     const url = `${V1}/${key}/${path}?${qs}`
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
     if (!res.ok) return null
     const text = await res.text()
     // Dead endpoints answer an HTML error page with a 200, which JSON.parse would
@@ -538,6 +541,9 @@ export async function ingestSchedule(
     }
   }
 
+  if (sport === 'SOCCER' && budgetMs - (clock() - startedAt) >= 7000) {
+    await ingestEplGoalReceipts(seasonStartYear(season), now).catch(() => undefined)
+  }
   return {
     season,
     fetched: events.length,
@@ -545,6 +551,45 @@ export async function ingestSchedule(
     deferred,
     budgetExhausted: deferred > 0,
   }
+}
+
+/** Backfill a bounded number of final EPL matches on the existing schedule ingestion tick. */
+export async function ingestEplGoalReceipts(season: number | null, now: Date): Promise<void> {
+  if (season == null) return
+  const [games, cached] = await Promise.all([
+    prisma.sportsGame.findMany({
+      where: {
+        sport: 'SOCCER', source: SOURCE, season: { in: [season, season - 1] }, startTime: { lt: now },
+        status: { in: ['Match Finished', 'Final', 'FT'], mode: 'insensitive' },
+        homeScore: { not: null }, awayScore: { not: null },
+      },
+      select: { externalId: true, startTime: true, homeTeam: true, awayTeam: true, homeScore: true, awayScore: true },
+      orderBy: { startTime: 'desc' },
+    }),
+    prisma.sportsDataCache.findMany({
+      where: { cacheKey: { startsWith: EPL_GOAL_RECEIPT_PREFIX }, expiresAt: { gt: now } },
+      select: { cacheKey: true },
+    }),
+  ])
+  const fresh = new Set(cached.map((row) => row.cacheKey))
+  const pending = games.flatMap((g) => {
+    const home = proTeamCode('SOCCER', g.homeTeam), away = proTeamCode('SOCCER', g.awayTeam)
+    if (!home || !away || home === away || !g.startTime || !g.externalId || g.homeScore == null || g.awayScore == null) return []
+    const key = eplGoalReceiptKey(g.startTime.toISOString().slice(0, 10).replaceAll('-', ''), home, away)
+    if (fresh.has(key)) return []
+    fresh.add(key)
+    return [{ key, eventId: g.externalId, home, away, homeScore: g.homeScore, awayScore: g.awayScore }]
+  }).slice(0, 4)
+
+  await Promise.all(pending.map(async ({ key: cacheKey, ...match }) => {
+    const body = await v1<unknown>('lookuptimeline.php', { id: match.eventId }, 5000)
+    const receipt = parseEplGoalReceipt(body, match)
+    const data = toPrismaJsonInput(receipt ?? { eventId: match.eventId, unavailable: true })
+    const expiresAt = new Date(now.getTime() + (receipt ? 365 : 1) * 86400000)
+    await prisma.sportsDataCache.upsert({
+      where: { cacheKey }, create: { cacheKey, data, expiresAt }, update: { data, expiresAt },
+    })
+  }))
 }
 
 // ── Player season statistics ───────────────────────────────────────────

@@ -16,7 +16,7 @@ import type { UserLeague, LeagueTeamSlot } from '@/app/dashboard/types'
 import type { AccentTone } from '@/lib/create-league-v2/theme'
 import type { ResolvedLeagueMedia } from '@/lib/league-home/league-media-resolver'
 
-export interface LeagueHomeHeroProps {
+interface LeagueHomeHeroProps {
   league: UserLeague
   teams: LeagueTeamSlot[]
   accent: AccentTone

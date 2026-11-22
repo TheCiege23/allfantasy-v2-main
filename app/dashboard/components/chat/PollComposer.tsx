@@ -6,7 +6,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { predictionCopy } from '@/lib/league-chat/predictionCopy'
 
 /** A poll takes 2 to 6 answers. */
-export const POLL_MAX_OPTIONS = 6
+const POLL_MAX_OPTIONS = 6
 
 const DURATIONS: Array<{ label: string; ms: number }> = [
   { label: '1h', ms: 60 * 60 * 1000 },

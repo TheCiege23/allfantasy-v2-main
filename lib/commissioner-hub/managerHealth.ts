@@ -18,7 +18,10 @@ import 'server-only'
  *               ran the lineup_sections migration.
  *   Moves       `WaiverClaim` + `WaiverTransaction` for that roster.
  *   Trades      `AfLeagueTrade` where the roster is either side.
- *   Last action `Roster.updatedAt`, which the sync path touches on every write.
+ *   Last action NATIVE leagues: the manager's own last action (`ownerLastAction.ts`) — a lineup save,
+ *               claim or trade proposal they made. `Roster.updatedAt` moves on every system write,
+ *               autopilot included, so it kept absent managers looking active (fixed 2026-11-20).
+ *               IMPORTED leagues: `Roster.updatedAt`, which the sync path touches on every write.
  *   Status      derived from the three above — see `resolveStatus`.
  *
  * ⚠ THE LINEUP DENOMINATOR IS THE LEAGUE'S OWN STARTER COUNT, NOT 11. The
@@ -36,6 +39,10 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { INACTIVE_AFTER_MS } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
+import { recordInactiveFlags } from '@/lib/commissioner-hub/inactiveFlagLedger'
+import { readEliminatedTeams } from '@/lib/guillotine/eliminatedTeams'
 
 export type ManagerHealthStatus = 'active' | 'at_risk' | 'inactive' | 'unknown'
 
@@ -50,6 +57,8 @@ export type ManagerHealthRow = {
   expectedStarters: number | null
   moves: number
   trades: number
+  /** FAAB left to bid, when the league runs FAAB and the team has a balance. */
+  faabRemaining: number | null
   lastActionAt: string | null
   status: ManagerHealthStatus
 }
@@ -144,21 +153,33 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   const empty: LeagueManagerHealth = { leagueId, rows: [], totalManagers: 0, inactiveCount: 0, atRiskCount: 0 }
   if (!leagueId) return empty
 
-  const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { starters: true } })
-    .catch(() => null)
+  const [league, allRosters, eliminated] = await Promise.all([
+    prisma.league
+      .findUnique({ where: { id: leagueId }, select: { starters: true, platform: true } })
+      .catch(() => null),
+    prisma.roster
+      .findMany({
+        where: { leagueId },
+        select: { id: true, platformUserId: true, managerUserId: true, playerData: true, updatedAt: true, redraftRosterId: true, faabRemaining: true },
+      })
+      .catch(() => [] as Array<{ id: string; platformUserId: string; managerUserId: string | null; playerData: unknown; updatedAt: Date; redraftRosterId: string | null; faabRemaining: number | null }>),
+    readEliminatedTeams(leagueId),
+  ])
 
-  const rosters = await prisma.roster
-    .findMany({
-      where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true, updatedAt: true },
-    })
-    .catch(() => [] as Array<{ id: string; platformUserId: string; playerData: unknown; updatedAt: Date }>)
+  /*
+   * 🛑 A CHOPPED TEAM IS OUT OF THE LEAGUE, NOT INACTIVE (2026-11-20). Its roster was released and its
+   * manager can no longer act, so its roster clock stops and every eliminated team aged into
+   * `inactive` here — and through this function into the Hub table, the quiet-managers list, the
+   * weekly recap, the commissioner recipes and the inactive-manager suggestions. A commissioner
+   * reported it from their own chopped leagues. The table is the managers still playing.
+   */
+  const rosters = allRosters.filter((r) => !eliminated.rosterIds.has(r.id))
 
   if (rosters.length === 0) return empty
 
   const rosterIds = rosters.map((r) => r.id)
-  const platformUserIds = rosters.map((r) => r.platformUserId).filter(Boolean)
+  // NFL-redraft claims and trades are keyed on the season's RedraftRoster, linked from the generic roster.
+  const redraftIds = rosters.map((r) => r.redraftRosterId).filter((id): id is string => Boolean(id))
 
   /*
    * Identity comes from LeagueTeam, joined on platformUserId — the same join the
@@ -166,18 +187,20 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
    * `LeagueTeam.platformUserId` is nullable and an unclaimed/orphan team legally
    * has none, so a missing row means "no display name", not "no manager".
    */
-  const [teams, waiverClaims, waiverTx, tradesProposed, tradesReceived] = await Promise.all([
+  const [teams, waiverClaims, waiverTx, tradesProposed, tradesReceived, redraftClaims, redraftProposed, redraftReceived] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, ownerName: true, teamName: true, avatarUrl: true, legacyRosterId: true },
+        select: { platformUserId: true, ownerName: true, teamName: true, avatarUrl: true, externalId: true },
       })
-      .catch(() => [] as Array<{ platformUserId: string | null; ownerName: string; teamName: string; avatarUrl: string | null; legacyRosterId: string | null }>),
+      .catch(() => [] as Array<{ platformUserId: string | null; ownerName: string; teamName: string; avatarUrl: string | null; externalId: string }>),
     prisma.waiverClaim
       .groupBy({ by: ['rosterId'], where: { rosterId: { in: rosterIds } }, _count: { _all: true } })
       .catch(() => [] as Array<{ rosterId: string; _count: { _all: number } }>),
+    // A processed claim also writes a transaction; count only the transactions no claim produced (free-agent adds),
+    // so one claim is one move, not two.
     prisma.waiverTransaction
-      .groupBy({ by: ['rosterId'], where: { rosterId: { in: rosterIds } }, _count: { _all: true } })
+      .groupBy({ by: ['rosterId'], where: { rosterId: { in: rosterIds }, claimId: null }, _count: { _all: true } })
       .catch(() => [] as Array<{ rosterId: string; _count: { _all: number } }>),
     prisma.afLeagueTrade
       .groupBy({ by: ['proposerRosterId'], where: { proposerRosterId: { in: rosterIds } }, _count: { _all: true } })
@@ -185,13 +208,27 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
     prisma.afLeagueTrade
       .groupBy({ by: ['receiverRosterId'], where: { receiverRosterId: { in: rosterIds } }, _count: { _all: true } })
       .catch(() => [] as Array<{ receiverRosterId: string; _count: { _all: number } }>),
+    prisma.redraftWaiverClaim
+      .groupBy({ by: ['rosterId'], where: { rosterId: { in: redraftIds } }, _count: { _all: true } })
+      .catch(() => [] as Array<{ rosterId: string; _count: { _all: number } }>),
+    prisma.redraftTradeProposal
+      .groupBy({ by: ['proposerRosterId'], where: { proposerRosterId: { in: redraftIds } }, _count: { _all: true } })
+      .catch(() => [] as Array<{ proposerRosterId: string; _count: { _all: number } }>),
+    prisma.redraftTradeProposal
+      .groupBy({ by: ['receiverRosterId'], where: { receiverRosterId: { in: redraftIds } }, _count: { _all: true } })
+      .catch(() => [] as Array<{ receiverRosterId: string; _count: { _all: number } }>),
   ])
 
+  /*
+   * 🛑 THE FALLBACK JOIN COULD NEVER MATCH (2026-11-15). It joined `LeagueTeam.legacyRosterId` to `Roster.id`, but
+   * `legacyRosterId` points at the LegacyRoster table, so an unclaimed team showed no name. A team's roster is
+   * `LeagueTeam.externalId`, the join every other commissioner surface uses.
+   */
   const teamByPlatformId = new Map<string, (typeof teams)[number]>()
-  const teamByLegacyRosterId = new Map<string, (typeof teams)[number]>()
+  const teamByRosterId = new Map<string, (typeof teams)[number]>()
   for (const t of teams) {
     if (t.platformUserId) teamByPlatformId.set(t.platformUserId, t)
-    if (t.legacyRosterId) teamByLegacyRosterId.set(t.legacyRosterId, t)
+    if (t.externalId) teamByRosterId.set(t.externalId, t)
   }
 
   const countBy = <K extends string>(rows: Array<Record<string, unknown>>, key: K): Map<string, number> => {
@@ -209,6 +246,9 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   const txCounts = countBy(waiverTx as unknown as Array<Record<string, unknown>>, 'rosterId')
   const proposedCounts = countBy(tradesProposed as unknown as Array<Record<string, unknown>>, 'proposerRosterId')
   const receivedCounts = countBy(tradesReceived as unknown as Array<Record<string, unknown>>, 'receiverRosterId')
+  const redraftClaimCounts = countBy(redraftClaims as unknown as Array<Record<string, unknown>>, 'rosterId')
+  const redraftProposedCounts = countBy(redraftProposed as unknown as Array<Record<string, unknown>>, 'proposerRosterId')
+  const redraftReceivedCounts = countBy(redraftReceived as unknown as Array<Record<string, unknown>>, 'receiverRosterId')
 
   const starterShapes = rosters.map((r) => countStarters(r.playerData))
   const expectedStarters = resolveExpectedStarters(
@@ -216,12 +256,22 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
     starterShapes.map((s) => s?.slots ?? 0),
   )
 
+  // Native: the manager's own last action. Imported: the synced timestamp (their managers act elsewhere).
+  const native = Boolean(league?.platform) && isNativePlatform(league!.platform)
+  const ownAction = native
+    ? await loadOwnerLastActions(rosters.map((r) => ({ id: r.id, leagueId, platformUserId: r.platformUserId, managerUserId: r.managerUserId, redraftRosterId: r.redraftRosterId })))
+    : null
+  const lastActionOf = (r: (typeof rosters)[number]): Date | null => (ownAction ? ownAction.get(r.id) ?? null : r.updatedAt ?? null)
+
   const now = Date.now()
   const rows: ManagerHealthRow[] = rosters.map((roster, i) => {
     const shape = starterShapes[i]
-    const team = teamByPlatformId.get(roster.platformUserId) ?? teamByLegacyRosterId.get(roster.id) ?? null
-    const moves = (claimCounts.get(roster.id) ?? 0) + (txCounts.get(roster.id) ?? 0)
-    const trades = (proposedCounts.get(roster.id) ?? 0) + (receivedCounts.get(roster.id) ?? 0)
+    const team = teamByPlatformId.get(roster.platformUserId) ?? teamByRosterId.get(roster.id) ?? null
+    const rr = roster.redraftRosterId ?? ''
+    const moves = (claimCounts.get(roster.id) ?? 0) + (txCounts.get(roster.id) ?? 0) + (rr ? redraftClaimCounts.get(rr) ?? 0 : 0)
+    const trades =
+      (proposedCounts.get(roster.id) ?? 0) + (receivedCounts.get(roster.id) ?? 0) +
+      (rr ? (redraftProposedCounts.get(rr) ?? 0) + (redraftReceivedCounts.get(rr) ?? 0) : 0)
     const denominator = expectedStarters ?? shape?.slots ?? null
     const lineupRatio = shape && denominator && denominator > 0 ? shape.filled / denominator : null
 
@@ -234,8 +284,9 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
       expectedStarters: denominator,
       moves,
       trades,
-      lastActionAt: roster.updatedAt ? roster.updatedAt.toISOString() : null,
-      status: resolveStatus({ lastActionAt: roster.updatedAt ?? null, lineupRatio, moves, now }),
+      faabRemaining: typeof roster.faabRemaining === 'number' ? roster.faabRemaining : null,
+      lastActionAt: lastActionOf(roster)?.toISOString() ?? null,
+      status: resolveStatus({ lastActionAt: lastActionOf(roster), lineupRatio, moves, now }),
     }
   })
 
@@ -251,6 +302,10 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
     const bt = b.lastActionAt ? Date.parse(b.lastActionAt) : 0
     return at - bt
   })
+
+  // Native only: record each inactive stretch shown, so the flag can be graded two weeks on. Best effort and
+  // not awaited — the table never waits on, or fails for, its own record.
+  if (native) void recordInactiveFlags(leagueId, rows).catch(() => {})
 
   return {
     leagueId,

@@ -23,7 +23,7 @@ import type { CommsTab } from './CommsDrawer'
  * `/chimmy/chat` is still a real page and still reachable directly. What
  * changed is that a bubble inside /core no longer throws you at it.
  */
-export function OpenCommsButton({
+function OpenCommsButton({
   className,
   tab = 'chimmy',
   label,

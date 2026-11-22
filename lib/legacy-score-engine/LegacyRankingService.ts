@@ -154,10 +154,3 @@ export async function getLegacyScoreByEntity(
   return toRow(r)
 }
 
-export async function getLegacyScoreById(recordId: string): Promise<LegacyScoreRow | null> {
-  const r = await prisma.legacyScoreRecord.findUnique({
-    where: { id: recordId },
-  })
-  if (!r) return null
-  return toRow(r)
-}

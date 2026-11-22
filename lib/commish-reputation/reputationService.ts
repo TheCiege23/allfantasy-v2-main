@@ -15,6 +15,7 @@ import {
   type PublicReputation,
   type Summary,
 } from './reputation'
+import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 
 /**
  * Commish reputation — reads and writes. Rules in ./reputation.
@@ -48,6 +49,9 @@ async function writeSettings(leagueId: string, mutate: (settings: Record<string,
 export async function commissionerSummary(commissionerUserId: string, opts: { fresh?: boolean } = {}): Promise<Summary> {
   const hit = summaryCache.get(commissionerUserId)
   if (!opts.fresh && hit && Date.now() - hit.at < CACHE_MS) return hit.summary
+  /* The system account owns every public ESPN league people joined by picking a team. It is not a
+     commissioner, and pooling all of those leagues under it would publish one fake reputation. */
+  if (isSystemLeagueOwner(commissionerUserId)) return summarize([])
   const leagues = await prisma.league.findMany({ where: { userId: commissionerUserId }, select: { id: true, settings: true } })
   const summary = summarize(leagues.map((l) => ({ leagueId: l.id, entries: readEntries(l.settings) })))
   summaryCache.set(commissionerUserId, { at: Date.now(), summary })
@@ -63,14 +67,14 @@ export async function publicReputationForLeagues(leagueIds: readonly string[]): 
   const out = new Map<string, PublicReputation>()
   if (ids.length === 0) return out
   const rows = await prisma.league.findMany({ where: { id: { in: ids } }, select: { id: true, userId: true, settings: true } })
-  const optedIn = rows.filter((r) => r.userId && isPublic(r.settings))
+  const optedIn = rows.filter((r) => r.userId && !isSystemLeagueOwner(r.userId) && isPublic(r.settings))
   const byCommissioner = new Map<string, Summary>()
   for (const commissioner of [...new Set(optedIn.map((r) => r.userId))]) byCommissioner.set(commissioner, await commissionerSummary(commissioner))
   for (const r of optedIn) out.set(r.id, publicReputation(byCommissioner.get(r.userId)!))
   return out
 }
 
-export type SubmitError = 'not_found' | 'not_member' | 'self' | 'duplicate' | 'ratings_required' | `invalid_${string}`
+export type SubmitError = 'not_found' | 'not_member' | 'self' | 'duplicate' | 'ratings_required' | 'no_commissioner' | `invalid_${string}`
 
 export async function submitRating(
   leagueId: string,
@@ -80,6 +84,8 @@ export async function submitRating(
 ): Promise<{ ok: true } | { ok: false; error: SubmitError }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, season: true } })
   if (!league) return { ok: false, error: 'not_found' }
+  // Nobody runs a system-owned league on AllFantasy, so there is no commissioner to rate.
+  if (isSystemLeagueOwner(league.userId)) return { ok: false, error: 'no_commissioner' }
   if (league.userId === userId) return { ok: false, error: 'self' }
   // Only managers of this league rate its commissioner. The old handler took any signed-in user.
   const membership = await resolveLeagueMembership(leagueId, userId)

@@ -11,6 +11,8 @@ import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
 
 const calls: string[] = []
 beforeEach(() => {
+  // The room renders inside the live room's DraftRoomShell (room v2), which reads matchMedia.
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   localStorage.clear()
   calls.length = 0
   vi.stubGlobal(

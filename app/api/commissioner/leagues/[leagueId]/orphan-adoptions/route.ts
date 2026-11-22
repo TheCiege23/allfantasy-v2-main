@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { getServerSession } from "next-auth"
 import { NextRequest, NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { trackDiscoveryOrphanAdoption } from "@/lib/discovery-analytics/server"
 import {
   getOrphanAdoptionRequests,
@@ -18,11 +18,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const statusFilter = req.nextUrl.searchParams?.get("status")?.trim().toLowerCase() || ""
 
@@ -48,11 +45,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
   const commissionerId = session?.user?.id
   if (!commissionerId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, commissionerId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, commissionerId, 'league')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const requestId = typeof body?.requestId === "string" ? body.requestId.trim() : ""

@@ -9,7 +9,7 @@ import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/L
 import '@/components/core-app/af-core.css'
 import { MANAGERS, SPORTS, draftSettingsResponse, rosterSettingsResponse, type HarnessSport } from './fixtures'
 
-export type HarnessRole = 'commissioner' | 'member'
+type HarnessRole = 'commissioner' | 'member'
 
 const TABS = [
   { id: 'native_home', label: 'League home' }, { id: 'roster', label: 'My Team' }, { id: 'matchups', label: 'Matchups' },

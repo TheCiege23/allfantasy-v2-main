@@ -1,6 +1,6 @@
-export type WorldCupPoolMentionType = "username" | "chimmy" | "all" | "global"
+type WorldCupPoolMentionType = "username" | "chimmy" | "all" | "global"
 
-export type WorldCupPoolMention = {
+type WorldCupPoolMention = {
   type: WorldCupPoolMentionType
   token: string
   value: string
@@ -10,7 +10,7 @@ export type WorldCupPoolMention = {
   requiresCommissioner: boolean
 }
 
-export type WorldCupPoolChatCapability = {
+type WorldCupPoolChatCapability = {
   id: string
   label: string
   status: "available" | "planned" | "blocked"

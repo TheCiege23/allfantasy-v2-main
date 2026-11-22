@@ -6,7 +6,7 @@ import type { PowerRankingTeam } from '@/lib/league-power-rankings/types';
 import { MovementIndicators } from './MovementIndicators';
 import { getLeagueRosterTabHref } from '@/lib/league-power-rankings/rosterLinkResolver';
 
-export interface RankingTableProps {
+interface RankingTableProps {
   leagueId: string;
   teams: PowerRankingTeam[];
 }

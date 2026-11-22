@@ -17,12 +17,22 @@ describe('simple creation team choices agree with the server', () => {
     expect(next.teamCount).toBe(12)
     view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
     // Keeper runs to 20 (free even sizes; the odd ones are AF Commissioner and not in a free stepper).
-    const evens = concept === 'keeper' ? [4, 6, 8, 10, 12, 14, 16, 18, 20] : [4, 6, 8, 10, 12, 14, 16]
+    const evens = [4, 6, 8, 10, 12, 14, 16]
+    if (concept === 'keeper') evens.push(18, 20)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '4')
-    expect(count).toHaveAttribute('max', String(evens.at(-1)))
-    expect(count).toHaveAttribute('step', '2')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent(evens.join(', '))
+    if (concept === 'dynasty') {
+      // NFL Dynasty takes every size, odd ones included, up to the NFL's 32 teams (owner's rule,
+      // 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS). College leagues keep the full range to 250.
+      evens.push(5, 9, 31, 32)
+      expect(count).toHaveAttribute('max', '32')
+      expect(count).toHaveAttribute('step', '1')
+      expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 32')
+    } else {
+      expect(count).toHaveAttribute('max', String(evens.at(-1)))
+      expect(count).toHaveAttribute('step', '2')
+      expect(document.getElementById('g30-team-count-options')).toHaveTextContent(evens.join(', '))
+    }
     for (const teamCount of evens) {
       const validation = validateCreatePayload({ concept, sport: next.sport, teamCount, draftType: next.draftType, scoringPreset: next.scoringPresetId, leagueName: 'Accepted choices' })
       expect(validation.ok, JSON.stringify(validation)).toBe(true)
@@ -42,17 +52,26 @@ describe('simple creation team choices agree with the server', () => {
       expect(patch.bestBall.playoffTeams).toBe(4)
     }
   })
+  it('steps from 16 to 17 in NFL dynasty', () => {
+    const onChange = vi.fn()
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 16, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    fireEvent.click(screen.getByTestId('g30-team-count-increase'))
+    expect(onChange.mock.calls[0][0].teamCount).toBe(17)
+  })
+
   it('preserves the full redraft range and a valid existing selection', () => {
     const onChange = vi.fn()
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 32, sport: 'NFL' as const }
+    // A college league: the full native range. (A pro league stops where its players run out.)
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 160, sport: 'NCAAF' as const }
     render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '2')
-    expect(count).toHaveAttribute('max', '32')
+    expect(count).toHaveAttribute('max', '250')
     expect(count).toHaveAttribute('step', '1')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 250')
     fireEvent.click(screen.getByTestId('g30-league-type-redraft'))
-    expect(onChange.mock.calls[0][0].teamCount).toBe(32)
+    expect(onChange.mock.calls[0][0].teamCount).toBe(160)
   })
 })
 
@@ -80,5 +99,12 @@ describe('Zombie universe controls', () => {
       onChange={vi.fn()} importCarryover fieldErrors={null} />)
     expect(screen.getByTestId('g30-zombie-league-count')).toBeDisabled()
     expect(screen.getByTestId('g30-zombie-league-count')).toHaveValue('1')
+  })
+
+  it('a pro-sport league is offered no more teams than the real league has', () => {
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
   })
 })

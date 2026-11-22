@@ -31,7 +31,7 @@ function Evaluation({ title, grade }: { title: string; grade: Receipt['grade'] }
       </div>
       {grade.recommendation ? <p>{copy(grade.recommendation)}</p> : null}
       {grade.moves?.length ? <ul>{grade.moves.map((move, index) => <li key={index}>{move.name}{copy(": ")}{copy(move.reasons.join('; '))}</li>)}</ul> : null}
-      {grade.rosterFit ? <p>{copy("Original personal roster utility: ")}{copy(number(grade.rosterFit.giveValue, locale))}{copy(" given, ")}{copy(number(grade.rosterFit.getValue, locale))}{copy(grade.letterBasis === 'your_team' ? " received. Your grade above was taken on these." : " received.")}</p> : null}
+      {grade.rosterFit ? <p>{copy("Original value to your team: ")}{copy(number(grade.rosterFit.giveValue, locale))}{copy(" given, ")}{copy(number(grade.rosterFit.getValue, locale))}{copy(grade.letterBasis === 'your_team' ? " received. Your grade above was taken on these." : " received.")}</p> : null}
     </> : <p>{copy("Not graded: ")}{copy(grade.reason)}</p>}
   </div>
 }
@@ -83,22 +83,22 @@ export function TradeEvaluationReceipt({ leagueId, viewerId }: { leagueId: strin
     } catch (e) { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : 'Comparison failed. Your original evaluation is unchanged.') }
     finally { if (!abort.signal.aborted) setBusy(false) }
   }
-  return <section className="af-tc-panel" aria-label={copy("Saved trade evaluation")} style={{ padding: 16, overflowWrap: 'anywhere' }}>
+  return <section className="af-tc-panel" aria-label={copy("Saved trade grade")} style={{ padding: 16, overflowWrap: 'anywhere' }}>
     <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
-    <h2>{copy("Saved trade evaluation")}</h2>
+    <h2>{copy("Saved trade grade")}</h2>
     {receipt ? <>
-      <p>{copy("Original evaluation: ")}{copy(new Date(receipt.evaluatedAt).toLocaleString(locale))}{copy(". This record stays unchanged.")}</p>
-      <p>{copy(receipt.sourceUpdatedAt ? `Price source updated: ${receipt.sourceUpdatedAt}.` : 'Price source update time was not available.')}{copy(" Evaluation time does not mean every source was updated then.")}</p>
+      <p>{copy("Graded: ")}{copy(new Date(receipt.evaluatedAt).toLocaleString(locale))}{copy(". This saved grade won’t change.")}</p>
+      <p>{copy(receipt.sourceUpdatedAt ? `Price source updated: ${receipt.sourceUpdatedAt}.` : 'Price source update time was not available.')}{copy(" Some values may be older than that date.")}</p>
       <Evaluation title={copy("Original values")} grade={receipt.grade} />
       {receipt.contextNotes ? <ul>{[...receipt.contextNotes.byeNotes, ...receipt.contextNotes.formatNotes].map((note, index) => <li key={index}>{copy(note)}</li>)}</ul> : null}
-      {receipt.dataGaps.length ? <details><summary>{copy("Original data gaps")}</summary><ul>{receipt.dataGaps.map((gap, index) => <li key={index}>{copy(gap)}</li>)}</ul></details> : null}
+      {receipt.dataGaps.length ? <details><summary>{copy("What was missing then")}</summary><ul>{receipt.dataGaps.map((gap, index) => <li key={index}>{copy(gap)}</li>)}</ul></details> : null}
       <button type="button" disabled={busy} onClick={() => void compare()}>{copy(busy ? 'Comparing…' : 'Compare with current values')}</button>
       {copy(' ')}<a href={`/api/trade-value/analyze?evaluation=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">{copy("View saved data")}</a>
       {current ? <>
-        <p>{copy("Current evaluation: ")}{copy(currentTime ? new Date(currentTime).toLocaleString(locale) : '')}{copy(". Prices, league rules, and pick resolution can change between evaluations.")}</p>
+        <p>{copy("Graded again: ")}{copy(currentTime ? new Date(currentTime).toLocaleString(locale) : '')}{copy(". Values, league rules and draft picks change over time, so grades can differ.")}</p>
         <Evaluation title={copy("Current values")} grade={current} />
       </> : null}
-    </> : !error ? <p>{copy("Loading original evaluation…")}</p> : null}
+    </> : !error ? <p>{copy("Loading the saved grade…")}</p> : null}
     {error ? <p role="alert">{copy(error)}</p> : null}
   </section>
 }

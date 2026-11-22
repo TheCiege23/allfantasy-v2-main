@@ -16,7 +16,7 @@ import { isFootballLike } from '@/lib/create-league-v2/state'
 import { normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 
-export type LegacyManualCanonicalBuildInput = {
+type LegacyManualCanonicalBuildInput = {
   sport: string
   leagueName: string
   teamCount: number
@@ -154,6 +154,18 @@ export function buildLegacyManualCanonicalCreatePayload(input: LegacyManualCanon
     const tribe = sw.survivor_suggested_tribe_count
     if (typeof tribe === 'number' && Number.isFinite(tribe)) {
       conceptSetup.survivorTribeCount = Math.max(2, Math.min(4, Math.round(tribe)))
+    }
+  }
+  /*
+   * Guilly with best ball lineups. The route validates `roster_mode: 'best_ball'` for a guillotine
+   * league (GuillotineValidation) and this translation used to drop it, so the league was created with
+   * managed lineups. Carried as the same `conceptSetup.guillotineBestBall` the main wizard sends, which
+   * creation saves as `settings.best_ball` (lib/guillotine/guillotineBestBall.ts).
+   */
+  if (ltRaw === 'guillotine') {
+    const rosterMode = String(sw.roster_mode ?? sw.mode ?? '').toLowerCase().trim()
+    if (rosterMode === 'best_ball' || rosterMode === 'bestball' || sw.best_ball === true || sw.guillotineBestBall === true) {
+      conceptSetup.guillotineBestBall = true
     }
   }
   if (ltRaw === 'best_ball') {

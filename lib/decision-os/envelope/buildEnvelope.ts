@@ -29,7 +29,7 @@ import type {
   PermittedAction,
 } from './types'
 
-export type EnvelopeInput = {
+type EnvelopeInput = {
   context: ResolvedContext
   traceId?: string
   facts?: EnvelopeFact[]

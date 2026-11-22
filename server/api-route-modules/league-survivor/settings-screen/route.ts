@@ -20,11 +20,13 @@
  *    merge naming → League.settings.mergeNamingMode (the late-season reader); co-commissioner mode,
  *    jury and tribe chats → the foundation settings.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import {
   buildSurvivorLeagueColumnPatch,
@@ -114,6 +116,9 @@ async function authorize(ctx: Ctx) {
   const access = await resolveSurvivorAccessContext(leagueId, userId)
   if (!access) return { error: refuse(await leagueLang(leagueId), 'leagueNotFound', 404) }
   if (!access.isLeagueMember || !access.decisions.canUpdateSettings) return { error: refuse(await leagueLang(leagueId), 'commissionerOnly', 403) }
+  // Survivor setup is league setup: a co-commissioner also needs that area (lib/league/commissionerAccess.ts).
+  const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refusedScope) return { error: refusedScope }
   return { leagueId, userId, access }
 }
 
@@ -236,6 +241,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const lang: Lang = state.language ?? 'en'
   const changed = changedSettingsKeys(state.form, next)
   if (!changed.length) return NextResponse.json({ ok: true, unchanged: true, state })
+  // The commissioner's "Format rules" lock (lib/league/formatRulesGuard.ts), on top of Survivor's own season locks
+  // below: a locked league changes its Survivor rules mid-season only after a vote.
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const locked = lockedChanges(changed, state.locks)
   if (locked.length) return refuse(lang, 'settingsLocked', 409, { locked })
@@ -384,5 +393,6 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       tribalCouncilTimeUtc: f.tribalCouncilTime,
     })
   }
+  await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: changed })
   return NextResponse.json({ ok: true, changed, state: await loadState(leagueId, viewer) })
 }

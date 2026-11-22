@@ -13,7 +13,7 @@ import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/Impo
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import { recordCanonicalImportAuditForExistingLeague } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
-import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
 import {
   applyImportedLeagueToExistingLeague,
@@ -69,7 +69,7 @@ export async function POST(
     return NextResponse.json({ error: 'sourceId is required' }, { status: 400 })
   }
   if (!isImportProviderAvailable(provider)) {
-    return NextResponse.json({ error: `Import from ${provider} is not yet available.` }, { status: 400 })
+    return NextResponse.json({ error: importComingSoonMessage(provider), code: 'coming_soon' }, { status: 400 })
   }
 
   const importGate = await assertImportCommissioner({

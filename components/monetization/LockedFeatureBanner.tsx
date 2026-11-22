@@ -42,4 +42,3 @@ export function LockedFeatureBanner() {
   )
 }
 
-export default LockedFeatureBanner

@@ -253,7 +253,7 @@ const PLAYOFF_VARIANT_ALIASES: Record<string, string> = {
   zombie: 'NO_PLAYOFF',
 }
 
-export function normalizePlayoffVariant(variant?: string | null): string {
+function normalizePlayoffVariant(variant?: string | null): string {
   const raw = String(variant ?? '').trim().toUpperCase()
   return PLAYOFF_VARIANT_ALIASES[raw] ?? raw
 }

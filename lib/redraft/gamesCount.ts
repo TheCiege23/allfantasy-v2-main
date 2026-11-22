@@ -31,11 +31,11 @@ export type GamesCountMode = 'all' | 'best_n' | 'lock_in'
 export type GamesCountSetting = { mode: 'all' } | { mode: 'best_n'; n: 2 | 3 } | { mode: 'lock_in' }
 
 /** The only sports the rule applies to: several games a week per player. */
-export const GAMES_COUNT_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
+const GAMES_COUNT_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
 
-export const GAMES_COUNT_MODES: readonly GamesCountMode[] = ['all', 'best_n', 'lock_in']
+const GAMES_COUNT_MODES: readonly GamesCountMode[] = ['all', 'best_n', 'lock_in']
 
-export const GAMES_COUNT_BEST_N_VALUES: readonly number[] = [2, 3]
+const GAMES_COUNT_BEST_N_VALUES: readonly number[] = [2, 3]
 
 /** The keys inside `settings.sportConfig`. */
 export const GAMES_COUNT_MODE_KEY = 'gamesCountMode'
@@ -136,7 +136,7 @@ export function compareGamesChronologically(a: Pick<WeekGame, 'gameId' | 'day' |
  * Best-first order for `best_n`: more points first; on equal points the EARLIER game wins (the score
  * the manager could have seen first), then the game id. Total, so the pick is deterministic.
  */
-export function compareGamesBestFirst(a: WeekGame, b: WeekGame): number {
+function compareGamesBestFirst(a: WeekGame, b: WeekGame): number {
   if (a.points !== b.points) return b.points - a.points
   return compareGamesChronologically(a, b)
 }
@@ -148,7 +148,7 @@ export function lastGame<T extends Pick<WeekGame, 'gameId' | 'day' | 'startTime'
   return last
 }
 
-export type CountedGames = { countedGameIds: string[]; points: number }
+type CountedGames = { countedGameIds: string[]; points: number }
 
 /**
  * Which of a started player's games count, and their total.

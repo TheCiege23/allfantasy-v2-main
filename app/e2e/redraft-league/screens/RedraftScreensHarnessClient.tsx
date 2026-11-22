@@ -12,7 +12,7 @@ import { NativeStandingsScreen } from '@/components/league/native/screens/Native
 import { PlayersTab } from '@/app/league/[leagueId]/tabs/PlayersTab'
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
-import {
+import { guillotineSummaryResponse,
   MANAGERS,
   SPORTS,
   forecastResponse,
@@ -68,6 +68,7 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
     if (method !== 'GET' && !url.includes('rolling-insights/batch')) return json({ error: 'Harness: writes are disabled.' }, 409)
     const path = url.split('?')[0]
     if (path === '/api/league/roster') return json(rosterResponse(s))
+    if (path.endsWith('/guillotine/summary')) return json(guillotineSummaryResponse())
     if (path.endsWith('/matchup-center')) return json(matchupResponse(s))
     if (path.endsWith('/scoring/matchups')) return json(scoreboardResponse(s))
     if (path.endsWith('/scoring/standings')) return json(standingsResponse(s))

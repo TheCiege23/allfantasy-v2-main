@@ -15,7 +15,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type UpsetImpactResult = {
+type UpsetImpactResult = {
   matchId: string
   matchDescription: string
   round: string
@@ -40,7 +40,7 @@ export type UpsetImpactResult = {
   impactLabel: "pool-shaking" | "significant" | "moderate" | "low"
 }
 
-export type UpsetImpactSummary = {
+type UpsetImpactSummary = {
   results: UpsetImpactResult[]
   /** The match where an upset would be most dramatic. */
   mostImpactful: UpsetImpactResult | null

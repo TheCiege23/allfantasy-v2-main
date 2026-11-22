@@ -10,7 +10,7 @@ export type ZombieValuationItem = {
   activatesAtWeek?: number | null
 }
 
-export type ZombieItemWindow = {
+type ZombieItemWindow = {
   /** The current week is excluded: an in-progress score receipt may already be frozen. */
   currentWeek: number
   finalWeek: number
@@ -24,7 +24,7 @@ const ordinaryWeapon = (type: string): number | null => {
   return type !== 'weapon_bomb' && Number.isFinite(value) ? value : null
 }
 
-export function knownZombieItem(type: string): boolean {
+function knownZombieItem(type: string): boolean {
   return type === 'serum' || type === 'weapon_bomb' || ordinaryWeapon(type) !== null
 }
 

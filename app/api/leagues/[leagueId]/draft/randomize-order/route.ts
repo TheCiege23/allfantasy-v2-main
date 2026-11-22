@@ -15,15 +15,16 @@
  * `/api/league/settings/randomize-order`.
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { SLEEPER_MIRRORED_DRAFT_CODE, SLEEPER_MIRRORED_DRAFT_ERROR, recordCommissionerDraftAction } from '@/lib/draft-room/commissionerDraftActions'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     const [league, lockRow, currentDraft, teams] = await Promise.all([
       prisma.league.findUnique({ where: { id: leagueId }, select: { leagueSize: true } }),
       prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftOrderLocked: true, randomizeHistory: true } }),
-      prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
+      prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true, sleeperDraftId: true } }),
       // A departed franchise is not dealt a draft slot.
       prisma.leagueTeam.findMany({
         where: { leagueId, ...CURRENT_TEAMS },
@@ -73,6 +74,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
     if (lockRow?.draftOrderLocked) {
       return NextResponse.json({ error: 'The draft order is locked. Unlock it to randomize.' }, { status: 409 })
+    }
+    // Sleeper rewrites a mirrored draft's order on every sync; an order drawn here would be undone.
+    if (currentDraft?.sleeperDraftId) {
+      return NextResponse.json({ error: SLEEPER_MIRRORED_DRAFT_ERROR, code: SLEEPER_MIRRORED_DRAFT_CODE }, { status: 409 })
     }
     if (currentDraft && !['pre_draft', 'configuring', 'configured'].includes(currentDraft.status)) {
       return NextResponse.json({ error: 'The draft has already started; its order can no longer change.' }, { status: 409 })
@@ -150,6 +155,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     const stepTeams = teams.map((t) => ({ teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null }))
     const stepOrders = steps.map((pass) => pass.map((t) => indexOf.get(t.id)!))
 
+    await recordCommissionerDraftAction(leagueId, userId, 'randomize_order', { source: 'draft/randomize-order' })
     return NextResponse.json({ ok: true, times, teams: teamsOut, chatPosted, chosenBy: chosenBy?.name ?? null, stepTeams, steps: stepOrders })
   } catch (e) {
     console.error('[draft/randomize-order]', e)

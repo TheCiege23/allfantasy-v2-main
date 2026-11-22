@@ -378,7 +378,7 @@ describe('chimmy league resolution: which leagues count as yours', () => {
         { userId: 'user-9' },
         { redraftMembers: { some: { userId: 'user-9' } } },
         { teams: { some: { claimedByUserId: 'user-9' } } },
-        { rosters: { some: { platformUserId: 'user-9' } } },
+        { rosters: { some: { OR: [{ platformUserId: 'user-9' }, { managerUserId: 'user-9' }] } } },
       ]),
     )
     expect(where?.OR).toHaveLength(4)

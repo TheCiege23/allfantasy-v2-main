@@ -21,7 +21,7 @@ export function AmbushConfirmationCard({
   const msg = `@Chimmy ambush ${t.toLowerCase().replace(/\s+/g, '_')}`
 
   return (
-    <div className="rounded-xl border border-[var(--zombie-crimson)]/40 bg-[var(--zombie-crimson)]/10 p-4">
+    <div className="rounded-xl border border-zombie-crimson/40 bg-zombie-crimson/10 p-4">
       <p className="text-[13px] font-bold text-red-200">🔴 Whisperer Action</p>
       <p className="mt-1 text-[11px] text-[var(--zombie-text-dim)]">Declare before kickoff. {ambushesLeft} ambush(es) left.</p>
       <div className="mt-2 flex flex-wrap gap-1">

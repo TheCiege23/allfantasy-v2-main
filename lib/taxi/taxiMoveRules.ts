@@ -26,7 +26,7 @@
 
 export const TAXI_RULES_ENFORCED_KEY = 'taxi_rules_enforced'
 
-export type TaxiLockBehavior = 'once_promoted_no_return' | 'free_move' | 'commissioner_custom'
+type TaxiLockBehavior = 'once_promoted_no_return' | 'free_move' | 'commissioner_custom'
 
 export type TaxiMoveRules = {
   /** Nothing goes onto the taxi squad after this week. Null: no lock. */
@@ -40,7 +40,7 @@ export type TaxiMoveRules = {
 
 export type TaxiSeasonPhase = 'offseason' | 'regular' | 'playoffs'
 
-export type TaxiMoveIssueCode =
+type TaxiMoveIssueCode =
   | 'TAXI_DEADLINE_PASSED'
   | 'TAXI_PROMOTION_CLOSED'
   | 'TAXI_NO_RETURN'

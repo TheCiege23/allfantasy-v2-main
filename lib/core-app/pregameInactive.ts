@@ -22,7 +22,7 @@ import { LOCK_ZONE } from './lineupLock'
  * inactive. Pure and client-safe: Intl only, zone pinned.
  */
 
-export const PREGAME_WINDOW_MINUTES = 120
+const PREGAME_WINDOW_MINUTES = 120
 
 export type PregameInactive = {
   /** ISO of when the Out designation landed. */

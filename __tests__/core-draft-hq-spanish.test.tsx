@@ -63,7 +63,9 @@ describe('Draft HQ Spanish view', () => {
 
     render(<DraftHq data={data} />)
 
-    expect(screen.getByRole('heading', { name: 'Centro del draft' })).toBeTruthy()
+    // The h1 says where you stand now (2026-11-13); the page's name moved to the eyebrow above it.
+    expect(screen.getByRole('heading', { level: 1, name: 'Sin empezar · eliges 2.º de 3' })).toBeTruthy()
+    expect(document.body.textContent).toContain('Centro del draft · Liga')
     expect(document.body.textContent).toContain('Tus selecciones')
     expect(document.body.textContent).toContain('no se sincronizan')
     expect(document.body.textContent).toContain('No se ha importado ningún draft completado')
@@ -100,9 +102,11 @@ describe('Standings Spanish view', () => {
 
     render(<StandingsBoardView board={board} initial={DEFAULT_STANDINGS_VIEW} />)
 
+    // 2026-11-14: the views sit under "Más vistas"; there is no Table/Cards switch.
+    expect(screen.getByText('Más vistas')).toBeTruthy()
     expect(screen.getByRole('radio', { name: 'Tabla de la liga' })).toBeTruthy()
     expect(screen.getByRole('radio', { name: 'Rendimiento AF' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'Tarjetas' })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: 'Tarjetas' })).toBeNull()
     expect(document.body.textContent).toContain('El récord determina el orden')
     expect(document.body.textContent).toContain('Las proyecciones comienzan cuando terminan 3 semanas')
     expect(document.body.textContent).toContain('¿Por qué un equipo está delante de otro?')
@@ -112,7 +116,6 @@ describe('Standings Spanish view', () => {
     expect(screen.getByRole('region', { name: 'Puntos a favor y en contra' }).textContent).toContain('120.0')
     fireEvent.click(screen.getByRole('radio', { name: 'Rendimiento AF' }))
     expect(document.body.textContent).toContain('Rendimiento AF es nuestro análisis')
-    fireEvent.click(screen.getByRole('radio', { name: 'Tarjetas' }))
-    expect(document.body.textContent).toContain('Puntuación de rendimiento')
+    expect(screen.getByRole('button', { name: 'Volver a la tabla de la liga' })).toBeTruthy()
   })
 })

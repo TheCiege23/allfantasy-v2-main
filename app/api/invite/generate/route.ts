@@ -1,10 +1,10 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isAdminEmailAllowed } from '@/lib/adminAuth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { createInviteLink } from '@/lib/invite-engine'
 import type { InviteType } from '@/lib/invite-engine/types'
 
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'targetId (leagueId) required for league invite' }, { status: 400 })
     }
     try {
-      await assertCommissioner(targetId, userId)
+      await assertCommissionerAccess(targetId, userId, 'league')
     } catch {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

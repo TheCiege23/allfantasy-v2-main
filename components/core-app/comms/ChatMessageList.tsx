@@ -1,5 +1,6 @@
 'use client'
 
+import ShareChimmyAnswerButton, { isShareableChimmyAnswer } from '@/components/chat/ShareChimmyAnswerButton'
 import {
   useCallback,
   useEffect,
@@ -24,6 +25,7 @@ import { EmojiPicker } from '@/app/dashboard/components/chat/EmojiPicker'
 import { useOverlayContainment } from '../useOverlayContainment'
 import { QuotedMessage } from './QuotedMessage'
 import { renderMessageText } from './messageText'
+import { ChimmyRichText } from './ChimmyRichText'
 import { MessageReactions } from './MessageReactions'
 import { hasRichContent } from './RichMessage'
 import { ChimmyVerdictChip } from './ChimmyAnswerPolish'
@@ -33,6 +35,7 @@ import { survivorChatMessages } from '@/lib/core-app/messages/survivorChat'
 import { useMessages } from '@/components/i18n/useMessages'
 import {
   describeReactors,
+  avatarToneFor,
   initialsFor,
   isDeletedMessage,
   isEditedMessage,
@@ -138,6 +141,11 @@ export type ChatMessageListProps = {
    * `data-event-kind` for styling; absent (the default everywhere else) stamps nothing.
    */
   eventKindFor?: (m: ChatListMessage) => string | null
+  /**
+   * League chat only. Posts one of the viewer's own private @chimmy answers to the league, on their
+   * tap. Absent (DMs, huddles) means the button is not offered. Resolve true when it was shared.
+   */
+  onShareChimmyAnswer?: (m: ChatListMessage) => Promise<boolean>
 }
 
 /** What a reporter can pick. The route takes one of these; "Something else" is the default. */
@@ -148,7 +156,7 @@ function MessageAvatar({ name, url }: { name: string; url: string | null | undef
   const safe = safeAvatarUrl(url)
   const [failed, setFailed] = useState(false)
   return (
-    <span className="af-cm-avatar" aria-hidden="true">
+    <span className="af-cm-avatar" aria-hidden="true" data-tone={avatarToneFor(name)}>
       {safe && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={safe} alt="" loading="lazy" onError={() => setFailed(true)} />
@@ -284,6 +292,7 @@ export function ChatMessageList({
   onReport,
   onBlock,
   eventKindFor,
+  onShareChimmyAnswer,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -339,6 +348,24 @@ export function ChatMessageList({
     const added = prevIndex >= 0 ? messages.length - 1 - prevIndex : 1
     setUnseen((n) => n + Math.max(1, added))
   }, [messages, viewerId, scrollToEnd])
+
+  /*
+   * A list mounted inside a hidden tab (the draft room's Chat tab, 2026-11-19) has no height, so
+   * the first scroll-to-end above does nothing and the tab later opens on the OLDEST messages.
+   * When the list goes from no height to some, land on the newest — if the reader was there.
+   */
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let lastHeight = el.clientHeight
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight
+      if (lastHeight === 0 && h > 0 && wasNearBottom.current) scrollToEnd(false)
+      lastHeight = h
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [scrollToEnd])
 
   const onScroll = useCallback(() => {
     const near = isNearBottom(scrollRef.current)
@@ -647,8 +674,22 @@ export function ChatMessageList({
                         />
                       ) : null}
                       {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
-                      {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
+                      {/*
+                        Chimmy writes Markdown, and a plain bubble printed it raw — "**Fill the seats:**"
+                        in a private answer, and in the copy "Share with league" posts to everyone (found
+                        live 2026-11-17). Its rows use the drawer's renderer: React elements only, no HTML,
+                        no links. Keyed on the server-owned marker (`chimmy`), never on a name, so a member
+                        cannot get formatting by calling themselves Chimmy.
+                      */}
+                      {shown && chimmy ? (
+                        <ChimmyRichText text={censorProfanity(shown)} className="af-cm-bubble-text af-cm-rich af-cm-chimmy-text" />
+                      ) : shown ? (
+                        <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p>
+                      ) : null}
                       {rich ? renderRich(m) : null}
+                      {onShareChimmyAnswer && !m.pending && isShareableChimmyAnswer(m.metadata) ? (
+                        <ShareChimmyAnswerButton shared={typeof m.metadata?.sharedMessageId === 'string'} onShare={() => onShareChimmyAnswer(m)} />
+                      ) : null}
                     </>
                   )}
                 </div>

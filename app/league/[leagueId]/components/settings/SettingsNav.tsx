@@ -132,7 +132,7 @@ export type SettingsNavTabId =
 type NavEntry = { id: SettingsNavTabId; label: string; icon: LucideIcon; labelKey?: string }
 
 /** One row in the nav. `key` is unique even where two rows open the same tab (Format & roster / Taxi squad). */
-export type SettingsNavItem = {
+type SettingsNavItem = {
   key: string
   id: SettingsNavTabId
   /** Fixed English label, as these tabs have always had. */
@@ -144,7 +144,7 @@ export type SettingsNavItem = {
   anchor?: string
 }
 
-export type SettingsNavGroup = {
+type SettingsNavGroup = {
   key: string
   /** Dictionary key for the group heading; the flat (non-dynasty) list has none. */
   headingKey?: string
@@ -201,8 +201,8 @@ const ZOMBIE_NAV: NavEntry[] = [
 
 const IDP_NAV: NavEntry[] = [
   { id: 'idp_roster', label: 'IDP Roster', icon: Shield },
-  { id: 'idp_scoring', label: 'IDP Scoring', icon: BarChart3 },
-  { id: 'idp_display', label: 'IDP Display', icon: Palette },
+  // IDP Scoring and IDP Display were mock-ups that saved nothing (2026-11-15): IDP stat values are set in the Scoring
+  // tab, which edits the values the IDP scorer reads; display choices are each viewer's own.
   { id: 'idp_ai', label: 'IDP Intelligence', icon: Bot },
   { id: 'idp_cap', label: 'IDP Cap', icon: DollarSign },
 ]
@@ -250,7 +250,7 @@ const SURVIVOR_NAV: NavEntry[] = [
   { id: 'survivor_advanced', label: 'Advanced Rules', icon: SlidersHorizontal },
 ]
 
-export type SettingsNavOptions = {
+type SettingsNavOptions = {
   showSurvivorTabs?: boolean
   showZombieTabs?: boolean
   showIdpTabs?: boolean

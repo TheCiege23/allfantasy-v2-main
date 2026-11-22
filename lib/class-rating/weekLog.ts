@@ -15,7 +15,7 @@ export const LOG_WEEKS_SHOWN = 10
  * "2026 wk 3 · +20" cards and no way to tell them apart. Grouped, the week's move is stated once
  * and each league appears as its own share of it.
  */
-export type ClassWeek = {
+type ClassWeek = {
   key: string
   season: number
   week: number

@@ -93,7 +93,7 @@ export interface ProjectionFact {
   factors: StoredProjectionFactors | null
 }
 
-export interface ProjectionFactsArgs {
+interface ProjectionFactsArgs {
   sport: string
   season: number
   week?: number | null
@@ -118,21 +118,40 @@ export interface ProjectionFactsArgs {
 }
 
 /**
+ * The week a caller that named NO week is asking about: the latest week the writer has written weekly rows for
+ * (`writeAfProjectionSnapshots` writes the current regular-season week), or null — the week-less season
+ * baseline — when there are none.
+ *
+ * 🛑 "NO WEEK" USED TO MEAN "EVERY ROW". The writer stores a week-less season baseline AND a week-scoped row per
+ * player, and an unfiltered read returned both, ordered by computedAt and cut at 2,000 rows — so one player
+ * could arrive as a baseline number and a weekly number, and Chimmy's projection slice printed either as "this
+ * week". Measured shape on 2026-09-02: rows spanning three weeks in one read. One week per read, always.
+ */
+export async function currentProjectionWeek(sport: string, season: number): Promise<number | null> {
+  const r = await prisma.aFProjectionSnapshot
+    .aggregate({ where: { sport, season, week: { not: null } }, _max: { week: true } })
+    .catch(() => null)
+  return r?._max.week ?? null
+}
+
+/**
  * Load projections, rescored for the asking league where the data allows it.
  *
  * Returns [] rather than throwing. An empty array here means "no rows matched", which the caller
  * must not present as "this player has no projection" without checking that the writer has run —
  * `not_computed` and `no_producer` are separate answers and only the caller knows which it needs.
  */
-export async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<ProjectionFact[]> {
+async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<ProjectionFact[]> {
   const sport = args.sport.trim().toUpperCase()
+  const week = args.week != null ? args.week : await currentProjectionWeek(sport, args.season)
 
   const rows = await prisma.aFProjectionSnapshot
     .findMany({
       where: {
         sport,
         season: args.season,
-        ...(args.week != null ? { week: args.week } : {}),
+        // ONE week, always: the asked week, else the current projection week, else the week-less baseline.
+        week,
         ...(args.playerIds?.length ? { playerId: { in: args.playerIds } } : {}),
       },
       orderBy: { computedAt: 'desc' },

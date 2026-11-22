@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
-  AlertTriangle,
   Archive,
   ArrowLeft,
   Bell,
@@ -16,18 +15,31 @@ import {
   LayoutList,
   LayoutDashboard,
   Link2,
+  Newspaper,
   Search,
   Shield,
   Sliders,
   Trophy,
   User,
+  UserCog,
 } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { AVATAR_PRESET_EMOJI } from '@/lib/avatar'
 import type { SettingsProfile } from './sections/settings-types'
 import { settingsNavBadges } from './settingsNavBadges'
+import {
+  completionPct,
+  firstMissingField,
+  hubIssues,
+  linkedAccountNames,
+  securityState,
+  type HubIssue,
+} from './settingsHubGuide'
+import { languageName, settingsHubGuideMessages } from './settingsHubGuideMessages'
 import '../nocturne-settings.css'
+import './settings-hub-guide.css'
 
 export type SettingsTabId =
   | 'profile'
@@ -60,7 +72,7 @@ const NAV_DEFS: NavDef[] = [
   // Which /core home sections show, and their alerts (2026-10-24) — HomeSectionsSettingsSection.
   { id: 'home', icon: LayoutList },
   { id: 'leagues', icon: LayoutDashboard },
-  { id: 'command', icon: LayoutDashboard },
+  { id: 'command', icon: Newspaper },
   { id: 'security', icon: Shield },
   { id: 'notifications', icon: Bell },
   { id: 'connected', icon: Link2 },
@@ -69,7 +81,7 @@ const NAV_DEFS: NavDef[] = [
   { id: 'billing', icon: CreditCard },
   { id: 'referral', icon: Gift },
   { id: 'legal', icon: FileText },
-  { id: 'account', icon: AlertTriangle },
+  { id: 'account', icon: UserCog },
 ]
 
 /** Tab definitions (id + icon). Labels come from `settings.nav.*` via `useLanguage`. */
@@ -78,14 +90,6 @@ export const SETTINGS_NAV = NAV_DEFS
 /** `settingsNavBadges` returns the literal 'OFF'; it is translated here, at render. */
 function badgeText(text: string, t: (key: string) => string): string {
   return text === 'OFF' ? t('settings.hub.badgeOff') : text
-}
-
-/** Plan-card status copy, same keys as BillingSettingsSection's status chip. */
-const HUB_STATUS_KEYS: Record<string, string> = {
-  active: 'settings.billing.statusActive',
-  grace: 'settings.billing.statusGrace',
-  past_due: 'settings.billing.statusPastDue',
-  expired: 'settings.billing.statusExpired',
 }
 
 export function isSettingsTabId(value: string | null | undefined): value is SettingsTabId {
@@ -98,44 +102,6 @@ function initialsFrom(name: string): string {
   const parts = t.split(/\s+/).filter(Boolean)
   if (parts.length >= 2) return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
   return t.slice(0, 2).toUpperCase()
-}
-
-/**
- * The optional profile fields the completion score counts, in the order the
- * hub nudges for them. One list, so the percentage and the nudge cannot drift.
- */
-const COMPLETION_FIELDS = ['displayName', 'bio', 'avatar', 'sports', 'timezone'] as const
-type CompletionField = (typeof COMPLETION_FIELDS)[number]
-
-function isFilled(profile: NonNullable<SettingsProfile>, field: CompletionField): boolean {
-  switch (field) {
-    case 'displayName':
-      return Boolean(profile.displayName)
-    case 'bio':
-      return Boolean(profile.bio)
-    case 'avatar':
-      return Boolean(profile.profileImageUrl || profile.avatarPreset)
-    case 'sports':
-      return Boolean(profile.preferredSports && profile.preferredSports.length > 0)
-    case 'timezone':
-      return Boolean(profile.timezone)
-  }
-}
-
-/**
- * Honest profile-completion score — measures which optional profile fields the
- * user has actually filled. No fabricated denominator.
- */
-function completionPct(profile: SettingsProfile): number {
-  if (!profile) return 0
-  const filled = COMPLETION_FIELDS.filter((f) => isFilled(profile, f)).length
-  return Math.round((filled / COMPLETION_FIELDS.length) * 100)
-}
-
-/** The first field still empty, for the hub's one-line nudge. Null when complete. */
-function firstMissingField(profile: SettingsProfile): CompletionField | null {
-  if (!profile) return null
-  return COMPLETION_FIELDS.find((f) => !isFilled(profile, f)) ?? null
 }
 
 /** The plan name the chrome shows — shared by the sidebar card and the hub, so they cannot disagree. */
@@ -244,73 +210,91 @@ function SidebarProfileCard({
 }
 
 /**
- * Card order on the hub: the 2026-09-13 design's nine first, then the three
- * tabs it does not draw (Command Center, Referrals, Account) — so no tab loses
- * its way in from the landing.
- */
-const HUB_ORDER: SettingsTabId[] = [
-  'profile',
-  'preferences',
-  'home',
-  'leagues',
-  'notifications',
-  'security',
-  'connected',
-  'billing',
-  'rank',
-  'legacy',
-  'legal',
-  'command',
-  'referral',
-  'account',
-]
-
-/**
- * The hub's four groups, in reading order. Twelve flat cards were ~1,300px of scrolling on a phone
- * with nothing to scan by; grouped, a person looking for "password" or "billing" reads four headings
- * first. Every tab in HUB_ORDER appears in exactly one group — the hub test pins that.
+ * The hub's four groups, in reading order (2026-11-14 guide pass). Every tab appears in exactly one —
+ * the hub test pins that. "What you see and hear" holds the five tabs that decide what the app shows
+ * and sends; they used to be split across "App" and "Leagues & history" by where they were built
+ * rather than by what they change.
  */
 const HUB_GROUPS: ReadonlyArray<{ id: 'account' | 'app' | 'leagues' | 'plan'; tabs: SettingsTabId[] }> = [
   { id: 'account', tabs: ['profile', 'security', 'account'] },
-  { id: 'app', tabs: ['preferences', 'home', 'notifications', 'command'] },
-  { id: 'leagues', tabs: ['leagues', 'connected', 'legacy', 'rank'] },
+  { id: 'app', tabs: ['preferences', 'notifications', 'home', 'leagues', 'command'] },
+  { id: 'leagues', tabs: ['connected', 'legacy', 'rank'] },
   { id: 'plan', tabs: ['billing', 'referral', 'legal'] },
 ]
 
-type HubCta = 'edit' | 'manage' | 'review' | 'view' | 'import'
+/** Every tab, in hub order — the groups flattened, so search keeps the reading order. */
+const HUB_ORDER: SettingsTabId[] = HUB_GROUPS.flatMap((g) => g.tabs)
 
-const HUB_CTA: Record<SettingsTabId, HubCta> = {
-  profile: 'edit',
-  preferences: 'edit',
-  home: 'edit',
-  leagues: 'edit',
-  notifications: 'manage',
-  security: 'review',
-  connected: 'manage',
-  billing: 'manage',
-  rank: 'view',
-  legacy: 'import',
-  legal: 'view',
-  command: 'edit',
-  referral: 'view',
-  account: 'manage',
-}
+const GROUP_TITLE_KEY = {
+  account: 'groupAccount',
+  app: 'groupApp',
+  leagues: 'groupLeagues',
+  plan: 'groupPlan',
+} as const
 
 const NAV_ICON = Object.fromEntries(NAV_DEFS.map((n) => [n.id, n.icon])) as Record<
   SettingsTabId,
   ComponentType<{ className?: string }>
 >
 
+type GuideCopy = (typeof settingsHubGuideMessages)['en']
+
+function issueHead(issue: HubIssue, g: GuideCopy): string {
+  switch (issue.key) {
+    case 'paymentDue':
+      return g.headPaymentDue
+    case 'emailUnverified':
+      return g.headEmailUnverified
+    case 'phoneUnverified':
+      return g.headPhoneUnverified
+    case 'notificationsOff':
+      return g.headNotificationsOff
+    case 'profileField':
+      return g.headProfileField(issue.field)
+  }
+}
+
+function issueFix(issue: HubIssue, g: GuideCopy): string {
+  switch (issue.key) {
+    case 'paymentDue':
+      return g.fixPaymentDue
+    case 'emailUnverified':
+      return g.fixEmailUnverified
+    case 'phoneUnverified':
+      return g.fixPhoneUnverified
+    case 'notificationsOff':
+      return g.fixNotificationsOff
+    case 'profileField':
+      return g.fixProfileField(issue.field)
+  }
+}
+
+function issueWhy(issue: HubIssue, g: GuideCopy): string {
+  switch (issue.key) {
+    case 'paymentDue':
+      return g.whyPaymentDue
+    case 'emailUnverified':
+      return g.whyEmailUnverified
+    case 'phoneUnverified':
+      return g.whyPhoneUnverified
+    case 'notificationsOff':
+      return g.whyNotificationsOff
+    case 'profileField':
+      return g.whyProfileField
+  }
+}
+
 /**
- * `/settings` with no tab — the 2026-09-13 Settings handoff.
+ * `/settings` with no tab — the hub.
  *
- * ⚠ EVERY STATE ON THIS SCREEN IS READ, NEVER DRAWN. The design shows "AF Supreme
- * — yearly, $199.99" and "15,000 tokens/mo"; nothing the client holds carries a
- * price, a billing interval or a token allowance (`EntitlementSnapshot` is plans,
- * status and period dates), so the plan banner names the plan, its status and
- * its renewal date and stops there. The card badges are `settingsNavBadges` —
- * the same derivation the sidebar uses — and a card with no real state carries
- * no badge.
+ * 2026-11-14 guide pass: it leads with an answer ("Your account is set up", or what is not), each card
+ * shows the state it is in rather than a verb, and the plan is named once — on its own card — where
+ * it used to appear as a chip, a card and a banner.
+ *
+ * ⚠ EVERY STATE ON THIS SCREEN IS READ, NEVER DRAWN. Nothing the client holds carries a price, a
+ * billing interval or a token allowance (`EntitlementSnapshot` is plans, status and period dates), so
+ * the plan line names the plan, its status and its renewal date and stops there. A card with no real
+ * state shows its description and nothing else.
  */
 function SettingsHub({
   profile,
@@ -328,21 +312,22 @@ function SettingsHub({
   notice?: ReactNode
 }) {
   const { t, tInterpolate } = useLanguage()
-  const { ent, isPro, planText } = usePlanText(planLabel)
+  const g = useMessages(settingsHubGuideMessages)
+  const { ent, planText } = usePlanText(planLabel)
 
   const name = profile?.displayName || profile?.username || t('settings.hub.yourProfile')
-  const username = profile?.username
-  const level = profile?.xpLevel
-  const tier = profile?.rankTier
-  const pct = completionPct(profile)
-  const missing = firstMissingField(profile)
   const presetEmoji =
     profile?.avatarPreset && !profile?.profileImageUrl
       ? AVATAR_PRESET_EMOJI[profile.avatarPreset as keyof typeof AVATAR_PRESET_EMOJI]
       : null
 
-  /* Search matches a card's description as well as its title — "password"
-     should find Security. */
+  const snap = ent.snapshot
+  const status = ent.loading ? null : (snap?.status ?? 'none')
+  const issues = hubIssues({ profile, notificationsOff: Boolean(badges.notifications), planStatus: status })
+  const lead = issues[0] ?? null
+  const headline = issues.length === 0 ? g.headClear : issues.length === 1 ? issueHead(lead!, g) : g.headMany(issues.length)
+
+  /* Search matches a card's description as well as its title — "password" should find Security. */
   const cards = useMemo(() => {
     const q = query.trim().toLowerCase()
     const all = HUB_ORDER.map((id) => ({
@@ -353,72 +338,94 @@ function SettingsHub({
     return q ? all.filter((c) => `${c.title} ${c.desc}`.toLowerCase().includes(q)) : all
   }, [query, t])
 
-  const snap = ent.snapshot
-  const status = snap?.status ?? 'none'
+  /** One line of real state per card, or null. `warn` marks a state the person probably did not intend. */
   const periodEnd = snap?.currentPeriodEnd ? new Date(snap.currentPeriodEnd).toLocaleDateString() : null
-  const planDetail = ent.loading
-    ? null
-    : status === 'none'
-      ? t('settings.hub.planFreeDetail')
-      : periodEnd
-        ? `${status === 'active' ? t('settings.billing.renews') : t('settings.billing.accessUntil')} ${periodEnd}`
-        : HUB_STATUS_KEYS[status]
-          ? t(HUB_STATUS_KEYS[status])
-          : status.replace(/_/g, ' ')
-  /* Same gate as BillingSettingsSection: an admin bypass has no Stripe customer to open. */
-  const portal = ent.hasAnyPaid && !ent.isAdminBypassAccount
+  function stateOf(id: SettingsTabId): { text: string; warn?: boolean; todo?: boolean } | null {
+    switch (id) {
+      case 'profile': {
+        if (!profile) return null
+        const missing = firstMissingField(profile)
+        return missing ? { text: g.fixProfileField(missing), todo: true } : { text: g.profileDone }
+      }
+      case 'security': {
+        const s = securityState(profile)
+        if (s === 'emailUnverified') return { text: g.securityEmailUnverified, warn: true }
+        if (s === 'phoneUnverified') return { text: g.securityPhoneUnverified, warn: true }
+        if (s === 'emailAndPhone') return { text: g.securityEmailAndPhone }
+        if (s === 'emailOnly') return { text: g.securityEmailOnly }
+        if (s === 'phoneOnly') return { text: g.securityPhoneOnly }
+        return null
+      }
+      case 'notifications':
+        if (!profile) return null
+        return badges.notifications ? { text: g.notificationsOff, warn: true } : { text: g.notificationsOn }
+      case 'connected': {
+        if (!profile) return null
+        const names = linkedAccountNames(profile)
+        return { text: names.length > 0 ? names.join(', ') : g.connectedNone }
+      }
+      case 'preferences':
+        if (!profile) return null
+        return { text: g.preferences(languageName(profile.preferredLanguage), profile.timezone ?? null) }
+      case 'rank':
+        return profile?.xpLevel != null ? { text: g.level(profile.xpLevel, profile.rankTier ?? null) } : null
+      case 'billing': {
+        if (ent.loading) return null
+        if (ent.error) return { text: planText, warn: true }
+        if (ent.isAdminBypassAccount) return { text: g.planAdmin(planText) }
+        if (status === 'past_due' || status === 'grace') return { text: g.planPaymentDue(planText), warn: true }
+        if (status === 'none' || !ent.hasAnyPaid) return { text: g.planFree }
+        if (periodEnd) return { text: status === 'active' ? g.planRenews(planText, periodEnd) : g.planUntil(planText, periodEnd) }
+        return { text: planText }
+      }
+      default:
+        return null
+    }
+  }
 
   return (
     <main className="ns-hub" data-testid="settings-hub">
-      <h1 className="ns-hub-title">{t('settings.title')}</h1>
-      {notice}
-
-      <section className="ns-hub-id" aria-label={name}>
-        <span className="ns-hub-avatar">
-          {profile?.profileImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.profileImageUrl} alt="" />
-          ) : presetEmoji ? (
-            <span className="ns-avatar-emoji">{presetEmoji}</span>
-          ) : (
-            initialsFrom(name)
-          )}
-        </span>
-        <div className="ns-hub-who">
-          <div className="ns-hub-name-row">
-            <span className="ns-hub-name">{name}</span>
-            {username ? <span className="ns-hub-handle">@{username}</span> : null}
-          </div>
-          <div className="ns-hub-chips">
-            {level != null ? (
-              <span className="ns-hub-chip">
-                {tInterpolate('settings.hub.levelShort', { level })}
-                {tier ? ` · ${tier}` : ''}
-              </span>
-            ) : null}
-            <span className="ns-hub-chip" data-tone={isPro ? 'plan' : undefined}>
-              {planText}
-            </span>
-            {ent.isAdminBypassAccount ? (
-              <span className="ns-hub-chip" title={t('settings.hub.bypassTitle')}>
-                {t('settings.hub.bypassTag')}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="ns-hub-completion">
-          <div className="ns-hub-completion-row">
-            <span>{t('settings.hub.completion')}</span>
-            <b>{pct}%</b>
-          </div>
-          <div className="ns-hub-meter" aria-hidden="true">
-            <span style={{ width: `${pct}%` }} />
-          </div>
-          <span className="ns-hub-nudge">
-            {missing ? t(`settings.hub.nudge.${missing}`) : t('settings.hub.nudge.done')}
+      <header className="ns-hubg-head" data-testid="settings-guide">
+        <p className="ns-hubg-eyebrow">
+          <span className="ns-hubg-avatar" aria-hidden="true">
+            {profile?.profileImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.profileImageUrl} alt="" />
+            ) : presetEmoji ? (
+              <span className="ns-avatar-emoji">{presetEmoji}</span>
+            ) : (
+              initialsFrom(name)
+            )}
           </span>
-        </div>
-      </section>
+          {g.eyebrow(profile?.username ? `@${profile.username}` : name)}
+        </p>
+        <h1 className="ns-hubg-title" data-testid="settings-guide-headline">
+          {headline}
+        </h1>
+        <p className="ns-hubg-intro">{g.intro}</p>
+        {issues.length > 0 ? (
+          <div className="ns-hubg-chips">
+            {issues.map((issue) => (
+              <button
+                key={issue.key}
+                type="button"
+                className="ns-hubg-chip"
+                data-issue={issue.key}
+                data-testid={`settings-guide-fix-${issue.key}`}
+                onClick={() => onOpen(issue.tab)}
+              >
+                {issueFix(issue, g)} →
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {lead ? (
+          <p className="ns-hubg-why" data-testid="settings-guide-why">
+            {issueWhy(lead, g)}
+          </p>
+        ) : null}
+      </header>
+      {notice}
 
       {/* Grouped, and a group with no match drops out while searching. */}
       {HUB_GROUPS.map((group) => {
@@ -428,18 +435,18 @@ function SettingsHub({
         return (
           <section key={group.id} className="ns-hub-group" aria-labelledby={headingId}>
             <h2 id={headingId} className="ns-hub-group-title">
-              {t(`settings.hub.group.${group.id}`)}
+              {g[GROUP_TITLE_KEY[group.id]]}
             </h2>
             <ul className="ns-hub-grid" aria-labelledby={headingId}>
               {groupCards.map((c) => {
                 const Icon = NAV_ICON[c.id]
-                const badge = badges[c.id]
+                const state = stateOf(c.id)
                 return (
                   <li key={c.id}>
                     <button
                       type="button"
                       className="ns-hub-card"
-                      data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
+                      data-tone={state?.warn ? 'warn' : undefined}
                       data-testid={`settings-hub-card-${c.id}`}
                       onClick={() => onOpen(c.id)}
                     >
@@ -448,16 +455,16 @@ function SettingsHub({
                           <Icon />
                         </span>
                         <span className="ns-hub-card-title">{c.title}</span>
-                        {badge ? (
-                          <span className="ns-nav-badge" data-tone={badge.tone}>
-                            {badgeText(badge.text, t)}
-                          </span>
-                        ) : null}
+                        <span className="ns-hubg-go" aria-hidden="true">
+                          →
+                        </span>
                       </span>
+                      {state ? (
+                        <span className="ns-hubg-state" data-tone={state.warn ? 'warn' : state.todo ? 'todo' : undefined} data-testid={`settings-hub-state-${c.id}`}>
+                          {state.text}
+                        </span>
+                      ) : null}
                       <span className="ns-hub-card-desc">{c.desc}</span>
-                      <span className="ns-hub-cta" aria-hidden="true">
-                        {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
-                      </span>
                     </button>
                   </li>
                 )
@@ -469,23 +476,6 @@ function SettingsHub({
       {cards.length === 0 ? (
         <p className="ns-hub-empty">{tInterpolate('settings.hub.noMatch', { query })}</p>
       ) : null}
-
-      <section className="ns-hub-plan" aria-label={t('settings.billing.currentPlan')}>
-        <div className="ns-hub-plan-copy">
-          <span className="ns-hub-plan-label">{t('settings.billing.currentPlan')}</span>
-          <span className="ns-hub-plan-name">{planText}</span>
-          {planDetail ? <span className="ns-hub-plan-detail">{planDetail}</span> : null}
-        </div>
-        {ent.loading ? null : portal ? (
-          <a className="ns-hub-plan-btn" href="/api/subscription/billing-portal" data-testid="settings-hub-manage-billing">
-            {t('settings.billing.manageBilling')}
-          </a>
-        ) : (
-          <a className="ns-hub-plan-btn" href="/pricing" data-testid="settings-hub-pricing">
-            {ent.hasAnyPaid ? t('settings.billing.changePlan') : t('settings.billing.viewPlans')}
-          </a>
-        )}
-      </section>
     </main>
   )
 }

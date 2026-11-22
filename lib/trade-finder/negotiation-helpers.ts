@@ -1,5 +1,3 @@
-export type AllowedAsset = { id: string; label: string; kind: "PLAYER" | "PICK" };
-
 export function buildFaabSteps(userFaabRemaining?: number): number[] {
   const base = [3, 5, 8, 12];
   if (!userFaabRemaining || userFaabRemaining <= 0) return [];

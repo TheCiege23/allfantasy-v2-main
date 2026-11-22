@@ -15,8 +15,6 @@
  * writers touch, and a malformed entry must cost one chip rather than the row.
  */
 
-export type StoredReaction = { emoji: string; count: number; userIds: string[] }
-
 export type ViewerReaction = {
   emoji: string
   /** Derived from `userIds`, not from the stored `count`, which can drift. */

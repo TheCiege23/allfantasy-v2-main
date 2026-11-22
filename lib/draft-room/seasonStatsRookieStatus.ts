@@ -35,7 +35,7 @@
 
 export type RookieVerdict = 'rookie' | 'not_rookie' | 'unknown'
 
-export type SeasonStatsRookieSport = 'MLB' | 'NBA' | 'NHL'
+type SeasonStatsRookieSport = 'MLB' | 'NBA' | 'NHL'
 
 const SEASON_STATS_ROOKIE_SPORTS: ReadonlySet<string> = new Set<SeasonStatsRookieSport>(['MLB', 'NBA', 'NHL'])
 
@@ -44,7 +44,7 @@ export function isSeasonStatsRookieSport(sport: unknown): sport is SeasonStatsRo
 }
 
 /** The only `player_season_stats.source` this module reads (see the header). */
-export const ROOKIE_STATS_SOURCE = 'rolling_insights'
+const ROOKIE_STATS_SOURCE = 'rolling_insights'
 
 /**
  * MLB's official rookie limits (owner's default rule): a player is a rookie for season S while,
@@ -52,8 +52,8 @@ export const ROOKIE_STATS_SOURCE = 'rolling_insights'
  * pitched. ⚠ The third clause — 45 days on the active roster — is ignored: we store no roster-day
  * data, so a bench player with few at-bats can read as a rookie when MLB would not call him one.
  */
-export const MLB_ROOKIE_MAX_AT_BATS = 130
-export const MLB_ROOKIE_MAX_INNINGS = 50
+const MLB_ROOKIE_MAX_AT_BATS = 130
+const MLB_ROOKIE_MAX_INNINGS = 50
 /**
  * NHL, the official rookie rule: a player is NOT a rookie for season S if, in any single season
  * before S, he played more than 25 regular-season NHL games, or he played 6 or more in each of any
@@ -61,16 +61,16 @@ export const MLB_ROOKIE_MAX_INNINGS = 50
  * we have no reliable birth dates (pool ages come from a DOB the provider once mangled), so an older
  * player with little NHL time can read as a rookie-eligible `unknown` when the NHL would not.
  */
-export const NHL_ROOKIE_MAX_GAMES_IN_ONE_SEASON = 25
-export const NHL_ROOKIE_TWO_SEASON_GAMES = 6
+const NHL_ROOKIE_MAX_GAMES_IN_ONE_SEASON = 25
+const NHL_ROOKIE_TWO_SEASON_GAMES = 6
 /**
  * The youngest age at which we assume a player could have had major-league time. Pool ages come
  * from a DOB the provider once mangled (±1 year, `contracts/rolling-insights/GAPS.md`), so this sits
  * below the modern youngest debuts (18-19) on purpose: a wider window only makes `rookie` rarer.
  */
-export const MLB_EARLIEST_CAREER_AGE = 16
+const MLB_EARLIEST_CAREER_AGE = 16
 
-export type StoredSeasonStatsRow = {
+type StoredSeasonStatsRow = {
   season: string | number
   stats: unknown
   gamesPlayed?: number | null
@@ -210,7 +210,7 @@ export function mlbRookieVerdict(args: {
   return 'rookie'
 }
 
-export function rookieVerdictFromSeasonStats(
+function rookieVerdictFromSeasonStats(
   sport: SeasonStatsRookieSport,
   args: {
     rows: readonly StoredSeasonStatsRow[]

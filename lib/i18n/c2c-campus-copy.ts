@@ -4,7 +4,7 @@
  * dynasty-format-copy.ts: one component reads it, through `useLanguage()`; anything that is not Spanish
  * reads English. `{{n}}`-style placeholders are filled by `campusCopy`.
  */
-export type CampusLang = 'en' | 'es'
+type CampusLang = 'en' | 'es'
 
 export function campusLang(language: string | null | undefined): CampusLang {
   return String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'
@@ -47,7 +47,7 @@ export const CAMPUS_COPY = {
   },
 } as const satisfies Record<string, Record<CampusLang, string>>
 
-export type CampusCopyKey = keyof typeof CAMPUS_COPY
+type CampusCopyKey = keyof typeof CAMPUS_COPY
 
 export function campusCopy(lang: CampusLang, key: CampusCopyKey, vars: Record<string, string | number> = {}): string {
   return CAMPUS_COPY[key][lang].replace(/\{\{(\w+)\}\}/g, (_, k: string) => (k in vars ? String(vars[k]) : ''))

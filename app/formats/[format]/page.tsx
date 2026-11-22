@@ -4,8 +4,9 @@ import { SpecialtyFormatPreview } from '@/components/specialty-preview/Specialty
 import { SPECIALTY_PREVIEW_FORMATS, getSpecialtyPreview } from '@/lib/specialty-preview/formats'
 
 /**
- * /formats/king-of-the-hill and /formats/pirate — static previews for formats that have art but
- * no engine yet. See lib/specialty-preview/formats.ts for why there is no rules list here.
+ * /formats/king-of-the-hill — a static preview for a format that has art but no engine yet. See
+ * lib/specialty-preview/formats.ts for why there is no rules list here. /formats/pirate used to
+ * live here too; Pirate shipped, so that path now 308s to /league-types/pirate (next.config.js).
  */
 export const dynamicParams = false
 

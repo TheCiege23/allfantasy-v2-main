@@ -10,13 +10,13 @@ export function TokenBalanceWidget() {
   return (
     <section
       className="rounded-xl border border-amber-400/25 bg-amber-500/10 p-3"
-      aria-label="AI token balance"
+      aria-label="Chimmy token balance"
       data-testid="token-balance-widget"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Coins className="h-4 w-4 text-amber-300" />
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-100/90">AI Tokens</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-100/90">Chimmy Tokens</p>
         </div>
         <Link
           href="/tokens"

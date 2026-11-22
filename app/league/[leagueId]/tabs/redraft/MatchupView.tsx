@@ -230,7 +230,7 @@ export function MatchupView({
           <span className="bg-gradient-to-r from-[#ff3d81] to-violet-400 bg-clip-text text-[11px] font-bold text-transparent">
             AF
           </span>
-          <span>Weather-sensitive scoring surfaces use cached data before any AI analysis.</span>
+          <span>Weather-sensitive scoring surfaces use cached data before any Chimmy analysis.</span>
         </div>
       ) : null}
     </div>

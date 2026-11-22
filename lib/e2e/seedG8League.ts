@@ -23,7 +23,7 @@ import { executeCanonicalLeagueCreation } from '@/lib/league-creation/canonical/
 import { syncCompletedDraftToRedraftSeason } from '@/lib/redraft/finalizeDraftToRedraftSeason'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
-export type SeededG8League = {
+type SeededG8League = {
   mark: string
   leagueId: string
   seasonId: string
@@ -52,7 +52,7 @@ export type SeededG8League = {
  */
 const E2E_PLAYER_SOURCE = 'e2e-g8-fixture'
 
-export type SeedG8Options = {
+type SeedG8Options = {
   team?: string
   /** Unique season year isolates the global PlayerWeeklyScore rows per run. */
   season?: number

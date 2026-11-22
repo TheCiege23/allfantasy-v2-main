@@ -1,6 +1,6 @@
 import { computeWinProbability } from "./intelligence/data-engine"
 
-export type NormalizedTeamAnalytics = {
+type NormalizedTeamAnalytics = {
   teamId: string
   tournamentId: string
   seasonYear: number
@@ -18,7 +18,7 @@ export type NormalizedTeamAnalytics = {
   sourceTimestamp: string
 }
 
-export type MatchupAnalytics = {
+type MatchupAnalytics = {
   tournamentId: string
   gameId: string
   round: number
@@ -33,7 +33,7 @@ export type MatchupAnalytics = {
   freshnessTimestamp: string
 }
 
-export type SeedHistoryMetric = {
+type SeedHistoryMetric = {
   sport: "ncaam"
   higherSeed: number
   lowerSeed: number
@@ -58,7 +58,7 @@ export type NodeProbabilityMap = Record<
   { pHome: number; pAway: number }
 >
 
-export type BracketSimulationSummary = {
+type BracketSimulationSummary = {
   tournamentId: string
   entryId: string
   simulations: number
@@ -189,7 +189,7 @@ const SEED_HISTORY: SeedHistoryMetric[] = [
   },
 ]
 
-export function lookupSeedHistory(args: {
+function lookupSeedHistory(args: {
   higherSeed: number | null
   lowerSeed: number | null
   round: number

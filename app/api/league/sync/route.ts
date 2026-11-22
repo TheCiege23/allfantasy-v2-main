@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { syncLeague, getDecryptedAuth } from '@/lib/league-sync-core';
 import { getResendClient } from '@/lib/resend-client';
+import { OUTSIDER_RESYNC_ERROR, resolveLeagueCopyTarget } from '@/lib/league-import/existingLeagueCopy';
 
 export async function POST(req: NextRequest) {
   let userId: string | undefined;
@@ -34,6 +35,27 @@ export async function POST(req: NextRequest) {
 
     if (!['sleeper', 'mfl', 'espn', 'yahoo', 'fantrax'].includes(normalizedPlatform)) {
       return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 });
+    }
+
+    /*
+     * 🛑 `syncLeague` upserts the CALLER's row, so a member of a league someone else imported got
+     * their own owned copy here — and an owner reads as the commissioner everywhere. The import
+     * refuses that; so does this (lib/league-import/existingLeagueCopy.ts). Before any provider
+     * call or credential decrypt, because the answer does not depend on them.
+     */
+    const copy = await resolveLeagueCopyTarget({ userId, platform: normalizedPlatform, platformLeagueId: String(platformLeagueId) });
+    if (copy.kind === 'member') {
+      return NextResponse.json(
+        {
+          error: "You're already in this league on AllFantasy. Open it from your leagues to see the latest.",
+          leagueId: copy.leagueId,
+          alreadyInLeague: true,
+        },
+        { status: 409 }
+      );
+    }
+    if (copy.kind === 'outsider') {
+      return NextResponse.json({ error: OUTSIDER_RESYNC_ERROR }, { status: 409 });
     }
 
     if (normalizedPlatform !== 'sleeper') {
@@ -76,7 +98,7 @@ export async function POST(req: NextRequest) {
                   <li>Format: ${(result as any).isDynasty ? 'Dynasty' : 'Redraft'}</li>
                   <li>Scoring: ${((result as any).scoring || (result as any).scoringType || 'STD').toUpperCase()}</li>
                 </ul>
-                <p>Your AI tools (Waiver AI, Trade Analyzer, Roster Report) will now use the latest data.</p>
+                <p>Your Chimmy tools (Waiver Chimmy, Trade Analyzer, Roster Report) will now use the latest data.</p>
                 <p style="color: #64748b; font-size: 0.85em; margin-top: 24px;">
                   Sync ID: ${(result as any).leagueId || (result as any).id || 'N/A'}<br>
                   If this wasn't you, contact support.

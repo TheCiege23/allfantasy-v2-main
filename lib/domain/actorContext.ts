@@ -34,7 +34,7 @@ import { type DomainError, invariant } from './errors'
 declare const ACTOR_CONTEXT_BRAND: unique symbol
 
 /** The data. Not constructible on its own — see `ActorContext`. */
-export type ActorContextFields = {
+type ActorContextFields = {
   readonly userId: string
   /**
    * Denormalised display name, captured at request time.

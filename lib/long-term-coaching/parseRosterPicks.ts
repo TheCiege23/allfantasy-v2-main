@@ -1,6 +1,6 @@
 /** Extract future draft pick capital from synced roster JSON (Sleeper-style). */
 
-export type ParsedDraftPick = {
+type ParsedDraftPick = {
   season: number
   round: number
   weightScore: number

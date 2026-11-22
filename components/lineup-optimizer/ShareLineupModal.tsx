@@ -20,7 +20,7 @@ function buildShareText(engine: DecisionEngineJson | null, projected: number, wi
     '',
     starters,
     '',
-    'Optimized with AllFantasy AI · allfantasy.ai',
+    'Optimized with AllFantasy Chimmy · allfantasy.ai',
   ].join('\n')
 }
 

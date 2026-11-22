@@ -11,6 +11,8 @@ vi.mock('@/lib/draft-lottery/lotteryConfigStorage', () => ({ getDraftOrderModeAn
 vi.mock('@/lib/draft-lottery/WeightedDraftLotteryEngine', () => ({ runWeightedLottery: m.run }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, draftSession: { findFirst: m.draft, update: m.update } } }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.audit }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { POST } from '@/app/api/leagues/[leagueId]/draft-lottery/run/route'
 

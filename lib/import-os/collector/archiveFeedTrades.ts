@@ -67,7 +67,7 @@ export function feedTradeToFact(t: FeedTrade, season: number): NormalizedTradeFa
   }
 }
 
-export type ArchiveFeedTradesResult =
+type ArchiveFeedTradesResult =
   | { written: number; trades: number }
   | { written: 0; skipped: 'no-completed-trades' | 'no-league-row' | 'no-rosters' | 'failed' }
 

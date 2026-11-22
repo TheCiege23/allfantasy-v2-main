@@ -31,21 +31,3 @@ export function buildRedditReadyPost(input: CommunityShareInput): RedditReadyPos
   }
 }
 
-/**
- * Build Reddit submit URL (user picks subreddit; we pre-fill url + title).
- */
-export function buildRedditSubmitUrl(
-  url: string,
-  title: string,
-  subreddit?: string
-): string {
-  const base = 'https://www.reddit.com/submit'
-  const params = new URLSearchParams({
-    url,
-    title: title.slice(0, TITLE_MAX),
-  })
-  if (subreddit) {
-    return `https://www.reddit.com/r/${subreddit.replace(/^r\//, '')}/submit?${params.toString()}`
-  }
-  return `${base}?${params.toString()}`
-}

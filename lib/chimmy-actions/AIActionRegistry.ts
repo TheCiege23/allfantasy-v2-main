@@ -12,7 +12,7 @@ import type {
   AIActionSurface,
 } from './AIActionModel'
 
-export interface ActionMeta {
+interface ActionMeta {
   label: string
   description: string
   safetyClass: AIActionSafetyClass
@@ -42,7 +42,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   auto_queue_best_3: {
     label: 'Auto-Queue Best 3',
-    description: 'Automatically add the top 3 AI-recommended players to your queue',
+    description: 'Automatically add the top 3 Chimmy-recommended players to your queue',
     safetyClass: 'confirmed',
     requiredPermissions: ['member', 'premium'],
     requiresCommissioner: false,
@@ -155,7 +155,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   save_waiver_plan: {
     label: 'Save Waiver Plan',
-    description: 'Save this AI waiver strategy for later in the week',
+    description: 'Save this Chimmy waiver strategy for later in the week',
     safetyClass: 'instant',
     requiredPermissions: ['member', 'premium'],
     requiresCommissioner: false,
@@ -191,7 +191,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   optimize_lineup: {
     label: 'Optimize Lineup',
-    description: 'Apply AI-optimized lineup for maximum projected points',
+    description: 'Apply Chimmy-optimized lineup for maximum projected points',
     safetyClass: 'confirmed',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -248,7 +248,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   propose_trade: {
     label: 'Propose Trade',
-    description: 'Open trade composer with AI-suggested assets pre-loaded',
+    description: 'Open trade composer with Chimmy-suggested assets pre-loaded',
     safetyClass: 'confirmed',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -281,8 +281,8 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
     prefillTarget: 'saved_trades',
   },
   ai_trade_review: {
-    label: 'Send to AI Review',
-    description: 'Get an in-depth private AI review of this trade',
+    label: 'Send to Chimmy Review',
+    description: 'Get an in-depth private Chimmy review of this trade',
     safetyClass: 'instant',
     requiredPermissions: ['member', 'premium'],
     requiresCommissioner: false,
@@ -478,7 +478,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   // ── Commissioner ───────────────────────────────────────────────────────────
   draft_announcement: {
     label: 'Draft Announcement',
-    description: 'Generate and post a league announcement with AI-drafted copy',
+    description: 'Generate and post a league announcement with Chimmy-drafted copy',
     safetyClass: 'confirmed',
     requiredPermissions: ['commissioner'],
     requiresCommissioner: true,
@@ -489,7 +489,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   post_recap: {
     label: 'Post Weekly Recap',
-    description: 'Generate and post an AI-written weekly league recap',
+    description: 'Generate and post a Chimmy-written weekly league recap',
     safetyClass: 'confirmed',
     requiredPermissions: ['commissioner', 'commissioner_subscription'],
     requiresCommissioner: true,
@@ -523,7 +523,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   generate_rule_update: {
     label: 'Generate Rule Update',
-    description: 'Draft an AI-written league rule change message',
+    description: 'Draft a Chimmy-written league rule change message',
     safetyClass: 'confirmed',
     requiredPermissions: ['commissioner', 'commissioner_subscription'],
     requiresCommissioner: true,
@@ -535,7 +535,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   open_health_report: {
     label: 'League Health Report',
-    description: 'Open the full AI league health and activity analysis',
+    description: 'Open the full Chimmy league health and activity analysis',
     safetyClass: 'instant',
     requiredPermissions: ['commissioner'],
     requiresCommissioner: true,
@@ -570,7 +570,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   compare_leagues: {
     label: 'Compare Options',
-    description: 'Compare this league against other AI-matched leagues',
+    description: 'Compare this league against other Chimmy-matched leagues',
     safetyClass: 'instant',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -594,7 +594,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   // ── General ────────────────────────────────────────────────────────────────
   open_deep_dive: {
     label: 'Deep Dive',
-    description: 'Open the full AI analysis for this recommendation',
+    description: 'Open the full Chimmy analysis for this recommendation',
     safetyClass: 'instant',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -608,7 +608,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   save_recommendation: {
     label: 'Save Recommendation',
-    description: 'Save this AI recommendation to review later',
+    description: 'Save this Chimmy recommendation to review later',
     safetyClass: 'instant',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -641,7 +641,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   post_to_league_chat: {
     label: 'Post to League Chat',
-    description: 'Share this AI insight with your league',
+    description: 'Share this Chimmy insight with your league',
     safetyClass: 'confirmed',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -652,7 +652,7 @@ export const AI_ACTION_REGISTRY: Record<AIActionType, ActionMeta> = {
   },
   start_simulation: {
     label: 'Start Simulation',
-    description: 'Run an AI scenario simulation for this context',
+    description: 'Run a Chimmy scenario simulation for this context',
     safetyClass: 'instant',
     requiredPermissions: ['member'],
     requiresCommissioner: false,
@@ -668,15 +668,3 @@ export function getActionMeta(type: AIActionType): ActionMeta {
   return AI_ACTION_REGISTRY[type]
 }
 
-/** All action types grouped by safety class */
-export const INSTANT_ACTIONS = (Object.keys(AI_ACTION_REGISTRY) as AIActionType[]).filter(
-  (t) => AI_ACTION_REGISTRY[t].safetyClass === 'instant',
-)
-
-export const CONFIRMED_ACTIONS = (Object.keys(AI_ACTION_REGISTRY) as AIActionType[]).filter(
-  (t) => AI_ACTION_REGISTRY[t].safetyClass === 'confirmed',
-)
-
-export const DESTRUCTIVE_ACTION_TYPES = (Object.keys(AI_ACTION_REGISTRY) as AIActionType[]).filter(
-  (t) => AI_ACTION_REGISTRY[t].isDestructive,
-)

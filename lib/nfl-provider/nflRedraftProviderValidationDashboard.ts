@@ -17,7 +17,7 @@ import type {
   NflRedraftProviderEvidencePacket,
 } from '@/lib/player-data/nflRedraftProviderEvidencePackets'
 
-export const NFL_REDRAFT_PROVIDER_VALIDATION_DASHBOARD_MODEL_VERSION =
+const NFL_REDRAFT_PROVIDER_VALIDATION_DASHBOARD_MODEL_VERSION =
   'nfl-redraft-provider-validation-dashboard-v1' as const
 
 const DASHBOARD_PROVIDER_IDS: NflRedraftProviderNodeId[] = [
@@ -41,7 +41,7 @@ const SECRET_PATTERNS = [
   'token',
 ]
 
-export type NflRedraftProviderValidationCounts = {
+type NflRedraftProviderValidationCounts = {
   evidencePackets: number
   staleEvidence: number
   missingEvidence: number
@@ -50,7 +50,7 @@ export type NflRedraftProviderValidationCounts = {
   fallbackSelections: number
 }
 
-export type NflRedraftProviderValidationHealthRow = {
+type NflRedraftProviderValidationHealthRow = {
   providerId: NflRedraftProviderNodeId
   displayName: string
   status: NflRedraftProviderLifecycleState
@@ -65,7 +65,7 @@ export type NflRedraftProviderValidationHealthRow = {
   counts: NflRedraftProviderValidationCounts
 }
 
-export type NflRedraftProviderTraceRow = {
+type NflRedraftProviderTraceRow = {
   capability: NflRedraftProviderOrchestratorCapability
   selectedProvider: NflRedraftProviderNodeId | null
   fallbackChain: NflRedraftProviderNodeId[]
@@ -78,7 +78,7 @@ export type NflRedraftProviderTraceRow = {
   warnings: string[]
 }
 
-export type NflRedraftCanonicalTraceView = {
+type NflRedraftCanonicalTraceView = {
   traceType: 'player' | 'game'
   canonicalId: string
   found: boolean
@@ -96,7 +96,7 @@ export type NflRedraftCanonicalTraceView = {
   providerSecretsExposed: false
 }
 
-export type NflRedraftLegacyDirectProviderAuditEntry = {
+type NflRedraftLegacyDirectProviderAuditEntry = {
   routeOrFile: string
   providerUsed: string
   riskLevel: 'low' | 'medium' | 'high'
@@ -130,7 +130,7 @@ export type NflRedraftProviderValidationDashboard = {
   }
 }
 
-export type BuildNflRedraftProviderValidationDashboardInput = {
+type BuildNflRedraftProviderValidationDashboardInput = {
   now?: Date
   env?: Record<string, string | undefined>
   evidencePackets?: NflRedraftProviderEvidencePacket[]

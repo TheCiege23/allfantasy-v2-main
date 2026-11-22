@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { trackDiscoveryLeagueView } from "@/lib/discovery-analytics/client"
 import type { DiscoverySource } from "@/lib/discovery-analytics"
 
-export interface DiscoveryViewTrackerProps {
+interface DiscoveryViewTrackerProps {
   leagueId: string
   source: DiscoverySource
   leagueName?: string | null

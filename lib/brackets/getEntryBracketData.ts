@@ -4,9 +4,7 @@ import { bracketSportToLeagueSport } from "@/lib/brackets/espn-playoff-sync"
 import { fetchTeamNewsForBracket, type BracketTeamNewsLine } from "@/lib/brackets/bracket-team-news"
 import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
 
-export type { BracketTeamNewsLine }
-
-export type BracketNodeWithGame = {
+type BracketNodeWithGame = {
   id: string
   slot: string
   round: number

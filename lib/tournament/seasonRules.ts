@@ -3,6 +3,11 @@ import { getDefaultScoringTemplate, SCORING_DEFAULTS_REGISTRY_VERSION } from '@/
 import type { SeasonBlueprint } from './seasonBlueprint'
 
 const instant = z.union([z.literal(''), z.string().datetime({ offset: true })])
+const draftWindow = z.object({ stage: z.number().int().min(1).max(3), startsAt: instant, completeBy: instant })
+const draftOverride = z.discriminatedUnion('scope', [
+  draftWindow.extend({ scope: z.literal('division'), target: z.string().trim().min(1).max(40) }),
+  draftWindow.extend({ scope: z.literal('league'), target: z.string().regex(/^stage-[1-3]-league-[1-9][0-9]?$/) }),
+])
 export const seasonRulesSchema = z.object({
   version: z.literal(1),
   sport: z.enum(['NFL', 'NBA']),
@@ -36,10 +41,22 @@ export const seasonRulesSchema = z.object({
     regularSeasonEndsAt: instant,
     scheduleReviewed: z.boolean(),
     periods: z.array(z.object({ number: z.number().int().min(1).max(30), startsAt: instant, endsAt: instant, finalizesAt: instant })).max(30),
-    drafts: z.array(z.object({ stage: z.number().int().min(1).max(3), startsAt: instant, completeBy: instant })).max(3),
+    drafts: z.array(draftWindow).max(3),
+    // An explicit list opts in to room deadlines. Preserve older published calendars that omit it.
+    draftOverrides: z.array(draftOverride).max(80).optional(),
   }),
 })
 export type SeasonRules = z.infer<typeof seasonRulesSchema>
+export type SeasonDraftOverride = z.infer<typeof draftOverride>
+
+export function resolveSeasonDraftWindow(calendar: SeasonRules['calendar'], stage: number, league: { key: string; division: string | null }) {
+  const overrides = calendar.draftOverrides?.filter(row => row.stage === stage)
+  return overrides?.find(row => row.scope === 'league' && row.target === league.key)
+    ?? overrides?.find(row => row.scope === 'division' && row.target === league.division)
+    ?? calendar.drafts.find(row => row.stage === stage)
+}
+
+export const SEASON_DRAFT_DEADLINE_POLICY = 'If any league misses its draft deadline, scoring stays locked for the whole stage pending commissioner review.'
 
 /** Snapshot defaults into the saved plan; future registry changes cannot silently alter its rules. */
 export function defaultSeasonRules(sport: 'NFL' | 'NBA', preset: SeasonBlueprint['scoring']): SeasonRules {
@@ -55,7 +72,7 @@ export function defaultSeasonRules(sport: 'NFL' | 'NBA', preset: SeasonBlueprint
     waivers: { mode: 'faab', budget: 100, processingHourUtc: 8, holdHours: 24 },
     tradeDeadlineHoursBeforeCut: 48, tradeReviewHours: 24, correctionHours: 24,
     postponements: 'actual_game_start_period', unresolvedTies: 'audited_commissioner_resolution', finalRosterRelease: false,
-    calendar: { timezone: 'America/New_York', seasonLabel: '', sourceUrl: '', regularSeasonStartsAt: '', regularSeasonEndsAt: '', scheduleReviewed: false, periods: [], drafts: [] },
+    calendar: { timezone: 'America/New_York', seasonLabel: '', sourceUrl: '', regularSeasonStartsAt: '', regularSeasonEndsAt: '', scheduleReviewed: false, periods: [], drafts: [], draftOverrides: [] },
   }
 }
 
@@ -95,15 +112,18 @@ export function assessSeasonRules(config: SeasonBlueprint) {
     add(i > 0 && start < ms(periods[i - 1]!.endsAt), `Period ${p.number}: scoring windows cannot overlap.`)
   })
   add(c.drafts.length !== 3 || new Set(c.drafts.map(d => d.stage)).size !== 3, 'Schedule one draft window for each of the three stages.')
-  for (const stage of [1, 2, 3]) {
-    const draft = c.drafts.find(d => d.stage === stage)
-    if (!draft) continue
+  const windows = [
+    ...c.drafts.map(draft => ({ draft, label: `Stage ${draft.stage}` })),
+    ...(c.draftOverrides ?? []).map(draft => ({ draft, label: `Stage ${draft.stage} ${draft.scope} ${draft.target}` })),
+  ]
+  for (const { draft, label } of windows) {
+    const { stage } = draft
     const first = c.periods.find(p => p.number === (stage === 1 ? config.startWeek : stage === 2 ? config.firstCutWeek + 1 : config.secondCutWeek + 1))
     const prior = c.periods.find(p => p.number === (stage === 2 ? config.firstCutWeek : config.secondCutWeek))
     const start = ms(draft.startsAt), end = ms(draft.completeBy)
-    add(!Number.isFinite(start) || !Number.isFinite(end) || start >= end, `Stage ${stage}: set a draft start and completion deadline.`)
-    add(stage > 1 && (!prior || !Number.isFinite(ms(prior.finalizesAt)) || start < ms(prior.finalizesAt)), `Stage ${stage}: redraft must start after the previous cut's scores finalize.`)
-    add(!first || !Number.isFinite(ms(first.startsAt)) || end + config.redraftBufferHours * 3600000 > ms(first.startsAt), `Stage ${stage}: draft completion must leave ${config.redraftBufferHours} hours before scoring starts.`)
+    add(!Number.isFinite(start) || !Number.isFinite(end) || start >= end, `${label}: set a draft start and completion deadline.`)
+    add(stage > 1 && (!prior || !Number.isFinite(ms(prior.finalizesAt)) || start < ms(prior.finalizesAt)), `${label}: redraft must start after the previous cut's scores finalize.`)
+    add(!first || !Number.isFinite(ms(first.startsAt)) || end + config.redraftBufferHours * 3600000 > ms(first.startsAt), `${label}: draft completion must leave ${config.redraftBufferHours} hours before scoring starts.`)
   }
   return { ready: blockers.length === 0, blockers }
 }

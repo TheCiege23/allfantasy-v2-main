@@ -24,7 +24,7 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
  * picker) — never a free agent, which needs that league's whole pool.
  */
 
-export type InjuryEmailAlert = {
+type InjuryEmailAlert = {
   title: string
   message: string
   leagueName?: string | null

@@ -24,7 +24,7 @@ const VIEWS: Array<{ value: WarehouseView; label: string }> = [
   { value: "transactions", label: "Transactions" },
   { value: "player", label: "Player drill-down" },
   { value: "team", label: "Team drill-down" },
-  { value: "ai", label: "AI insight" },
+  { value: "ai", label: "Chimmy insight" },
 ]
 
 type WarehouseSummary = {
@@ -289,9 +289,9 @@ export default function WarehouseHistoryPanel({
             setApplyToken((v) => v + 1)
           }}
           className="rounded border border-violet-400/30 bg-violet-500/10 px-2 py-1 text-xs text-violet-200 hover:bg-violet-500/20"
-          aria-label="Launch AI warehouse insight"
+          aria-label="Launch Chimmy warehouse insight"
         >
-          AI insight
+          Chimmy insight
         </button>
         <button
           type="button"
@@ -608,7 +608,7 @@ export default function WarehouseHistoryPanel({
 
       {!loading && !error && view === "ai" && (
         <div className="rounded-lg border border-violet-400/30 bg-violet-500/10 p-3 text-sm">
-          <p className="font-medium text-violet-100">Warehouse AI insight context</p>
+          <p className="font-medium text-violet-100">Warehouse Chimmy insight context</p>
           <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-violet-100/90">
             {JSON.stringify(payload?.data ?? {}, null, 2)}
           </pre>

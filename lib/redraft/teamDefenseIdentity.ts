@@ -15,7 +15,7 @@ export function formatNflTeamDefenseName(teamAbbr: string | null | undefined): s
 }
 
 /** True if a string is a raw synthetic team-defense id (`nfl:def:KC`) that must never be shown. */
-export function isRawTeamDefenseId(value: string | null | undefined): boolean {
+function isRawTeamDefenseId(value: string | null | undefined): boolean {
   return /^nfl:def:/i.test(String(value ?? '').trim())
 }
 

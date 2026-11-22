@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import {
   TOOLS_HUB_TITLE,
   TOOLS_HUB_DESCRIPTION,
@@ -10,7 +11,7 @@ import { buildMetadata } from '@/lib/seo'
 export const metadata: Metadata = buildMetadata({
   title: TOOLS_HUB_TITLE,
   description: TOOLS_HUB_DESCRIPTION,
-  canonical: 'https://allfantasy.ai/tools-hub',
+  canonical: `${getPublicSiteOrigin()}/tools-hub`,
 })
 
 export default function ToolsHubPage() {

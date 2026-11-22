@@ -14,7 +14,7 @@ export const SURVIVOR_WAIVER_IMMUNITY_IDOLS = 2
 export const SURVIVOR_WAIVER_IMMUNITY_POWER = 'vote_shield'
 
 export type PoolIdolCandidate = { playerId: string; playerName?: string | null; adp?: number | null }
-export type PoolIdolPlacement = { playerId: string; playerName: string | null; powerType: string }
+type PoolIdolPlacement = { playerId: string; playerName: string | null; powerType: string }
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0

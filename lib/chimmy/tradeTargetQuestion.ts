@@ -17,7 +17,7 @@ import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/trad
  * sentence whose give side is empty — the verb runs straight into "for".
  */
 
-export type TradeTargetQuestion = {
+type TradeTargetQuestion = {
   /** The name as the asker wrote it, trimmed. One to four words. */
   playerName: string
 }

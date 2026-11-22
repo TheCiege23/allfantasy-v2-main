@@ -1,0 +1,22 @@
+import {beforeEach,describe,expect,it,vi} from 'vitest'
+const db=vi.hoisted(()=>({league:{findUnique:vi.fn()},waiverClaim:{findMany:vi.fn(),findUnique:vi.fn(),update:vi.fn(),updateMany:vi.fn()},roster:{findMany:vi.fn(),findFirst:vi.fn(),findUnique:vi.fn(),update:vi.fn()},leagueTeam:{findMany:vi.fn()},survivorGuillotineChop:{count:vi.fn()},waiverRun:{create:vi.fn(),update:vi.fn()},waiverTransaction:{create:vi.fn()},waiverResult:{createMany:vi.fn()},$queryRaw:vi.fn(),$transaction:vi.fn()}))
+const bridge=vi.hoisted(()=>({apply:vi.fn(),mirror:vi.fn()}))
+vi.mock('@/lib/prisma',()=>({prisma:db}))
+vi.mock('@/lib/waiver-wire/season-phase-gate',()=>({loadWaiverRunPhaseGate:async()=>()=>null}))
+vi.mock('@/lib/waiver-wire/leagueWaiverLock',()=>({withLeagueWaiverLock:async(_id:any,_kind:any,run:any)=>({ran:true,value:await run()})}))
+vi.mock('@/lib/redraft/legacyWaiverBridge',()=>({applyLegacyWaiverToCanonical:bridge.apply,mirrorCanonicalRosters:bridge.mirror}))
+vi.mock('@/lib/waiver-wire/settings-service',()=>({getEffectiveLeagueWaiverSettings:async()=>({normalizedWaiverType:'faab',allowZeroFaabBid:true,faabMinBid:0,waiverEngineConfig:{}})}))
+vi.mock('@/lib/waiver-wire/waiver-state-service',()=>({getLeagueWaiverState:async()=>({processingLocked:false}),upsertLeagueWaiverStateAfterRun:vi.fn(async()=>{})}))
+vi.mock('@/lib/waiver-wire/run-hooks',()=>({onWaiverRunComplete:vi.fn(async()=>{})}))
+vi.mock('@/lib/specialty-league/registry',()=>({getSpecialtySpecByVariant:()=>null}))
+vi.mock('@/lib/survivor/SurvivorEffectEngine',()=>({isWaiverFrozenForRoster:async()=>false}))
+vi.mock('@/lib/waiver-wire/commissioner-claim-override',()=>({commissionerOverrideAllowed:()=>false,getCommissionerOverrides:()=>({})}))
+vi.mock('@/lib/ai-learning-system/recordEvent',()=>({recordAfLearningEvent:vi.fn(async()=>{})}))
+vi.mock('@/lib/ai-learning-system/resolveLeagueSport',()=>({resolveLeagueSport:async()=>'NBA'}))
+vi.mock('@/lib/analytics/recordAnalyticsEvent',()=>({recordProductEvent:vi.fn()}))
+import {processWaiverClaimsForLeague} from '@/lib/waiver-wire/process-engine'
+beforeEach(()=>{vi.resetAllMocks();const roster={id:'R',platformUserId:'manager',playerData:{players:['old']},faabRemaining:100,waiverPriority:1};const claim={id:'C',leagueId:'L',rosterId:'R',addPlayerId:'830',dropPlayerId:'old',faabBid:30,priorityOrder:1,status:'pending',metadata:{},roster};db.league.findUnique.mockResolvedValue({id:'L',platform:'allfantasy',leagueType:'redraft',leagueVariant:'survivor_guillotine',sport:'NBA',settings:{lineup_history_version:1},rosterSize:20});db.waiverClaim.findMany.mockResolvedValue([claim]);db.waiverClaim.findUnique.mockResolvedValue(claim);db.roster.findMany.mockResolvedValue([roster]);db.roster.findFirst.mockResolvedValue({redraftRosterId:'native-R',redraftRoster:{seasonId:'S'}});db.roster.findUnique.mockResolvedValue(roster);db.leagueTeam.findMany.mockResolvedValue([]);db.survivorGuillotineChop.count.mockResolvedValue(0);db.waiverRun.create.mockResolvedValue({id:'run'});db.$transaction.mockImplementation(fn=>fn(db));bridge.apply.mockResolvedValue({playerName:'Actual native player',position:'PG'});bridge.mirror.mockResolvedValue(undefined)})
+describe('complete Survivor waiver processor without legacy Player rows',()=>{
+ it('settles through the canonical bridge once and never requires a duplicate legacy writer',async()=>{const result=await processWaiverClaimsForLeague('L',{runType:'manual'});expect(result[0].success).toBe(true);expect(bridge.apply).toHaveBeenCalledTimes(1);expect(bridge.apply.mock.calls[0][1]).toMatchObject({leagueId:'L',rosterId:'R',addPlayerId:'830',dropPlayerId:'old',faabSpent:30});expect(bridge.mirror).toHaveBeenCalledWith(db,['native-R']);expect(db.roster.update).toHaveBeenCalledTimes(1);expect(db.roster.update.mock.calls[0][0].data.faabRemaining).toBe(70);expect('player' in db).toBe(false);expect('redraftRosterPlayer' in db).toBe(false)})
+ it('fails before FAAB or generic ownership updates when canonical settlement rejects the claim',async()=>{bridge.apply.mockRejectedValue(new Error('Verified native identity unavailable'));const result=await processWaiverClaimsForLeague('L',{runType:'manual'});expect(result[0].success).toBe(false);expect(db.roster.update).not.toHaveBeenCalled();expect(bridge.mirror).not.toHaveBeenCalled();expect(result[0].message).toContain('identity unavailable')})
+})

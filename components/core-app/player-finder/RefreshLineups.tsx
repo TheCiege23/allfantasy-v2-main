@@ -86,4 +86,3 @@ export function RefreshLineups({ asOf, nowIso }: { asOf: string | null | undefin
   )
 }
 
-export default RefreshLineups

@@ -15,7 +15,3 @@ export const nhlAdapter: SportAdapter = {
   },
 }
 
-export function getPowerPlayTime(_playerId: string): number {
-  void _playerId
-  return 0
-}

@@ -1,6 +1,5 @@
 export {
   getCommandPaletteShortcut,
-  isCommandPaletteShortcut,
   createCommandPaletteHandler,
 } from "./SearchOverlayController"
 export {
@@ -8,22 +7,13 @@ export {
   getGroupedStaticResults,
   getUniversalLiveResults,
   mergeSearchResults,
-  normalizeSearchQuery,
-  shouldRunLiveSearch,
-  type UniversalSearchPayload,
-  type UniversalLiveResults,
-  type UniversalLiveSearchOptions,
-  type SearchResultGroup,
 } from "./UniversalSearchService"
 export {
-  getQuickActions,
   filterQuickActionsByQuery,
-  UNIVERSAL_QUICK_ACTIONS,
   type QuickActionItem,
 } from "./QuickActionsService"
 export {
   resolveStaticResults,
-  getStaticSearchItems,
   mapLeagueSearchHitsToResults,
   mapPlayerSearchHitsToResults,
   dedupeSearchResults,
@@ -35,7 +25,6 @@ export {
 } from "./SearchResultResolver"
 export {
   ALL_SPORT_SEARCH_FILTER,
-  getSupportedSportFilters,
   getSportSearchFilterOptions,
   resolveSportFilter,
   shouldShowSportFilter,

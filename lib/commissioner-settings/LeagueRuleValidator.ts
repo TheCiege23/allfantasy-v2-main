@@ -3,8 +3,8 @@
  * Sport-aware (NFL, NHL, NBA, MLB, NCAAF, NCAAB, SOCCER).
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
-import type { LeagueSport } from "@prisma/client"
 import type { LeagueSettingsPatch } from "./types"
 
 export type ValidationResult = { valid: true } | { valid: false; error: string }
@@ -42,8 +42,8 @@ export function validateRosterSettings(patch: LeagueSettingsPatch): ValidationRe
   }
   if (patch.leagueSize !== undefined && patch.leagueSize != null) {
     const n = Number(patch.leagueSize)
-    if (!Number.isInteger(n) || n < 2 || n > 32) {
-      return { valid: false, error: "League size must be between 2 and 32" }
+    if (!Number.isInteger(n) || n < 2 || n > MAX_NATIVE_TEAMS) {
+      return { valid: false, error: `League size must be between 2 and ${MAX_NATIVE_TEAMS}` }
     }
   }
   if (patch.benchSize !== undefined && patch.benchSize != null) {

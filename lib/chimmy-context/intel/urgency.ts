@@ -9,7 +9,7 @@
  * Contract: NEVER throws; always returns a fully populated result.
  */
 
-export type UrgencyInput = {
+type UrgencyInput = {
   week: number | null
   playoffStartWeek: number | null
   weeksUntilPlayoffs: number | null
@@ -33,7 +33,7 @@ export type UrgencyInput = {
   rosterWeaknessScore?: number | null
 }
 
-export type UrgencyLevel =
+type UrgencyLevel =
   | "critical"
   | "high"
   | "moderate"

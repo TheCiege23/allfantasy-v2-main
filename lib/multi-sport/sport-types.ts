@@ -41,7 +41,7 @@ export const SPORT_EMOJI: Record<SportType, string> = {
   SOCCER: '⚽',
 }
 
-export function isSportType(s: string): s is SportType {
+function isSportType(s: string): s is SportType {
   return SPORT_TYPES.includes(s as SportType)
 }
 

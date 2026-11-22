@@ -21,7 +21,7 @@ import type { WorldCupChimmyGrounding } from "@/lib/world-cup/worldCupChimmyGrou
  * any answer that touches live scores, cached data, or pool standings.
  * This is what produces "Using live match data from 2:14 PM ET." in responses.
  */
-export type DataSourceDisclosure = {
+type DataSourceDisclosure = {
   /**
    * Overall classification of sports data availability.
    * - live          → active live match feed with scores and minutes
@@ -74,7 +74,7 @@ export type DataSourceDisclosure = {
 // Core packet type — matches the user-defined contract exactly
 // ---------------------------------------------------------------------------
 
-export type ChimmyGroundingPacket = {
+type ChimmyGroundingPacket = {
   sport:
     | "world_cup"
     | "nfl"

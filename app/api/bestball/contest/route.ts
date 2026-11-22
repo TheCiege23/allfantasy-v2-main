@@ -1,9 +1,9 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
   const leagueId = body.leagueId?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   try {
-    await requireCommissionerOnly(leagueId, userId)
+    await requireCommissionerAccess(leagueId, userId, 'league')
   } catch (err) {
     if (err instanceof Response) return err
     throw err

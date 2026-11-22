@@ -20,7 +20,7 @@ import {
  * The start/sit call, as the engine made it. `renderDecisionScenario`'s opening sentence reads this
  * too, so the chip and the sentence under it are one rule.
  */
-export type StartSitCall = { call: 'start'; name: string } | { call: 'start_both' } | { call: 'sit_both' }
+type StartSitCall = { call: 'start'; name: string } | { call: 'start_both' } | { call: 'sit_both' }
 
 export function startSitCall(s: ReadyStartSitScenario): StartSitCall {
   const pick = s.options.find((p) => p.playerId === s.startPlayerId)

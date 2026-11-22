@@ -11,7 +11,7 @@
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import type { IntelligenceDenyReason, IntelligenceRequestContext, IntelligenceTool } from './types'
 
-export type IntelligenceFeatureMapping = {
+type IntelligenceFeatureMapping = {
   featureId: SubscriptionFeatureId
   /** When the subscription check fails, may the user pay with tokens for a one-off run? */
   allowTokenFallback: boolean
@@ -23,7 +23,7 @@ export type IntelligenceFeatureMapping = {
 
 /** Centralized tool → entitlement map. Manager surfaces map to manager features; the commissioner surface is
  *  commissioner-gated. Editing access policy happens HERE, not scattered across routes. */
-export const INTELLIGENCE_FEATURE_MAP: Record<IntelligenceTool, IntelligenceFeatureMapping> = {
+const INTELLIGENCE_FEATURE_MAP: Record<IntelligenceTool, IntelligenceFeatureMapping> = {
   // tokenRuleCode values are real entries in TOKEN_SPEND_RULE_MATRIX; confirm/seed them when wiring live routes.
   user_os: {
     featureId: 'player_ai_recommendations',
@@ -67,7 +67,7 @@ export interface LeagueAccessChecker {
   }): Promise<{ isMember: boolean; isCommissioner: boolean } | null>
 }
 
-export type IntelligenceAccessResult =
+type IntelligenceAccessResult =
   | { ok: true; entitlementMode: 'subscription' | 'tokens'; tokenRuleCode?: string; isCommissioner: boolean }
   | { ok: false; denyReason: IntelligenceDenyReason }
 

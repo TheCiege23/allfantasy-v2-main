@@ -27,13 +27,13 @@ export const SURVIVOR_NAV_LABELS: Readonly<Record<string, string>> = {
 }
 
 /** Section headings in the rail. `null` headings stay unheaded. */
-export const SURVIVOR_SECTION_HEADINGS: Readonly<Record<string, string>> = {
+const SURVIVOR_SECTION_HEADINGS: Readonly<Record<string, string>> = {
   league: 'The island',
   now: 'This episode',
 }
 
 /** Nav keys a Survivor league does not offer. */
-export const SURVIVOR_HIDDEN_NAV_KEYS: ReadonlySet<string> = new Set(['defense-hub'])
+const SURVIVOR_HIDDEN_NAV_KEYS: ReadonlySet<string> = new Set(['defense-hub'])
 
 /**
  * The theme for the selected league, from its resolved type key (`resolveLeagueCardTypeKey`).

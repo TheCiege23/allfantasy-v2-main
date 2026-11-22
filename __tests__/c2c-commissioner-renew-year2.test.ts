@@ -48,6 +48,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueSeason: {
       upsert: leagueSeasonUpsertMock,
     },
+    redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
     leagueTeam: {
       updateMany: leagueTeamUpdateManyMock,
       count: leagueTeamCountMock,
@@ -57,6 +58,7 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromOwner(() => 'commissioner-1'))
 
 describe('C2C commissioner renew / continue-to-next-year', () => {
   beforeEach(() => {

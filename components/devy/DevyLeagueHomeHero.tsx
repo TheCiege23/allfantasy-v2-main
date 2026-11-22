@@ -2,7 +2,7 @@
 
 import { Crosshair, Sparkles, Telescope, Timer, Trophy } from 'lucide-react'
 
-export type DevyLeagueHomeHeroProps = {
+type DevyLeagueHomeHeroProps = {
   leagueName: string
   sport: string
   season: number

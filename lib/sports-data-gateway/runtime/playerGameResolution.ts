@@ -8,7 +8,7 @@
 import type { CanonicalGameSchedule } from '../contracts'
 import { resolveTeam } from '../teamIdentity'
 
-export type PlayerGameResolutionInput = {
+type PlayerGameResolutionInput = {
   canonicalPlayerId: string
   playerTeamReference: string | null // Sleeper team abbreviation
   sport: string

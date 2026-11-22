@@ -24,7 +24,7 @@ export type ProviderHealthState =
   | 'unavailable'
   | 'not_configured'
 
-export type SelectionInput = {
+type SelectionInput = {
   sport: string
   capability: SportsDataCapability
   registry: CapabilityRegistry

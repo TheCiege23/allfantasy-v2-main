@@ -10,6 +10,8 @@ import {
 import {
   EspnImportConnectionError,
   EspnImportLeagueNotFoundError,
+  EspnFormatChangedError,
+  EspnUnavailableError,
   fetchEspnLeagueForImport,
 } from './espn/EspnLeagueFetchService'
 import {
@@ -20,6 +22,8 @@ import {
   YahooImportUnknownSportError,
 } from './yahoo/YahooLeagueFetchService'
 import { describeYahooRejection } from './yahoo/yahooRejection'
+import { isYahooSnapshotSourceId, YahooSnapshotIncompleteError } from './yahoo/snapshot/yahooSnapshotModel'
+import { loadYahooSnapshotPayload } from './yahoo/snapshot/yahooSnapshotStore'
 import {
   fetchMflLeagueForImport,
   MflImportConnectionError,
@@ -192,7 +196,14 @@ export async function runImportedLeagueNormalizationPipeline(
           code: 'UNAUTHORIZED',
         }
       }
-      payload = await fetchYahooLeagueForImport(input.userId, sourceId)
+      /*
+       * A league the commissioner PASTED (yahoo-snapshot:<id>) is read from their own stored
+       * snapshot, never from Yahoo — see lib/league-import/yahoo/snapshot/. It builds the same
+       * YahooImportPayload, so everything below is unchanged.
+       */
+      payload = isYahooSnapshotSourceId(sourceId)
+        ? await loadYahooSnapshotPayload(input.userId, sourceId)
+        : await fetchYahooLeagueForImport(input.userId, sourceId)
     } else if (provider === 'espn') {
       if (typeof input === 'string' || !input.userId) {
         return {
@@ -278,11 +289,23 @@ export async function runImportedLeagueNormalizationPipeline(
     if (e instanceof EspnImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }
     }
+    /*
+     * ESPN timed out / 5xx'd through every retry, or answered with something that is not a league
+     * object. Both messages are written for users ("ESPN import temporarily unavailable…") and
+     * neither is a missing league, so they must not fall through to the generic code below.
+     */
+    if (e instanceof EspnUnavailableError || e instanceof EspnFormatChangedError) {
+      return { success: false, error: e.message, code: 'PROVIDER_UNAVAILABLE' }
+    }
     if (e instanceof YahooImportConnectionError) {
       return { success: false, error: e.message, code: 'CONNECTION_REQUIRED' }
     }
     if (e instanceof YahooImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }
+    }
+    /* A pasted league missing its settings or standings page: the message names the page. */
+    if (e instanceof YahooSnapshotIncompleteError) {
+      return { success: false, error: e.message, code: 'NORMALIZATION_FAILED' }
     }
     if (e instanceof YahooImportUnknownSportError) {
       return { success: false, error: e.message, code: 'UNSUPPORTED_SPORT' }

@@ -81,7 +81,7 @@ const FORMER_ENGLISH = [
   'Many leagues, one bracket', 'Winners steal from losers', 'This league', 'is graded as', 'Sleeper can’t describe', 'League format', 'Buy-in',
   'Confirm format', 'Update format', 'Your commissioner can confirm',
   'Devy command center', 'Multi-year prospect development', 'This league is built', 'Save changes', 'Rosters & slots', 'Devy pool', 'Drafts & picks',
-  'Promotions', 'Trading', 'Future assets', 'AI / Chimmy', 'Commissioner', 'Danger zone', 'Taxi and Devy are separate', 'Enforce separate', 'Devy player pool',
+  'Promotions', 'Trading', 'Future assets', 'Commissioner', 'Danger zone', 'Taxi and Devy are separate', 'Enforce separate', 'Devy player pool',
   'This controls which', 'Filters', 'Annual rookie', 'Future pick trading', 'Promotion rules', 'Trading rules', 'Supports players', 'Uses your sport scoring',
   'Future rookie and devy picks', 'Ask about devy', 'Should I draft', 'Commissioner tools', 'Overrides', 'Advanced / danger zone', 'Disabling devy',
   // Not bare 'exchange rate' / 'Tournament': DEVY_BRIDGE_CAVEAT and the league-type option labels (lib, left on
@@ -124,7 +124,7 @@ describe('🛑 the Rules tab reads Spanish in Spanish', () => {
     lang.language = 'es'
     const r = render(<DevyLeagueSettingsHub ctx={devyCtx()} />)
     for (const s of ['Centro de mando devy', 'Desarrollo de prospectos a varios años', 'Guardar cambios']) expect(r.container.textContent, s).toContain(s)
-    const tabs = ['Plantillas y puestos', 'Grupo devy', 'Drafts y picks', 'Ascensos', 'Trades', 'Puntuación', 'Activos futuros', 'IA / Chimmy', 'Comisionado', 'Zona de peligro']
+    const tabs = ['Plantillas y puestos', 'Grupo devy', 'Drafts y picks', 'Ascensos', 'Trades', 'Puntuación', 'Activos futuros', 'Chimmy', 'Comisionado', 'Zona de peligro']
     for (const label of tabs) {
       fireEvent.click(r.getAllByText(label)[0]!)
       expect(englishIn(r.container), label).toEqual([])

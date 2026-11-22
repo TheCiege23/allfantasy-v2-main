@@ -5,9 +5,9 @@ import type { SupportedSport } from '@/lib/sport-scope'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 
-export type MatchupOpponentResolutionSource = 'manual' | 'sleeper_matchup' | 'native_performance' | 'none'
+type MatchupOpponentResolutionSource = 'manual' | 'sleeper_matchup' | 'native_performance' | 'none'
 
-export type ResolveMatchupOpponentResult = {
+type ResolveMatchupOpponentResult = {
   opponentExternalId: string | null
   opponentName: string | null
   source: MatchupOpponentResolutionSource

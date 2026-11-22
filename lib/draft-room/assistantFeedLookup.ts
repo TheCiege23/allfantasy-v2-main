@@ -5,7 +5,7 @@ import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
  * so the live draft room can attach real news/injury context per player without N+1 API calls.
  */
 
-export type AssistantFeedSnapshot = {
+type AssistantFeedSnapshot = {
   headlineTitle?: string
   headlineAt?: string | null
   headlineTeam?: string | null
@@ -23,7 +23,7 @@ function nameKey(name: string): string {
 }
 
 /** Headline shape from GET /draft/assistant-context */
-export type AssistantHeadlineRow = {
+type AssistantHeadlineRow = {
   title?: string | null
   playerName?: string | null
   team?: string | null
@@ -31,7 +31,7 @@ export type AssistantHeadlineRow = {
 }
 
 /** Injury shape from GET /draft/assistant-context */
-export type AssistantInjuryRow = {
+type AssistantInjuryRow = {
   playerName?: string | null
   team?: string | null
   status?: string | null

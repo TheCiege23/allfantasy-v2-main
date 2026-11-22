@@ -39,7 +39,7 @@ function detectEspnDynasty(raw: EspnImportPayload): boolean {
   return (espnKeeperCount(raw) ?? 0) > 0
 }
 
-export function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
+function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
   const scoringType = raw.settings?.scoringType?.trim().toUpperCase() ?? ''
   if (scoringType.includes('TOTAL_POINTS')) return 'total_points'
   if (scoringType.includes('ROTO')) return 'rotisserie'
@@ -77,6 +77,14 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       raw.commissionerTeamIds,
       raw.teams.map((team) => team.teamId),
     )
+    /*
+     * ESPN reports a default acquisition budget (100) even for a league that does
+     * not use one, so storing it verbatim gave every team "$100 left" in a
+     * waiver-priority league. Only an explicit "no budget" clears it; when the
+     * settings block is missing we do not know, and keep what ESPN sent.
+     */
+    const noWaiverBudget = raw.settings != null && raw.settings.usesFaab === false
+
     const rosters = raw.teams.map((team) => ({
       source_team_id: team.teamId,
       source_manager_id: team.managerId,
@@ -91,9 +99,10 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       points_against: team.pointsAgainst ?? undefined,
       player_ids: team.rosterPlayerIds,
       starter_ids: team.starterPlayerIds,
+      starter_slot_by_id: team.starterSlotById,
       reserve_ids: team.reservePlayerIds,
       taxi_ids: [],
-      faab_remaining: team.faabRemaining,
+      faab_remaining: noWaiverBudget ? null : team.faabRemaining,
       waiver_priority: team.waiverPriority,
     }))
 
@@ -128,12 +137,22 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         matchup.teamId2 == null
           ? []
           : [
-              {
-                roster_id_1: matchup.teamId1,
-                roster_id_2: matchup.teamId2,
-                points_1: matchup.points1,
-                points_2: matchup.points2,
-              },
+              /*
+               * 🛑 AN UNDECIDED MATCHUP CARRIES NO POINTS INTO THE IMPORT. ESPN sends
+               * `totalPoints: 0` for every week not yet played, and the bootstrap derives a result
+               * from points — 0 vs 0 is 'T'. Measured on a week-9 league: weeks 9–14 became six
+               * fake TIES per team in `TeamPerformance`, which Chimmy's league history and the
+               * class-rating week log both count. The pairing is kept; the score arrives on the
+               * sync after ESPN decides the matchup.
+               */
+              matchup.undecided
+                ? { roster_id_1: matchup.teamId1, roster_id_2: matchup.teamId2 }
+                : {
+                    roster_id_1: matchup.teamId1,
+                    roster_id_2: matchup.teamId2,
+                    points_1: matchup.points1,
+                    points_2: matchup.points2,
+                  },
             ],
       ),
     }))
@@ -219,7 +238,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         schedule_unit: 'week',
         matchup_frequency: matchupFrequency,
         waiver_type: raw.settings?.usesFaab ? 'faab' : 'priority',
-        faab_budget: raw.settings?.acquisitionBudget ?? null,
+        faab_budget: noWaiverBudget ? null : raw.settings?.acquisitionBudget ?? null,
         roster_positions: rosterPositions.map((slot) => `${slot.slot}:${slot.count}`),
         scoring_settings: receptionRule ? { rec: receptionRule.points } : undefined,
         espn_settings: raw.settings?.raw ?? null,

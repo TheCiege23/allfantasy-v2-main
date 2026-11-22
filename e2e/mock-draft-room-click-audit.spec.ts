@@ -237,9 +237,9 @@ test.describe('@mock-draft-room click audit', () => {
       await assistantRefresh.click()
       await expect(page.getByTestId('mock-draft-ai-assistant-ask-chimmy')).toHaveAttribute('href', /insightType=draft/)
     }
-    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/AI ADP On/i)
+    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/Chimmy ADP On/i)
     await page.getByTestId('mock-draft-ai-adp-toggle').click()
-    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/AI ADP Off/i)
+    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/Chimmy ADP Off/i)
 
     await expect(page.getByTestId('mock-draft-chat-ai-suggestion')).toContainText('Chimmy:')
     await page.getByTestId('mock-draft-chat-input').fill('Let us prioritize value.')

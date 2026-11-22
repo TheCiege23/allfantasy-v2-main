@@ -4,7 +4,7 @@ import type { NormalizedImportResult, NormalizedRoster } from '@/lib/league-impo
  * Maps normalized provider data → `League` import_* columns for rank XP.
  * Aligns with Sleeper logic in `lib/import/processImportJob.ts` (playoff cutoff, standing === 1).
  */
-export type DerivedImportLeagueStats = {
+type DerivedImportLeagueStats = {
   importWins: number
   importLosses: number
   importTies: number

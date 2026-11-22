@@ -8,7 +8,7 @@ import { pushAskMessages } from './messages/pushAsk'
 
 export type PushAskPlacement = 'follow' | 'finder_home'
 
-export type PushAskCopy = {
+type PushAskCopy = {
   title: Record<PushAskPlacement, string>
   body: Record<PushAskPlacement, string>
   turnOn: string

@@ -27,7 +27,7 @@ export interface DecisionTelemetryEvent {
   at: string
 }
 
-export type DecisionTelemetrySink = (event: DecisionTelemetryEvent) => void
+type DecisionTelemetrySink = (event: DecisionTelemetryEvent) => void
 
 let sink: DecisionTelemetrySink | null = null
 /** Tests/infra can register a sink (e.g., to assert emission) without a real telemetry backend. */

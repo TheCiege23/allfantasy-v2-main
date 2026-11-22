@@ -17,7 +17,7 @@
  */
 import type { TaxiMoveRules, TaxiSeasonPhase } from './taxiMoveRules'
 
-export type TaxiDeadlineKind = 'promotion_closes' | 'lock_closes'
+type TaxiDeadlineKind = 'promotion_closes' | 'lock_closes'
 
 /** The deadlines that close at the end of `week`, in the order they are announced. */
 export function taxiDeadlinesClosingThisWeek(rules: TaxiMoveRules, phase: TaxiSeasonPhase, week: number): TaxiDeadlineKind[] {
@@ -30,9 +30,9 @@ export function taxiDeadlinesClosingThisWeek(rules: TaxiMoveRules, phase: TaxiSe
   return out
 }
 
-export type TaxiTeam = { ownerId: string; teamName: string | null; taxiPlayers: string[] }
+type TaxiTeam = { ownerId: string; teamName: string | null; taxiPlayers: string[] }
 
-export type TaxiDeadlineMessage = { userId: string; audience: 'owner' | 'commissioner'; kind: TaxiDeadlineKind; title: string; body: string }
+type TaxiDeadlineMessage = { userId: string; audience: 'owner' | 'commissioner'; kind: TaxiDeadlineKind; title: string; body: string }
 
 const list = (names: readonly string[]) =>
   names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`

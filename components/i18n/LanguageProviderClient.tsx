@@ -199,3 +199,15 @@ export function useOptionalLanguage() {
   return useContext(LanguageContext) ?? defaultLanguageValue;
 }
 
+/**
+ * Supplies the bundled-English fallback to components that call `useLanguage()` (which throws
+ * without a provider) when no provider is mounted, e.g. the mock draft room rendered bare in a
+ * unit test. Under a real provider it renders its children unchanged, so it never masks the
+ * viewer's language.
+ */
+export function LanguageFallbackBoundary({ children }: { children: React.ReactNode }) {
+  const ctx = useContext(LanguageContext);
+  if (ctx) return <>{children}</>;
+  return <LanguageContext.Provider value={defaultLanguageValue}>{children}</LanguageContext.Provider>;
+}
+

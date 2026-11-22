@@ -1,6 +1,6 @@
 import type { UserProfileForSettings } from "@/lib/user-settings/types"
 
-export type RecoveryOption = "email" | "phone"
+type RecoveryOption = "email" | "phone"
 
 /**
  * Returns which recovery options are available for password reset:

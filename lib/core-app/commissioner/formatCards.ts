@@ -3,8 +3,8 @@ import { messagesFor } from '@/lib/i18n/messages'
 import { leagueSettingsHomeHref } from '@/lib/league-settings-home/settingsEntryRouting'
 import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
 
-export type CommissionerFormatCardFact = { key: string; label: string; value: string }
-export type CommissionerFormatCardLink = { key: string; label: string; href: string }
+type CommissionerFormatCardFact = { key: string; label: string; value: string }
+type CommissionerFormatCardLink = { key: string; label: string; href: string }
 
 export type CommissionerFormatCard = {
   key: string

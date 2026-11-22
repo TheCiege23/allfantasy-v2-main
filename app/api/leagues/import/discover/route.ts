@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
+import { recordImportStarted } from '@/lib/analytics/importFunnel'
 import { prisma } from '@/lib/prisma'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import {
@@ -119,7 +120,7 @@ async function getSleeperLeaguesForDiscovery(userId: string, sport: string, seas
 
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) {
     return auth.response
   }
@@ -163,6 +164,9 @@ export async function POST(req: NextRequest) {
   if (!requestedSportCheck.ok) {
     return NextResponse.json({ error: requestedSportCheck.message }, { status: 400 })
   }
+
+  // The funnel's "import started": a supported provider, accepted. Not awaited into the answer's path.
+  void recordImportStarted(auth.userId, provider, 'discover')
 
   // ── Yahoo: discovery reads the CONNECTED Yahoo account (OAuth use_login=1).
   // No accountIdentifier is needed or used — Yahoo scopes the list to the

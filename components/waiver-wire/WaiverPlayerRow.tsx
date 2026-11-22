@@ -33,6 +33,8 @@ type Props = {
     seasonStatsSummary?: string[]
   }
   sport?: string | null
+  /** The league this wire belongs to — carried into the comparison so its start/sit read can show. */
+  leagueId?: string | null
   /** NHL dynasty: a Fantrax-only prospect — "Prospect" badge, "Unsigned" when he has no club. */
   prospect?: boolean
   onAddClick: () => void
@@ -123,6 +125,7 @@ export default function WaiverPlayerRow({
   trendScore,
   waiverHoldLabel,
   movesClosedReason,
+  leagueId,
 }: Props) {
   const { t } = useOptionalLanguage()
   const pos = player.position || "UNK"
@@ -133,7 +136,13 @@ export default function WaiverPlayerRow({
   const trend = typeof trendScore === "number" ? trendScore : 0
   const logo = player.teamLogoUrl || (player.team ? teamLogoUrl(player.team, sport ?? "NFL") : "")
   const posColor = positionColor(pos, normalizedSport)
-  const detailsHref = `/player-comparison?player=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(normalizedSport)}`
+  // "Compare" opens the comparison tool with this player in the first slot (2026-11-12). It used to
+  // open /player-comparison — the search landing page — which ignores the player entirely.
+  const detailsHref = `/player-comparison-lab?${new URLSearchParams({
+    playerA: player.name,
+    sport: normalizedSport,
+    ...(leagueId ? { leagueId } : {}),
+  })}`
   const sourceLabels = useMemo(() => {
     const labels = [
       player.adpSourceLabel,

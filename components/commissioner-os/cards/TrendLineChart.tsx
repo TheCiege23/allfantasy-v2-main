@@ -2,13 +2,13 @@
 
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-export interface TrendChartSeries {
+interface TrendChartSeries {
   id: string
   name: string
   points: { label: string; value: number }[]
 }
 
-export interface TrendLineChartProps {
+interface TrendLineChartProps {
   series: TrendChartSeries[]
   height?: number
   /** Required — Recharts' SVG output carries no semantics of its own, so this is the chart's only accessible description. */

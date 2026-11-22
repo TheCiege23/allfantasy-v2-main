@@ -4,7 +4,6 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { buildTimelineForRivalry } from './RivalryTimelineBuilder'
 import type { RivalryTier } from './types'
 import { getRivalryTierBadgeColor } from './RivalryTierResolver'
 import { getRivalrySportLabel, normalizeSportForRivalry } from './SportRivalryResolver'

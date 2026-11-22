@@ -32,7 +32,7 @@ export type WeeklyBlueprint = {
  * finished board card, keep the same-league model's later game as a forward-looking fallback.
  * Its odds still require independent matching period provenance below.
  */
-export function upcomingGame(card: WeekMatchup | undefined, outlook: SeasonOutlook | null): SwingMatchup | null {
+function upcomingGame(card: WeekMatchup | undefined, outlook: SeasonOutlook | null): SwingMatchup | null {
   if (!card?.live?.final) return null
   const swing = outlook?.swingByLeague?.[card.leagueId]
   const season = outlook?.leagues.find(l => l.leagueId === card.leagueId)?.season

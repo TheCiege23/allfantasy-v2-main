@@ -7,6 +7,7 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { writeSnapshot } from '@/lib/trade-engine/snapshot-store'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { logUserEventByUsername } from '@/lib/user-events'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   getAllPlayers,
   getLeagueInfo,
@@ -102,6 +103,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/analyze", too
       rateLimit: { action: 'rankings_analyze', maxRequests: 10, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_rankings_analysis`): the /af-legacy screen locks this action (Team Direction), and that lock was the only one —
+     * a direct POST ran the model for anyone. A guest actor (`guest:…`) holds no plan and gets the same lock.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_rankings_analysis' })
+    if (!plan.ok) return plan.response
     const sleeper_username = gate.identity.sleeperUsername
 
     if (!league_id) {

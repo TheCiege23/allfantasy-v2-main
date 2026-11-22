@@ -151,7 +151,7 @@ export default function AutomationSettingsPanel({ leagueId }: { leagueId: string
       <div>
         <h3 className="text-sm font-semibold text-white">Automation Settings</h3>
         <p className="mt-1 text-xs text-white/65">
-          Deterministic automation only — no AI API required. Commissioners control timers, queue auto-pick, CPU empty-team automation, overnight pauses, pause controls, and auction automation.
+          Deterministic automation only — no Chimmy API required. Commissioners control timers, queue auto-pick, CPU empty-team automation, overnight pauses, pause controls, and auction automation.
         </p>
       </div>
 
@@ -213,7 +213,7 @@ export default function AutomationSettingsPanel({ leagueId }: { leagueId: string
           </label>
           {effectiveUI.orphanTeamAiManagerEnabled && (effectiveUI.orphanDrafterMode ?? 'cpu') === 'ai' && (
             <p className="mt-2 text-xs text-amber-300">
-              AI empty-team manager is currently active from AI settings. Enable the CPU toggle above to switch automation back to deterministic CPU mode.
+              Chimmy empty-team manager is currently active from Chimmy settings. Enable the CPU toggle above to switch automation back to deterministic CPU mode.
             </p>
           )}
         </div>

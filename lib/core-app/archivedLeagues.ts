@@ -18,7 +18,7 @@
  * `lineupLockService.ts`).
  */
 
-export type LifecycleRow = {
+type LifecycleRow = {
   id: string
   lifecycleState?: string | null
 }

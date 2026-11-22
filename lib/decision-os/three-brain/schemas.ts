@@ -6,7 +6,7 @@
  */
 import { z } from 'zod'
 
-export const SpecialistFindingSchema = z.object({
+const SpecialistFindingSchema = z.object({
   claim: z.string().min(1),
   evidenceIds: z.array(z.string()).default([]),
   impact: z.enum(['low', 'medium', 'high']).catch('medium').default('medium'),
@@ -18,7 +18,6 @@ export const SpecialistDraftSchema = z.object({
   recommendation: z.string().optional(),
   caveats: z.array(z.string()).default([]),
 })
-export type SpecialistDraft = z.infer<typeof SpecialistDraftSchema>
 
 /** What OpenAI is asked to return. agreementState / confidence / freshness / evidence identity are NOT
  *  model-owned — the server assigns/bounds them afterward. */
@@ -31,7 +30,6 @@ export const SynthesisDraftSchema = z.object({
   caveats: z.array(z.string()).default([]),
   evidenceIds: z.array(z.string()).default([]),
 })
-export type SynthesisDraft = z.infer<typeof SynthesisDraftSchema>
 
 /** What Claude is asked to return when REVIEWING the OpenAI synthesis. `verdict` is the model's judgment;
  *  the server still owns status, confidence, freshness, and identity. */
@@ -49,4 +47,3 @@ export const ClaudeReviewDraftSchema = z.object({
     })
     .optional(),
 })
-export type ClaudeReviewDraft = z.infer<typeof ClaudeReviewDraftSchema>

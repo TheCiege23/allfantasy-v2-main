@@ -10,7 +10,7 @@ import 'server-only'
 
 import { dedupeInFlight } from '@/lib/api-performance/dedupe'
 
-export function leagueRequestDedupeKey(parts: {
+function leagueRequestDedupeKey(parts: {
   leagueId: string
   surface: string
   /** e.g. season, week, userId — omit when not part of cache identity */

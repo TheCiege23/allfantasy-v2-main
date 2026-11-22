@@ -150,4 +150,3 @@ export function PortfolioInventory({ data }: { data: PortfolioData | null }) {
   )
 }
 
-export default PortfolioInventory

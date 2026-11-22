@@ -14,7 +14,7 @@ import {
   readConsolationPlaysFor,
 } from '@/lib/playoff-runtime/consolationPlaysFor'
 
-export interface PlayoffBracketConfig {
+interface PlayoffBracketConfig {
   playoff_team_count: number
   playoff_weeks: number
   playoff_start_week: number | null

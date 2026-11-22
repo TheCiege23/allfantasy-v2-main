@@ -5,7 +5,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getDevyConfig } from '../DevyLeagueConfig'
 import { appendDevyLifecycleEvent } from './DevyAuditLog'
 import {
   DEVY_LIFECYCLE_STATE,

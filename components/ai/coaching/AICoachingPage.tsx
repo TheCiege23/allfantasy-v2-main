@@ -171,7 +171,7 @@ export function AICoachingPage({
                 ))}
                 {plan ? (
                   <span className={cn('rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', modeHeroClass(plan.mode))}>
-                    AI mode · {modeLabel(plan.mode)}
+                    Chimmy mode · {modeLabel(plan.mode)}
                   </span>
                 ) : null}
               </div>

@@ -27,6 +27,7 @@ import {
  *   /e2e/redraft-core/standings/commissioner?sport=MLB&health=none   ← health score unavailable
  *   /e2e/redraft-core/standings/season-outlook?sport=NHL&identity=off ← no stamp (the default look)
  *   /e2e/redraft-core/standings/standings?sport=NFL&leagueType=dynasty ← a non-redraft league: no stamp
+ *   /e2e/redraft-core/standings/standings?elimination=1&h2h=0          ← a guillotine with no weekly games
  *
  * The stamp goes through the real decision (lib/core-app/coreShellRedraftIdentity.ts).
  *
@@ -59,7 +60,8 @@ export default async function RedraftCoreStandingsHarnessPage({
   let body: React.ReactNode
   let checklist: ReturnType<typeof harnessChecklist> | null = null
   if (screen === 'standings') {
-    const data = harnessStandings()
+    // `?h2h=0`: a points-only league (the usual guillotine) — no weekly games, so no records.
+    const data = harnessStandings({ headToHead: sp.h2h !== '0' })
     // `?elimination=1`: a guillotine week — 9 and 10 already chopped, you (4) on the bubble with 7 and 8.
     // An elimination league has no playoff race, so it carries no odds.
     const elimination = sp.elimination === '1' ? { eliminated: ['9', '10'], bubble: ['4', '7', '8'] } : null

@@ -1,5 +1,5 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { requireDraftRouteUser } from '@/lib/draft/api-route-helpers'
 import { getOrCreateDraftSession, startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { rosterConfigurationIncompleteBody } from '@/lib/league/roster-configuration-gate-error'
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'leagueId is required' }, { status: 400 })
     }
 
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
     const { session, created } = await getOrCreateDraftSession(leagueId)
     if (start) {
       const started = await startDraftSession(leagueId)

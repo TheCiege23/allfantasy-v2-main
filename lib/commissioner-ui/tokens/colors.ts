@@ -30,7 +30,7 @@ export const severityTokens: Record<SeverityTier, ColorTokenTriplet> = {
   positive: { text: '--severity-positive-text', bg: '--severity-positive-bg', border: '--severity-positive-border' },
 }
 
-export type StatusRole = 'information' | 'opportunity' | 'disabled'
+type StatusRole = 'information' | 'opportunity' | 'disabled'
 
 export const statusTokens: Record<StatusRole, ColorTokenTriplet> = {
   information: { text: '--status-information-text', bg: '--status-information-bg', border: '--status-information-border' },
@@ -45,7 +45,7 @@ export const statusTokens: Record<StatusRole, ColorTokenTriplet> = {
  * distinct is what prevents benchmarking from blurring into severity
  * language.
  */
-export type BenchmarkComparison = 'above' | 'equal' | 'below'
+type BenchmarkComparison = 'above' | 'equal' | 'below'
 
 export const benchmarkTokens: Record<BenchmarkComparison, string> = {
   above: '--benchmark-above',

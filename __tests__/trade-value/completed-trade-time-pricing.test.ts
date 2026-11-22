@@ -13,12 +13,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  today: [] as unknown[],
+  today: [] as ReturnType<typeof fantasyCalcPlayerFromSnapshot>[],
   captures: new Map<string, unknown[]>(),
   kickerOnTodaysBoard: true,
   table: [] as Array<{ leagueId: string; sleeperUsername: string; snapshotType: string; contextKey: string | null; payloadJson: unknown; createdAt: Date }>,
 }))
 
+vi.mock('@/lib/trade-value-console/afLeaguePlayerPrice', () => ({
+  loadAfNflMarketQuote: async ({ sleeperId }: { sleeperId: string }) => {
+    const row = h.today.find(entry => entry.player.sleeperId === sleeperId)
+    return row ? { marketValue: row.value, position: row.player.position, generatedAt: new Date('2026-10-03T09:00:00.000Z') } : null
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -290,6 +296,7 @@ describe('graded within a day of the trade — the league’s own live chart', (
     const now = hoursAfter(23)
     const live = await gradeAtTradeTime(g, DEAL, at(LIVE_TRADE_AT), {}, now)
     expect(live).toMatchObject({ pricedAsOf: now.toISOString(), grade: { letter: 'A', giveValue: 5000, getValue: 7000 } })
+    expect(live!.grade.lines.map(line => line.valueSource)).toEqual(['af_completed_trades', 'af_completed_trades', 'fantasycalc_pick'])
     expect(live!.grade.lines.every((l) => l.valueAsOf === '2026-10-03T09:00:00.000Z')).toBe(true)
   })
 

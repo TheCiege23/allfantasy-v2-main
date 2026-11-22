@@ -139,6 +139,7 @@ export async function applyDailySportToLineup(
       p.afProjectedPoints = p.ruledOut ? 0 : o.projectedPoints
       p.projectionSource = 'allfantasy'
     }
+    p.periodGames = o.periodGames
     if (p.gameContext == null) p.gameContext = dailyGameContext(p.team, o, kind)
     /*
      * The period's slate WAS read for him and holds no game for his team: an off day (daily lineup) or

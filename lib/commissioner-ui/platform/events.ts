@@ -9,7 +9,7 @@
  * modules that don't exist yet.
  */
 
-export interface CommissionerModuleActivatedEvent {
+interface CommissionerModuleActivatedEvent {
   type: 'module:activated'
   moduleId: string
   timestamp: string
@@ -21,7 +21,7 @@ export interface CommissionerModuleActivatedEvent {
  * own Event Severity model exactly (Informational/Success/Warning/
  * Critical) — reused, not reinvented.
  */
-export interface CommissionerNotificationRaisedEvent {
+interface CommissionerNotificationRaisedEvent {
   type: 'notification:raised'
   severity: 'informational' | 'success' | 'warning' | 'critical'
   message: string

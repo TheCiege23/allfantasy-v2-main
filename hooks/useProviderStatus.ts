@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-export type ProviderStatus = {
+type ProviderStatus = {
   openai: boolean
   deepseek: boolean
   grok: boolean

@@ -287,7 +287,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/feedback", tool: "Lega
     const parsed = feedbackSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       return NextResponse.json(
         { error: firstError?.message || "Invalid feedback data" },
         { status: 400 }

@@ -18,9 +18,19 @@ import { SalaryCapRulesView } from './SalaryCapRulesView'
 import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { SalaryCapSpecialtyHome } from '@/components/league/specialty/salary/SalaryCapSpecialtyHome'
 import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCapBidCheck'
+import { ImportedContractsUpload } from './ImportedContractsUpload'
 
-export interface SalaryCapHomeProps {
+interface SalaryCapHomeProps {
   leagueId: string
+  /** The view a league-workspace tab opens (lib/salary-cap/workspaceTabs.ts). */
+  initialView?: SalaryCapView
+  /**
+   * Inside the league workspace, whose sidebar / Section picker lists every Salary Cap view and links Chat, Waivers,
+   * Trades and Settings. The quick-link row and the in-page tab row / View menu would be a second and third way to
+   * navigate (the same duplication Big Brother had), so they are not drawn. A child view's "Back" returns to the
+   * cap home view, as before.
+   */
+  shellNav?: boolean
 }
 
 const VIEW_LABELS: Record<SalaryCapView, string> = {
@@ -29,15 +39,18 @@ const VIEW_LABELS: Record<SalaryCapView, string> = {
   contracts: 'Contracts',
   'team-builder': 'Team Builder',
   draft: 'Draft & Contracts',
-  ai: 'AI Tools',
+  ai: 'Chimmy Tools',
   rules: 'Rules & Settings',
 }
 
-export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
+export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false }: SalaryCapHomeProps) {
   const [summary, setSummary] = useState<SalaryCapSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [view, setView] = useState<SalaryCapView>('home')
+  const [view, setView] = useState<SalaryCapView>(initialView)
+  useEffect(() => {
+    setView(initialView)
+  }, [initialView])
   /** The free-agent bid check (specialty handoff SalaryCapBid) — a full-screen view over the home. */
   const [bidOpen, setBidOpen] = useState(false)
 
@@ -102,6 +115,13 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
   return (
     <SpecialtyShell format="salary" testId="salary-specialty">
     <div className="space-y-6">
+      {/* Shown above every cap view: an imported league whose contracts AllFantasy does not hold. */}
+      {summary?.contractsNote ? (
+        <p role="note" data-testid="salary-cap-imported-note" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+          {summary.contractsNote}
+        </p>
+      ) : null}
+      {summary?.canImportContracts ? <ImportedContractsUpload leagueId={leagueId} onSaved={() => void load()} /> : null}
       {view === 'home' && summary && (
         <SalaryCapSpecialtyHome
           summary={summary}
@@ -111,6 +131,8 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
         />
       )}
 
+      {!shellNav ? (
+      <>
       {/* Quick links */}
       <div className="flex flex-wrap gap-2">
         <Link
@@ -173,7 +195,18 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
           ))}
         </div>
       </div>
+      </>
+      ) : null}
 
+      {/*
+        The sub-views live in the Salary Cap specialty shell, which is dark in BOTH modes (Cap home reads fine in light
+        mode because it is styled by a CSS module). They are written with Tailwind's text-white, which the global
+        light-mode readability rule (app/globals.css, `.mode-readable [class*="text-white"]`) turns dark — dark text on
+        the shell's dark backdrop, ~1:1 contrast (2026-11-07, Salary Cap audit item 3). `af-draft-dark` is that rule's
+        existing opt-out, so the sub-views keep the shell's theme like Cap home does.
+      */}
+      {view !== 'home' ? (
+      <div className="af-draft-dark" data-cap-subview={view}>
       {view === 'cap-dashboard' && summary && (
         <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
       )}
@@ -192,6 +225,8 @@ export function SalaryCapHome({ leagueId }: SalaryCapHomeProps) {
       {view === 'rules' && summary && (
         <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
       )}
+      </div>
+      ) : null}
     </div>
     </SpecialtyShell>
   )

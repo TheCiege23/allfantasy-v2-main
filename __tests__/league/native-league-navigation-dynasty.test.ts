@@ -29,25 +29,27 @@ describe('native league navigation: Dynasty group', () => {
     const dynasty = groups.find(group => group.id === 'dynasty')
     expect(dynasty?.title).toBe('Dynasty')
     expect(dynasty?.items.map(item => [item.id, item.icon])).toEqual([['dynasty', 'dynasty'], ['dynasty_taxi', 'taxi'], ['dynasty_picks', 'picks']])
-    const more = groups.find(group => group.id === 'more')
-    expect(more?.items.some(item => item.id.startsWith('dynasty'))).toBe(false)
+    // Only in the Dynasty group: no top tab carries them as sub-tabs too.
+    expect(groups[0].items.flatMap(item => item.children).some(child => child.id.startsWith('dynasty'))).toBe(false)
     // It sits right after "This league".
     expect(groups.map(group => group.id).slice(0, 2)).toEqual(['league', 'dynasty'])
   })
 
-  it('a non-dynasty league has no Dynasty group, and its nav is unchanged', () => {
+  it('a non-dynasty league has no Dynasty group: the Sleeper tabs only', () => {
     const groups = buildNativeLeagueNavigation(base, false)
-    expect(groups.map(group => group.id)).toEqual(['league', 'week', 'more'])
-    expect(groups.map(group => group.title)).toEqual(['This league', 'This week', 'More tools'])
-    expect(groups[0].items.map(item => item.label)).toEqual(['League home', 'My team', 'Matchup', 'Players & waivers', 'Trades', 'Draft HQ', 'Standings & playoffs', 'League chat'])
-    expect(groups[2].items).toEqual([{ id: 'legacy', label: 'Legacy', icon: 'more' }])
+    expect(groups.map(group => group.id)).toEqual(['league'])
+    expect(groups.map(group => group.title)).toEqual(['This league'])
+    expect(groups[0].items.map(item => item.label)).toEqual(['Draft', 'Matchup', 'Team', 'League', 'Trade'])
+    // Legacy, once alone under "More tools", is a League sub-tab.
+    expect(groups[0].items.find(item => item.label === 'League')?.children.map(child => child.label)).toEqual(['Overview', 'Standings & playoffs', 'League chat', 'Legacy'])
   })
 
   it('labels and titles go through i18n: Spanish', () => {
     const groups = buildNativeLeagueNavigation([...base, ...dynastyTabs], true, false, tFor('es'))
-    expect(groups.map(group => group.title)).toEqual(['Esta liga', 'Dinastía', 'Esta semana', 'Más herramientas'])
+    expect(groups.map(group => group.title)).toEqual(['Esta liga', 'Dinastía'])
+    expect(groups[0].items.map(item => item.label)).toEqual(['Draft', 'Enfrentamiento', 'Equipo', 'Liga', 'Intercambios'])
     expect(groups[1].items.map(item => item.label)).toEqual(['Centro de dinastía', 'Plantel taxi', 'Picks del draft'])
-    const labels = groups.flatMap(group => [group.title, ...group.items.map(item => item.label)])
+    const labels = groups.flatMap(group => [group.title, ...group.items.flatMap(item => [item.label, ...item.children.map(child => child.label)])])
     expect(labels.join(' ').toLowerCase()).not.toContain('waiver')
     expect(nativeLeagueRecordTitle(tFor('es'))).toBe('Tu historial')
     expect(nativeLeagueRecordLinks('L1', tFor('es')).map(link => link.label)).toEqual(['Tu carrera', 'Rankings'])

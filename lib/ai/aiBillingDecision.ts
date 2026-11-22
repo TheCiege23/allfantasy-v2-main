@@ -20,7 +20,7 @@
  */
 
 /** All possible billing intent reasons */
-export type AiBillingReason =
+type AiBillingReason =
   | "deterministic"         // answered from policy/rules — no AI cost
   | "cache_hit"             // answered from cache — LLM was skipped
   | "llm_required"          // LLM was called — token charge applies
@@ -61,10 +61,10 @@ const PAID_PLANS = new Set(["pro", "commissioner", "war_room", "supreme"])
 const HINTS: Record<AiBillingReason, string> = {
   deterministic:         "No token used · answered from pool data",
   cache_hit:             "No token used · cached insight",
-  llm_required:          "1 token used · AI coaching answer",
-  premium_plan_included: "Included in your plan · AI answer",
+  llm_required:          "1 token used · Chimmy coaching answer",
+  premium_plan_included: "Included in your plan · Chimmy answer",
   validator_blocked:     "No token used · response filtered",
-  provider_missing:      "No token used · AI unavailable",
+  provider_missing:      "No token used · Chimmy unavailable",
   error:                 "No token used · error",
 }
 

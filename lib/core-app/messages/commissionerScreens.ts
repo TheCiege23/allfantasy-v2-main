@@ -174,6 +174,14 @@ export const commissionerScreensMessages = defineMessages({
     scoresPost: 'Post report to league chat',
     scoresPosting: 'Posting…',
     scoresPosted: 'Posted to league chat',
+    scoresIntroEspn: 'Projected points each team started, out of the best lineup it could have started. Imported from ESPN, so these use AllFantasy projections under this league’s scoring, and each lineup as AllFantasy read it after every player’s kickoff. ESPN’s own projections are not stored and may differ. A week is scored only when every starter’s slot was read after his game began.',
+    scoresIntroSleeper: 'Projected points each team started, out of the best lineup it could have started. Imported from Sleeper, so these use AllFantasy projections under this league’s scoring, as of each player’s kickoff. Sleeper’s own projections are not stored and may differ. Players who could not play are left out of the best lineup.',
+    coverageTitle: 'Snapshot coverage',
+    coverageMonitorOff: 'Lineup Integrity scores start once the tanking monitor is on in Integrity settings.',
+    coverageNone: 'No snapshots yet this season. They are taken every hour while the tanking monitor is on.',
+    coverageLatest: (week: number, n: number, of: number) => `Week ${week} snapshots: ${n} of ${of} teams.`,
+    coverageScored: (week: number, n: number, of: number) => `Week ${week} scored: ${n} of ${of} teams.`,
+    coverageGap: 'A team without a snapshot has no score that week.',
 
     // WeeklyRecapReview
     recapErrChimmyQuiet: 'Chimmy is switched off for this league, so the recap cannot post. Turn Chimmy back on under Automations.',
@@ -373,6 +381,14 @@ export const commissionerScreensMessages = defineMessages({
     scoresPost: 'Publicar informe en el chat de la liga',
     scoresPosting: 'Publicando…',
     scoresPosted: 'Publicado en el chat de la liga',
+    scoresIntroEspn: 'Puntos proyectados que cada equipo alineó, sobre la mejor alineación que pudo poner. Como la liga viene de ESPN, se usan las proyecciones de AllFantasy bajo la puntuación de esta liga, y cada alineación tal como AllFantasy la leyó después del inicio del partido de cada jugador. Las proyecciones propias de ESPN no se guardan y pueden ser distintas. Una semana solo recibe puntaje cuando el puesto de cada titular se leyó después de que empezara su partido.',
+    scoresIntroSleeper: 'Puntos proyectados que cada equipo alineó, sobre la mejor alineación que pudo poner. Como la liga viene de Sleeper, se usan las proyecciones de AllFantasy bajo la puntuación de esta liga, al inicio del partido de cada jugador. Las proyecciones propias de Sleeper no se guardan y pueden ser distintas. Los jugadores que no podían jugar quedan fuera de la mejor alineación.',
+    coverageTitle: 'Cobertura de capturas',
+    coverageMonitorOff: 'Los puntajes de integridad de alineación empiezan cuando el monitor de tanking está activado en los ajustes de Integridad.',
+    coverageNone: 'Aún no hay capturas esta temporada. Se toman cada hora mientras el monitor de tanking está activado.',
+    coverageLatest: (week, n, of) => `Capturas de la semana ${week}: ${n} de ${of} equipos.`,
+    coverageScored: (week, n, of) => `Semana ${week} con puntaje: ${n} de ${of} equipos.`,
+    coverageGap: 'Un equipo sin captura no tiene puntaje esa semana.',
 
     // WeeklyRecapReview
     recapErrChimmyQuiet: 'Chimmy está apagado en esta liga, así que el resumen no puede publicarse. Vuelve a activarlo en Automatizaciones.',

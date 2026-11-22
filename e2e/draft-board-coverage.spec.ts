@@ -18,7 +18,9 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
         await expect(cell).toContainText('Example Player 1')
         const cellBounds = await cell.boundingBox()
         expect(cellBounds).not.toBeNull()
-        expect(Math.abs(cellBounds!.width - cellBounds!.height)).toBeLessThanOrEqual(1)
+        // Room v2 (2026-11): tiles are full-width rectangles at a fixed 68px, never taller than wide.
+        expect(Math.abs(cellBounds!.height - 68)).toBeLessThanOrEqual(1)
+        expect(cellBounds!.width).toBeGreaterThanOrEqual(cellBounds!.height)
         expect(await cell.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
         const bounds = await board.boundingBox()
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
@@ -40,11 +42,12 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
   expect((await search.boundingBox())!.width).toBeGreaterThan(120)
   expect((await sort.boundingBox())!.width).toBeGreaterThan(120)
   const tabs = dock.getByRole('tablist')
-  expect(await tabs.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true)
+  // Four tabs since 2026-11-19 (Queue, My team, Chimmy, Chat), so the row may now fit without
+  // scrolling; the last tab must still be reachable and in view either way.
   await tabs.getByRole('tab', { name: /Queue/ }).focus()
   await page.keyboard.press('End')
-  await expect(tabs.getByRole('tab', { name: 'Activity', exact: true })).toBeFocused()
-  await expect(tabs.getByRole('tab', { name: 'Activity', exact: true })).toBeInViewport()
+  await expect(tabs.getByRole('tab', { name: 'Chat', exact: true })).toBeFocused()
+  await expect(tabs.getByRole('tab', { name: 'Chat', exact: true })).toBeInViewport()
   await page.keyboard.press('Home')
   await expect(search).toBeVisible()
 
@@ -56,7 +59,7 @@ test('@draft-room shared live and mock boards fit all sports and narrow docks', 
     const tabsAt = await bar.evaluate(el => [...el.querySelectorAll('button')].map(b => ({
       label: b.textContent, overflow: b.scrollWidth - b.clientWidth, height: b.getBoundingClientRect().height,
     })))
-    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Intel', 'Chat', 'AF Legacy', 'Commish Edit'])
+    expect(tabsAt.map(t => t.label)).toEqual(['Queue', 'Chimmy', 'Chat', 'Commish Edit'])
     for (const t of tabsAt) {
       expect(t.overflow, `${width}px ${t.label}`).toBeLessThanOrEqual(0)
       expect(t.height, `${width}px ${t.label}`).toBeLessThan(40)

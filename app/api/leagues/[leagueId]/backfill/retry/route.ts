@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { getServerSession } from 'next-auth'
@@ -42,7 +43,7 @@ export async function POST(
     select: { id: true, userId: true, platform: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (league.userId !== userId) {
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
   const provider = String(league.platform ?? '').toLowerCase()

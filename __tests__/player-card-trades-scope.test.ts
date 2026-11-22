@@ -218,7 +218,7 @@ describe('memberLeaguePlatformIdsFor — the viewer set', () => {
     expect(args.where.OR).toEqual([
       { userId: 'u1' },
       { redraftMembers: { some: { userId: 'u1' } } },
-      { rosters: { some: { platformUserId: 'u1' } } },
+      { rosters: { some: { OR: [{ platformUserId: 'u1' }, { managerUserId: 'u1' }] } } },
       { teams: { some: { claimedByUserId: 'u1' } } },
     ])
     expect(args.select).toEqual({ platformLeagueId: true })

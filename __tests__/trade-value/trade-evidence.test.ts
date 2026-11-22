@@ -19,7 +19,7 @@ describe('observed trade evidence', () => {
     ], at, ['Roster could not be read.'])
     expect(e.status).toBe('mixed')
     expect(e.issues.join(' ')).toContain('more than 7 days old')
-    expect(e.issues.join(' ')).toContain('estimate or formula')
+    expect(e.issues.join(' ')).toContain('Formula: this value is an estimate (pick curve)')
     expect(e.issues.join(' ')).toContain('Roster could not be read.')
     expect(e.dated).toBe(1)
   })
@@ -28,7 +28,7 @@ describe('observed trade evidence', () => {
     expect(tradeEvidence([line({ valueAsOf: 'bad' })], at).status).toBe('limited')
     expect(tradeEvidence([line({ valueAsOf: '2027-01-01' })], at).status).toBe('limited')
     expect(tradeEvidence([], at).status).toBe('limited')
-    expect(tradeEvidence([line()], 'bad').issues.join(' ')).toContain('freshness cannot be checked')
+    expect(tradeEvidence([line()], 'bad').issues.join(' ')).toContain('can’t check how fresh the values are')
   })
 })
 
@@ -36,7 +36,7 @@ describe('player-slot package review', () => {
   it('reports the net player slots without counting picks or FAAB', () => {
     const review = tradePackageReview([line(), line({ side: 'get' }), line({ side: 'get', name: 'Depth' }), line({ side: 'get', assetKind: 'pick' })])
     expect(review).toMatchObject({ givePlayers: 1, getPlayers: 2, netPlayerSlots: 1 })
-    expect(review?.note).toContain('may require drops')
+    expect(review?.note).toContain('you’ll have to drop someone')
   })
   it('does not guess the kind of an older receipt or invent a penalty for a balanced package', () => {
     expect(tradePackageReview([line(), line({ side: 'get' }), line({ assetKind: undefined })])).toBeNull()

@@ -16,6 +16,7 @@
  *     the season engine's own state too (open draft / `renewedIntoSeason`), inside its transaction.
  * Commissioner only for POST. All members can GET.
  */
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -166,7 +167,7 @@ export async function GET(
   } catch { /* table may not exist */ }
 
   return NextResponse.json({
-    isCommissioner: league.userId === session.user.id,
+    isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'league'),
     currentSeason,
     nextSeason,
     leagueType,
@@ -244,7 +245,8 @@ export async function POST(
     },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
   const zombie = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { universeId: true } })
   if (zombie || league.leagueVariant === 'zombie' || league.leagueType === 'zombie') return NextResponse.json({
     error: 'zombie_season_renewal_required',
@@ -380,6 +382,25 @@ export async function POST(
         },
         { status: statusForRedraftRenewFailure(result.code) },
       )
+    }
+  }
+
+  /*
+   * 🛑 A KEEPER OR DYNASTY LEAGUE IS ALREADY ON NEXT SEASON WHEN RENEW IS PRESSED. Closing the season
+   * builds next year's season shell and moves `League.season` onto it (ensureNextRedraftSeasonShell), so
+   * `league.season + 1` skipped a year: a 2026 keeper league renewed into 2028, and the 2027 history
+   * row was written for a season nobody played (keeper simulation, 2026-11-10: 27 of 27 leagues). When
+   * the league's season is that unplayed shell and the season before it exists, the season engine has
+   * already decided: history belongs to the season before, and next season is the one already current.
+   */
+  if (!redraftRenewal) {
+    const [shell, played] = await Promise.all([
+      prisma.redraftSeason.findFirst({ where: { leagueId, season: currentSeason, status: 'setup' }, select: { id: true, season: true, status: true } }),
+      prisma.redraftSeason.findFirst({ where: { leagueId, season: currentSeason - 1 }, select: { id: true, season: true } }),
+    ])
+    if (shell?.status === 'setup' && shell.season === currentSeason && played?.season === currentSeason - 1) {
+      nextSeason = currentSeason
+      currentSeason = currentSeason - 1
     }
   }
 

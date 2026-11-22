@@ -8,6 +8,7 @@ export const runtime = "nodejs"
 const createEntrySchema = z.object({
   action: z.literal("create_entry"),
   name: z.string().trim().min(1).max(80).optional(),
+  inviteCode: z.string().trim().max(100).optional(),
 })
 
 export async function GET(request: Request, context: { params: Promise<{ challengeId: string }> }) {
@@ -22,6 +23,7 @@ export async function GET(request: Request, context: { params: Promise<{ challen
   const view = await getPlayoffBracketView({
     challengeId: params.data.challengeId,
     requestedEntryId: new URL(request.url).searchParams.get("entryId") ?? undefined,
+    inviteCode: new URL(request.url).searchParams.get("code"),
     user: auth.user,
   })
 
@@ -52,6 +54,7 @@ export async function POST(request: Request, context: { params: Promise<{ challe
       challengeId: params.data.challengeId,
       user: auth.user,
       name: parsed.data.name,
+      inviteCode: parsed.data.inviteCode,
     })
 
     return NextResponse.json({ ok: true, ...result })

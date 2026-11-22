@@ -95,7 +95,7 @@ export type EnvelopeIntent =
  * is a judgement that is not. Presenting the second as the first is how a guess
  * acquires the authority of arithmetic.
  */
-export type FactBasis =
+type FactBasis =
   | 'provider_reported'
   | 'calculated'
   | 'inferred'

@@ -41,4 +41,3 @@ export function PresenceStrip({ viewers }: { viewers: PresentViewer[] }) {
   )
 }
 
-export default PresenceStrip

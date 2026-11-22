@@ -3,7 +3,7 @@
  * Used to decide minimal vs full shell and active product highlighting.
  */
 
-export type ShellVariant = "minimal" | "full"
+type ShellVariant = "minimal" | "full"
 
 /**
  * Paths that use minimal shell (landing, marketing, public tools).

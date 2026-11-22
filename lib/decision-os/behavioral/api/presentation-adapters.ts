@@ -20,14 +20,7 @@ import type { ManagerBehavioralIntelligence }  from '../manager-intelligence'
 import type { LeagueBehavioralIntelligence }   from '../league-intelligence'
 import type { PlatformBehavioralIntelligence } from '../platform-intelligence'
 
-import {
-  buildHealthCard,
-  buildRetentionCard,
-  buildCommissionerCard,
-  buildManagerCard,
-  buildEngagementMetric,
-  buildRetentionMetric,
-} from '../../presentation/cards'
+import { buildHealthCard, buildRetentionCard, buildManagerCard, buildEngagementMetric, buildRetentionMetric } from '../../presentation/cards'
 import {
   buildRecommendationPresentation,
   buildRecommendationPresentationSet,
@@ -107,13 +100,6 @@ export function adaptLeagueBehavioralToPresentation(
       totalManagers:  intel.participationDistribution.totalManagers,
       completeness:   intel.completeness,
     },
-  )
-
-  const commissionerCard = buildCommissionerCard(
-    id,
-    intel.commissionerWorkload,
-    intel.commissionerWorkloadItems,
-    { completeness: intel.completeness },
   )
 
   // Map league recommendations to IPM

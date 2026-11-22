@@ -111,7 +111,9 @@ export function SettingsLockPanel({ leagueId }: { leagueId: string }) {
 
       <ul className="space-y-2">
         {LOCK_GROUPS.map((g) => {
-          const row = view.groups.find((x) => x.group === g)!
+          // An area the server did not send (an older server mid-deploy) is not drawn, never crashed on.
+          const row = view.groups.find((x) => x.group === g)
+          if (!row) return null
           const vote = openVote(g)
           const removable = !view.seasonUnderway
           return (

@@ -220,7 +220,7 @@ export function LineupOptimizerExperience() {
               onChange={(e) => opt.setUseAiExplain(e.target.checked)}
               className="rounded border-white/20"
             />
-            AI narrative
+            Chimmy narrative
           </label>
         </div>
       </div>

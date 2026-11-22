@@ -7,7 +7,7 @@ export interface AntiGamingInput {
   metrics: SnapshotMetrics
 }
 
-export interface AntiGamingResult {
+interface AntiGamingResult {
   rosterId: number
   originalRank: number
   adjustedRank: number
@@ -16,7 +16,7 @@ export interface AntiGamingResult {
   failedMetrics: string[]
 }
 
-export interface AntiGamingJustification {
+interface AntiGamingJustification {
   metric: 'starter_value_percentile' | 'expected_wins' | 'injury_delta' | 'trade_efficiency'
   label: string
   previousValue: number | null

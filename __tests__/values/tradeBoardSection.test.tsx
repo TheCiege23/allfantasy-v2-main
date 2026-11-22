@@ -90,7 +90,7 @@ describe('the honesty rules a table can silently un-make', () => {
     expect(screen.queryByText('0')).toBeNull()
     expect(screen.queryByText('0.0')).toBeNull()
     expect(
-      screen.getByTitle(/not the same as being worth nothing/i),
+      screen.getByTitle(/not the same as worth nothing/i),
     ).toBeTruthy()
   })
 
@@ -102,7 +102,7 @@ describe('the honesty rules a table can silently un-make', () => {
     mount(BOARD({ rows: [row({ value: 240, valueIsFloor: true })] }))
     await screen.findByText('Target Backer')
     expect(screen.getByText('floor')).toBeTruthy()
-    expect(screen.getByTitle(/Do not compare two floor-priced defenders/i)).toBeTruthy()
+    expect(screen.getByTitle(/not equal trade assets/i)).toBeTruthy()
   })
 
   /*
@@ -133,15 +133,18 @@ describe('the honesty rules a table can silently un-make', () => {
     expect(screen.queryByText(/for any kicker in this league/i)).toBeNull()
   })
 
-  it('surfaces the loader’s notes rather than dropping them', async () => {
+  // 2026-11-14: the notes are said once, folded under the board, in the reader's language.
+  it('says what the values mean, folded under the board', async () => {
     mount(BOARD({ notes: ['These values are specific to THIS league.'] }))
-    expect(await screen.findByText(/specific to THIS league/i)).toBeTruthy()
+    const how = await screen.findByTestId('defense-trade-board-how')
+    expect(how.textContent).toMatch(/Values are for this league only/)
+    expect(how.textContent).toMatch(/share one board/)
   })
 })
 
 describe('states that are not an error', () => {
   it.each([
-    ['not_idp_league', /does not score defenders/i],
+    ['not_idp_league', /score defenders/i],
     ['no_projection_history', /No projection history/i],
     ['valuation_refused', /refused rather than guessed/i],
   ])('explains %s instead of rendering an empty table', async (state, copy) => {

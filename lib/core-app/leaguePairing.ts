@@ -286,7 +286,13 @@ export async function resolvePairedHalf(
             .filter(Boolean),
         ),
       ).sort((a, b) => a.localeCompare(b))
-      const requestedTeam = String(member.teamExternalId ?? snap?.userTeam ?? '').trim()
+      /*
+       * ⚠ AN EMPTY teamExternalId MEANS "NOT SET", NOT "THE TEAM NAMED ''". The Peach Bowl / Cream Bowl
+       * link was written with '' on both members (production, 2026-11-21), and `??` only falls back on
+       * null, so the snapshot's own userTeam was never reached: no team matched, and the college half
+       * read as a roster nobody owns. Blank falls back exactly as null does.
+       */
+      const requestedTeam = String(member.teamExternalId?.trim() || snap?.userTeam || '').trim()
       const selectedTeam = teamNames.find((name) => name.toLowerCase() === requestedTeam.toLowerCase()) ?? requestedTeam
       const userTeam = selectedTeam.toLowerCase()
       const teamOf = (r: unknown): string => {

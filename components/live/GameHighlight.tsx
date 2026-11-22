@@ -58,4 +58,3 @@ export function GameHighlight({ youtubeId, title }: { youtubeId: string; title: 
   )
 }
 
-export default GameHighlight

@@ -9,6 +9,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { survivorNotificationKind } from '@/lib/core-app/survivorNotificationIcon'
 import { isAllowedDeepLink } from '@/lib/routing/DeepLinkHandler'
 import { isSafeInternalPath } from '@/lib/auth/auth-intent-resolver'
+import { isSportsNewsType, newsStoryLink } from '@/lib/core-app/notificationsGuide'
 
 /**
  * 22c — the notifications centre, and the push suppression rule behind it.
@@ -43,6 +44,8 @@ export type NotificationFilter =
   | 'lineups'
   | 'drafts'
   | 'commissioner'
+  /** Sports news anyone following that sport gets (`sports_news`, `breaking_news`). Not about your team. */
+  | 'news'
 
 export type NotificationRow = {
   relatedIds?: string[]
@@ -130,7 +133,7 @@ export type NotificationsCenterData = {
  */
 const PUSH_SLOTS = 3
 
-export type PushNotification = {
+type PushNotification = {
   id: string
   /** League name always leads — a reason with no league is unactionable. */
   leagueName: string | null
@@ -166,7 +169,7 @@ export type PushSelection = {
  * Returns a number where higher wins. Deliberately a pure function of the issue
  * so the same input always produces the same slate.
  */
-export function priorityOf(issue: CoreIssue, now: Date): number {
+function priorityOf(issue: CoreIssue, now: Date): number {
   let score = 0
 
   if (issue.deadline) {
@@ -283,14 +286,16 @@ function classify(text: string): NotificationFilter {
 function classifyStored(type: string, title: string, body: string | null, meta: unknown): NotificationFilter {
   const category = categoryFromMeta(meta)
   if (category) {
-    if (['lineup_reminders', 'lineup_alerts', 'injury_alerts'].includes(category)) return 'lineups'
-    if (['trade_proposals', 'trade_accept_reject'].includes(category)) return 'trades'
+    if (['lineup_reminders', 'lineup_alerts', 'injury_alerts', 'imported_lineup'].includes(category)) return 'lineups'
+    if (['trade_proposals', 'trade_accept_reject', 'imported_trade'].includes(category)) return 'trades'
     if (category === 'waiver_processing') return 'waivers'
     if (['chat_mentions', 'direct_messages', 'league_chat'].includes(category)) return 'mentions'
     if (['league_announcements', 'commissioner_alerts'].includes(category)) return 'commissioner'
-    if (['draft_alerts', 'draft_intel_alerts'].includes(category)) return 'drafts'
+    if (['draft_alerts', 'draft_intel_alerts', 'imported_draft'].includes(category)) return 'drafts'
+    if (category === 'breaking_news') return 'news'
     return 'all'
   }
+  if (isSportsNewsType(type)) return 'news'
   if (/news/i.test(type)) return 'all'
   const typed = classify(type)
   return typed !== 'all' ? typed : classify(`${title} ${body ?? ''}`)
@@ -423,6 +428,12 @@ export async function getNotificationsCenter(input: {
     const gameHref = n.type.startsWith('game_') || n.type === 'postgame_recap'
       ? typeof storedHref === 'string' && /^\/core\/live(?:\?|$)/.test(storedHref) ? storedHref : '/core/live'
       : null
+    /*
+     * A sports-news alert carries the story's URL (breakingNewsAlerts writes it as both
+     * actionHref and sourceUrl) and has no league, so it rendered as a row nobody could
+     * open (2026-11-14). It now links to the story itself.
+     */
+    const storyLink = kind === 'news' ? newsStoryLink(n.meta) : null
     const survivorType = survivorNotificationKind(n.type)
     const handoff =
       n.leagueId && n.league
@@ -461,6 +472,8 @@ export async function getNotificationsCenter(input: {
       severity: severityOf(n.severity),
       action: chatHref
         ? { label: 'Open chat', href: chatHref, external: false }
+        : storyLink
+        ? { label: storyLink.label, href: storyLink.href, external: true }
         : n.leagueId
         ? {
             label: n.type === 'trade_offer_reminder' || n.type === 'trade_offer_expiring' ? 'Respond to offer' : kind === 'lineups' ? 'Review lineup' : kind === 'trades' ? 'Review trade' : kind === 'waivers' ? 'Review waivers' : kind === 'drafts' ? 'Open Draft HQ' : 'Open league',
@@ -491,6 +504,7 @@ export async function getNotificationsCenter(input: {
     lineups: all.filter((r) => r.kind === 'lineups').length,
     drafts: all.filter((r) => r.kind === 'drafts').length,
     commissioner: all.filter((r) => r.kind === 'commissioner').length,
+    news: all.filter((r) => r.kind === 'news').length,
   }
 
   /*

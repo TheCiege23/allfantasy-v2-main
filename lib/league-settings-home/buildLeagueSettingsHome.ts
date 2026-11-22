@@ -11,6 +11,8 @@ import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffSt
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { isPirateLeague, readPirateRules, type PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTeamLeagues'
+import { copyLeagueAvailable } from '@/lib/league/copyLeague'
 
 export type SettingsSubPageId =
   | 'general'
@@ -26,6 +28,8 @@ export type SettingsSubPageId =
   /** Guillotine: endgame, release timing, tiebreakers, correction wait… (lib/guillotine/guillotineRules.ts). */
   | 'guillotine-rules'
   | 'pirate-rules'
+  /** AllFantasy-only rules with no other native editor: the odd-team extra matchup and keeper rules (Phase C2). */
+  | 'af-options'
   | 'playoffs'
   | 'members'
   | 'team-settings'
@@ -57,7 +61,7 @@ export type SettingsHomeRow = {
 
 export type SettingsHomeSection = { id: string; title: string; rows: SettingsHomeRow[] }
 
-export type SettingsHomeLeague = {
+type SettingsHomeLeague = {
   id: string
   name?: string | null
   sport?: string | null
@@ -76,7 +80,7 @@ export type SettingsHomeLeague = {
   settings?: unknown
 }
 
-export type SettingsHomeTeam = {
+type SettingsHomeTeam = {
   claimedByUserId?: string | null
   isCoCommissioner?: boolean | null
   ownerName?: string | null
@@ -133,7 +137,7 @@ const LOADING = '…'
  * `data-layout="stacked"`; league-settings-home.css applies it below 480px). Short values stay
  * right-aligned like Sleeper. Nothing is ever truncated: a long value wraps.
  */
-export const LONG_SETTINGS_VALUE_CHARS = 24
+const LONG_SETTINGS_VALUE_CHARS = 24
 
 export function isLongSettingsValue(value: string | null | undefined): boolean {
   return String(value ?? '').length > LONG_SETTINGS_VALUE_CHARS
@@ -209,7 +213,7 @@ export function formatDraftDateTime(iso: string | null | undefined, timeZone?: s
   return `${get('weekday')} ${get('month')} ${get('day')}, ${get('hour')}:${get('minute')} ${get('dayPeriod')} ${ZONE_SHORT[zone] ?? zone}`.replace(/\s+/g, ' ').trim()
 }
 
-export function formatPickTimer(seconds: number | null | undefined): string {
+function formatPickTimer(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'No timer'
   if (seconds < 120) return `${seconds}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`
@@ -217,14 +221,14 @@ export function formatPickTimer(seconds: number | null | undefined): string {
   return `${Number.isInteger(h) ? h : h.toFixed(1)}h`
 }
 
-export function formatDraftShape(draft: SettingsHomeDraft | null): string {
+function formatDraftShape(draft: SettingsHomeDraft | null): string {
   if (!draft) return LOADING
   const type = draft.type ? titleCase(draft.type) : 'Snake'
   const rounds = draft.rounds ? `${draft.rounds} rounds` : null
   return [type, rounds, formatPickTimer(draft.timerSeconds)].filter(Boolean).join(' · ')
 }
 
-export function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'waiverBudget'>): string {
+function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'waiverBudget'>): string {
   const type = String(league.waiverType ?? 'rolling').toLowerCase()
   if (type === 'faab') {
     const budget = Number(league.waiverBudget ?? 100)
@@ -242,7 +246,7 @@ const TRADE_REVIEW_LABELS: Record<string, string> = {
   none: 'Trades off',
 }
 
-export function formatTrades(league: Pick<SettingsHomeLeague, 'settings' | 'tradeDeadlineWeek'>): string {
+function formatTrades(league: Pick<SettingsHomeLeague, 'settings' | 'tradeDeadlineWeek'>): string {
   const s = settingsRecord(league.settings)
   const json = settingsRecord(s.settingsJson)
   const mode = String(s.trade_review_mode ?? s.tradeReviewMode ?? json.tradeReviewMode ?? 'commissioner').toLowerCase()
@@ -267,6 +271,20 @@ export function formatScoringMode(settings: unknown): string {
   return 'Points'
 }
 
+/**
+ * What the "AllFantasy options" sub-page holds for this league, or null when it holds nothing: the odd-team
+ * extra matchup (an odd redraft or keeper league), keeper rules (a keeper league) and, given the sport, copy
+ * league (an NFL league; docs/league-page/COPY_LEAGUES_DESIGN.md). Phase C2.
+ */
+export function afOptionsSummary(leagueType: string | null | undefined, teamCount: number, sport?: string | null): string | null {
+  const type = String(leagueType ?? '').toLowerCase()
+  const parts: string[] = []
+  if (copyLeagueAvailable(sport)) parts.push('Copy league')
+  if (isOddTeamCount(teamCount) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(type)) parts.push('Odd-team extra matchup')
+  if (type === 'keeper') parts.push('Keeper rules')
+  return parts.length ? parts.join(' · ') : null
+}
+
 function divisionCount(settings: unknown): number {
   const s = settingsRecord(settings)
   const cfg = settingsRecord(s.division_config)
@@ -281,6 +299,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const pirate = isPirateLeague(league)
   const teamCount = league.leagueSize ?? teams.length
   const joined = teams.filter((t) => Boolean(t.claimedByUserId)).length
+  const afSummary = afOptionsSummary(league.leagueType, teamCount, league.sport)
 
   const sections: SettingsHomeSection[] = [
     {
@@ -293,6 +312,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         // Waivers sit with the league's format, not the draft (owner's call, 2026-11-01): how claims run is
         // part of what kind of league this is.
         { id: 'waivers', label: 'Waivers', value: formatWaivers(league), ...edit('waivers') },
+        ...(afSummary ? [{ id: 'af-options', label: 'AllFantasy options', value: afSummary, ...edit('af-options') }] : []),
       ],
     },
     {
@@ -428,10 +448,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   if (canEdit) {
     sections.push({
       id: 'commissioner',
-      title: 'Commissioner tools',
+      // The Commissioner Hub (owner's page review #16) replaces "Commissioner tools"; the sub-page it
+      // used to name is the lineups / locks / schedule / members panel and league history.
+      title: 'Commissioner Hub',
       rows: [
-        { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
-        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls and league history', target: 'commissioner-tools' },
+        { id: 'league-ai', label: 'League Chimmy', value: 'Helpers & commissioner intelligence', target: 'ai' },
+        { id: 'commissioner-tools', label: 'Lineups, locks & schedule', value: 'Lineups, locks, schedule, members and league history', target: 'commissioner-tools' },
         { id: 'dues', label: 'Dues & payouts', value: 'Track who has paid', target: 'dues' },
         { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
         { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },

@@ -7,7 +7,7 @@ import type { AIModelRole } from '@/lib/unified-ai/types'
 import type { AIErrorCode, UnifiedAIError } from './types'
 
 const USER_MESSAGES: Record<AIErrorCode, string> = {
-  provider_unavailable: 'AI is temporarily unavailable. Please try again in a moment.',
+  provider_unavailable: 'Chimmy is temporarily unavailable. Please try again in a moment.',
   timeout: 'The request took too long. Please try again.',
   invalid_response: 'We received an unexpected response. Please try again.',
   rate_limited: 'Too many requests. Please wait a minute and try again.',

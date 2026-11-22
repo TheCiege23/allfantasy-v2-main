@@ -259,4 +259,3 @@ export function PlayerCompare({
   )
 }
 
-export default PlayerCompare

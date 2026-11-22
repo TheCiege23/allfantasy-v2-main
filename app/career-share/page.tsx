@@ -665,7 +665,7 @@ export default function CareerSharePage() {
                       </div>
                       <div>
                         {Number(rankData.careerXp).toLocaleString()} XP
-                        {rankData.aiReportGrade ? ` · AI Grade ${rankData.aiReportGrade}` : ''}
+                        {rankData.aiReportGrade ? ` · Chimmy Grade ${rankData.aiReportGrade}` : ''}
                       </div>
                     </div>
                   ) : (
@@ -742,7 +742,7 @@ export default function CareerSharePage() {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-[11px] text-white/40">AI Grade</label>
+                      <label className="mb-1 block text-[11px] text-white/40">Chimmy Grade</label>
                       <input
                         value={tradeGrade}
                         onChange={(event) => setTradeGrade(event.target.value)}
@@ -818,7 +818,7 @@ export default function CareerSharePage() {
                   <input
                     value={outlook}
                     onChange={(event) => setOutlook(event.target.value)}
-                    placeholder="AI outlook (e.g. Contender)"
+                    placeholder="Chimmy outlook (e.g. Contender)"
                     className="w-full rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-xs text-white placeholder:text-white/20 focus:outline-none"
                   />
                 </div>
@@ -1020,7 +1020,7 @@ export default function CareerSharePage() {
                     className="flex w-full items-center justify-between gap-3 p-5 text-left"
                   >
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">🤖 Dynasty AI Report</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400">🤖 Dynasty Chimmy Report</p>
                       <p className="mt-1 text-xs text-white/35">
                         Loads separately from caption generation so your share flow stays fast.
                       </p>
@@ -1032,7 +1032,7 @@ export default function CareerSharePage() {
                     <div className="border-t border-white/6 px-5 pb-5 pt-4">
                       {!report && !reportLoading ? (
                         <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-sm text-white/45">
-                          Load your dynasty report from the left panel to add an AI-backed career snapshot here.
+                          Load your dynasty report from the left panel to add a Chimmy-backed career snapshot here.
                         </div>
                       ) : null}
 
@@ -1243,7 +1243,7 @@ export default function CareerSharePage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="mb-0.5 text-[11px] font-bold uppercase tracking-widest text-yellow-400">🎁 Share Tokens</p>
-                          <p className="text-xs text-white/40">Copy or share your caption to earn 1 free AI token per day</p>
+                          <p className="text-xs text-white/40">Copy or share your caption to earn 1 free Chimmy token per day</p>
                         </div>
                         <div className="text-center">
                           <div className="text-2xl font-black text-yellow-400">{rewards.unredeemedTokens}</div>

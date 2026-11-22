@@ -356,6 +356,41 @@ describe('resolving the other half from a league', () => {
   })
 
   /**
+   * ⚠ '' IS "NOT SET". The production Peach Bowl / Cream Bowl link stores teamExternalId as an EMPTY
+   * STRING on both members (2026-11-21). `??` does not fall back on '', so no team was chosen and the
+   * college half read as nobody's roster. It must fall back to the snapshot's own userTeam.
+   */
+  it('an empty teamExternalId falls back to the snapshot userTeam, as null does', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'link-1',
+        name: 'Cream & Peach',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: '' },
+          { platform: 'fantrax', leagueId: 'fx-1', role: 'college', teamExternalId: '' },
+        ],
+      },
+    })
+    fantraxFindUnique.mockResolvedValue({
+      id: 'fx-1',
+      leagueName: 'Cream Bowl',
+      season: 2026,
+      userTeam: 'Ciege82',
+      roster: [
+        { name: 'Mine', teamName: 'Ciege82' },
+        { name: 'Theirs', teamName: 'Connor0488' },
+      ],
+    })
+    leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    expect(out?.other).toMatchObject({ role: 'college', teamLabel: 'Ciege82', playerCount: 1 })
+  })
+
+  /**
    * ⚠ NULL PLAYER COUNT IS NOT ZERO. A roster that cannot be read must not
    * render as a manager who owns nobody — the screen prints the reason instead.
    */

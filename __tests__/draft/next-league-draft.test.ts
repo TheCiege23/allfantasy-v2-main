@@ -125,7 +125,7 @@ function league(overrides: Record<string, unknown> = {}) {
   }
 }
 
-/** The automatic rookie order (an AF Commissioner setting, off by default) switched on. */
+/** The automatic rookie order saved switched on (worst record first is also the default with nothing saved). */
 const AUTO_ON = (mode: 'worst_to_first' | 'reverse_max_pf' = 'worst_to_first') => ({
   settings: { rookie_draft_order: { enabled: true, mode } },
 })
@@ -406,8 +406,19 @@ describe('a saved rookie order wins over standings', () => {
     expect(seated().at(-1)).toBe('R-a') // the champion picks last
   })
 
-  it('🛑 the automatic order is OFF by default: a max_pf league takes its own order, not standings', async () => {
+  it('🛑 worst record first is the default: a league that said nothing is seated from standings, with no plan', async () => {
     rookieLeague({})
+    m.entitled.mockResolvedValue(false)
+    const r = await createNextLeagueDraft('L1', 'commish')
+    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
+    expect(seated()[0]).toBe('R-b') // 2-11, the worst team, picks first
+    expect(seated().at(-1)).toBe('R-a') // the champion picks last
+    expect(m.entitled).not.toHaveBeenCalled()
+    m.entitled.mockResolvedValue(true)
+  })
+
+  it('switched off: the league takes its own order, not standings', async () => {
+    rookieLeague({ settings: { rookie_draft_order: { enabled: false, mode: 'worst_to_first' } } })
     m.buildSlotOrder.mockResolvedValue([{ slot: 1, rosterId: 'R-a', displayName: 'A' }, { slot: 2, rosterId: 'R-b', displayName: 'B' }, { slot: 3, rosterId: 'R-c', displayName: 'C' }, { slot: 4, rosterId: 'R-d', displayName: 'D' }])
     const r = await createNextLeagueDraft('L1', 'commish')
     expect(r).toMatchObject({ ok: true, orderSource: 'default' })
@@ -415,13 +426,13 @@ describe('a saved rookie order wins over standings', () => {
     expect(seated()).toEqual(['R-a', 'R-b', 'R-c', 'R-d'])
   })
 
-  it('🛑 on, but the commissioner no longer holds AF Commissioner: the league’s own order', async () => {
+  it('🛑 lowest max PF, but the commissioner no longer holds AF Commissioner: worst record first, not the startup seating', async () => {
     rookieLeague()
     m.entitled.mockResolvedValueOnce(false)
-    m.buildSlotOrder.mockResolvedValue([{ slot: 1, rosterId: 'R-a', displayName: 'A' }, { slot: 2, rosterId: 'R-b', displayName: 'B' }, { slot: 3, rosterId: 'R-c', displayName: 'C' }, { slot: 4, rosterId: 'R-d', displayName: 'D' }])
     const r = await createNextLeagueDraft('L1', 'commish')
-    expect(r).toMatchObject({ ok: true, orderSource: 'default' })
+    expect(r).toMatchObject({ ok: true, orderSource: 'standings' })
     expect(m.entitled).toHaveBeenCalledWith('commish')
+    expect(seated().at(-1)).toBe('R-a')
   })
 })
 

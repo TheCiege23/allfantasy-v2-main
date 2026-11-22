@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Check, Copy, Share2 } from 'lucide-react'
 
-export interface CreatorInvitePanelProps {
+interface CreatorInvitePanelProps {
   inviteUrl: string
   inviteCode?: string
   onCopy?: () => void

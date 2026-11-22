@@ -21,6 +21,8 @@
  * (`contracts/fleaflicker/fixtures/scoreboard.NFL.2021.week1.json` and
  * `...week16.json`), including the flag-omission pattern those fixtures prove.
  */
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 const leagueFindMany = vi.fn()
@@ -309,6 +311,79 @@ describe('fleaflicker matchup parity — the silent season clamp', () => {
     expect(result.synced).toBe(1)
     expect(writtenRows()).toHaveLength(2)
     expect(writtenRows()[0]).toMatchObject({ seasonYear: SEASON })
+  })
+})
+
+describe('fleaflicker matchup parity — a live, in-season league (the committed 2026 capture)', () => {
+  /*
+   * `contracts/fleaflicker/fixtures/scoreboard.NFL.2026.live.json`: league 344624 mid-week-11.
+   * The body has NO `season` key anywhere, and every game is `isInProgress: true` with no
+   * `isFinalScore`. Before the guard read the body's dates this league was skipped on every run as
+   * "provider returned unknown (silently clamped)".
+   */
+  const live = () =>
+    JSON.parse(
+      readFileSync(
+        path.join(process.cwd(), 'contracts/fleaflicker/fixtures/scoreboard.NFL.2026.live.json'),
+        'utf8',
+      ),
+    ) as { games: Array<Record<string, any>>; schedulePeriod: Record<string, any> }
+
+  beforeEach(() => {
+    const body = live()
+    leagueFindMany.mockResolvedValue([{ platformLeagueId: '344624', season: 2026, sport: 'NFL' }])
+    leagueTeamFindMany.mockResolvedValue(
+      body.games.flatMap((g) => [{ externalId: String(g.home.id) }, { externalId: String(g.away.id) }]),
+    )
+  })
+
+  it('is no longer refused as a clamped season, and writes NO in-progress game', async () => {
+    responses.set(null, live())
+
+    const result = await runFleaflickerMatchupParity({ now: NOW })
+
+    expect(result.failed).toBe(0)
+    expect(result.results[0]?.note ?? '').not.toMatch(/clamped/i)
+    expect(result.results[0]?.note).toMatch(/no final week/i)
+    // Every period 1..11 was read (the head doubles as period 11), none beyond it.
+    expect(result.results[0]?.periodsRead).toBe(11)
+    expect(writtenRows()).toHaveLength(0)
+  })
+
+  it('writes an earlier week of that league once its games are final, labelled 2026', async () => {
+    responses.set(null, live())
+    // The same real rows as a finished week would carry them: a score value and `isFinalScore`.
+    const finished = live()
+    finished.schedulePeriod = { ...finished.schedulePeriod, ordinal: 10, value: 10 }
+    finished.games = finished.games.map((g, i) => {
+      const { isInProgress: _omit, ...rest } = g
+      return {
+        ...rest,
+        homeScore: { score: { value: 100 + i, formatted: String(100 + i) } },
+        awayScore: { score: { value: 90 + i, formatted: String(90 + i) } },
+        isFinalScore: true,
+      }
+    })
+    responses.set(10, finished)
+
+    const result = await runFleaflickerMatchupParity({ now: NOW })
+
+    expect(result.synced).toBe(1)
+    const rows = writtenRows()
+    expect(rows).toHaveLength(12)
+    expect(new Set(rows.map((r) => r.week))).toEqual(new Set([10]))
+    expect(new Set(rows.map((r) => r.seasonYear))).toEqual(new Set([2026]))
+  })
+
+  it('the same key-less body is still refused when the league row says 2027', async () => {
+    leagueFindMany.mockResolvedValue([{ platformLeagueId: '344624', season: 2027, sport: 'NFL' }])
+    responses.set(null, live())
+
+    const result = await runFleaflickerMatchupParity({ now: NOW })
+
+    expect(result.skipped).toBe(1)
+    expect(result.results[0]?.note).toMatch(/clamped/i)
+    expect(writtenRows()).toHaveLength(0)
   })
 })
 

@@ -33,7 +33,7 @@ async function handle() {
       { jobName: JOB, trigger: "cron" },
       async () => {
         const snapshot = await readNbaCupSnapshot(season)
-        if (!snapshot || !nbaCupLiveWindowOpen(snapshot.games)) {
+        if (!snapshot || (!snapshot.fanout?.eventIds?.length && !nbaCupLiveWindowOpen(snapshot.games))) {
           return { applied: false, skipped: "no_live_games", failures: [] as Array<{ date: string; error: string | null }> }
         }
         return syncNbaCupTournament({ season, apply: true, liveOnly: true })

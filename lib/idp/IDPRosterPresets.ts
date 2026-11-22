@@ -7,7 +7,6 @@
 import type { RosterDefaults } from '@/lib/sport-defaults/types'
 import type { SportType } from '@/lib/sport-defaults/types'
 import type { IdpPositionMode, IdpRosterPreset, IdpSlotOverrides } from './types'
-import { IDP_GROUP_TO_SPLIT } from './types'
 
 /** Base football offensive slots (no DST for IDP leagues; offense + IDP). */
 const FOOTBALL_IDP_OFFENSE_STARTER_SLOTS: Record<'NFL' | 'NCAAF', Record<string, number>> = {

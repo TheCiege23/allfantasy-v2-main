@@ -55,7 +55,7 @@ export function LevelSwatch({ level }: { level: 0 | 1 | 2 | 3 }) {
 
 // ── bar list ────────────────────────────────────────────────────────────────────────────────
 
-export type BarItem = { key: string; label: string; value: number; hint?: string }
+type BarItem = { key: string; label: string; value: number; hint?: string }
 
 /**
  * Horizontal bars, one hue, the count printed at the tip. Each bar is a button — the whole row is
@@ -140,7 +140,7 @@ export function Sparkline({ values, label }: { values: Array<number | null>; lab
 
 // ── line chart ──────────────────────────────────────────────────────────────────────────────
 
-export type LinePoint = { key: string; label: string; value: number | null; estimated: boolean; note?: string }
+type LinePoint = { key: string; label: string; value: number | null; estimated: boolean; note?: string }
 
 // Built per call, not once at import: the locale is the reader's (lib/i18n/appLocale.ts).
 export const formatCompact = (n: number) =>
@@ -379,7 +379,7 @@ export function LineChart({
 
 // ── heatmap ─────────────────────────────────────────────────────────────────────────────────
 
-export type HeatCell = { level: 0 | 1 | 2 | 3; count: number; unknown?: string }
+type HeatCell = { level: 0 | 1 | 2 | 3; count: number; unknown?: string }
 
 /**
  * Rows × columns, each cell a button carrying its count. A semantic table so a screen reader walks
