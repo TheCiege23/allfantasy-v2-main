@@ -1,8 +1,9 @@
+import {transactionSummary} from './summary.js'
 const $=id=>document.getElementById(id)
 let context,tabId,batches=[]
 const status=text=>{$('status').textContent=text}
 async function app(action,payload){const result=await chrome.tabs.sendMessage(tabId,{action,...payload});if(!result?.ok)throw Error(result?.data?.error??'AllFantasy request failed');return result.data}
-async function run(task){$('league').disabled=true;$('weeks').disabled=true;$('load').disabled=true;$('preview').disabled=true;$('apply').disabled=true;try{await task()}catch(error){batches=[];status(error.message)}finally{$('league').disabled=false;$('weeks').disabled=!context;$('load').disabled=false;$('preview').disabled=!context;$('apply').disabled=!batches.length}}
+async function run(task){$('league').disabled=true;$('weeks').disabled=true;$('load').disabled=true;$('preview').disabled=true;$('apply').disabled=true;$('transactions').disabled=true;try{await task()}catch(error){batches=[];status(error.message)}finally{$('league').disabled=false;$('transactions').disabled=false;$('weeks').disabled=!context;$('load').disabled=false;$('preview').disabled=!context;$('apply').disabled=!batches.length}}
 $('league').addEventListener('input',()=>{context=null;batches=[];$('preview').disabled=true;$('apply').disabled=true})
 $('weeks').addEventListener('change',()=>{batches=[];$('apply').disabled=true})
 $('load').onclick=()=>run(async()=>{
@@ -10,6 +11,15 @@ $('load').onclick=()=>run(async()=>{
  const leagueId=$('league').value.trim();if(!/^[a-f0-9-]{36}$/i.test(leagueId))throw Error('Enter the AllFantasy league UUID')
  const tabs=await chrome.tabs.query({url:'https://www.allfantasy.ai/*'});if(!tabs.length)throw Error('Open AllFantasy and sign in, then reload its page')
  tabId=tabs[0].id;context=await app('context',{leagueId});$('weeks').disabled=false;status(`${context.leagueName}: ${context.periods.length} completed weeks available. No scores imported.`)
+})
+$('transactions').onclick=()=>run(async()=>{
+ const leagueId=$('league').value.trim();if(!/^[a-f0-9-]{36}$/i.test(leagueId))throw Error('Enter the AllFantasy league UUID')
+ const tabs=await chrome.tabs.query({url:'https://www.allfantasy.ai/*'});if(!tabs.length)throw Error('Open AllFantasy and sign in, then reload its page')
+ tabId=tabs[0].id;const tx=await app('txContext',{leagueId});const files={}
+ for(const item of tx.downloads){status(`${tx.leagueName}: downloading ${item.view==='TRADE'?'trades':'claims and drops'}`);const result=await chrome.runtime.sendMessage({action:'downloadTransactions',url:item.url});if(!result?.ok)throw Error(result?.error??'Download failed');files[item.view]=result.csv}
+ status(`${tx.leagueName}: saving to AllFantasy`)
+ const saved=await app('transactions',{batch:{kind:'transactions',leagueId,trades:files.TRADE,claimDrops:files.CLAIM_DROP}})
+ status(`${tx.leagueName}: ${transactionSummary(saved)}`)
 })
 $('preview').onclick=()=>run(async()=>{
  batches=[]
