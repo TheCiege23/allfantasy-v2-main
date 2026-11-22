@@ -1,0 +1,36 @@
+/* Phone presentation shared by every AF Core screen. Desktop keeps its existing density. */
+@media (max-width: 720px) {
+  :root:has(.af-core.af-shell) { --af-tabbar-height: calc(78px + env(safe-area-inset-bottom, 0px)); }
+  .af-core.af-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .af-core.af-shell .af-main { min-width: 0; }
+  .af-core.af-shell .af-nav { display: none; }
+  .af-core.af-shell .af-topbar { gap: 8px; padding: 10px 12px; }
+  .af-core.af-shell:not([data-league-first='true']) .af-topbar-right {
+    flex: 1 1 100%; min-width: 0; max-width: 100%; gap: 8px;
+    padding-block: 2px; scroll-padding-inline: 8px;
+  }
+  .af-core.af-shell .af-content { padding-inline: clamp(12px, 4vw, 20px); }
+  .af-core.af-shell .af-tabbar { gap: 2px; padding-inline: max(6px, env(safe-area-inset-left, 0px)); }
+  .af-core.af-shell .af-tabbar-item { min-width: 0; min-height: 64px; gap: 5px; touch-action: manipulation; }
+  .af-core.af-shell .af-tabbar-label { font-size: 12px; line-height: 1.2; color: var(--text2); }
+  .af-core.af-shell .af-tabbar-item[data-active='true'] .af-tabbar-label { color: var(--accent); }
+  .af-core.af-shell .af-tabbar-glyph { font-size: 20px; }
+  .af-core.af-shell .af-tabbar-glyph svg { width: 20px; height: 20px; }
+  .af-core.af-shell :is(.af-btn, .af-admin-shortcut, .af-streak-chip, .af-mobile-more-link) {
+    min-height: 48px; touch-action: manipulation;
+  }
+  .af-core.af-shell .af-btn { white-space: normal; line-height: 1.4; padding-block: 10px; }
+  .af-core.af-shell .af-mobile-more-link { font-size: 15px; }
+  .af-core.af-shell .af-mobile-more { overscroll-behavior: contain; scroll-padding-block: 16px; }
+  .af-core.af-shell :is(.af-search-wrap, .af-lf-switch) { min-width: 0; }
+  .af-core.af-shell :is(input, textarea, select) { scroll-margin-block: 80px; }
+  html[data-phone-keyboard] .af-core.af-shell :is(.af-tabbar, .af-lf-chatbar, .af-cm-launch) { display: none; }
+  html[data-phone-keyboard] .af-core.af-shell .af-mobile-more {
+    top: calc(var(--phone-visible-top, 0px) + 12px); bottom: auto;
+    max-height: calc(var(--phone-visible-height, 100dvh) - 24px);
+  }
+  html[data-phone-keyboard] .af-core.af-shell .af-content { padding-bottom: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core.af-shell .af-tabbar-item { transition: none; }
+}

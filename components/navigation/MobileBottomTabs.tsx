@@ -44,7 +44,8 @@ export default function MobileBottomTabs() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
+      aria-label="Main navigation"
+      className="af-mobile-bottom-tabs fixed inset-x-0 bottom-0 z-40 border-t px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
       style={{
         borderColor: "var(--border)",
         background: "color-mix(in srgb, var(--panel) 92%, transparent)",
@@ -87,7 +88,7 @@ export default function MobileBottomTabs() {
                 style={{ background: "var(--accent-cyan-strong)" }}
                 aria-hidden="true"
               />
-              <Icon className="mb-1 h-4 w-4" />
+              <Icon className="mb-1 h-5 w-5" />
               {item.label}
             </Link>
           )
