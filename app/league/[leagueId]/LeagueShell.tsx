@@ -1738,6 +1738,21 @@ export function LeagueShell({
               />
             ) : null
           }
+          /*
+            The old league header's member menu, for an imported league's non-commissioner members: the same four
+            items and handlers it had (Edit team, Co-owners, Leave league, Previous leagues). A commissioner, and every
+            native league, keep the gear going straight to settings.
+          */
+          memberMenu={
+            !nativeWorkspace && !isCommissioner
+              ? [
+                  { id: 'edit-team', title: t('league.memberMenu.editTeam'), sub: t('league.memberMenu.editTeam.sub'), onSelect: () => openLeagueSettingsModal('my-team') },
+                  { id: 'co-owners', title: t('league.memberMenu.coOwners'), sub: t('league.memberMenu.coOwners.sub'), onSelect: () => openLeagueSettingsModal('co-owners') },
+                  { id: 'leave', title: t('league.memberMenu.leave'), sub: t('league.memberMenu.leave.sub'), onSelect: () => setLeaveLeagueHintOpen(true) },
+                  { id: 'previous', title: t('league.memberMenu.previous'), sub: t('league.memberMenu.previous.sub'), onSelect: () => openLeagueSettingsModal('league-history') },
+                ]
+              : null
+          }
           league={selectedLeague}
           leagues={leagueList}
           tabs={tabDefs}
