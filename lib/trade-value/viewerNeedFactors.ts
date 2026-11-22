@@ -122,6 +122,12 @@ export function allocateNeedFactors(args: {
   needAfterTrade: RosterNeed
   scarcity: ScarcityBoard
   learned?: LearnedNeedInputs | null
+  /**
+   * The same roster as `needAfterOutgoing` with every ruled-out player counted as available — its DEPTH. A position
+   * with an open slot now and none on depth is short only this week (a starter is out), and the learned premium for
+   * that is the one measured for "short this week" (2026-11-22). Absent: every open slot reads as plain "short".
+   */
+  depthAfterOutgoing?: RosterNeed | null
 }): { give: Array<LeagueValueAdjustment | null>; get: Array<LeagueValueAdjustment | null> } {
   const give: Array<LeagueValueAdjustment | null> = args.give.map(() => null)
   const get: Array<LeagueValueAdjustment | null> = args.get.map(() => null)
@@ -131,6 +137,7 @@ export function allocateNeedFactors(args: {
     out: Array<LeagueValueAdjustment | null>,
     need: RosterNeed,
     phrase: (basis: string) => string,
+    depth: RosterNeed | null = null,
   ) => {
     const byPos = new Map<string, number[]>()
     lines.forEach((l, i) => {
@@ -154,16 +161,19 @@ export function allocateNeedFactors(args: {
        * TRADE_LEARNED_NEED=on: a premium (an open slot) is the one MEASURED for teams short at this position, where the
        * daily run published one — in place of the hand-set 6% per open slot. A discount (surplus) is left as it is.
        */
-      const measured = delta.factor > 1 && args.learned?.need ? learnedNeedPremium(args.learned.tables, args.learned.book, pos, 'short') : null
+      // Short only this week: the hole is a ruled-out starter, not missing depth.
+      const thisWeek = depth != null && (depth.byPosition.find((p) => p.position === pos)?.deficit ?? 0) <= 0
+      const level = thisWeek ? 'short_this_week' : 'short'
+      const measured = delta.factor > 1 && args.learned?.need ? learnedNeedPremium(args.learned.tables, args.learned.book, pos, level) : null
       const factor = measured ? 1 + measured.pct / 100 : delta.factor
       const reason = measured
-        ? `${phrase(delta.basis)}; teams short at ${pos} paid ${measured.pct > 0 ? '+' : ''}${measured.pct}% over normal-depth teams across ${measured.trades} completed trades`
+        ? `${phrase(delta.basis)}; teams short at ${pos}${thisWeek ? ' this week (a starter ruled out)' : ''} paid ${measured.pct > 0 ? '+' : ''}${measured.pct}% over normal-depth teams across ${measured.trades} completed trades`
         : phrase(delta.basis)
       for (const i of covered) out[i] = { kind: 'need', factor, reason }
     }
   }
 
-  allocate(args.get, get, args.needAfterOutgoing, (b) => b)
+  allocate(args.get, get, args.needAfterOutgoing, (b) => b, args.depthAfterOutgoing ?? null)
   allocate(args.give, give, args.needAfterTrade, (b) => `after this trade ${b}`)
 
   /*
@@ -311,6 +321,9 @@ async function rosterNeedFactors(args: {
       .map((g) => ({ position: g.position!, unavailable: isRuledOut(g.injuryStatus ?? null) }))
 
     const needAfterOutgoing = computeRosterNeed({ requirements, rostered: remaining })
+    // The same roster's depth — everyone counted as available — so a hole that is only a ruled-out starter reads as
+    // "short this week" for the learned need premium.
+    const depthAfterOutgoing = computeRosterNeed({ requirements, rostered: remaining.map((s) => ({ ...s, unavailable: false })) })
     const needAfterTrade = computeRosterNeed({ requirements, rostered: [...remaining, ...incoming] })
 
     const positions = [...new Set([...give, ...get].map((l) => l.position?.toUpperCase().trim()).filter(Boolean))] as string[]
@@ -321,6 +334,6 @@ async function rosterNeedFactors(args: {
       positions,
     }).catch(() => new Map() as ScarcityBoard)
 
-    return { ...allocateNeedFactors({ give, get, needAfterOutgoing, needAfterTrade, scarcity, learned: args.learned ?? null }), gap: null }
+    return { ...allocateNeedFactors({ give, get, needAfterOutgoing, needAfterTrade, scarcity, learned: args.learned ?? null, depthAfterOutgoing }), gap: null }
   }
 }

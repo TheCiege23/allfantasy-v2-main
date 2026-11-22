@@ -23,6 +23,8 @@ type TradeAuditView = {
   rows: AuditRow[]
   teams: { teamId: string; name: string; trades: number }[]
   pairs: PairFinding[]
+  /** Facts beside each trade, by trade key (`tradeMarketContext.ts`): how unusual the gap is, records, the pick market. */
+  marketContext?: Record<string, string[]>
 }
 
 const BAND_LABEL: Record<FairnessBand, string> = { fair: 'Fair', watch: 'Worth a look', outside: 'Outside fair range' }
@@ -145,6 +147,16 @@ function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagu
                 <p className="af-cm-audit-basis">
                   {l.band === 'fair' ? 'About even.' : `${l.gapPct > 0 ? team.name : l.partnerName} received more.`} Values {basisLabel(l.basis)}.
                 </p>
+                {view.marketContext?.[l.tradeKey]?.length ? (
+                  <div className="af-cm-audit-market" data-testid="trade-audit-market">
+                    <div className="af-label">Against the market</div>
+                    <ul className="af-cm-evidence">
+                      {view.marketContext[l.tradeKey]!.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ol>
