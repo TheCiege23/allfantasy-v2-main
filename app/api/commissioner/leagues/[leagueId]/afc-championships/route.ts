@@ -4,10 +4,14 @@ import { afcConflictMessage, afcOverrideInput, initializeAfcPilot, loadAfcPilot,
 
 type Context = { params: Promise<{ leagueId: string }> }
 
-async function mutate(context: Context, action: (pilot: NonNullable<Awaited<ReturnType<typeof loadAfcPilot>>>) => Promise<void>) {
+async function mutate(
+  context: Context,
+  access: 'owner' | 'bracket',
+  action: (pilot: NonNullable<Awaited<ReturnType<typeof loadAfcPilot>>>) => Promise<void>,
+) {
   const { leagueId } = await context.params
   const { appUserId } = await resolvePlatformUser()
-  const pilot = appUserId ? await loadAfcPilot(leagueId, appUserId) : null
+  const pilot = appUserId ? await loadAfcPilot(leagueId, appUserId, access) : null
   if (!pilot) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   try {
     await action(pilot)
@@ -20,11 +24,11 @@ async function mutate(context: Context, action: (pilot: NonNullable<Awaited<Retu
 }
 
 export async function POST(_req: NextRequest, context: Context) {
-  return mutate(context, initializeAfcPilot)
+  return mutate(context, 'owner', initializeAfcPilot)
 }
 
 export async function PUT(req: NextRequest, context: Context) {
   const input = afcOverrideInput.safeParse(await req.json().catch(() => null))
   if (!input.success) return NextResponse.json({ error: 'Enter a valid round and its pairings.' }, { status: 400 })
-  return mutate(context, pilot => saveAfcOverride(pilot, input.data))
+  return mutate(context, 'bracket', pilot => saveAfcOverride(pilot, input.data))
 }

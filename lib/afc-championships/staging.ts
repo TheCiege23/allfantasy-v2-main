@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -12,9 +13,11 @@ const settingsKey = 'staging_afc_championships'
 const seedList = Object.keys(afcTeams).map(Number).filter(isAfcSeed)
 const seedInput = z.custom<AfcSeed>(value => typeof value === 'number' && isAfcSeed(value))
 const pairing = z.object({ away: seedInput, home: seedInput })
+const overridesSchema = z.record(z.string(), z.array(pairing).max(8))
 const configSchema = z.object({
   revision: z.number().int().nonnegative(),
-  overrides: z.record(z.string(), z.array(pairing).max(8)),
+  overrides: overridesSchema,
+  practice: z.object({ accountDigest: z.string(), overrides: overridesSchema }).optional(),
 })
 export const afcOverrideInput = z.object({
   round: z.number().int().min(1).max(5),
@@ -27,14 +30,25 @@ export function isAfcPilotLeague(leagueId: string) {
     process.env.RAILWAY_ENVIRONMENT_ID === 'd23b2377-5944-44e7-bba5-57804006fd91' && leagueId === pilotLeagueId
 }
 
-export async function loadAfcPilot(leagueId: string, userId: string) {
+function practiceAccountDigest() {
+  const digest = process.env.AF_AFC_PRACTICE_COMMISSIONER_SHA256
+  return digest && /^[a-f0-9]{64}$/.test(digest) ? digest : null
+}
+
+export async function loadAfcPilot(leagueId: string, userId: string, access: 'owner' | 'bracket' = 'owner') {
   if (!isAfcPilotLeague(leagueId)) return null
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { id: true, userId: true, season: true, settings: true, platform: true, sport: true, updatedAt: true },
   })
-  return league && league.userId === userId && league.season === pilotSeason &&
-    league.sport === 'NFL' && isNativePlatform(league.platform) ? league : null
+  if (!league || league.season !== pilotSeason || league.sport !== 'NFL' || !isNativePlatform(league.platform)) return null
+  if (league.userId === userId) return league
+  const digest = access === 'bracket' ? practiceAccountDigest() : null
+  if (!digest) return null
+  const account = await prisma.appUser.findUnique({ where: { id: userId }, select: { email: true, emailVerified: true } })
+  if (!account?.email || !account.emailVerified) return null
+  const actual = createHash('sha256').update(account.email.trim().toLowerCase()).digest('hex')
+  return actual === digest ? league : null
 }
 
 type Pilot = NonNullable<Awaited<ReturnType<typeof loadAfcPilot>>>
@@ -44,19 +58,28 @@ function settingsObject(settings: Prisma.JsonValue) {
   return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {}
 }
 
+function activeOverrides(config: z.infer<typeof configSchema>, digest: string | null) {
+  return digest && config.practice?.accountDigest === digest ? config.practice.overrides : config.overrides
+}
+
 export async function afcSnapshot(pilot: Pilot, store: Store = prisma) {
   const config = configSchema.safeParse(settingsObject(pilot.settings)[settingsKey])
   if (!config.success) return null
+  const digest = practiceAccountDigest()
   const seedByRoster = new Map(seedList.map(seed => [afcRosterId(seed), seed]))
   const rows = await store.teamWeekResult.findMany({
-    where: { leagueId: pilot.id, season: pilot.season, week: { gte: 9, lte: 13 }, rosterId: { in: [...seedByRoster.keys()] } },
+    // Practice replays the semifinals. The completed staging results stay in the database.
+    where: { leagueId: pilot.id, season: pilot.season, week: { gte: 9, lte: digest ? 11 : 13 }, rosterId: { in: [...seedByRoster.keys()] } },
     select: { week: true, rosterId: true, totalPoints: true, status: true },
   })
   const scores = rows.flatMap(row => {
     const seed = seedByRoster.get(row.rosterId)
     return seed == null ? [] : [{ week: row.week, seed, points: row.totalPoints, final: row.status === 'final' }]
   })
-  return { leagueId: pilot.id, season: pilot.season, revision: config.data.revision, rounds: resolveAfcChampionships(scores, config.data.overrides) }
+  return {
+    leagueId: pilot.id, season: pilot.season, revision: config.data.revision, practice: digest !== null,
+    rounds: resolveAfcChampionships(scores, activeOverrides(config.data, digest)),
+  }
 }
 
 // A staging replay of the confirmed opening rounds. Subsequent rounds use AF roster results.
@@ -118,14 +141,19 @@ export async function saveAfcOverride(pilot: Pilot, input: z.infer<typeof afcOve
     const snapshot = await afcSnapshot(pilot, tx)
     const round = snapshot?.rounds[input.round - 1]
     if (!config.success || !round || config.data.revision !== input.revision) throw new AfcConflict('The bracket changed. Refresh and try again.')
+    const digest = practiceAccountDigest()
+    if (digest && input.round !== 4) throw new AfcConflict('Practice overrides are available for Round 4.')
     if (!round.canOverride) throw new AfcConflict('Pairings can be changed after all teams advance and before scoring starts.')
     if (input.pairings && !validAfcPairings(round.defaults, input.pairings)) {
       throw new AfcConflict('Use every eligible team exactly once.')
     }
-    const overrides = { ...config.data.overrides }
+    const overrides = { ...activeOverrides(config.data, digest) }
     if (input.pairings) overrides[input.round] = input.pairings
     else delete overrides[input.round]
-    await updateConfig(tx, pilot, { revision: config.data.revision + 1, overrides })
+    await updateConfig(tx, pilot, {
+      ...config.data, revision: config.data.revision + 1,
+      ...(digest ? { practice: { accountDigest: digest, overrides } } : { overrides }),
+    })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 }
 
