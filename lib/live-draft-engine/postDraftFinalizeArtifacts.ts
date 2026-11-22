@@ -7,6 +7,7 @@ import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGat
 
 import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { dedupeInFlight } from '@/lib/api-performance'
 
 const POST_DRAFT_ARTIFACT_STABLE_THROTTLE_MS = 60_000
 const MAX_THROTTLE_KEYS = 200
@@ -38,10 +39,15 @@ function prunePostDraftArtifactThrottle() {
  *   waivers, trades, scoring, and lineup tools see the drafted roster.
  */
 export async function runPostDraftFinalizationArtifacts(leagueId: string): Promise<void> {
+  return dedupeInFlight(`draft:finalization:${leagueId}`, () => finalizeArtifacts(leagueId))
+}
+
+async function finalizeArtifacts(leagueId: string): Promise<void> {
   if (await isSeasonTournamentDraft(leagueId)) return
   const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')
   await finalizeRosterAssignments(leagueId)
 
+  let seasonSyncFailed = false
   try {
     const { syncCompletedDraftToRedraftSeason } = await import('@/lib/redraft/finalizeDraftToRedraftSeason')
     const summary = await syncCompletedDraftToRedraftSeason(leagueId)
@@ -130,6 +136,7 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
       }
     }
   } catch (err) {
+    seasonSyncFailed = true
     console.error('[postDraftFinalizeArtifacts] redraft season sync failed', {
       leagueId,
       error: err instanceof Error ? err.message : String(err),
@@ -146,6 +153,10 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
 
   const { computeAndPersistDraftRankings } = await import('@/lib/post-draft-manager-ranking')
   await computeAndPersistDraftRankings(leagueId)
+  if (!seasonSyncFailed) {
+    postDraftArtifactOkAt.set(leagueId, Date.now())
+    prunePostDraftArtifactThrottle()
+  }
 }
 
 /**
@@ -168,8 +179,6 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
 
   try {
     await runPostDraftFinalizationArtifacts(leagueId)
-    postDraftArtifactOkAt.set(leagueId, Date.now())
-    prunePostDraftArtifactThrottle()
   } catch (err) {
     postDraftArtifactOkAt.delete(leagueId)
     console.error('[syncPostDraftArtifactsIfCompletedThrottled] failed', {
@@ -189,10 +198,11 @@ export async function repairDraftCompletionIfBoardFull(leagueId: string): Promis
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, rounds: true, teamCount: true },
+    select: { id: true, status: true, rounds: true, teamCount: true, _count: { select: { picks: true } } },
   })
   if (!session || session.status === 'completed') return false
   const totalPicks = session.rounds * session.teamCount
+  if (session._count && session._count.picks < totalPicks) return false
   const rows = await prisma.draftPick.findMany({
     where: { sessionId: session.id },
     select: { overall: true, playerName: true, position: true, pickMetadata: true },

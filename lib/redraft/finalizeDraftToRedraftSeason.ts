@@ -31,6 +31,7 @@ import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeason
 import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -486,7 +487,7 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, survivorMode: true, settings: true },
+    select: { id: true, survivorMode: true, settings: true, sport: true, leagueType: true, platform: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
@@ -575,14 +576,35 @@ export async function syncCompletedDraftToRedraftSeason(
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
 
   const importedSnapshot = session.draftModeLabel === 'imported_rosters'
+  const batchNativePlayers = !importedSnapshot && !league.survivorMode &&
+    league.sport === 'NFL' && ['redraft', 'dynasty'].includes(league.leagueType ?? '') &&
+    resolveWriteAuthority(league.platform) === 'NATIVE' && session.playerPool !== 'rookies_only'
   const pools = await loadPlayerPools(leagueId, {settings:league.settings,seasonId:season.id})
   const importedKey = (rosterId: string, playerId: string) => JSON.stringify([poolOf(pools, rosterId),playerId])
+  const nativeKey = (rosterId: string, playerId: string) => JSON.stringify([rosterId, playerId])
   const importedPlayerIds = importedSnapshot
     ? new Set((await prisma.redraftRosterPlayer.findMany({
         where: { roster: { seasonId: season.id } }, select: { playerId: true, rosterId:true },
       })).map(row => importedKey(row.rosterId,row.playerId)))
     : null
-  const importedPlayers: Prisma.RedraftRosterPlayerCreateManyInput[] = []
+  const nativePlayerIds = batchNativePlayers
+    ? new Set((await prisma.redraftRosterPlayer.findMany({
+        where: { roster: { seasonId: season.id }, droppedAt: null },
+        select: { rosterId: true, playerId: true },
+      })).map(row => nativeKey(row.rosterId, row.playerId)))
+    : null
+  const batchedPlayers: Prisma.RedraftRosterPlayerCreateManyInput[] = []
+  if (nativePlayerIds) {
+    const rosterIds = [...new Set(session.picks.filter(pick => !isDraftPickSkipped(pick) && !isDraftPickRowEmpty(pick)).map(pick => pick.rosterId))]
+    // Limit concurrent writes so a 250-team season leaves connections available for the draft room.
+    for (let start = 0; start < rosterIds.length; start += 8) {
+      await Promise.all(rosterIds.slice(start, start + 8).map(async genericRosterId => {
+        const mapping = await ensureRedraftRosterForGenericRoster({ seasonId: season.id, leagueId, genericRosterId })
+        redraftRosterByGenericRosterId.set(genericRosterId, mapping)
+        if (mapping.created) redraftRostersCreated += 1
+      }))
+    }
+  }
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
@@ -642,7 +664,9 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    const existingActive = importedPlayerIds ? importedPlayerIds.has(importedKey(pick.rosterId,playerId)) : await prisma.redraftRosterPlayer.findFirst({
+    const existingActive = importedPlayerIds ? importedPlayerIds.has(importedKey(pick.rosterId,playerId))
+      : nativePlayerIds ? nativePlayerIds.has(nativeKey(mapping.redraftRoster.id, playerId))
+      : await prisma.redraftRosterPlayer.findFirst({
       where: {
         rosterId: mapping.redraftRoster.id,
         playerId,
@@ -671,8 +695,13 @@ export async function syncCompletedDraftToRedraftSeason(
     }
     if (importedPlayerIds) {
       // A retry of the immutable imported draft cannot insert its pick twice, including overlapping requests.
-      importedPlayers.push({ ...data, id: 'import-pick:' + pick.id })
+      batchedPlayers.push({ ...data, id: 'import-pick:' + pick.id })
       importedPlayerIds.add(importedKey(pick.rosterId,playerId))
+      continue
+    }
+    if (nativePlayerIds) {
+      batchedPlayers.push({ ...data, id: 'draft-pick:' + pick.id })
+      nativePlayerIds.add(nativeKey(mapping.redraftRoster.id, playerId))
       continue
     }
     const createdRow = await prisma.redraftRosterPlayer.create({ data })
@@ -681,10 +710,10 @@ export async function syncCompletedDraftToRedraftSeason(
     redraftPlayersCreated += 1
   }
 
-  if (importedPlayers.length) {
-    const inserted = await prisma.redraftRosterPlayer.createMany({ data: importedPlayers, skipDuplicates: true })
+  if (batchedPlayers.length) {
+    const inserted = await prisma.redraftRosterPlayer.createMany({ data: batchedPlayers, skipDuplicates: true })
     redraftPlayersCreated += inserted.count
-    redraftPlayersAlreadyPresent += importedPlayers.length - inserted.count
+    redraftPlayersAlreadyPresent += batchedPlayers.length - inserted.count
   }
 
   // An imported franchise can be empty and still needs a season roster and a schedule.

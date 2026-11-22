@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import { gunzipSync } from 'node:zlib'
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -8,6 +9,7 @@ const mock = vi.hoisted(() => ({
   snapshot: vi.fn(),
   roster: vi.fn(async (_leagueId: string, userId: string) => 'roster-' + userId),
   preference: vi.fn(async (_sessionId: string, userId: string) => ({ enabled: userId === 'alice' })),
+  repair: vi.fn(async () => {}),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mock.auth }))
@@ -19,7 +21,7 @@ vi.mock('@/lib/live-draft-engine/auction', () => ({ runAuctionAutomationTick: as
 vi.mock('@/lib/live-draft-engine/keeper', () => ({ runKeeperAutomationTick: async () => {} }))
 vi.mock('@/lib/live-draft-engine/slow-draft/SlowDraftRuntimeService', () => ({ runSlowDraftAutomationTick: async () => {} }))
 vi.mock('@/lib/live-draft-engine/postDraftFinalizeArtifacts', () => ({
-  repairDraftCompletionIfBoardFull: async () => {}, syncPostDraftArtifactsIfCompletedThrottled: async () => {},
+  repairDraftCompletionIfBoardFull: mock.repair, syncPostDraftArtifactsIfCompletedThrottled: async () => {},
 }))
 vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({ getDraftUISettingsForLeague: async () => ({}) }))
 vi.mock('@/lib/orphan-ai-manager/orphanRosterResolver', () => ({ getOrphanRosterIdsForLeague: async () => [] }))
@@ -59,5 +61,32 @@ describe('draft session polling', () => {
     expect(b.session).toMatchObject({currentUserRosterId:'roster-bob', viewerAutopick:{enabled:false}})
     expect((await (await poll()).json()).session.picks).toEqual([{overall:1}])
     expect(mock.snapshot).toHaveBeenCalledTimes(2)
+  })
+
+  it('serves the full board and private viewer fields before maintenance finishes', async () => {
+    let releaseRepair!: () => void
+    mock.repair.mockImplementationOnce(() => new Promise<void>(resolve => { releaseRepair = resolve }))
+    const picks = Array.from({ length: 300 }, (_, index) => ({ overall: index + 1, playerName: 'Player '.repeat(35) }))
+    const board = { id: 'large-session', status: 'in_progress', picks }
+    mock.snapshot.mockResolvedValue(board)
+    mock.auth.mockResolvedValueOnce({ user: { id: 'alice' } }).mockResolvedValueOnce({ user: { id: 'bob' } })
+    const poll = (encoding: string) => GET(
+      new NextRequest('https://example.invalid/api/leagues/large-league/draft/session', {
+        headers: { 'Accept-Encoding': encoding },
+      }),
+      { params: Promise.resolve({ leagueId: 'large-league' }) },
+    )
+    try {
+      const [alice, bob] = await Promise.all([poll('gzip'), poll('gzip;q=0, identity')])
+      expect(alice.headers.get('Content-Encoding')).toBe('gzip')
+      expect(bob.headers.get('Content-Encoding')).toBeNull()
+      const a = JSON.parse(gunzipSync(Buffer.from(await alice.arrayBuffer())).toString())
+      const b = await bob.json()
+      expect(a.session).toMatchObject({ picks, currentUserRosterId: 'roster-alice', viewerAutopick: { enabled: true } })
+      expect(b.session).toMatchObject({ picks, currentUserRosterId: 'roster-bob', viewerAutopick: { enabled: false } })
+      expect(releaseRepair).toBeTypeOf('function')
+    } finally {
+      releaseRepair?.()
+    }
   })
 })

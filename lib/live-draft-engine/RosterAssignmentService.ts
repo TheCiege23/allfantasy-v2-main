@@ -100,6 +100,7 @@ export async function finalizeRosterAssignments(
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.status !== 'completed') return EMPTY_FINALIZE_SUMMARY
+  const sessionId = session.id
 
   const rosterPayload = await getLeagueDraftTemplatePayload(leagueId).catch(() => null)
   const rosterTemplate = rosterPayload?.template ?? null
@@ -153,13 +154,13 @@ export async function finalizeRosterAssignments(
     // Unknown: keep the long-standing behaviour (an existing lineup is kept).
   }
 
-  for (const [rosterId, players] of byRoster) {
+  async function assignRoster(rosterId: string, players: AssignedPlayer[]) {
     const roster = await prisma.roster.findFirst({
       where: { leagueId, id: rosterId },
     })
     if (!roster) {
       missingRosterRows += 1
-      continue
+      return
     }
     const data = (roster.playerData as Record<string, unknown>) ?? {}
 
@@ -169,7 +170,7 @@ export async function finalizeRosterAssignments(
         data: { playerData: toPrismaJsonInput(addFollowUpDraftPlayers(data, players, rosterTemplate)) },
       })
       teamsSynced += 1
-      continue
+      return
     }
 
     const collegePlayers = players.filter(isNbaCollegePick)
@@ -181,7 +182,7 @@ export async function finalizeRosterAssignments(
     // one from THIS draft — commissioner manual edits or a re-run of
     // finalization must not clobber user-configured lineups.
     const builtBy = typeof data.lineup_draft_session_id === 'string' ? data.lineup_draft_session_id : null
-    const lineupFromAnotherDraft = builtBy ? builtBy !== session.id : hasEarlierDraft
+    const lineupFromAnotherDraft = builtBy ? builtBy !== sessionId : hasEarlierDraft
     if (rosterTemplate && (!hasExistingLineup(data) || lineupFromAnotherDraft)) {
       const sections = buildLineupSectionsFromPicks(
         proPlayers.map((p) => ({
@@ -195,7 +196,7 @@ export async function finalizeRosterAssignments(
       nextPlayerData = {
         ...buildPlayerDataFromSections(nextPlayerData, sections),
         draftPicks: players,
-        lineup_draft_session_id: session.id,
+        lineup_draft_session_id: sessionId,
       }
     }
 
@@ -205,6 +206,12 @@ export async function finalizeRosterAssignments(
       data: { playerData: toPrismaJsonInput(nextPlayerData) },
     })
     teamsSynced += 1
+  }
+
+  const rosterEntries = [...byRoster]
+  const batchSize = rosterEntries.length >= 32 ? 8 : 1
+  for (let start = 0; start < rosterEntries.length; start += batchSize) {
+    await Promise.all(rosterEntries.slice(start, start + batchSize).map(([rosterId, players]) => assignRoster(rosterId, players)))
   }
 
   return { teamsSynced, playersSynced, skippedPlayers, missingRosterRows }
