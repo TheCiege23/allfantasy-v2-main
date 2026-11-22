@@ -174,9 +174,30 @@ describe('the combined page for an NBA league on Fantrax', () => {
     h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
     const now = new Date('2026-11-21T18:00:00Z')
     const r = await loadCollegeProRoster('nba', 'u1', now)
-    expect(h.metrics).toHaveBeenCalledOnce()
     expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'nba', week: 5, rosterIds: ['p1', 'p2', 'p3'], limit: 3, includeTradeValues: false, now })
     expect(r.applies && r.sides.find((s) => s.role === 'pro')?.weeklyProjections).toEqual({ p1: 123.51, p2: 0 })
+  })
+
+  it("fills the college half's PROJ column from the college league, scored by that league", async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    h.metrics.mockImplementation(async (a: { leagueId: string }) =>
+      a.leagueId === 'cbb'
+        ? { unit: 'fantasy points', rows: [{ rosterPlayerId: 'c1', playerId: 'rc1', weekly: 18.4, perGame: 9.2 }] }
+        : { unit: 'fantasy points', rows: [{ rosterPlayerId: 'p1', playerId: 'r1', weekly: 123.51, perGame: 41.17 }] },
+    )
+    const now = new Date('2026-11-21T18:00:00Z')
+    const r = await loadCollegeProRoster('nba', 'u1', now)
+    // The college league's own week, not the NBA period's: the metrics infer it from NCAAB's calendar.
+    expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'cbb', week: null, rosterIds: ['c1'], limit: 1, includeTradeValues: false, now })
+    expect(r.applies && r.sides.find((s) => s.role === 'college')?.weeklyProjections).toEqual({ c1: 18.4 })
+  })
+
+  it('leaves the college PROJ column empty, not zeroed, when the college league has no projection', async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    h.metrics.mockImplementation(async (a: { leagueId: string }) =>
+      a.leagueId === 'cbb' ? { unit: 'fantasy points', rows: [{ rosterPlayerId: 'c1', playerId: 'rc1', weekly: null, perGame: 9.2 }] } : null,
+    )
+    const r = await loadCollegeProRoster('nba', 'u1', new Date('2026-11-21T18:00:00Z'))
     expect(r.applies && r.sides.find((s) => s.role === 'college')?.weeklyProjections).toBeUndefined()
   })
 
