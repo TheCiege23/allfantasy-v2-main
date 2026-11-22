@@ -369,10 +369,11 @@ export async function loadLeaguePlayerMetrics(args: {
     const linked = identity.get(row.playerId)
     const knownTeam = projectionTeamKey(sport, linked?.team ?? null)
     const statTeam = projectionTeamKey(sport, recordedTeams.get(row.playerId) ?? null)
-    const inactiveSince = nbaPeriodDay ? activeBoard?.byId.get(row.playerId)?.verifiedNbaInactiveSince : undefined
+    const nbaEvidence = sport === 'NBA' ? activeBoard?.byId.get(row.playerId) : undefined
+    const inactiveSince = nbaPeriodDay ? nbaEvidence?.verifiedNbaInactiveSince : undefined
     const noNbaRoster = Boolean(nbaPeriodDay && inactiveSince && nbaPeriodDay >= inactiveSince)
     const scheduledTeam = statTeam && schedule.has(statTeam) ? statTeam : knownTeam && schedule.has(knownTeam) ? knownTeam : statTeam ?? knownTeam
-    const team = noNbaRoster ? null : scheduledTeam
+    const team = noNbaRoster ? null : nbaEvidence?.verifiedNbaTeam ?? scheduledTeam
     const value = args.includeTradeValues !== false && activeBoard
       ? boardPlayerValue(activeBoard, { playerId: row.playerId, ...(activeBoard.ctx.requireProviderId ? { rosterPlayerId: activeBoard.byId.get(row.playerId)?.rosterAlias } : {}) })
       : null
@@ -415,7 +416,7 @@ export async function loadLeaguePlayerMetrics(args: {
         rosterPlayerId: leagueIdOf(linked, 'fantraxId') ?? undefined,
         availabilityId: leagueIdOf(linked, 'sleeperNbaId'),
         team: team ?? null,
-      } : args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId), team: recordedTeams.get(row.playerId) ?? linked?.team ?? null,
+      } : args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId), team: nbaEvidence?.verifiedNbaTeam ?? recordedTeams.get(row.playerId) ?? linked?.team ?? null,
         availabilityId: sport === 'NBA' || sport === 'NFL' ? leagueIdOf(linked, sport === 'NBA' ? 'sleeperNbaId' : 'sleeperId') : null } : args.searchName ? {
         rosterPlayerId: idColumn ? leagueIdOf(linked, sport === 'NFL' && idColumn === 'rollingInsightsId' ? 'sleeperId' : idColumn) ?? undefined : undefined,
       } : {}),
