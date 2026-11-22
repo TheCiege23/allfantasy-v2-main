@@ -9,7 +9,7 @@
  *  - after the merge the week's top score wins immunity, which rewards a ceiling.
  */
 
-export type SurvivorAdviceTone = 'warn' | 'info' | 'good'
+type SurvivorAdviceTone = 'warn' | 'info' | 'good'
 export type SurvivorAdvice = { id: 'at_risk' | 'at_council' | 'immune' | 'play_idol' | 'hold_idol' | 'lineup'; tone: SurvivorAdviceTone; title: string; body: string }
 
 export type SurvivorWeekAdviceFacts = {

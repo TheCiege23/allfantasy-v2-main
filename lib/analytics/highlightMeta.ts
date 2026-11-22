@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { HIGHLIGHTS, HIGHLIGHT_SURFACES } from './highlights'
 
-const base = z.object({ surface: z.enum(HIGHLIGHT_SURFACES), viewId: z.string().uuid() })
+const base = z.object({ surface: z.enum(HIGHLIGHT_SURFACES), viewId: z.guid() })
 const view = base.extend({
   status: z.enum(['clips', 'empty', 'unavailable', 'error']),
   clipCount: z.number().int().min(0).max(12),

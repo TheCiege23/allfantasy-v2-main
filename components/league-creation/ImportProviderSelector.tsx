@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config';
 import type { ImportProvider } from '@/lib/league-import/types';
 
-export interface ImportProviderSelectorProps {
+interface ImportProviderSelectorProps {
   value: ImportProvider | null;
   onChange: (provider: ImportProvider | null) => void;
   disabled?: boolean;

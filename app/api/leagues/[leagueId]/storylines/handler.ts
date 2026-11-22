@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -44,7 +45,7 @@ async function gate(ctx: Ctx) {
   if (!leagueId) return { error: NextResponse.json({ error: 'Missing leagueId' }, { status: 400 }) } as const
   const role = await getLeagueRole(leagueId, userId)
   if (role === null) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) } as const
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!(await canCommissionerAct(leagueId, userId, 'chat'))) {
     return { error: NextResponse.json({ error: 'Commissioner only' }, { status: 403 }) } as const
   }
   return { leagueId, userId } as const

@@ -20,13 +20,14 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
+        $queryRaw: async () => [],
         // `findMany` serves the seat count and the open-seat claim (none here, so a roster is created).
         roster: { findUnique: mocks.rosterFindUnique, count: mocks.rosterCount, create: mocks.rosterCreate, findMany: async () => [] },
         appUser: { findMany: async () => [], findUnique: async () => ({ email: "joiner@test.local" }) },
         redraftLeagueMember: { upsert: async () => ({}) },
         league: { findUnique: mocks.leagueFindUnique },
         draftSession: { findUnique: mocks.draftSessionFindUnique, findFirst: mocks.draftSessionFindUnique },
-        userProfile: { findFirst: mocks.userProfileFindFirst },
+        userProfile: { findFirst: mocks.userProfileFindFirst, findMany: async () => [] },
         leagueTeam: { count: mocks.leagueTeamCount, create: mocks.leagueTeamCreate },
         growthAttribution: { upsert: mocks.growthAttributionUpsert },
       }),

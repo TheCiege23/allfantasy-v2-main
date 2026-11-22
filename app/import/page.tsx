@@ -6,6 +6,7 @@ import { normalizeIncomingImportProvider } from "@/lib/import/importSearchParams
 import { IMPORT_PROVIDER_UI_OPTIONS } from "@/lib/league-import/provider-ui-config";
 import { prisma } from "@/lib/prisma";
 import { safeInternalPathOr } from "@/lib/auth/auth-intent-resolver";
+import { isReferralCode } from "@/lib/referral/referralShareLink";
 
 /**
  * /import — cut over to the V4 screen.
@@ -134,6 +135,16 @@ export default async function ImportPage(
     if (initialSleeperUsername) qs.set("username", initialSleeperUsername);
     if (initialLeagueSourceId) qs.set("leagueId", initialLeagueSourceId);
     const callbackUrl = encodeURIComponent(`/import?${qs.toString()}`);
+    /*
+     * A leaguemate invite (2026-11-15) carries the inviter's referral code. Whoever holds one is almost
+     * always new, so they go to SIGN-UP rather than sign-in, and the code goes with them: the auth pages
+     * do not mount ReferralTracker, so a code dropped here was a referral never credited and a free
+     * week (lib/referral/proWeek.ts) never earned. The sign-up page records the click itself.
+     */
+    const ref = pickQuery(sp, "ref").trim();
+    if (isReferralCode(ref)) {
+      redirect(`/signup?ref=${encodeURIComponent(ref)}&callbackUrl=${callbackUrl}`);
+    }
     redirect(`/login?callbackUrl=${callbackUrl}`);
   }
 

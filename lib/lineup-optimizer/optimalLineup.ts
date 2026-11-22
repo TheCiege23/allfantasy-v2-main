@@ -13,13 +13,22 @@
  *     optimal QB <- QB_A(30), SUPER_FLEX <- RB_B(25)  = 55
  *
  * A twenty-point miss, silently, on a metric whose entire purpose is to be the number nobody can
- * manipulate. `__tests__/commissioner-os/efl/optimalLineup.test.ts` runs that exact case through
- * BOTH implementations and pins both answers, so this is a measurement rather than an assertion.
+ * manipulate. `__tests__/commissioner-os/efl/trueMaxPf.test.ts` ("the Best Ball optimizer now agrees with
+ * the exact primitive on the case that justified it") runs that exact case through BOTH implementations and pins the answer
+ * (55, where the old greedy pass gave 35), so this is a measurement rather than an assertion; the rest of that file covers the
+ * primitive itself (FLEX/superflex/IDP seats, dual eligibility, ordering independence). Its Best
+ * Ball use is pinned in `__tests__/bestball/best-ball-audit-2026-11.test.ts` (re-seating, dedupe,
+ * negative points, unfillable seats, ties) and `__tests__/bestball/daily-best-ball-scoring.test.ts`
+ * (each day's lineup, summed).
  *
- * ⚠ BEST BALL IS NOT CHANGED BY THIS FILE. Its optimizer, its snapshots and its behaviour are
- * untouched; Best Ball has its own product semantics (and its own tie/alternate reporting) and
- * repointing it is a separate, user-visible decision. This module exists so that it CAN adopt the
- * primitive later without either side being rewritten.
+ * ✅ BEST BALL NOW USES THIS PRIMITIVE EVERYWHERE (audit 2026-11-06, finding #17). Native redraft best
+ * ball (matchups, standings and Guilly chops via `scoreRosterBestBall` in lib/redraft/scoringEngine.ts)
+ * and daily best ball (lib/bestball/dailyBestBall.ts) already did; `lib/bestball/optimizerCore.ts`
+ * (contests, survivor, the optimize cache), `lib/bestball/leagueOptimizer.ts` (the weekly processor)
+ * and `lib/scoring/best-ball-engine.ts` (the scoring worker) were repointed through
+ * `lib/bestball/productionLineup.ts`, so no best ball number can come from a different optimizer than
+ * the matchup's. The greedy counterexample above is kept as history: the old greedy pass scored 35,
+ * and `trueMaxPf.test.ts` now pins both implementations at 55.
  *
  * ## The algorithm, and why it is provably optimal
  *
@@ -140,7 +149,18 @@ export function computeOptimalLineup(input: {
    * zero, and an unstable tiebreak makes the same inputs produce different (equally optimal)
    * lineups across runs — which is fine for the total and fatal for a fingerprint.
    */
-  const players = [...input.players].sort(
+  /*
+   * 🛑 ONE PLAYER, ONE SEAT — ENFORCED HERE, NOT ASSUMED OF THE CALLER. Seats are matched by array
+   * index, so the same `playerId` arriving twice (two active `redraft_roster_players` rows: the table
+   * has no unique (rosterId, playerId)) was seated twice and scored twice — `{WR_A 30, WR_A 30}` into
+   * WR + FLEX totalled 60. Keep the highest-scoring row per player; ties keep the first seen.
+   */
+  const bestByPlayer = new Map<string, OptimizerPlayerInput>()
+  for (const p of input.players) {
+    const prev = bestByPlayer.get(p.playerId)
+    if (!prev || p.points > prev.points) bestByPlayer.set(p.playerId, p)
+  }
+  const players = [...bestByPlayer.values()].sort(
     (a, b) => b.points - a.points || (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0),
   )
 

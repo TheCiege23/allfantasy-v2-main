@@ -80,13 +80,38 @@ export async function POST(req: NextRequest) {
      * results to write about, and the old route happily accepted `week: undefined`, printed
      * "Week ?" as the title, and let the model imagine the rest.
      */
-    if (!Number.isFinite(Number(week))) {
+    /*
+     * 🛑 THE LEAGUE PAGE'S STORY CARD NEVER SENT A WEEK (2026-11-15), so every request was refused with "week
+     * required" and the card showed that error to every league. With no week given, the story is about the latest
+     * week that has scored results this season — still real matchups, never an invented slate. A week that is given
+     * but not a number is still refused.
+     */
+    if (week !== undefined && week !== null && !Number.isFinite(Number(week))) {
       return NextResponse.json(
         { error: 'week required', detail: 'A storyline is about a specific week; pass one.' },
         { status: 400 },
       )
     }
-    const resolvedWeek = Number(week)
+    let resolvedWeek: number
+    if (week === undefined || week === null) {
+      const latest = await prisma.teamWeekResult.findFirst({
+        where: { leagueId, season: resolvedSeason },
+        orderBy: { week: 'desc' },
+        select: { week: true },
+      })
+      if (!latest) {
+        return NextResponse.json(
+          {
+            error: 'no_results',
+            detail: `No week of ${league.name}'s ${resolvedSeason} season has been scored yet. The story is written from real matchups once one has.`,
+          },
+          { status: 409 },
+        )
+      }
+      resolvedWeek = latest.week
+    } else {
+      resolvedWeek = Number(week)
+    }
 
     const [results, labels] = await Promise.all([
       prisma.teamWeekResult.findMany({

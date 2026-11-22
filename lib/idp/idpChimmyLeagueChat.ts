@@ -2,6 +2,7 @@
  * League chat @Chimmy routing for IDP leagues (AfSub-gated features).
  */
 
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { isIdpLeague } from '@/lib/idp'
 import { prisma } from '@/lib/prisma'
 import {
@@ -87,7 +88,7 @@ export async function processIdpLeagueChatInput(
   const week = weekMatch ? Math.min(18, Math.max(1, parseInt(weekMatch[1]!, 10))) : 1
 
   const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: await viewingRosterWhere(leagueId, userId),
     select: { id: true },
   })
   const managerId = userId
@@ -235,7 +236,7 @@ export async function processIdpLeagueChatInput(
     if (defVal?.[1]) {
       const nameQ = defVal[1].trim()
       const roster = await prisma.roster.findFirst({
-        where: { leagueId, platformUserId: userId },
+        where: await viewingRosterWhere(leagueId, userId),
         select: { playerData: true },
       })
       const defs = parseIdpPlayers(roster?.playerData)

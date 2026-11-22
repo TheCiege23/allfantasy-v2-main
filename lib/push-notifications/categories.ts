@@ -45,6 +45,10 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   // Real-world breaking news and live game moments (2026-10-15). Both capped per person per day.
   "breaking_news",
   "live_game_alerts",
+  "imported_scoring",
+  "imported_lineup",
+  "imported_trade",
+  "imported_draft",
 ] as const
 
 export type PushNotificationCategory = (typeof PUSH_NOTIFICATION_CATEGORIES)[number]

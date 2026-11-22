@@ -12,7 +12,7 @@ import {
 import { getLegacyScoreByEntity } from '@/lib/legacy-score-engine/LegacyRankingService'
 import type { LegacyScoreRow } from '@/lib/legacy-score-engine/LegacyRankingService'
 
-export interface HallOfFameEntryWithLegacy {
+interface HallOfFameEntryWithLegacy {
   entryId: string
   entityType: string
   entityId: string
@@ -27,7 +27,7 @@ export interface HallOfFameEntryWithLegacy {
   legacy: LegacyScoreRow | null
 }
 
-export interface HallOfFameMomentWithLegacy {
+interface HallOfFameMomentWithLegacy {
   momentId: string
   leagueId: string
   sport: string

@@ -50,6 +50,22 @@ describe('PageHeader', () => {
     expect(container.querySelector('.af-pg-actions')).toBeNull()
   })
 
+  it('sets a titleAside on the title line, beside the heading and outside its accessible name', () => {
+    const { container } = render(
+      <PageHeader title="Season Outlook" titleRowClassName="af-x-row" titleAside={<span className="af-fresh">2 min ago</span>} />,
+    )
+    const row = container.querySelector('.af-pg-titlerow')
+    expect(row?.className).toBe('af-pg-titlerow af-x-row')
+    expect(row?.querySelector('h1')?.textContent).toBe('Season Outlook')
+    expect(row?.querySelector(':scope > .af-fresh')?.textContent).toBe('2 min ago')
+    expect(screen.getByRole('heading', { level: 1, name: 'Season Outlook' })).toBeTruthy()
+    // No aside, no row: the heading sits straight in the headline, as before.
+    cleanup()
+    const plain = render(<PageHeader title="Standings" />)
+    expect(plain.container.querySelector('.af-pg-titlerow')).toBeNull()
+    expect(plain.container.querySelector('.af-pg-headline > h1')).not.toBeNull()
+  })
+
   it('can be an h2 inside a page that already has its h1', () => {
     render(<PageHeader title="Panel" as="h2" />)
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Panel')

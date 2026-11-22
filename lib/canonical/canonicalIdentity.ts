@@ -50,7 +50,7 @@
 import { createHash } from 'crypto'
 import { normalizePlayerName } from '@/lib/player-assets/resolvePlayerHeadshot'
 
-export interface CanonicalPlayerSeed {
+interface CanonicalPlayerSeed {
   name: string
   sport: string
   position?: string | null
@@ -61,7 +61,7 @@ export interface CanonicalPlayerSeed {
 /** How a canonical id was derived — recorded on the row so a re-match can be audited. */
 export type CanonicalMatchStrategy = 'sleeper_id' | 'name_sport_position_team'
 
-export interface CanonicalPlayerIdentity {
+interface CanonicalPlayerIdentity {
   id: string
   matchKey: string
   strategy: CanonicalMatchStrategy
@@ -119,7 +119,7 @@ export function normalizePosition(position: string | null | undefined): string {
 }
 
 /** Team codes and full school names both appear as `SportsPlayer.team`; compare case-folded. */
-export function normalizeTeam(team: string | null | undefined): string {
+function normalizeTeam(team: string | null | undefined): string {
   return String(team ?? '').trim().toUpperCase()
 }
 
@@ -147,13 +147,13 @@ export function deriveCanonicalPlayerIdentity(
   return { id, matchKey, strategy, normalizedName }
 }
 
-export interface CanonicalTeamSeed {
+interface CanonicalTeamSeed {
   name: string
   sport: string
   leagueKey?: string | null
 }
 
-export interface CanonicalTeamIdentity {
+interface CanonicalTeamIdentity {
   normalizedName: string
   sportKey: string
   leagueKey: string | null
@@ -167,9 +167,18 @@ export function deriveCanonicalTeamIdentity(seed: CanonicalTeamSeed): CanonicalT
   return {
     sportKey: normalizeSport(seed.sport),
     leagueKey: seed.leagueKey?.trim() || null,
-    normalizedName: String(seed.name ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' '),
+    normalizedName: legacyCanonicalTeamName(seed.name)
+      /*
+       * The dash family folds to a hyphen. Rolling Insights carries "University of Missouri-Kansas City"
+       * (RI 357) and "University of Missouri–Kansas City" (RI 347) as two rows, and this rule made them two
+       * canonical teams (merged 2026-11-20). Five stored teams used an en dash; their names were rewritten
+       * to this form the same day, and `legacyCanonicalTeamName` still finds any written the old way.
+       */
+      .replace(/[‐-―−]/g, '-'),
   }
+}
+
+/** The pre-2026-11-20 normalised name (no dash folding) — for finding rows stored under it. */
+export function legacyCanonicalTeamName(name: string | null | undefined): string {
+  return String(name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }

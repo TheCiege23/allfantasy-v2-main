@@ -512,7 +512,15 @@ export function buildNflRedraftTeamScore(input: {
   const starterTotal = roundScore(starters.reduce((sum, player) => sum + player.fantasyPoints, 0))
   const benchTotal = roundScore(bench.reduce((sum, player) => sum + player.fantasyPoints, 0))
   const irTotal = roundScore(ir.reduce((sum, player) => sum + player.fantasyPoints, 0))
-  const missingStarterPlayerIds = starters.filter((player) => !player.hasStats).map((player) => player.playerId)
+  // A finalized row with no stat keys is the week finalizer's certified zero for a starter who did not
+  // play (bye, inactive — lib/redraft/weekFinalizer.ts writes `stats: {}` + `isFinalized: true`). It is
+  // accounted for, not missing. Only a row that is FINALIZED qualifies: a live empty row, or no row at
+  // all, still means the stat line has not arrived. Without this, `persistNflRedraftLiveScoringWeek`
+  // wrote every sealed matchup with a bye/inactive starter back to `active`, and standings dropped it.
+  const certifiedZero = (player: NflRedraftPlayerScore) =>
+    !player.hasStats && input.scoreRowsByPlayerId.get(player.playerId)?.isFinalized === true
+  const accountedFor = (player: NflRedraftPlayerScore) => player.hasStats || certifiedZero(player)
+  const missingStarterPlayerIds = starters.filter((player) => !accountedFor(player)).map((player) => player.playerId)
 
   return {
     rosterId: input.team.rosterId,
@@ -527,7 +535,7 @@ export function buildNflRedraftTeamScore(input: {
     starterCount: starters.length,
     scoredStarterCount: starters.length - missingStarterPlayerIds.length,
     missingStarterPlayerIds,
-    allStartersFinal: starters.length > 0 && starters.every((player) => player.hasStats && player.isFinalized),
+    allStartersFinal: starters.length > 0 && starters.every((player) => accountedFor(player) && player.isFinalized),
     lineupLegal: illegalLineupIssues.length === 0,
     illegalLineupIssues,
     starters,

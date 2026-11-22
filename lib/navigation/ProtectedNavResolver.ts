@@ -6,7 +6,7 @@
 import type { NavLinkItem } from "./NavLinkResolver"
 import { getPrimaryNavItems } from "./NavLinkResolver"
 
-export interface ProtectedNavState {
+interface ProtectedNavState {
   /** Show main nav tabs / drawer links (when authenticated in full shell, or when minimal shell shows app entry). */
   showPrimaryNav: boolean
   /** Show user menu / profile / settings (authenticated only). */

@@ -1,3 +1,4 @@
+import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -16,8 +17,6 @@ import {
   normalizeDraftedNameSet,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine/queue-utils'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -239,7 +238,6 @@ export type DraftHqData = {
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
 
-
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
   espn: 'ESPN',
@@ -336,7 +334,7 @@ async function loadPreparedQueue(sessionId: string, userId: string): Promise<Sec
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const row = await prisma.draftQueue.findUnique({
-    where: { sessionId_userId: { sessionId, userId } },
+    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
     select: { order: true },
   })
   const order = row?.order
@@ -768,9 +766,11 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
 
   /* AllFantasy's own projection for every player on the board — one read. */
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: boardLeague?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: boardLeague?.settings,
+    sport: boardLeague?.sport,
   })
 
   const teamCount = teams.length
@@ -906,9 +906,11 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     league?.sport,
   )
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: league?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: league?.settings,
+    sport: league?.sport,
   })
 
   return {
@@ -1169,9 +1171,11 @@ export async function getDraftHqData(
     league.sport,
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
   const madeAfs = await loadDraftAfProjections({
+    leagueId,
     platform: league.platform,
     playerIds: made.map((p) => p.playerId),
     leagueSettings: league.settings,
+    sport: league.sport,
   })
 
   const madePicks: SectionState<MadePick[]> =

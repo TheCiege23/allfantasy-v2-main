@@ -50,7 +50,7 @@ export type ChatAlertDecision =
   | { alert: false; reason: 'already_read' | 'viewing' | 'throttled' }
   | { alert: true; email: boolean }
 
-export type ChatAlertDecisionInput = {
+type ChatAlertDecisionInput = {
   now: Date
   messageAt: Date
   lastReadAt: Date | null | undefined

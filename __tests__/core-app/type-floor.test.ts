@@ -211,14 +211,14 @@ const INLINE_EXEMPT: Record<string, { n: number; why: string }> = {
   'components/career/ShareCard.tsx': { n: 1, why: '620x780 satori poster, exported as a PNG' },
   'components/core-app/career/CareerProgressChart.tsx': { n: 1, why: 'SVG axis label, viewBox 0 0 700 196, preserveAspectRatio="none"' },
   'components/dynasty/DynastyProjectionPanel.tsx': { n: 2, why: 'SVG axis labels inside a viewBox' },
-  'components/ConfidenceRiskBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
   'components/ai-confidence/ConfidenceBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
-  'components/mobile/UniversalAIBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
   'components/core-app/screens/AuthV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
-  'components/core-app/screens/Career.tsx': { n: 2, why: 'AF crest glyph, aria-hidden SVG' },
+  // The AF crest left Career's header on 2026-11-14 (the page now opens on its headline); the gauge label stays.
+  'components/core-app/screens/Career.tsx': { n: 1, why: 'GM prestige gauge label inside an SVG viewBox' },
   'components/core-app/screens/ImportV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'components/core-app/screens/LandingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'components/core-app/screens/PricingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'components/core-app/screens/TokenCentreV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text> (same mark as PricingV4)' },
   'components/core-app/screens/RecoveryChrome.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'app/import/[platform]/page.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
 }

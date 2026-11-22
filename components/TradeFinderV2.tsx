@@ -1,12 +1,11 @@
 'use client'
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { Search, ChevronDown, ChevronUp, Copy, MessageCircle, ArrowRight, ArrowLeft, Zap, RefreshCw, AlertTriangle, Users, TrendingUp, Shield, X, Layers, BarChart3, Info, Send, RotateCcw, Target, UserCheck, Handshake } from 'lucide-react'
-import { Card, Button, Pill, cx, EmptyState, LoadingSpinner, Divider } from '@/components/ui/legacy-ui'
+import { Search, ChevronDown, ChevronUp, Copy, MessageCircle, ArrowRight, ArrowLeft, Zap, RefreshCw, AlertTriangle, Users, TrendingUp, Shield, Layers, BarChart3, Info, Send, RotateCcw, Handshake } from 'lucide-react'
+import { Card, Button, Pill, cx, Divider } from '@/components/ui/legacy-ui'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import AIBottomSheet from '@/components/mobile/AIBottomSheet'
 import { ConfidencePill, ConfidenceBreakdownModal, RiskFlags } from '@/components/ai'
-import type { Confidence, ConfidenceBreakdown } from '@/components/ai'
 import { NegotiationSheet } from '@/components/negotiation'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { NegotiationData } from '@/components/negotiation'
@@ -905,7 +904,7 @@ export default function TradeFinderV2({
   const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const [showAll, setShowAll] = useState(false)
   const [deepDiveOpen, setDeepDiveOpen] = useState(false)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [, setCopiedId] = useState<string | null>(null)
   const [chatTradeContext, setChatTradeContext] = useState<string | null>(null)
   const [userRosterId, setUserRosterId] = useState<number | null>(externalRosterId || null)
   const [negOpen, setNegOpen] = useState(false)
@@ -1088,8 +1087,6 @@ export default function TradeFinderV2({
     const receives = candidate?.teamA?.receives?.map(a => a.name).join(', ') || ''
     setChatTradeContext(`I'm considering this trade: I send ${gives} and receive ${receives}. ${rec.summary}. What do you think?`)
   }
-
-  const currentLeague = leagues.find(l => l.league_id === selectedLeague)
 
   const activeRec = recommendations.find(r => r.tradeId === activeTradeId)
   const activeCandidate = activeRec ? matchCandidateToRec(activeRec) : undefined
@@ -1372,7 +1369,7 @@ export default function TradeFinderV2({
         <div className="space-y-4">
           <div className="text-center">
             <p className="text-xs text-white/40">
-              AI scanned {response.meta.partnersEvaluated} teams, generated {response.meta.rawCandidatesGenerated} candidates, refined to {response.meta.prunedTo}
+              Chimmy scanned {response.meta.partnersEvaluated} teams, generated {response.meta.rawCandidatesGenerated} candidates, refined to {response.meta.prunedTo}
             </p>
           </div>
 

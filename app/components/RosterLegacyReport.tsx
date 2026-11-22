@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Award, Shield, TrendingUp, Clock, AlertTriangle, Users, DollarSign, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
 
 const iconMap: Record<string, any> = {
   Award, Shield, TrendingUp, Clock, AlertTriangle, Users, DollarSign,

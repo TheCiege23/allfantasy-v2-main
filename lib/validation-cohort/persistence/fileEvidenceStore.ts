@@ -23,7 +23,7 @@ export class FileEvidenceStore implements HistoricalEvidenceStore {
   private readonly portfoliosDir: string
   private readonly statePath: string
 
-  constructor(private readonly root: string) {
+  constructor(root: string) {
     this.leaguesDir = path.join(root, 'leagues')
     this.portfoliosDir = path.join(root, 'portfolios')
     this.statePath = path.join(root, 'import-state.json')

@@ -1,9 +1,9 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 
   let targetUserId = session.user.id
   if (userIdParam && userIdParam !== session.user.id) {
-    await requireCommissionerOnly(leagueId, session.user.id)
+    await requireCommissionerAccess(leagueId, session.user.id, 'view')
     targetUserId = userIdParam
   }
 

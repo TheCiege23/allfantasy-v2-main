@@ -1,10 +1,11 @@
+import { listHeldTeams } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { findSportsPlayersByLeagueIds } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
-export type AutoCoachRosterPlayer = {
+type AutoCoachRosterPlayer = {
   /** The roster id — what `excludedPlayerIds` stores and what the engine compares against. */
   id: string
   name: string
@@ -31,14 +32,14 @@ export async function listAutoCoachRosterPlayers(
   const byId = new Map<string, AutoCoachRosterPlayer>()
 
   for (const league of leagues) {
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId: league.id, platformUserId: userId },
-      select: { playerData: true },
-    })
-    if (!roster) continue
-
-    const sections = getNormalizedLineupSections(roster.playerData)
-    const rows = [...sections.starters, ...sections.bench]
+    // Every team the manager runs in this league (lib/league/viewerTeams.ts), not just one of them.
+    const rows: ReturnType<typeof getNormalizedLineupSections>['starters'] = []
+    for (const team of await listHeldTeams(league.id, userId)) {
+      const roster = await prisma.roster.findFirst({ where: { id: team.rosterId, leagueId: league.id }, select: { playerData: true } })
+      if (!roster) continue
+      const sections = getNormalizedLineupSections(roster.playerData)
+      rows.push(...sections.starters, ...sections.bench)
+    }
     const ids = rows.map((r) => String(r.id ?? '').trim()).filter(Boolean)
     if (ids.length === 0) continue
 

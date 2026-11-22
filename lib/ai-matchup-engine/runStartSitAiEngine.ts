@@ -256,7 +256,7 @@ export async function runStartSitAiEngine(params: {
       ifNeedFloor: 'Prefer safer roles when protecting a lead.',
       ifNeedUpside: 'Prefer ceiling when chasing points.',
     },
-    winProbabilityInfluence: 'Configure AI keys for full analysis.',
+    winProbabilityInfluence: 'Configure Chimmy keys for full analysis.',
     dataNotes: 'Providers unavailable.',
     providers: {
       openai: 'error',

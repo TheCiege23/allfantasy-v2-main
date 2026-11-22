@@ -209,6 +209,21 @@ describe('runWeeklyResolution — the league moves on to the next week', () => {
     expect(argsOf('zombieWeeklyWinnings.upsert')).toEqual([])
   })
 
+  it('a held week records WHY, and the commissioner alert says it in words (lib/zombie/settlementHoldReasons.ts)', async () => {
+    arrange(3)
+    overrides.set('zombieWeeklyWinnings.findMany', async () => [{ rosterId: 'a', amount: 100, source: 'weekly_settlement' }])
+    const { logAuditEntry } = await import('@/lib/zombie/auditService')
+    const { notifyCommissioner } = await import('@/lib/zombie/commissionerNotificationService')
+    vi.mocked(logAuditEntry).mockClear()
+    vi.mocked(notifyCommissioner).mockClear()
+    await runWeeklyResolution('z1', 3)
+    const held = vi.mocked(logAuditEntry).mock.calls.find(([, e]) => (e as { action?: string }).action === 'SETTLEMENT_HELD')
+    expect(held?.[1]).toMatchObject({ week: 3, newState: { code: 'ZOMBIE_WINNINGS_POLICY_REVIEW_REQUIRED', kind: 'support' } })
+    const alert = vi.mocked(notifyCommissioner).mock.calls.at(-1)!
+    expect(alert[2]).toBe('Week 3 settlement is on hold')
+    expect(String(alert[3])).toContain('Retry settlement')
+  })
+
   it('points the league at the week after the one it resolved', async () => {
     arrange(3)
     await runWeeklyResolution('z1', 3, { force: true })

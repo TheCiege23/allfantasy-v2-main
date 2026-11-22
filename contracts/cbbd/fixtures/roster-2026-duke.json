@@ -1,0 +1,303 @@
+{
+  "_probe": {
+    "path": "/teams/roster?season=2026&team=Duke",
+    "capturedAt": "2026-11-22"
+  },
+  "response": [
+    {
+      "teamId": 72,
+      "teamSourceId": "150",
+      "team": "Duke",
+      "conference": "ACC",
+      "season": 2026,
+      "players": [
+        {
+          "id": 209,
+          "sourceId": "5105337",
+          "name": "Maliq Brown",
+          "firstName": "Maliq",
+          "lastName": "Brown",
+          "jersey": "6",
+          "position": "Forward",
+          "height": 81,
+          "weight": 225,
+          "hometown": {
+            "city": "Culpeper",
+            "state": "VA",
+            "country": null,
+            "latitude": 38.4733823,
+            "longitude": -77.9961275,
+            "countyFips": "51047"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 198977,
+          "sourceId": "5041935",
+          "name": "Cameron Boozer",
+          "firstName": "Cameron",
+          "lastName": "Boozer",
+          "jersey": "12",
+          "position": "Forward",
+          "height": 81,
+          "weight": 250,
+          "hometown": {
+            "city": "Miami",
+            "state": "FL",
+            "country": null,
+            "latitude": 25.7741728,
+            "longitude": -80.19362,
+            "countyFips": "12086"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2026
+        },
+        {
+          "id": 198983,
+          "sourceId": "5144124",
+          "name": "Nik Khamenia",
+          "firstName": "Nik",
+          "lastName": "Khamenia",
+          "jersey": "4",
+          "position": "Guard",
+          "height": 80,
+          "weight": 225,
+          "hometown": {
+            "city": "Tarzana",
+            "state": "CA",
+            "country": null,
+            "latitude": 34.1689262,
+            "longitude": -118.5365791,
+            "countyFips": "06037"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2026
+        },
+        {
+          "id": 7432,
+          "sourceId": "5107141",
+          "name": "Ifeanyi Ufochukwu",
+          "firstName": "Ifeanyi",
+          "lastName": "Ufochukwu",
+          "jersey": "15",
+          "position": "Center",
+          "height": 83,
+          "weight": 240,
+          "hometown": {
+            "city": "Benin City",
+            "state": "NGR",
+            "country": null,
+            "latitude": null,
+            "longitude": null,
+            "countyFips": null
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2026
+        },
+        {
+          "id": 3397,
+          "sourceId": "4888720",
+          "name": "Jack Scott",
+          "firstName": "Jack",
+          "lastName": "Scott",
+          "jersey": "20",
+          "position": "Guard",
+          "height": 78,
+          "weight": 220,
+          "hometown": {
+            "city": "Pelican Island",
+            "state": "NJ",
+            "country": null,
+            "latitude": 39.94251765,
+            "longitude": -74.0885471233452,
+            "countyFips": "34029"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2026
+        },
+        {
+          "id": 208,
+          "sourceId": "4711256",
+          "name": "Caleb Foster",
+          "firstName": "Caleb",
+          "lastName": "Foster",
+          "jersey": "1",
+          "position": "Guard",
+          "height": 77,
+          "weight": 200,
+          "hometown": {
+            "city": "Harrisburg",
+            "state": "NC",
+            "country": null,
+            "latitude": 35.3258295,
+            "longitude": -80.6454979,
+            "countyFips": "37025"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2024,
+          "endSeason": 2027
+        },
+        {
+          "id": 198978,
+          "sourceId": "5041937",
+          "name": "Cayden Boozer",
+          "firstName": "Cayden",
+          "lastName": "Boozer",
+          "jersey": "2",
+          "position": "Guard",
+          "height": 76,
+          "weight": 195,
+          "hometown": {
+            "city": "Miami",
+            "state": "FL",
+            "country": null,
+            "latitude": 25.7741728,
+            "longitude": -80.19362,
+            "countyFips": "12086"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2027
+        },
+        {
+          "id": 198985,
+          "sourceId": "5287474",
+          "name": "Dame Sarr",
+          "firstName": "Dame",
+          "lastName": "Sarr",
+          "jersey": "7",
+          "position": "Guard",
+          "height": 80,
+          "weight": 200,
+          "hometown": {
+            "city": "Oderzo",
+            "state": null,
+            "country": "Italy",
+            "latitude": null,
+            "longitude": null,
+            "countyFips": null
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2027
+        },
+        {
+          "id": 198989,
+          "sourceId": "5144150",
+          "name": "Sebastian Wilkins",
+          "firstName": "Sebastian",
+          "lastName": "Wilkins",
+          "jersey": "5",
+          "position": "Guard",
+          "height": 80,
+          "weight": 220,
+          "hometown": {
+            "city": "Boston",
+            "state": "MA",
+            "country": null,
+            "latitude": 42.3554334,
+            "longitude": -71.060511,
+            "countyFips": "25025"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2026,
+          "endSeason": 2027
+        },
+        {
+          "id": 211,
+          "sourceId": "5061585",
+          "name": "Isaiah Evans",
+          "firstName": "Isaiah",
+          "lastName": "Evans",
+          "jersey": "3",
+          "position": "Guard",
+          "height": 78,
+          "weight": 180,
+          "hometown": {
+            "city": "Fayetteville",
+            "state": "NC",
+            "country": null,
+            "latitude": 35.0525759,
+            "longitude": -78.878292,
+            "countyFips": "37051"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 212,
+          "sourceId": "4873107",
+          "name": "Darren Harris",
+          "firstName": "Darren",
+          "lastName": "Harris",
+          "jersey": "1",
+          "position": "Guard",
+          "height": 77,
+          "weight": 205,
+          "hometown": {
+            "city": "Herndon",
+            "state": "VA",
+            "country": null,
+            "latitude": 38.9695316,
+            "longitude": -77.3859479,
+            "countyFips": "51059"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 218,
+          "sourceId": "4432321",
+          "name": "Cameron Sheffield",
+          "firstName": "Cameron",
+          "lastName": "Sheffield",
+          "jersey": "13",
+          "position": "Guard",
+          "height": 78,
+          "weight": 205,
+          "hometown": {
+            "city": "Alpharetta",
+            "state": "GA",
+            "country": null,
+            "latitude": 34.0709576,
+            "longitude": -84.2747329,
+            "countyFips": "13121"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 216,
+          "sourceId": "4873209",
+          "name": "Patrick Ngongba II",
+          "firstName": "Patrick",
+          "lastName": "Ngongba II",
+          "jersey": "21",
+          "position": "Center",
+          "height": 83,
+          "weight": 250,
+          "hometown": {
+            "city": "Manassas",
+            "state": "VA",
+            "country": null,
+            "latitude": 38.7509488,
+            "longitude": -77.4752667,
+            "countyFips": "51683"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2027
+        }
+      ]
+    }
+  ]
+}

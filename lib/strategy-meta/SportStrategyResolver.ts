@@ -3,11 +3,7 @@
  * Strategy logic adapts to each sport's roster, draft, and scoring context.
  */
 import type { StrategySport, StrategyType } from './types'
-import { SUPPORTED_STRATEGY_SPORTS } from './types'
-import { getDetectionConfig } from './detection-config'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
-
-export const STRATEGY_SPORTS: readonly StrategySport[] = [...SUPPORTED_STRATEGY_SPORTS]
 
 /** Human-readable strategy label per sport (analogous concepts across sports). */
 const STRATEGY_LABELS: Record<StrategyType, string> = {
@@ -70,14 +66,7 @@ export function getStrategyLabelForSport(strategyType: StrategyType, sport: Stra
 }
 
 /**
- * Get detection config for a sport (draft position allocation, positional concentration).
- */
-export function getSportStrategyConfig(sport: StrategySport) {
-  return getDetectionConfig(sport)
-}
-
-/**
- * Normalize sport for strategy meta (must be one of STRATEGY_SPORTS).
+ * Normalize sport for strategy meta (falls back to the default sport).
  */
 export function resolveSportForStrategy(sport: string | null | undefined): StrategySport {
   return normalizeToSupportedSport(sport ?? DEFAULT_SPORT)

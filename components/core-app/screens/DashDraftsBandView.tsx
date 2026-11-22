@@ -14,7 +14,7 @@ import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
  *
  * ⚠ ONLY SLICES CROSS THE BOUNDARY: each card gets the fields it shows, never the aggregator's row.
  */
-export type DraftsBandCard = {
+type DraftsBandCard = {
   leagueId: string
   leagueName: string
   imageUrl: string | null
@@ -110,4 +110,3 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
   )
 }
 
-export default DashDraftsBandView

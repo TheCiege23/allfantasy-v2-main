@@ -6,6 +6,8 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: m.gate, isCommissioner: m.role }))
 vi.mock('@/lib/commissioner-workspace/taskStore', () => ({ reconcileLeagueTasks: m.reconcile, readLeagueTasks: m.read }))
 vi.mock('@/lib/prisma', () => ({ prisma: { $transaction: async (fn: (tx: unknown) => unknown) => fn({ commissionerWorkspaceTask: { createMany: m.create, findFirst: m.row, updateMany: m.update }, leagueAuditLog: { create: m.audit } }) } }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromBoolean(() => async (l: string, u: string) => { try { await m.gate(l, u) } catch { return false } return Boolean(await m.role(l, u)) }))
 import { GET, POST, PATCH } from '@/app/api/core/commissioner-queue/route'
 const body = { requestId: '0123456789abcdef', title: 'Review scoring', description: 'Reviewed task', dueAt: null }
 const req = (method: string, value: unknown = body) => new Request('http://localhost/api/core/commissioner-queue?league=A', { method, ...(method === 'GET' ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }) })

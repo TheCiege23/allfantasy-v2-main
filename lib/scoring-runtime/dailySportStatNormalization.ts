@@ -355,7 +355,7 @@ function addNhlRateBonuses(stats: Record<string, number>): void {
  * Either way a REGULATION loss with no goal against means the winner went into an empty net, which
  * is not a shutout; a shootout loss stays eligible, as in the NHL.
  */
-export function derivedNhlShutout(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
+function derivedNhlShutout(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
   if (stats.g_ga !== 0) return 0
   if ((stats.g_loss ?? 0) > 0) return 0
   const played = (stats.g_toi ?? 0) > 0 || (stats.g_sa ?? 0) > 0 || (stats.g_sv ?? 0) > 0 ||
@@ -380,7 +380,7 @@ export function derivedNhlShutout(stats: Record<string, number>, raw: JsonRecord
  * before it was stored, or a game still running) derives nothing either: a goalie's own line
  * cannot show that his team won. A line the vendor already gave a loss is left alone.
  */
-export function derivedNhlWin(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
+function derivedNhlWin(stats: Record<string, number>, raw: JsonRecord): 0 | 1 {
   if (raw.gameFinal !== true || raw.teamWon !== true) return 0
   if (asNumber(raw.teamGoaliesUsed) !== 1) return 0
   if ((stats.g_loss ?? 0) > 0 || (stats.g_otl ?? 0) > 0) return 0
@@ -389,7 +389,7 @@ export function derivedNhlWin(stats: Record<string, number>, raw: JsonRecord): 0
 }
 
 /** Regulation length. The fallback in {@link derivedNhlShutout} requires the goalie's clock to reach it. */
-export const NHL_SHUTOUT_FULL_GAME_MINUTES = 60
+const NHL_SHUTOUT_FULL_GAME_MINUTES = 60
 
 /**
  * Numeric keys every stored NHL line carries that no category scores. `player_id` is folded into
@@ -464,7 +464,7 @@ export function collectCachedWeekRows(payload: unknown, week: number): unknown[]
   return rows
 }
 
-export interface WeeklyAggregate {
+interface WeeklyAggregate {
   stats: Record<string, number>
   gamesCounted: number
   unmappedKeys: string[]
@@ -509,7 +509,7 @@ export function isDailyStatSport(sport: string | null | undefined): boolean {
   return Object.hasOwn(DAILY_SPORT_NORMALIZERS, String(sport ?? '').trim().toUpperCase())
 }
 
-export interface WeekWindow {
+interface WeekWindow {
   start: Date
   end: Date
 }

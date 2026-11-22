@@ -167,5 +167,11 @@ describe('League Home loader — leagueRivalRows', () => {
       lastResult: 'beat you by 10.0', lastParts: { kind: 'lost', margin: 10 },
     })
     expect(out[0]!.lastParts).toEqual({ kind: 'tie', margin: 0 })
-  })
+    /*
+     * ⚠ THE IMPORT IS THE WHOLE COST. It loads leagueHome's full module graph unmocked: measured
+     * 18.6s alone on main and 20.8s with a fresh transform (2026-11-14), against the 30s default —
+     * so a loaded box or a busy CI shard timed it out with nothing wrong. Same budget as the
+     * league-context loader test, which pulls in the same graph.
+     */
+  }, 60_000)
 })

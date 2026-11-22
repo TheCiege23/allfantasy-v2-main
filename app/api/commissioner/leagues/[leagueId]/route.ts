@@ -1,8 +1,8 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { leagueChatThreadLinkRefusal } from '@/lib/league/leagueChatThreadLink'
 import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { settingsPatchLockedResponse } from '@/lib/league/settingsLockGuard'
@@ -25,11 +25,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
   const leagueId = params.leagueId
   if (!leagueId) return NextResponse.json({ error: 'League ID required' }, { status: 400 })
 
-  try {
-    await assertCommissioner(leagueId, userId)
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   // Only this league's own chat may be linked (lib/league/leagueChatThreadLink.ts).

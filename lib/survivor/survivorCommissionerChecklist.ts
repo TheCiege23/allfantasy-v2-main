@@ -4,7 +4,7 @@
  * the card and its tests. Anything that is fine says so, so a finished checklist reads as "ready".
  */
 
-export type SurvivorChecklistState = 'done' | 'todo' | 'waiting'
+type SurvivorChecklistState = 'done' | 'todo' | 'waiting'
 export type SurvivorChecklistItem = { id: string; label: string; detail: string; state: SurvivorChecklistState }
 
 export type SurvivorChecklistFacts = {

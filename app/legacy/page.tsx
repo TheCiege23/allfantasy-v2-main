@@ -125,10 +125,10 @@ export default function LegacyOverview() {
       <div className="max-w-7xl mx-auto px-6 py-6 flex gap-2 border-b border-white/10 overflow-x-auto">
         {[
           { id: 'overview', label: 'Overview', icon: '🏠' },
-          { id: 'trade', label: 'AI Trade Hub', icon: '⚖️' },
-          { id: 'waiver', label: 'Waiver AI', icon: '📈' },
+          { id: 'trade', label: 'Chimmy Trade Hub', icon: '⚖️' },
+          { id: 'waiver', label: 'Waiver Chimmy', icon: '📈' },
           { id: 'chat', label: 'Chimmy Chat', icon: '💬' },
-          { id: 'mock-draft', label: 'Mock Draft AI', icon: '🧠' },
+          { id: 'mock-draft', label: 'Mock Draft Chimmy', icon: '🧠' },
           { id: 'ideas', label: 'Submit Ideas', icon: '💡' },
           { id: 'transfer', label: 'Transfer', icon: '🔄' },
         ].map(tab => {
@@ -184,7 +184,7 @@ export default function LegacyOverview() {
         {activeTab === 'trade' && (
           <div className="py-16 text-center">
             <div className="text-6xl mb-4">⚖️</div>
-            <h2 className="text-2xl font-bold mb-2">AI Trade Hub</h2>
+            <h2 className="text-2xl font-bold mb-2">Chimmy Trade Hub</h2>
             <p className="text-slate-400">Evaluate trades, get counter-offer suggestions, and analyze trade history.</p>
             <p className="text-sm text-slate-500 mt-4">Navigate to the Trade Analyzer from the dashboard for full functionality.</p>
           </div>
@@ -197,8 +197,8 @@ export default function LegacyOverview() {
         {activeTab === 'mock-draft' && (
           <div className="space-y-4">
             <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-              <h2 className="text-xl font-bold text-white">Legacy Mock Draft with AI</h2>
-              <p className="text-sm text-slate-300 mt-1">Run AI-powered mock drafts using your synced leagues and settings.</p>
+              <h2 className="text-xl font-bold text-white">Legacy Mock Draft with Chimmy</h2>
+              <p className="text-sm text-slate-300 mt-1">Run Chimmy-powered mock drafts using your synced leagues and settings.</p>
             </div>
 
             {mockLoading ? (
@@ -207,7 +207,7 @@ export default function LegacyOverview() {
               <MockDraftSimulatorClient leagues={mockLeagues} />
             ) : (
               <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-6 text-center space-y-3">
-                <p className="text-sm text-slate-300">No synced leagues found yet. Sync a league to unlock league-aware AI mock drafts.</p>
+                <p className="text-sm text-slate-300">No synced leagues found yet. Sync a league to unlock league-aware Chimmy mock drafts.</p>
                 <div className="flex items-center justify-center gap-3">
                   <Link href="/import" className="rounded-lg bg-white text-black px-4 py-2 text-sm font-medium hover:bg-slate-200">Sync League</Link>
                   <Link href="/af-legacy" className="rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Open Full Legacy</Link>
@@ -243,9 +243,9 @@ export default function LegacyOverview() {
 function LegacyAuthGate() {
   return (
     <div className="rounded-2xl border border-white/15 bg-white/5 p-8 text-center space-y-4">
-      <h2 className="text-2xl font-bold">Sign in to unlock Legacy AI tools</h2>
+      <h2 className="text-2xl font-bold">Sign in to unlock Legacy Chimmy tools</h2>
       <p className="text-sm text-slate-300 max-w-xl mx-auto">
-        Trade AI, Waiver AI, Mock Draft AI, and league-transfer actions require an account so your results, imports, and AI context stay synced.
+        Trade Chimmy, Waiver Chimmy, Mock Draft Chimmy, and league-transfer actions require an account so your results, imports, and Chimmy context stay synced.
       </p>
       <div className="flex items-center justify-center gap-3">
         <Link href="/login?next=/legacy" className="rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Sign In</Link>

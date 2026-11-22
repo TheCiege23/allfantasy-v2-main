@@ -532,6 +532,61 @@
   color: var(--text);
 }
 
+/* Bid ladder (AuctionBidLadder.tsx): team · amount · time, newest first. Top level, not in a query. */
+.af-dr-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-dr-ladder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-dr-ladder-team {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text2);
+}
+
+.af-dr-ladder-amt {
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-dr-ladder-row[data-top='true'] .af-dr-ladder-team,
+.af-dr-ladder-row[data-top='true'] .af-dr-ladder-amt {
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-dr-ladder-time {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-dr-won {
+  display: flex;
+  flex-direction: column;
+}
+
+.af-dr-ladder-summary {
+  cursor: pointer;
+  padding: 2px 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
 .af-dr-track {
   height: 4px;
   border-radius: 999px;

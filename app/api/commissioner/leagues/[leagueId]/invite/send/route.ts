@@ -1,10 +1,10 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { getServedOrigin } from "@/lib/http/served-origin"
 import { createHash } from "crypto"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { getLeaguePrivacySettings } from "@/lib/league-privacy"
 import { buildFantasyInviteLink, generateInviteToken, getDefaultFantasyInviteExpiry } from "@/lib/league-invite"
 import { buildEmailIdempotencyKey } from "@/lib/email/idempotency"
@@ -61,7 +61,8 @@ export async function POST(
 
   try {
     const { leagueId } = await params
-    await assertCommissioner(leagueId, userId)
+    const refused = await commissionerAccessResponse(leagueId, userId, 'league')
+    if (refused) return refused
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

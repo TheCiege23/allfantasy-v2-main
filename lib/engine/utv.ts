@@ -11,32 +11,6 @@ import type { SportKey } from './trade-types'
 import { pickRoundTable } from '@/lib/pick-curve'
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface UTVEntry {
-  playerId: string
-  name: string
-  sport: SportKey
-  position: string
-  utv: number // 0–1000
-  marketValue: number
-  tradeVolume: number // how many times traded in last 90 days
-  lastTradeDate: string | null
-  trend: 'rising' | 'falling' | 'stable'
-  trendDelta: number // change in last 14 days (-100 to +100)
-  updatedAt: string
-}
-
-export interface UTVPickEntry {
-  sport: SportKey
-  year: number
-  round: number
-  tier: 'early' | 'mid' | 'late'
-  utv: number
-}
-
-// ---------------------------------------------------------------------------
 // Sport normalization constants — different sports have different value ceilings
 // ---------------------------------------------------------------------------
 
@@ -62,15 +36,6 @@ const SPORT_POSITION_WEIGHTS: Record<string, Record<string, number>> = {
   NCAAB: { PG: 0.90, SG: 0.85, SF: 0.85, PF: 0.80, C: 0.75 },
   SOCCER: { FW: 0.95, MF: 0.85, DF: 0.65, GK: 0.50 },
 }
-
-// ---------------------------------------------------------------------------
-// In-memory cache (precomputed nightly, refreshed on demand)
-// ---------------------------------------------------------------------------
-
-let _utvCache: Map<string, UTVEntry> = new Map()
-let _utvPickCache: Map<string, UTVPickEntry> = new Map()
-let _cacheTimestamp = 0
-const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
 
 // ---------------------------------------------------------------------------
 // Core UTV computation
@@ -137,24 +102,6 @@ export function computeUTV(inputs: {
   return normalizeToUTV(normalized, sport, position)
 }
 
-/**
- * Compute trend direction from recent value history.
- */
-export function computeTrend(
-  currentUtv: number,
-  previousUtv: number | null,
-  daysDelta: number = 14,
-): { trend: 'rising' | 'falling' | 'stable'; trendDelta: number } {
-  if (previousUtv == null) return { trend: 'stable', trendDelta: 0 }
-
-  const delta = currentUtv - previousUtv
-  const pctChange = previousUtv > 0 ? (delta / previousUtv) * 100 : 0
-
-  if (pctChange > 3) return { trend: 'rising', trendDelta: Math.round(delta) }
-  if (pctChange < -3) return { trend: 'falling', trendDelta: Math.round(delta) }
-  return { trend: 'stable', trendDelta: Math.round(delta) }
-}
-
 // ---------------------------------------------------------------------------
 // Pick UTV
 // ---------------------------------------------------------------------------
@@ -210,43 +157,7 @@ export function computePickUTV(inputs: {
 // Cache management
 // ---------------------------------------------------------------------------
 
-/**
- * Get cached UTV for a player. Returns null if not cached.
- */
-export function getCachedUTV(playerId: string): UTVEntry | null {
-  if (Date.now() - _cacheTimestamp > CACHE_TTL_MS) return null
-  return _utvCache.get(playerId) ?? null
-}
-
-/**
- * Set UTV in cache.
- */
-export function setCachedUTV(entry: UTVEntry): void {
-  _utvCache.set(entry.playerId, entry)
-  _cacheTimestamp = Date.now()
-}
-
-/**
- * Bulk set UTV entries (for nightly precompute).
- */
-export function bulkSetUTV(entries: UTVEntry[]): void {
-  _utvCache = new Map(entries.map(e => [e.playerId, e]))
-  _cacheTimestamp = Date.now()
-}
-
-/**
- * Get all cached UTV entries for a sport.
- */
-export function getUTVBySport(sport: SportKey): UTVEntry[] {
-  const result: UTVEntry[] = []
-  for (const entry of _utvCache.values()) {
-    if (entry.sport === sport) result.push(entry)
-  }
-  return result
-}
-
 // ---------------------------------------------------------------------------
 // Exports for trade engine integration
 // ---------------------------------------------------------------------------
 
-export { SPORT_VALUE_CEILING, SPORT_POSITION_WEIGHTS }

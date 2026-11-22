@@ -121,11 +121,11 @@ export function PlayerDecisionTool() {
       <header className="space-y-2">
         <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
           <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          AI Start A vs B
+          Chimmy Start A vs B
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Player decision engine</h1>
         <p className="max-w-2xl text-sm text-white/60">
-          Deterministic projections, matchup, usage, and risk signals — with an optional AI explanation layer that
+          Deterministic projections, matchup, usage, and risk signals — with an optional Chimmy explanation layer that
           narrates the numbers (never overrides them).
         </p>
       </header>
@@ -239,7 +239,7 @@ export function PlayerDecisionTool() {
               onChange={(e) => setIncludeAi(e.target.checked)}
               className="h-4 w-4 rounded border-white/20 bg-transparent"
             />
-            <span className="text-sm text-white/75">Include AI narrative (Pro / gated)</span>
+            <span className="text-sm text-white/75">Include Chimmy narrative (Pro / gated)</span>
           </label>
         </div>
 
@@ -398,7 +398,7 @@ export function PlayerDecisionTool() {
             className="flex w-full items-center justify-between rounded-xl border border-white/12 bg-black/25 px-4 py-3 text-left text-sm text-white hover:bg-white/5"
             data-testid="player-decision-why-toggle"
           >
-            <span>Why this call? ({data.narrativeSource === 'ai' ? 'AI + data' : 'Data-first'})</span>
+            <span>Why this call? ({data.narrativeSource === 'ai' ? 'Chimmy + data' : 'Data-first'})</span>
             <ChevronDown className={cn('h-4 w-4 transition', whyOpen && 'rotate-180')} />
           </button>
           {whyOpen && (

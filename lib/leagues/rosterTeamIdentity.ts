@@ -29,7 +29,7 @@
  * the Decision OS canonical world and the app surfaces cannot drift apart.
  */
 
-export type RosterIdentityRow = {
+type RosterIdentityRow = {
   id?: string | null
   platformUserId: string | null
   playerData: unknown
@@ -99,16 +99,29 @@ function playerCount(playerData: unknown): number {
   return Array.isArray(players) ? players.length : 0
 }
 
+/** When an import last wrote this row (`playerData.imported_at`), as a sortable number. 0: not recorded. */
+function importedAtMs(playerData: unknown): number {
+  const blob = asBlob(playerData)
+  const raw = readString(blob, 'imported_at') ?? readString(asBlob(blob?.import), 'importedAt')
+  const ms = raw ? Date.parse(raw) : NaN
+  return Number.isFinite(ms) ? ms : 0
+}
+
 /**
- * Among several rows bound to one team, the one to read: the fuller roster, then the lower id — the
- * write side's own tie-break (`importedRosterIdentity.rank`).
+ * Among several rows bound to one team, the one to read: the row an import wrote most recently, then
+ * the fuller roster, then the lower id.
  *
- * ⚠ IT DISCRIMINATES NOTHING TODAY, AND IS HERE FOR DETERMINISM. Six teams in production carry two
- * rows under one team id (the duplicates #1005 deliberately left in place), and all six pairs hold
- * IDENTICAL players and starters. So the value of this is that the answer cannot depend on the order
- * rows come back in — not that it picks a better row, which would overstate it.
+ * 🛑 "FULLER, THEN LOWER ID" PICKED A DEAD ROW. It was written when every duplicate pair held identical
+ * players, so it only had to be deterministic. Measured read-only on production 2026-11-20: the four
+ * pairs left (all ESPN, the importer's own team in four leagues) are one row the sync still writes and
+ * one it stopped writing on 2026-09-17, and they have drifted apart: 7 to 13 players in common of 14 to
+ * 18. In "RIP Mitch McConnell" both hold 17 players and the dead row has the lower id, so every reader
+ * of this rule showed that manager a roster two months old. The write side keeps writing the row under
+ * the team's current owner key (`importedRosterIdentity.rank`); the newest `imported_at` is that row.
  */
 function better(a: RosterIdentityRow, b: RosterIdentityRow): boolean {
+  const fresher = importedAtMs(a.playerData) - importedAtMs(b.playerData)
+  if (fresher !== 0) return fresher > 0
   const diff = playerCount(a.playerData) - playerCount(b.playerData)
   if (diff !== 0) return diff > 0
   return String(a.id ?? '') < String(b.id ?? '')

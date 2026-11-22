@@ -15,7 +15,7 @@ import { readTaxiRulesEnforced } from '@/lib/taxi/taxiMoveRules'
 import { readAutoHandover } from '@/lib/inactive-manager/autoHandover'
 
 export type AutomationGroup = 'lineups' | 'drafts' | 'fairness'
-export type AutomationState = 'on' | 'off' | 'needs_plan'
+type AutomationState = 'on' | 'off' | 'needs_plan'
 
 export type AutomationRow = {
   key: string
@@ -37,6 +37,8 @@ export type AutomationFacts = {
   dynasty: boolean
   /** The league owner holds AF Commissioner. */
   commissionerPlan: boolean
+  /** The league owner's plan lets Chimmy run teams (AF Pro or AF Supreme since 2026-11-22). */
+  autopilotPlan: boolean
   /** The rookie draft opens itself this offseason (`resolveRookieDraftAutoOpen`). */
   rookieDraftAutoOpen: boolean
   liveRookieOrderOn: boolean
@@ -87,8 +89,8 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
         group: 'lineups' as const,
         label: 'Hand over a team with no activity',
         state: rule ? ('on' as const) : ('off' as const),
-        detail: rule ? `After ${rule.days} days, to ${rule.to === 'autopilot' && f.commissionerPlan ? 'Chimmy autopilot' : 'AllFantasy'}` : null,
-        detailEs: rule ? `Tras ${rule.days} días, a ${rule.to === 'autopilot' && f.commissionerPlan ? 'piloto automático de Chimmy' : 'AllFantasy'}` : null,
+        detail: rule ? `After ${rule.days} days, to ${rule.to === 'autopilot' && f.autopilotPlan ? 'Chimmy autopilot' : 'AllFantasy'}` : null,
+        detailEs: rule ? `Tras ${rule.days} días, a ${rule.to === 'autopilot' && f.autopilotPlan ? 'piloto automático de Chimmy' : 'AllFantasy'}` : null,
         href: '#ch-inactive-managers',
         plan: 'free' as const,
       }
@@ -98,8 +100,20 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       group: 'lineups',
       label: 'Lineup minimums for eliminated teams',
       state: paid(Boolean(eliminated)),
-      detail: eliminated ? (eliminated.autoFill ? 'Short spots filled from the bench' : 'Managers warned') : null,
-      detailEs: eliminated ? (eliminated.autoFill ? 'Puestos faltantes llenados desde la banca' : 'Se avisa a los mánagers') : null,
+      detail: eliminated
+        ? eliminated.optimize
+          ? 'Best lineup set before kickoff'
+          : eliminated.autoFill
+            ? 'Short spots filled from the bench'
+            : 'Managers warned'
+        : null,
+      detailEs: eliminated
+        ? eliminated.optimize
+          ? 'Mejor alineación puesta antes del inicio'
+          : eliminated.autoFill
+            ? 'Puestos faltantes llenados desde la banca'
+            : 'Se avisa a los mánagers'
+        : null,
       href: '#ch-eliminated-lineups',
       plan: 'commissioner',
     },

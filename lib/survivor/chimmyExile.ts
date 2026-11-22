@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
+import { rosterIdFromOrphanSeat, seatPlaceholderUserIdOr } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
@@ -14,7 +15,6 @@ export { chimmyExilePlan, type ChimmyExilePlan, type ExileCandidate } from './ch
 /** How many finalized weeks of a player's scoring Chimmy reads to judge a team. */
 export const CHIMMY_EXILE_FORM_WEEKS = 3
 
-const SEAT_PREFIX = 'orphan-'
 
 /**
  * How long Chimmy waits before trying a castaway's Exile pick again after an attempt that came to
@@ -72,14 +72,14 @@ export type ChimmyExileTurn = { claimed: Record<string, { team: string; expected
 export async function runChimmyExileTurn(leagueId: string, now = new Date()): Promise<ChimmyExileTurn> {
   const turn: ChimmyExileTurn = { claimed: {}, skipped: {} }
   const exiled = await prisma.survivorPlayer.findMany({
-    where: { leagueId, playerState: 'exile', userId: { startsWith: SEAT_PREFIX } },
+    where: { leagueId, playerState: 'exile', OR: seatPlaceholderUserIdOr() },
     select: { userId: true, redraftRosterId: true },
   })
   if (exiled.length === 0) return turn
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true, userId: true } })
   if (!league) return turn
   const managed = await readPlayableChimmyLineups(league)
-  const chimmy = exiled.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? p.userId.slice(SEAT_PREFIX.length), p.userId))
+  const chimmy = exiled.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? rosterIdFromOrphanSeat(p.userId) ?? '', p.userId))
   if (chimmy.length === 0) return turn
   const scorer = buildLeagueStatScorer(league)
   if (!scorer) {

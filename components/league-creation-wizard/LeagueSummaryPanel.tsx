@@ -21,7 +21,7 @@ const COMMISSIONER_PREF_LABELS: Record<keyof WizardCommissionerPreferences, stri
   draftCopilot: 'Draft copilot',
   matchupNarration: 'Matchup narration',
   fairnessAudit: 'Fairness audit',
-  powerRankingsAi: 'AI power rankings',
+  powerRankingsAi: 'Chimmy power rankings',
   constitutionAssistant: 'Rules assistant',
 }
 
@@ -105,8 +105,8 @@ export function LeagueSummaryPanel({ state, creationPreset: _creationPreset, onE
   const automationSettings = state.automationSettings ?? DEFAULT_AUTOMATION_SETTINGS
   const privacySettings = state.privacySettings ?? DEFAULT_PRIVACY_SETTINGS
   const aiSummary = [
-    aiSettings.aiAdpEnabled ? 'AI ADP on' : 'AI ADP off',
-    aiSettings.orphanTeamAiManagerEnabled ? 'Orphan AI on' : 'Orphan AI off',
+    aiSettings.aiAdpEnabled ? 'Chimmy ADP on' : 'Chimmy ADP off',
+    aiSettings.orphanTeamAiManagerEnabled ? 'Orphan Chimmy on' : 'Orphan Chimmy off',
     aiSettings.draftHelperEnabled ? 'Draft helper on' : 'Draft helper off',
   ].join(' · ')
   const automationSummary = [
@@ -196,10 +196,10 @@ export function LeagueSummaryPanel({ state, creationPreset: _creationPreset, onE
         <SummaryRow label="Platform style" value={getPlatformStyleLabel(state.platformStyleMirror)} />
       </SummarySection>
 
-      <SummarySection title="AI, automation & privacy" stepId="draft_privacy" onEditStep={onEditStep}>
-        <SummaryRow label="AI" value={aiSummary} testId="league-summary-ai-settings" />
+      <SummarySection title="Chimmy, automation & privacy" stepId="draft_privacy" onEditStep={onEditStep}>
+        <SummaryRow label="Chimmy" value={aiSummary} testId="league-summary-ai-settings" />
         <SummaryRow label="Automation" value={automationSummary} testId="league-summary-automation-settings" />
-        <SummaryRow label="AF Commissioner AI" value={commissionerSummary} testId="league-summary-commissioner-prefs" />
+        <SummaryRow label="AF Commissioner Chimmy" value={commissionerSummary} testId="league-summary-commissioner-prefs" />
         <SummaryRow label="Visibility" value={privacySettings.visibility} />
         <SummaryRow label="Invite link" value={privacySettings.allowInviteLink ? 'Allowed' : 'Disabled'} />
       </SummarySection>

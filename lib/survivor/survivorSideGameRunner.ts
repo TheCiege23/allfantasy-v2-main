@@ -16,6 +16,7 @@ import 'server-only'
  *     banked at 2, and one sane auction bid.
  */
 
+import { isSeatPlaceholderUserId, rosterIdFromOrphanSeat } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { isChimmyRunning } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable'
@@ -64,7 +65,6 @@ import {
 } from './survivorSideGameService'
 import { sideGameCopy } from './survivorSideGameCopy'
 
-const SEAT_PREFIX = 'orphan-'
 
 export interface SideGameStepResult {
   exileBidsSettled: number
@@ -350,10 +350,10 @@ export async function runChimmySideGameTurn(league: SideGameLeague, week: number
   const state = await loadSideGameState(prisma, league.id)
   const liveAuctions = [...state.auctions.values()].filter((a) => a.status !== 'cancelled' && a.status !== 'settled' && new Date(a.opensAt).getTime() <= now.getTime() && now.getTime() < new Date(a.closesAt).getTime())
   if (!anything && !liveAuctions.length) return {}
-  const castaways = (await loadCastaways(prisma, league.id)).filter((c) => c.userId.startsWith(SEAT_PREFIX))
+  const castaways = (await loadCastaways(prisma, league.id)).filter((c) => isSeatPlaceholderUserId(c.userId))
   if (!castaways.length) return {}
   const managed = await readPlayableChimmyLineups({ id: league.id, userId: league.userId, settings: league.settings })
-  const seats = castaways.filter((c) => isChimmyRunning(managed, c.rosterId ?? c.userId.slice(SEAT_PREFIX.length), c.userId))
+  const seats = castaways.filter((c) => isChimmyRunning(managed, c.rosterId ?? rosterIdFromOrphanSeat(c.userId) ?? '', c.userId))
   if (!seats.length) return {}
   const games = week > 0 ? await loadSideGameWeekGames(prisma, league.sport, league.season, week) : []
   const records = seasonRecords(await loadSideGameSeasonGames(prisma, league.sport, league.season, week))

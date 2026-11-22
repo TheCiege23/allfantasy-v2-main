@@ -73,25 +73,25 @@ export function CapOverviewBar({
           title="Dead money"
         />
         <div
-          className="h-full bg-[color:var(--cap-green)]/90 transition-all"
+          className="h-full bg-cap-green/90 transition-all"
           style={{ width: `${pAvail}%` }}
           title="Available"
         />
       </div>
       <div className="flex flex-wrap gap-2 text-[11px]">
-        <span className="rounded-full border border-[color:var(--cap-contract)]/30 bg-[color:var(--cap-contract)]/10 px-2 py-1 font-semibold text-blue-100">
+        <span className="rounded-full border border-cap-contract/30 bg-cap-contract/10 px-2 py-1 font-semibold text-blue-100">
           Active: ${a.toFixed(1)}M
         </span>
-        <span className="rounded-full border border-[color:var(--cap-dead)]/30 bg-white/[0.04] px-2 py-1 font-semibold text-white/60">
+        <span className="rounded-full border border-cap-dead/30 bg-white/[0.04] px-2 py-1 font-semibold text-white/60">
           Dead: ${d.toFixed(1)}M
         </span>
-        <span className="rounded-full border border-[color:var(--cap-green)]/30 bg-[color:var(--cap-green)]/10 px-2 py-1 font-semibold text-emerald-100">
+        <span className="rounded-full border border-cap-green/30 bg-cap-green/10 px-2 py-1 font-semibold text-emerald-100">
           Available: ${v.toFixed(1)}M
         </span>
       </div>
 
       {capAdviceLoading ? (
-        <p className="text-[11px] text-white/40">Loading AI cap tips…</p>
+        <p className="text-[11px] text-white/40">Loading Chimmy cap tips…</p>
       ) : capAdvice?.recommendations?.length ? (
         <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/15 p-3" data-testid="cap-overview-ai-moves">
           <h3 className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">Best cap moves</h3>
@@ -112,7 +112,7 @@ export function CapOverviewBar({
               onClick={onOpenFullCapAnalysis}
               className="mt-3 rounded-lg border border-cyan-500/40 px-3 py-2 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950/40"
             >
-              See Full AI Cap Analysis
+              See Full Chimmy Cap Analysis
             </button>
           ) : null}
         </div>

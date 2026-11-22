@@ -37,6 +37,13 @@ export type ResolvedProviderPlayer = {
   team: string | null
   imageUrl: string | null
   sport: string
+  /** The Sleeper id this identity links to, when it has one — what NFL pricing keys on. */
+  sleeperId?: string | null
+  /**
+   * The Rolling Insights id, when it has one. Outside the NFL it is the link that reaches a
+   * `sports_players` record (`<SPORT>:<id>`); Fantrax-linked NBA/NHL/college identities carry no Sleeper id.
+   */
+  rollingInsightsId?: string | null
 }
 
 const IDENTITY_COLUMNS = ['espnId', 'fantraxId', 'fleaflickerId', 'mflId'] as const
@@ -60,6 +67,7 @@ export async function resolveProviderRosterPlayers(
   platform: string,
   playerIds: readonly string[],
   sport: string,
+  ambiguousIds?: Set<string>,
 ): Promise<Map<string, ResolvedProviderPlayer>> {
   const out = new Map<string, ResolvedProviderPlayer>()
   const column = providerIdentityColumn(platform)
@@ -74,6 +82,7 @@ export async function resolveProviderRosterPlayers(
       currentTeam: true,
       sport: true,
       sleeperId: true,
+      rollingInsightsId: true,
       espnId: true,
       fantraxId: true,
       fleaflickerId: true,
@@ -115,8 +124,14 @@ export async function resolveProviderRosterPlayers(
       team: row.currentTeam ?? portrait?.team ?? null,
       imageUrl: toImageUrl(portrait?.imageUrl),
       sport: row.sport,
+      sleeperId: row.sleeperId ?? null,
+      rollingInsightsId: row.rollingInsightsId ?? null,
     })
   }
-  for (const [key, count] of matches) if (count > 1) out.delete(key)
+  for (const [key, count] of matches) {
+    if (count < 2) continue
+    out.delete(key)
+    ambiguousIds?.add(key)
+  }
   return out
 }

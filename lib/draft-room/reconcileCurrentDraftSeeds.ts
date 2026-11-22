@@ -1,5 +1,5 @@
 import { strictIdentityKey, canonicalTeam } from './player-canonical-identity'
-export type CurrentDraftSeed = { name: string; position: string; team: string | null; playerId: string; imageUrl?: string | null; age?: number | null; injuryStatus?: string | null; status?: string | null }
+type CurrentDraftSeed = { name: string; position: string; team: string | null; playerId: string; imageUrl?: string | null; age?: number | null; injuryStatus?: string | null; status?: string | null }
 type Seed = { name?: string; playerName?: string; full_name?: string; position?: string; pos?: string; team?: string | null; teamAbbr?: string | null; playerId?: string | null }
 /** Market seeds contribute rank only; verified current rows supply identity and roster fields. */
 export function reconcileCurrentDraftSeeds<T extends Seed>(seeds: readonly T[], players: readonly CurrentDraftSeed[]): Array<T & CurrentDraftSeed> {

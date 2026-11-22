@@ -25,8 +25,9 @@ describe('Guilly setup', () => {
 
   it('accepts the defaults and refuses every option the engine cannot run', () => {
     expect(validateGuillySetup(named)).toEqual([])
-    expect(validateGuillySetup({ ...named, lineups: 'bestball' })).toHaveLength(1)
-    expect(validateGuillySetup({ ...named, doubleChop: true })).toHaveLength(1)
+    // Best ball lineups and double-chop weeks run on the engine now (lib/guilly/setup.ts).
+    expect(validateGuillySetup({ ...named, lineups: 'bestball' })).toEqual([])
+    expect(validateGuillySetup({ ...named, doubleChop: true })).toEqual([])
     expect(validateGuillySetup({ ...named, release: 'free_agency' })).toHaveLength(1)
     expect(validateGuillySetup({ ...named, auctionBudget: 500 })).toHaveLength(1)
     // The auction budget only matters for an auction draft.
@@ -53,9 +54,9 @@ describe('Guilly setup', () => {
   it('renders unsupported options disabled', async () => {
     const { GuillySetup } = await import('@/components/guilly/GuillySetup')
     render(<GuillySetup />)
-    expect((screen.getByRole('button', { name: /Bestball/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /Bestball/ }) as HTMLButtonElement).disabled).toBe(false)
     expect((screen.getByRole('button', { name: /Free agency/ }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: /^On/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /^On/ }) as HTMLButtonElement).disabled).toBe(false)
     expect((screen.getByRole('button', { name: '$200' }) as HTMLButtonElement).disabled).toBe(false)
     expect((within(screen.getByRole('group', { name: 'Auction budget' })).getByRole('button', { name: /\$500/ }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByTestId('guilly-summary').textContent).toContain('Week 17')

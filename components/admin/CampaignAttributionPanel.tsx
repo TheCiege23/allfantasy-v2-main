@@ -274,6 +274,8 @@ export function CampaignAttributionPanel() {
                       <th scope="col" className="py-2 pr-3 text-right">Views</th>
                       <th scope="col" className="py-2 pr-3 text-right">Visitors</th>
                       <th scope="col" className="py-2 pr-3 text-right">Accounts</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Imported</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Acct→Imp</th>
                       <th scope="col" className="py-2 pr-3 text-right">Activated</th>
                       <th scope="col" className="py-2 pr-3 text-right">V→A</th>
                       <th scope="col" className="py-2 pr-3 text-right">Acct→Act</th>
@@ -293,6 +295,9 @@ export function CampaignAttributionPanel() {
                         <td className="py-3 pr-3 text-right">{row.landingViews.toLocaleString()}</td>
                         <td className="py-3 pr-3 text-right font-black text-white">{row.uniqueVisitors.toLocaleString()}</td>
                         <td className="py-3 pr-3 text-right font-black text-white">{row.signupsCompleted.toLocaleString()}</td>
+                        {/* Distinct users with a completed import (since 2026-11-15) — the step between an account and a working home. */}
+                        <td className="py-3 pr-3 text-right font-black text-white">{(row.importsCompleted ?? 0).toLocaleString()}</td>
+                        <td className="py-3 pr-3 text-right">{formatRate(row.signupToImportRate ?? null)}</td>
                         {/* The launch question: which campaigns produced ACTIVATED users, not just accounts. */}
                         <td className="py-3 pr-3 text-right font-black text-violet-200">{row.dashboardsActivated.toLocaleString()}</td>
                         <td className="py-3 pr-3 text-right">{formatRate(row.visitorToActivationRate)}</td>
@@ -312,6 +317,38 @@ export function CampaignAttributionPanel() {
             )}
           </div>
 
+          </details>
+          {/* Which surface sends paying subscribers (2026-11-15). `lock_<depth>` rows are the /core lock cards. */}
+          <details className="af-cc-drilldown" data-testid="upgrades-by-entry">
+            <summary>Upgrades by entry point</summary>
+            {(report.upgradesByEntry ?? []).length === 0 ? (
+              <p className="af-cc-context-note">No subscription checkouts in this window yet. Tracking started 2026-11-15.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] text-left text-xs">
+                  <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    <tr>
+                      <th scope="col" className="py-2 pr-3">Entry point</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Checkouts started</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Trials started</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Paid</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Start→Paid</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {(report.upgradesByEntry ?? []).map((row) => (
+                      <tr key={row.entrySource} className="align-top text-white/70">
+                        <td className="py-3 pr-3 font-mono text-[11px] text-white">{row.entrySource}</td>
+                        <td className="py-3 pr-3 text-right">{row.checkoutsStarted.toLocaleString()}</td>
+                        <td className="py-3 pr-3 text-right">{(row.trialsStarted ?? 0).toLocaleString()}</td>
+                        <td className="py-3 pr-3 text-right font-black text-violet-200">{row.paid.toLocaleString()}</td>
+                        <td className="py-3 pr-3 text-right">{formatRate(row.checkoutToPaidRate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </details>
           <details className="af-cc-drilldown">
             <summary>How attribution is measured</summary>

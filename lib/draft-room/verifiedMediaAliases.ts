@@ -2,7 +2,7 @@
  * These never join statistics, confer roster eligibility, or replace a position/team.
  * A birthday match alone is NOT an identity match: many unrelated athletes share one.
  */
-export const VERIFIED_MEDIA_ALIASES = [
+const VERIFIED_MEDIA_ALIASES = [
   {
     "sport": "MLB",
     "rollingId": "377",

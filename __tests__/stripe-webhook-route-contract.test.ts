@@ -185,6 +185,65 @@ describe("Stripe webhook route contracts", () => {
     expect(userSubscriptionUpsertMock).toHaveBeenCalledTimes(1)
   })
 
+  it("an AF Pro free trial is written as TRIALING, ending when the trial does — never a month of active", async () => {
+    constructEventMock.mockReturnValueOnce({
+      id: "evt_trial",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_trial",
+          mode: "subscription",
+          subscription: "sub_trial",
+          customer: "cus_trial",
+          payment_status: "no_payment_required",
+          metadata: { purchaseType: "subscription", userId: "u1", sku: "af_pro_monthly", trialDays: "7" },
+        },
+      },
+    })
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    const before = Date.now()
+    const res = await POST(
+      createMockNextRequest("http://localhost/api/stripe/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "sig_test" },
+        body: "{}",
+      }) as any,
+    )
+    expect(res.status).toBe(200)
+    const data = userSubscriptionUpsertMock.mock.calls[0][0].create
+    expect(data.status).toBe("trialing")
+    expect(data.metadata).toMatchObject({ trialDays: 7 })
+    const days = (new Date(data.currentPeriodEnd).getTime() - before) / 86_400_000
+    expect(days).toBeGreaterThan(6.99)
+    expect(days).toBeLessThan(7.01)
+  })
+
+  it("🛑 trialDays on a session that DID charge is not a trial — the row is active", async () => {
+    constructEventMock.mockReturnValueOnce({
+      id: "evt_paid",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_paid",
+          mode: "subscription",
+          subscription: "sub_paid",
+          customer: "cus_paid",
+          payment_status: "paid",
+          metadata: { purchaseType: "subscription", userId: "u1", sku: "af_pro_monthly", trialDays: "7" },
+        },
+      },
+    })
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    await POST(
+      createMockNextRequest("http://localhost/api/stripe/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "sig_test" },
+        body: "{}",
+      }) as any,
+    )
+    expect(userSubscriptionUpsertMock.mock.calls[0][0].create.status).toBe("active")
+  })
+
   it("treats already processed event as idempotent duplicate", async () => {
     findUniqueMock.mockResolvedValueOnce({ status: "processed" })
     const { POST } = await import("@/app/api/stripe/webhook/route")
@@ -219,14 +278,33 @@ describe("Stripe webhook route contracts", () => {
     expect(updateMock).not.toHaveBeenCalled()
   })
 
+  it("still answers 409 to a retry while a recent delivery may genuinely be running", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      status: "processing",
+      createdAt: new Date(Date.now() - 5 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 5 * 60 * 1000),
+    })
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    const req = createMockNextRequest("http://localhost/api/stripe/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "sig_test" },
+      body: "{}",
+    })
+    const res = await POST(req as any)
+    expect(res.status).toBe(409)
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
   it("retries stale processing webhook events instead of dropping fulfillment", async () => {
     findUniqueMock.mockResolvedValueOnce({
       status: "processing",
-      // Stale means older than the route's PROCESSING_EVENT_STALE_MS (24h). This used
-      // 10 minutes, which the route correctly treats as still in flight (409), so the
-      // test had been failing on main since that window was widened.
-      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      /*
+       * A delivery that crashed half an hour ago (a deploy swapped the container mid-request).
+       * The window used to be 24 hours, so this paid customer got a 409 on every Stripe retry
+       * for a day; half an hour is the case that must now be taken over and fulfilled.
+       */
+      createdAt: new Date(Date.now() - 30 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 30 * 60 * 1000),
     })
     const { POST } = await import("@/app/api/stripe/webhook/route")
     const req = createMockNextRequest("http://localhost/api/stripe/webhook", {

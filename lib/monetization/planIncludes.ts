@@ -29,7 +29,7 @@ export const PLAN_FAMILY_SHORT_TAGLINE: Record<PlanFamilyKey, string> = {
   // ⚠ Not "league operations" and not "Draft room": running a league and its draft room are
   // FREE (the Oct 15 paywall rule). These plans sell what sits on top of that.
   af_commissioner:
-    "Commissioner automation, integrity and insight — running your league stays free, and dues & payouts stay on FanCred.",
+    "Commissioner automation, integrity and insight — running your league stays free, and AllFantasy never holds league dues.",
   af_war_room:
     "Draft-room intelligence plus dynasty & long-term planning for deep, year-round fantasy managers.",
   /*

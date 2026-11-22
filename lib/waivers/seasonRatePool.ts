@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
 import type { WaiverValueBasis } from './waiverSportBasis'
@@ -73,15 +74,17 @@ export function starterIdsOf(playerData: unknown): Set<string> {
 }
 
 /** The `PlayerIdentityMap` columns a league's roster ids can be written in. */
-export type LeagueIdColumn = 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId'
+export type LeagueIdColumn = 'cfbdId' | 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId' | 'sleeperNbaId'
 
 const LEAGUE_ID_COLUMNS: readonly LeagueIdColumn[] = [
+  'cfbdId',
   'rollingInsightsId',
   'espnId',
   'fantraxId',
   'mflId',
   'fleaflickerId',
   'sleeperId',
+  'sleeperNbaId',
 ]
 
 const PLATFORM_COLUMN: Record<string, LeagueIdColumn> = {
@@ -101,14 +104,15 @@ const PLATFORM_COLUMN: Record<string, LeagueIdColumn> = {
  * roster ids measured on production 2026-09-29 were RI numbers (see resolvePlayerNames.ts). Any
  * other id a native roster holds simply fails to resolve and counts against the resolution floor.
  */
-export function leagueIdColumn(platform: string | null | undefined): LeagueIdColumn | null {
+export function leagueIdColumn(platform: string | null | undefined, sport?: string): LeagueIdColumn | null {
   const p = String(platform ?? '').trim().toLowerCase()
+  if (p === 'sleeper' && sport === 'NBA') return 'sleeperNbaId'
   if (isNativePlatform(p || null)) return 'rollingInsightsId'
   return PLATFORM_COLUMN[p] ?? null
 }
 
 /** Where a sport's projection key lives on `PlayerIdentityMap`. */
-export function projectionKeyField(sport: string): 'id' | 'cfbdId' {
+function projectionKeyField(sport: string): 'id' | 'cfbdId' {
   return sport.trim().toUpperCase() === 'NCAAF' ? 'cfbdId' : 'id'
 }
 
@@ -211,7 +215,7 @@ export async function loadSeasonRateRows(
 }
 
 /** What the identity map knows about one projection key. */
-export type KeyIdentity = {
+type KeyIdentity = {
   team: string | null
   /** The key's id in each league column; `null` when the column is empty on every row for it. */
   ids: Partial<Record<LeagueIdColumn, string | null>>
@@ -231,6 +235,7 @@ const IDENTITY_SELECT = {
   mflId: true,
   fleaflickerId: true,
   sleeperId: true,
+  sleeperNbaId: true,
 } as const
 
 /** Identity for each projection key, scoped to the sport. One read. */
@@ -242,23 +247,29 @@ export async function loadIdentityForKeys(
   const ids = [...new Set(keys.filter(Boolean))]
   if (ids.length === 0) return new Map()
   const field = projectionKeyField(sport)
-  const rows = (await db.playerIdentityMap
-    .findMany({ where: { sport, [field]: { in: ids } }, select: IDENTITY_SELECT })
-    .catch(() => [])) as IdentityRow[]
+  const registryIds = field === 'cfbdId' ? ids.filter(id => /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) : []
+  const [primaryRows, registryRows] = await Promise.all([
+    db.playerIdentityMap.findMany({ where: { sport, [field]: { in: ids } }, select: IDENTITY_SELECT }).catch(() => []),
+    registryIds.length ? db.playerIdentityMap.findMany({ where: { sport, id: { in: registryIds } }, select: IDENTITY_SELECT }).catch(() => []) : [],
+  ])
+  const rows = [...primaryRows, ...registryRows] as IdentityRow[]
 
   const out = new Map<string, KeyIdentity>()
+  const requested = new Set(ids)
   for (const r of rows) {
-    const key = field === 'id' ? r.id : r.cfbdId
-    if (!key) continue
-    const held: KeyIdentity = out.get(key) ?? { team: null, ids: {}, ambiguous: new Set() }
-    held.team = held.team ?? r.currentTeam ?? null
-    for (const col of LEAGUE_ID_COLUMNS) {
-      const v = r[col] ? String(r[col]).trim() : null
-      const prev = held.ids[col]
-      if (prev == null) held.ids[col] = v
-      else if (v != null && v !== prev) held.ambiguous.add(col)
+    const keys = [r.id, ...(field === 'cfbdId' && r.cfbdId ? [r.cfbdId] : [])]
+    for (const key of keys) {
+      if (!requested.has(key)) continue
+      const held: KeyIdentity = out.get(key) ?? { team: null, ids: {}, ambiguous: new Set() }
+      held.team = held.team ?? r.currentTeam ?? null
+      for (const col of LEAGUE_ID_COLUMNS) {
+        const v = r[col] ? String(r[col]).trim() : null
+        const prev = held.ids[col]
+        if (prev == null) held.ids[col] = v
+        else if (v != null && v !== prev) held.ambiguous.add(col)
+      }
+      out.set(key, held)
     }
-    out.set(key, held)
   }
   return out
 }
@@ -280,6 +291,7 @@ export async function resolveRosterIdsToKeys(
   sport: string,
   column: LeagueIdColumn,
   rosterIds: readonly string[],
+  projectedKeys?: ReadonlySet<string>,
 ): Promise<Map<string, string>> {
   const ids = [...new Set(rosterIds.map((x) => String(x).trim()).filter(Boolean))]
   if (ids.length === 0) return new Map()
@@ -291,7 +303,9 @@ export async function resolveRosterIdsToKeys(
   const claims = new Map<string, string | null>()
   for (const r of rows) {
     const from = r[column] ? String(r[column]).trim() : ''
-    const to = field === 'id' ? r.id : r.cfbdId
+    const to = field === 'id' ? r.id
+      : r.cfbdId && (!projectedKeys || projectedKeys.has(r.cfbdId)) ? r.cfbdId
+        : r.rollingInsightsId ? r.id : r.cfbdId
     if (!from || !to) continue
     if (!claims.has(from)) claims.set(from, to)
     else if (claims.get(from) !== to) claims.set(from, null)
@@ -312,11 +326,12 @@ export function priceSeasonRate(
   row: SeasonRateRow,
   basis: WaiverValueBasis,
   scoring: Record<string, unknown> | null,
+  sport?: string,
 ): number | null {
   if (basis === 'season_per_game_af_default') return Number.isFinite(row.perGame) ? row.perGame : null
   if (basis === 'season_per_game_league') {
     if (!scoring || !row.components) return null
-    const scored = computeLeagueProjectedPoints(row.components, scoring)
+    const scored = sport === 'NCAAF' ? scoreNcaafProjection(row.components, scoring, row.position) : computeLeagueProjectedPoints(row.components, scoring)
     return scored ? scored.points : null
   }
   return null

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
@@ -8,6 +9,8 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { waiverFactText } from '@/lib/core-app/playerCardCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverEdgeMessages } from '@/lib/core-app/messages/waiverEdge'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
+import { rivalPieces, type RivalPiece } from '@/lib/core-app/waiversGuide'
 import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { WaiverEdge } from '@/lib/competitive-edge/waiverEdge'
 
@@ -22,6 +25,13 @@ import type { WaiverEdge } from '@/lib/competitive-edge/waiverEdge'
  * Spanish (2026-10-06): the facts are built from waiverEdge.ts's `parts` and the card's words come
  * from lib/core-app/playerCardCopy.ts; the loader's reasons are coreUiCopy's. English is unchanged.
  */
+
+/**
+ * ⚠ HOW MANY RIVALS SHOW BEFORE "SHOW ALL" (2026-11-07 phone pass). The list arrives ordered by claims
+ * won, so the first three are the managers you are most likely bidding against. Live at 375px all
+ * eleven took 995px — most of a 2,575px Waivers screen — under the one section you came to act on.
+ */
+export const RIVALS_PREVIEW = 3
 
 export type WaiverEdgeState = { available: true; data: WaiverEdge } | { available: false; reason: string }
 
@@ -47,6 +57,19 @@ export function WaiverCompetitiveEdge({
 }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(waiverEdgeMessages)
+  const g = useMessages(waiversGuideMessages)
+  const [showAllRivals, setShowAllRivals] = useState(false)
+  const money = (n: number) => `$${n.toLocaleString('en-US')}`
+  const pieceText = (p: RivalPiece) =>
+    p.kind === 'left'
+      ? g.rivalLeft(money(p.amount))
+      : p.kind === 'noClaims'
+        ? g.rivalNoClaims
+        : p.kind === 'claims'
+          ? g.rivalClaims(p.claims, p.zero, p.spent != null ? money(p.spent) : null)
+          : p.kind === 'biggest'
+            ? g.rivalBiggest(money(p.bid), p.position)
+            : g.rivalPosition(p.count, p.position)
   if (access && !access.unlocked) {
     return <CoreDepthLock access={access} what={lockSubjectText('Competitive Edge', language)} lang={language} />
   }
@@ -82,18 +105,37 @@ export function WaiverCompetitiveEdge({
           ))}
       </ul>
 
-      <ul className="af-wv-edge-rivals">
-        {rivals.map((r) => (
+      <ul className="af-wv-edge-rivals" id="af-wv-edge-rivals">
+        {(showAllRivals ? rivals : rivals.slice(0, RIVALS_PREVIEW)).map((r) => (
           <li key={r.manager.teamExternalId} className="af-wv-edge-rival" data-testid={`waiver-edge-rival-${r.manager.teamExternalId}`}>
             <div className="af-wv-edge-name">{r.manager.name}</div>
-            <ul className="af-wv-edge-facts">
-              {r.facts.map((f) => (
-                <li key={f.key}>{waiverFactText(f, language)}</li>
-              ))}
-            </ul>
+            {/*
+              One line per manager (2026-11-14), not four sentences that each began with his name and
+              ended "more than your $449" — the league line above says the comparison once.
+            */}
+            {rivalPieces(r.facts).length > 0 ? (
+              <p className="af-wv-edge-line" data-testid="waiver-edge-rival-line">{rivalPieces(r.facts).map(pieceText).join(' · ')}</p>
+            ) : (
+              <ul className="af-wv-edge-facts">
+                {r.facts.map((f) => (
+                  <li key={f.key}>{waiverFactText(f, language)}</li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ul>
+      {rivals.length > RIVALS_PREVIEW ? (
+        <button
+          type="button"
+          className="af-wv-edge-more"
+          aria-expanded={showAllRivals}
+          aria-controls="af-wv-edge-rivals"
+          onClick={() => setShowAllRivals((open) => !open)}
+        >
+          {showAllRivals ? m.showFewerRivals : m.showAllRivals(rivals.length)}
+        </button>
+      ) : null}
 
       <p className="af-wv-edge-note" data-testid="waiver-competitive-edge-basis">
         {m.basis(coverage.season, asOf, coverage.stale)}

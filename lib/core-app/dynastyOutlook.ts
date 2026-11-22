@@ -19,7 +19,7 @@ import { agingThreshold } from './dynastyAging'
  * card names the threshold beside every player it lists, so it reads as a flag, never a verdict.
  */
 
-export type DynastyPick = { season: number; round: number; label: string; fromTeamName: string | null }
+type DynastyPick = { season: number; round: number; label: string; fromTeamName: string | null }
 
 export type DynastyOutlook = {
   picks:

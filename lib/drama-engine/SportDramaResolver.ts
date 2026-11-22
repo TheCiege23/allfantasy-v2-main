@@ -3,7 +3,6 @@
  */
 
 import type { DramaSport } from './types'
-import { DRAMA_SPORTS } from './types'
 import { isSupportedSport } from '@/lib/sport-scope'
 
 const MAP: Record<string, DramaSport> = {
@@ -67,4 +66,3 @@ export function getDramaCadenceConfig(sport: DramaSport): {
   }
 }
 
-export { DRAMA_SPORTS }

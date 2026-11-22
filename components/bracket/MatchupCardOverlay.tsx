@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, ChevronRight, Zap, Shield, TrendingUp } from "lucide-react"
+import { X, ChevronRight, Zap, TrendingUp } from "lucide-react"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 
 type Node = {
@@ -338,7 +338,7 @@ export function MatchupCardOverlay({
             <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "rgba(251,146,60,0.3)", borderTopColor: "transparent" }} />
-                <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>Loading AI analysis...</span>
+                <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>Loading Chimmy analysis...</span>
               </div>
             </div>
           </div>
@@ -349,7 +349,7 @@ export function MatchupCardOverlay({
             <div className="rounded-xl p-4 space-y-3" style={{ background: "rgba(251,146,60,0.03)", border: "1px solid rgba(251,146,60,0.08)" }}>
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5" style={{ color: "#fb923c" }} />
-                <span className="text-xs font-bold" style={{ color: "#fb923c" }}>AI Matchup Analysis</span>
+                <span className="text-xs font-bold" style={{ color: "#fb923c" }}>Chimmy Matchup Analysis</span>
                 {aiData.confidence && (
                   <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)" }}>
                     {aiData.confidence}% conf

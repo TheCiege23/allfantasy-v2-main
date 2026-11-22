@@ -1,5 +1,5 @@
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
-import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
 ﻿/**
  * Post-draft artifacts after DraftSession is marked completed: roster materialization + persisted grades.
  * Kept separate from DraftSessionService to avoid circular imports with ranking/draft-grade code.

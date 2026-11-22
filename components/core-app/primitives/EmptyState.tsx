@@ -25,7 +25,8 @@ export function EmptyState({
   body?: ReactNode
   hint?: ReactNode
   mark?: ReactNode
-  links?: Array<{ href: string; label: ReactNode }>
+  /** `prefetch: false` for a link into a heavy screen, as the screens' own links already do. */
+  links?: Array<{ href: string; label: ReactNode; prefetch?: boolean }>
   actions?: ReactNode
   className?: string
   testId?: string
@@ -44,7 +45,7 @@ export function EmptyState({
         {links && links.length > 0 ? (
           <p className="af-empty-card-links">
             {links.map((link) => (
-              <Link key={link.href} href={link.href}>
+              <Link key={link.href} href={link.href} prefetch={link.prefetch}>
                 {link.label}
               </Link>
             ))}

@@ -112,7 +112,7 @@ export function rosterPickAsset(p: RosterPick, leagueId: string | null | undefin
 }
 
 export function UnpricedValue(props: { reason?: UnpricedReason | null }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy}=useTradeVisualCopy()
 
   const label = props.reason ? `No value: ${props.reason.label}` : 'No value'
   return (
@@ -188,7 +188,7 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
  * Position colour, the same assignment the league Trades tab uses for its
  * trade-block cards, so a WR reads the same colour on every trade surface.
  */
-export const POSITION_TONE: Record<string, string> = {
+const POSITION_TONE: Record<string, string> = {
   QB: 'qb',
   RB: 'rb',
   WR: 'wr',
@@ -424,14 +424,6 @@ export function TradeAssetPicker(props: {
    * the displayed value, the disabled state and the submitted amount cannot disagree.
    */
   const effectiveFaab = props.faabAvailable != null ? Math.min(faab, props.faabAvailable) : faab
-
-  /**
-   * Team logo, resolved on the client from the abbreviation.
-   *
-   * Returns null for an unknown team or sport, and the row then shows the abbreviation alone —
-   * which is why the abbreviation is rendered beside the logo rather than replaced by it.
-   */
-  const teamLogoFor = (team: string | null): string | null => teamLogoUrl(team, props.sport)
 
   const search = useCallback(
     async (q: string) => {

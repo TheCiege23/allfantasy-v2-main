@@ -67,7 +67,7 @@ describe('G.3 — service: on-clock detection + timer-reset triggers', () => {
   it('shouldResetTimerAfterTx is captured outside the tx + checked after it commits', () => {
     expect(src).toMatch(/let shouldResetTimerAfterTx = false/)
     // The tx returns its value; the post-tx hook reads it via `audit.shouldResetTimer`.
-    expect(src).toMatch(/return \{ ok: true as const, shouldResetTimer: shouldResetTimerAfterTx \}/)
+    expect(src).toMatch(/return \{ ok: true as const, shouldResetTimer: shouldResetTimerAfterTx, auditRow \}/)
   })
 
   it('resetTimer is dynamically imported AFTER the tx commits (not inside it)', () => {

@@ -2,8 +2,6 @@
  * Viral Social Sharing System — types (Prompt 121).
  */
 
-import type { SupportedSport } from '@/lib/sport-scope';
-
 export const ACHIEVEMENT_SHARE_TYPES = [
   'winning_matchup',
   'winning_league',
@@ -47,4 +45,3 @@ export interface ShareContent {
   hashtags: string[];
 }
 
-export type ShareableMomentSport = SupportedSport;

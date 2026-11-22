@@ -520,4 +520,3 @@ export function PasswordResetV4() {
   )
 }
 
-export default PasswordResetV4

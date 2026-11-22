@@ -6,7 +6,7 @@ import { LeaguePickBoard } from '@/components/dynasty/LeaguePickBoard'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import '@/components/dynasty/dynasty-era.css'
 
-export type DynastyHomeProps = {
+type DynastyHomeProps = {
   leagueId: string
   view?: 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'
 }

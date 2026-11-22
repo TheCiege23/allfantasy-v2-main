@@ -6,11 +6,11 @@
  * commissioner writes, and only before the draft starts.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { getSurvivorIdolSetupView, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
   if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!(await isSurvivorLeague(leagueId))) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
-  const [commissioner, access] = await Promise.all([isCommissioner(leagueId, userId), resolveSurvivorAccessContext(leagueId, userId)])
+  const [commissioner, access] = await Promise.all([canCommissionerAct(leagueId, userId, 'view'), resolveSurvivorAccessContext(leagueId, userId)])
   const view = await getSurvivorIdolSetupView(leagueId, { isCommissioner: commissioner, canSeeDraw: Boolean(access?.decisions.canSeeHiddenIdolAssignments) })
   return NextResponse.json(view, { headers: { 'Cache-Control': 'no-store' } })
 }
@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
-  if (!(await isCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (!(await isSurvivorLeague(leagueId))) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
   const body = await req.json().catch(() => null)
   const result = await saveSurvivorIdolConfig(leagueId, body)

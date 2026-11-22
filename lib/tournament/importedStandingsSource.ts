@@ -48,7 +48,7 @@ export type ImportedTeamRecord = {
   lastUpdatedAt: Date
 }
 
-export type ImportedLeagueRecords = {
+type ImportedLeagueRecords = {
   leagueId: string
   rows: ImportedTeamRecord[]
   /**
@@ -122,7 +122,7 @@ function normalizeName(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-export type ParticipantLike = {
+type ParticipantLike = {
   /** For an imported tournament this holds the PLATFORM user id, not an AppUser id. */
   userId: string
   displayName?: string | null
@@ -159,7 +159,7 @@ export function parseTeamIdentity(userId: string): { leagueId: string; externalI
   return { leagueId: rest.slice(0, cut), externalId: rest.slice(cut + 1) }
 }
 
-export type RecordMatch = {
+type RecordMatch = {
   participant: ParticipantLike
   record: ImportedTeamRecord | null
   /**

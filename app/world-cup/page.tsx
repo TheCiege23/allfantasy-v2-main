@@ -88,7 +88,7 @@ const whyNowCards = [
   {
     icon: Bot,
     color: "text-violet-300 bg-violet-300/10 border-violet-300/25",
-    title: "AI bracket grades available",
+    title: "Chimmy bracket grades available",
     body: "Chimmy can grade your bracket picks, suggest upsets, and explain each team's path to the final.",
   },
   {
@@ -113,9 +113,9 @@ const upgradeCards = [
     price: "$9.99/mo",
     bestFor: "Best for players",
     icon: Sparkles,
-    body: "Bracket grades, group-stage advice, knockout strategy, upset picks, team comparisons, and saved AI reports.",
+    body: "Bracket grades, group-stage advice, knockout strategy, upset picks, team comparisons, and saved Chimmy reports.",
     href: proHref,
-    cta: "Unlock AI tools",
+    cta: "Unlock Chimmy tools",
     event: "AFProUpsellViewed",
     accent: "amber" as const,
   },
@@ -125,7 +125,7 @@ const upgradeCards = [
     price: "$14.99/mo",
     bestFor: "Best for pool creators",
     icon: Crown,
-    body: "Custom scoring, bigger pools, pool announcements, invite tools, leaderboard exports, and AI commissioner recaps.",
+    body: "Custom scoring, bigger pools, pool announcements, invite tools, leaderboard exports, and Chimmy commissioner recaps.",
     href: commissionerHref,
     cta: "Upgrade commissioner tools",
     event: "AFCommissionerUpsellViewed",
@@ -133,11 +133,11 @@ const upgradeCards = [
   },
   {
     id: "af-tokens",
-    title: "AI Tokens",
+    title: "Chimmy Tokens",
     price: "No subscription",
     bestFor: "Best for occasional use",
     icon: Coins,
-    body: "Buy token packs and spend them on any AI feature — bracket grades, upset analysis, Chimmy questions — only when you need it.",
+    body: "Buy token packs and spend them on any Chimmy feature — bracket grades, upset analysis, Chimmy questions — only when you need it.",
     href: tokensHref,
     cta: "Buy token packs",
     event: "TokenUpsellViewed",
@@ -149,7 +149,9 @@ const upgradeCards = [
     price: "$19.99/mo",
     bestFor: "Best for die-hards",
     icon: Star,
-    body: "All AI tools, priority Chimmy access, advanced analytics, league tools, AF Legacy intel, and commissioner features — everything in one plan.",
+    // Supreme bundles AF Pro + AF Commissioner (SUPREME_INCLUDED_PLAN_IDS). AF Legacy is sold on its own since
+    // 2026-10-25; this card promised "AF Legacy intel" until 2026-11-17.
+    body: "Everything in AF Pro and AF Commissioner in one plan — all Chimmy tools, priority Chimmy access, advanced analytics, league tools and commissioner features. AF Legacy is sold separately.",
     href: supremeHref,
     cta: "Go Supreme",
     event: "AFSupremeUpsellViewed",
@@ -160,7 +162,7 @@ const upgradeCards = [
 const trustItems = [
   { icon: CheckCircle2, label: "Free to start", color: "text-emerald-300" },
   { icon: ShieldCheck, label: "No gambling", color: "text-cyan-300" },
-  { icon: Bot, label: "AI optional", color: "text-amber-200" },
+  { icon: Bot, label: "Chimmy optional", color: "text-amber-200" },
   { icon: Lock, label: "Private groups", color: "text-white/60" },
 ]
 
@@ -226,7 +228,7 @@ export default function WorldCupAdLandingPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300 text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,0.45)]">
             AF
           </span>
-          <span className="hidden sm:inline">AllFantasy.AI</span>
+          <span className="hidden sm:inline">AllFantasy</span>
         </Link>
         <div className="flex items-center gap-2 text-xs font-bold">
           <Link
@@ -262,7 +264,7 @@ export default function WorldCupAdLandingPage() {
                 />
               </div>
               <div className="text-left">
-                <p className="text-[11px] font-black uppercase tracking-[0.20em] text-cyan-300/70">AllFantasy.AI</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.20em] text-cyan-300/70">AllFantasy</p>
                 <p className="text-sm font-black text-white/80">2026 World Cup Pools</p>
               </div>
             </div>
@@ -349,7 +351,7 @@ export default function WorldCupAdLandingPage() {
                 { label: "48 Teams", color: "cyan" },
                 { label: "104 Matches", color: "amber" },
                 { label: "Free Pools", color: "emerald" },
-                { label: "AI Picks", color: "violet" },
+                { label: "Chimmy Picks", color: "violet" },
               ]}
               className="relative w-full"
               onVideoViewed={trackWcHeroVideoViewed}
@@ -551,7 +553,7 @@ export default function WorldCupAdLandingPage() {
             { step: "1", title: "Create your pool", body: "Start with a free World Cup pool and default scoring that works for casual fans.", icon: Trophy, color: "text-cyan-300 bg-cyan-300/10 border-cyan-300/25" },
             { step: "2", title: "Invite your crew", body: "Share your pool link with friends, family, coworkers, group chats, or soccer fans.", icon: Users, color: "text-violet-300 bg-violet-300/10 border-violet-300/25" },
             { step: "3", title: "Build brackets", body: "Make picks before kickoff. Choose group-stage winners and predict the knockout rounds.", icon: ClipboardList, color: "text-amber-300 bg-amber-300/10 border-amber-300/25" },
-            { step: "4", title: "Use AI when ready", body: "Upgrade for bracket grades, upset picks, and commissioner intelligence reports.", icon: Bot, color: "text-emerald-300 bg-emerald-300/10 border-emerald-300/25" },
+            { step: "4", title: "Use Chimmy when ready", body: "Upgrade for bracket grades, upset picks, and commissioner intelligence reports.", icon: Bot, color: "text-emerald-300 bg-emerald-300/10 border-emerald-300/25" },
           ].map(({ step, title, body, icon: Icon, color }) => (
             <div key={step} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur">
               <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${color}`}>
@@ -645,7 +647,7 @@ export default function WorldCupAdLandingPage() {
               </div>
             </div>
             <div className="shrink-0">
-              <p className="mb-2 text-[11px] font-black uppercase tracking-widest text-white/35">AI available with</p>
+              <p className="mb-2 text-[11px] font-black uppercase tracking-widest text-white/35">Chimmy available with</p>
               <Link
                 href={proHref}
                 onClick={() => {
@@ -753,7 +755,7 @@ export default function WorldCupAdLandingPage() {
             <span>·</span>
             <span>No gambling</span>
             <span>·</span>
-            <span>AI optional</span>
+            <span>Chimmy optional</span>
             <span>·</span>
             <span>Private groups</span>
           </div>

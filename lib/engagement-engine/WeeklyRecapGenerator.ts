@@ -24,7 +24,7 @@ export async function buildWeeklyRecap(userId: string): Promise<WeeklyRecapPaylo
   const parts: string[] = []
   if (summary.leagueViews > 0) parts.push(`${summary.leagueViews} league visit${summary.leagueViews !== 1 ? "s" : ""}`)
   if (summary.bracketViews > 0) parts.push(`${summary.bracketViews} bracket view${summary.bracketViews !== 1 ? "s" : ""}`)
-  if (summary.aiUses > 0) parts.push(`${summary.aiUses} AI tool use${summary.aiUses !== 1 ? "s" : ""}`)
+  if (summary.aiUses > 0) parts.push(`${summary.aiUses} Chimmy tool use${summary.aiUses !== 1 ? "s" : ""}`)
 
   return {
     title: "Your weekly recap",

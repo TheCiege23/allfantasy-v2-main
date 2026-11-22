@@ -1,4 +1,4 @@
-import { getTheAudioDbApiKeyOrFallback } from '@/lib/env/sports-media-keys';
+import { searchArtistsCached } from '@/lib/music/musicCatalog';
 import type { NextRequest } from 'next/server';
 
 type ArtistSummary = {
@@ -42,18 +42,6 @@ function getAllGenreCandidates(): string[] {
   return Array.from(new Set(perGenre));
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    next: { revalidate: 3600 },
-  });
-
-  if (!response.ok) {
-    throw new Error(`TheAudioDB API error: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 async function fetchItunesArtists(query: string): Promise<ArtistSummary[]> {
   try {
     const response = await fetch(
@@ -89,38 +77,29 @@ export async function POST(request: NextRequest) {
     const searchQuery = typeof query === 'string' ? query.trim() : '';
     const isAllGenres = !genreLabel;
 
-    const apiKey = getTheAudioDbApiKeyOrFallback('2');
-    const baseUrl = `https://www.theaudiodb.com/api/v1/json/${apiKey}`;
-
+    /*
+     * TheAudioDB is read through the durable cache (lib/music/musicCatalog.ts); its key-bearing URL
+     * lives only in lib/music/theAudioDbFetch.ts. `null` = no answer, which falls back as a throw did.
+     */
     let artists: ArtistSummary[] = [];
     let fallbackArtists: ArtistSummary[] = [];
 
     if (searchQuery.length > 0) {
-      try {
-        const searchData = await fetchJson<{ artists?: ArtistSummary[] }>(
-          `${baseUrl}/search.php?s=${encodeURIComponent(searchQuery)}`
-        );
-
-        artists = (searchData.artists || [])
-          .filter((artist) => !!artist.idArtist && !!artist.strArtist)
-          .slice(0, 20);
-      } catch {
-        artists = await fetchItunesArtists(searchQuery);
-      }
+      const found = await searchArtistsCached(searchQuery);
+      artists = found
+        ? found.filter((artist) => !!artist.idArtist && !!artist.strArtist).slice(0, 20)
+        : await fetchItunesArtists(searchQuery);
 
       fallbackArtists = [];
     } else {
-      // db-first-exception: TheAudioDB does not expose a working artist-by-genre endpoint for this widget,
-      // so the route uses a small curated genre seed list and resolves actual artist data from TheAudioDB.
+      // TheAudioDB has no working artist-by-genre endpoint for this widget, so the route uses a small
+      // curated genre seed list and resolves each artist through the cached reader.
       const candidates = isAllGenres ? getAllGenreCandidates() : GENRE_SEED_ARTISTS[genreLabel] || [];
 
       const artistResults = await Promise.allSettled(
         candidates.map(async (artistName) => {
-          const artistData = await fetchJson<{ artists?: ArtistSummary[] }>(
-            `${baseUrl}/search.php?s=${encodeURIComponent(artistName)}`
-          );
-
-          const artist = artistData.artists?.[0];
+          const found = await searchArtistsCached(artistName);
+          const artist = found?.[0];
           if (!artist) {
             return null;
           }

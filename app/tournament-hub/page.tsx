@@ -62,6 +62,26 @@ export default async function TournamentHubIndex() {
     },
   })
 
+  /*
+   * The plan screen (`/tournament/create`) builds the older tournament record,
+   * which lives in a different table from the grouped-leagues one above. Left
+   * out, a commissioner creates a tournament and this page says "Nothing here
+   * yet". A failed read lists none rather than breaking the page.
+   */
+  const builtTournaments = await prisma.legacyTournament
+    .findMany({
+      where: { creatorId: userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        status: true,
+        _count: { select: { leagues: true, conferences: true } },
+      },
+    })
+    .catch(() => [])
+
   const joined = await prisma.tournamentParticipant.findMany({ where: { userId, status: { in: ['registered', 'waitlisted'] }, tournament: { status: 'rules_published' } }, select: { status: true, tournament: { select: { id: true, name: true, sport: true } } } })
 
   return (
@@ -113,7 +133,7 @@ export default async function TournamentHubIndex() {
         </div>
       </header>
 
-      {tournaments.length === 0 && universes.length === 0 ? (
+      {tournaments.length === 0 && builtTournaments.length === 0 && universes.length === 0 ? (
         /*
          * ⚠ AN EMPTY LIST IS A STARTING POINT, NOT AN ERROR. This is what a
          * commissioner sees the first time, and it is also what they see if they
@@ -132,7 +152,9 @@ export default async function TournamentHubIndex() {
 
       {universes.length > 0 ? (
         <>
-          {tournaments.length > 0 ? <h2 className="af-th-league-name">Tournaments</h2> : null}
+          {tournaments.length > 0 || builtTournaments.length > 0 ? (
+            <h2 className="af-th-league-name">Tournaments</h2>
+          ) : null}
         </>
       ) : null}
 
@@ -147,6 +169,25 @@ export default async function TournamentHubIndex() {
             {['blueprint', 'rules_published'].includes(t.status) ? <>{t.sport} · {t.status === 'rules_published' ? 'Rules published' : 'Planning preview'} · {t.maxParticipants} entrants · {t.leaguesPerConference} opening leagues</> : <>{t.sport} · round {t.currentRoundNumber || 1} · {t._count.conferences}{' '}
             {t._count.conferences === 1 ? 'conference' : 'conferences'} ·{' '}
             {t._count.tournamentLeagues} leagues · {t.currentParticipantCount} managers</>}
+          </p>
+        </Link>
+      ))}
+
+      {builtTournaments.map((t) => (
+        <Link
+          key={t.id}
+          href={`/tournament/${t.id}`}
+          className="af-th-league af-th-card"
+          data-testid="tournament-hub-built-tournament"
+        >
+          <h2 className="af-th-league-name">
+            {t.name}
+            <span className="af-th-linknote">{t.status}</span>
+          </h2>
+          <p className="af-th-pick-meta">
+            {t.sport} · {t._count.conferences}{' '}
+            {t._count.conferences === 1 ? 'conference' : 'conferences'} · {t._count.leagues}{' '}
+            {t._count.leagues === 1 ? 'league' : 'leagues'}
           </p>
         </Link>
       ))}

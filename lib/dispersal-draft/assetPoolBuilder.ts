@@ -57,7 +57,7 @@ function rowToPlayerAsset(sourceRosterId: string, raw: unknown): DispersalAsset 
 /**
  * Extract player rows from `playerData`: top-level array or nested `players` / `roster`.
  */
-export function extractPlayersFromPlayerData(playerData: unknown, sourceRosterId: string): DispersalAsset[] {
+function extractPlayersFromPlayerData(playerData: unknown, sourceRosterId: string): DispersalAsset[] {
   if (playerData == null) return []
   if (Array.isArray(playerData)) {
     return playerData.map((raw) => rowToPlayerAsset(sourceRosterId, raw)).filter((a): a is DispersalAsset => Boolean(a))
@@ -70,8 +70,6 @@ export function extractPlayersFromPlayerData(playerData: unknown, sourceRosterId
   }
   return []
 }
-
-type RawDraftPick = Record<string, unknown>
 
 function rawToDraftPickAsset(sourceRosterId: string, raw: unknown): DispersalAsset | null {
   const o = asRecord(raw)

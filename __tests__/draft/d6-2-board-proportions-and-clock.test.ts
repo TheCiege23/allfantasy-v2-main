@@ -23,7 +23,8 @@ describe('D.6.2 — board zone proportions + dock collapse toggle (DraftRoomShel
   const src = read('components/app/draft-room/DraftRoomShell.tsx')
 
   it('half size splits the screen: the board caps at 50vh so the pool and chat get the other half', () => {
-    expect(src).toMatch(/half: 'max-h-\[min\(50vh,600px\)\]'/)
+    // 2026-11-19: the board takes the larger share by default (it was 50vh).
+    expect(src).toMatch(/half: 'max-h-\[min\(58vh,760px\)\]'/)
   })
 
   it('players size gives the panel most of the screen and keeps a board strip', () => {
@@ -109,11 +110,11 @@ describe('D.6.2 — top-middle RESUME DRAFT replaced with prominent clock', () =
     expect(src).toMatch(/data-urgent=\{urgentLowTimer \? 'true' : 'false'\}/)
   })
 
-  it('paused state shows a "Resume" badge inside the clock pill (commissioner click target)', () => {
-    // The badge copy now goes through t(); "Resume" is its English value.
-    expect(src).toMatch(/>\s*\{t\('draftRoom\.topBar\.resumeBadge'\)\}\s*<\/span>/)
-    expect(translations.en['draftRoom.topBar.resumeBadge']).toBe('Resume')
-    expect(src).toMatch(/data-paused=\{draftStatus === 'paused' \? 'true' : 'false'\}/)
+  it('paused: the clock reads Paused and is NOT a second Resume control (2026-11-19)', () => {
+    // A paused commissioner used to see two Resume controls side by side. Resume is the one pill.
+    expect(src).not.toMatch(/draftRoom\.topBar\.resumeBadge/)
+    expect(src).toMatch(/const isPausedCommissioner = false/)
+    expect(src).toMatch(/data-testid=\{draftStatus === 'paused' \? 'draft-topbar-resume-pill' : 'draft-topbar-pause-pill'\}/)
   })
 
   it('commissioner-paused pill is a button (clickable to resume); else it is a div', () => {

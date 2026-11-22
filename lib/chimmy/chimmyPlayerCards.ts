@@ -26,7 +26,7 @@ import type { LeagueGroundingRoster } from '@/lib/ai/leagueSportsGroundingPacket
  * Anything else resolves to null and the UI falls back to initials.
  */
 
-export type ChimmyPlayerCard = {
+type ChimmyPlayerCard = {
   playerId: string
   name: string
   position: string | null

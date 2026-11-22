@@ -38,7 +38,7 @@ export type TradeTakeSide = {
   receives: TradeTakeAsset[]
 }
 
-export type TradeTakeSideResult = {
+type TradeTakeSideResult = {
   manager: string
   /** Market value this side takes in. */
   received: number
@@ -47,7 +47,7 @@ export type TradeTakeSideResult = {
   grade: string
 }
 
-export type ChimmyTradeTake = {
+type ChimmyTradeTake = {
   text: string
   verdict: 'win' | 'even'
   winner: string | null
@@ -58,7 +58,7 @@ export type ChimmyTradeTake = {
 }
 
 /** The gap below which a trade is called even — `compareTradeValues`' own threshold. */
-export const EVEN_PERCENT = 5
+const EVEN_PERCENT = 5
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 

@@ -35,7 +35,7 @@ export async function resolveRosterDisplayNames(
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId, id: { in: ids } },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, redraftRosterId: true },
   })
   const ownerIds = [
     ...new Set(
@@ -44,9 +44,7 @@ export async function resolveRosterDisplayNames(
         .filter((v): v is string => typeof v === 'string' && v.trim().length > 0),
     ),
   ]
-  if (ownerIds.length === 0) return names
-
-  const [teams, users] = await Promise.all([
+  const [teams, users] = ownerIds.length === 0 ? [[], []] : await Promise.all([
     prisma.leagueTeam.findMany({
       where: { leagueId, externalId: { in: ownerIds } },
       select: { externalId: true, ownerName: true, teamName: true },
@@ -72,6 +70,27 @@ export async function resolveRosterDisplayNames(
   for (const r of rosters) {
     const name = teamName.get(r.platformUserId) ?? userName.get(r.platformUserId)
     if (name) names.set(r.id, name)
+  }
+
+  /*
+   * 🛑 A TEAM NOBODY HAD CLAIMED WAS "A TEAM" ON EVERY GUILLOTINE SCREEN. An open seat's roster is
+   * owned by a placeholder ("open-slot-<league>-3"), which matches no league team and no user, so the
+   * chop line, the survival standings and the chopped list all fell back to "A team" for it. Walking a
+   * league locally (2026-11-20), seven of eight teams read "A team" and three chops were unnamed. The
+   * season's own roster row carries the seat's name ("Open Team 3", or the name an AI manager's team
+   * was given), so a roster still unnamed takes that. A value holding an "@" is never used: these names
+   * go on screen and into prompts, and an owner name can be an email.
+   */
+  const unnamed = rosters.filter((r) => !names.has(r.id) && r.redraftRosterId)
+  if (unnamed.length > 0) {
+    const seats = await prisma.redraftRoster
+      .findMany({ where: { id: { in: unnamed.map((r) => r.redraftRosterId as string) } }, select: { id: true, teamName: true } })
+      .catch(() => [] as Array<{ id: string; teamName: string | null }>)
+    const seatName = new Map(seats.map((x) => [x.id, x.teamName?.trim() ?? '']))
+    for (const r of unnamed) {
+      const name = seatName.get(r.redraftRosterId as string)
+      if (name && !name.includes('@')) names.set(r.id, name)
+    }
   }
   return names
 }

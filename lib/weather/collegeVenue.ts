@@ -1,7 +1,7 @@
 import { resolveCollegeTeam, type CollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIdentity'
 import { NCAAF_TEAM_STADIUM } from '@/lib/weather/ncaafTeamStadiums'
 
-export type CollegeVenue = { lat: number; lng: number; dome: boolean; label: string }
+type CollegeVenue = { lat: number; lng: number; dome: boolean; label: string }
 
 /**
  * A college team's home stadium, keyed by the team's CANONICAL school — the same

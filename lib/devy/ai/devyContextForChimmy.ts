@@ -3,6 +3,7 @@
  * Deterministic data only. Chimmy never decides promotion, eligibility, or pool assignment.
  */
 
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { prisma } from '@/lib/prisma'
 import { isDevyLeague, getDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 import { getDevyTeamOutlook } from '@/lib/devy/rankings/DevyTeamOutlookService'
@@ -15,10 +16,11 @@ export async function buildDevyContextForChimmy(
   const isDevy = await isDevyLeague(leagueId)
   if (!isDevy) return ''
 
+  const myTeamWhere = await viewingRosterWhere(leagueId, userId)
   const [config, roster, rights] = await Promise.all([
     getDevyConfig(leagueId),
     prisma.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: myTeamWhere,
       select: { id: true },
     }),
     prisma.devyRights.findMany({

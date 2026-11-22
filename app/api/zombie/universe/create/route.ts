@@ -20,7 +20,7 @@ export const maxDuration = 120
 const schema = z.object({
   zombieUniverseTier: z.enum(['single_gamma', 'beta_trio', 'alpha_hex']),
   /** Same JSON shape as `POST /api/league/create` (native manual path). */
-  leagueCreatePayload: z.record(z.unknown()),
+  leagueCreatePayload: z.record(z.string(), z.unknown()),
 })
 
 /**

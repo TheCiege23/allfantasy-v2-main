@@ -187,6 +187,10 @@ export function GuillotineAutopilotCard({
             <button type="button" className="nl-button" disabled={recapState.busy} onClick={() => void postAiRecap()} data-testid="guillotine-ai-recap">
               <Sparkles size={14} aria-hidden /> {recapState.busy ? 'Chimmy is writing…' : 'Have Chimmy recap the last chop'}
             </button>
+            {/* Chop ties left to you, and undoing the last chop (lib/guillotine/commissionerTiebreak.ts, chopUndo.ts). */}
+            <a className="nl-button" href={`/league/${encodeURIComponent(leagueId)}/guillotine-tiebreak`} data-testid="guillotine-chop-decisions">
+              Chop decisions &amp; undo
+            </a>
           </div>
           {recapState.message ? (
             <p role="status" className="mt-2 text-[12px] opacity-80">

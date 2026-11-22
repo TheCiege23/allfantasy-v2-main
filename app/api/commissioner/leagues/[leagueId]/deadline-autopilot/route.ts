@@ -6,26 +6,23 @@
  *         Turning the switch ON needs the Commissioner plan (402); the list and OFF are free.
  *   POST  { action: 'remind_now', key }  Free: send one reminder by hand (once per 6 h per deadline)
  */
+import { commissionerAccessResponse, type CommissionerNeed } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { readAutopilotView, saveAutopilotSettings, sendManualReminder } from '@/lib/deadline-autopilot/autopilotService'
 
 export const dynamic = 'force-dynamic'
 
 type Ctx = { params: Promise<{ leagueId: string }> }
 
-async function gate(ctx: Ctx) {
+async function gate(ctx: Ctx, need: CommissionerNeed) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const
   const { leagueId } = await ctx.params
-  const role = await getLeagueRole(leagueId, userId)
-  if (role === null) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) } as const
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return { error: NextResponse.json({ error: 'Commissioner only' }, { status: 403 }) } as const
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, need)
+  if (refused) return { error: refused } as const
   return { leagueId } as const
 }
 
@@ -33,7 +30,7 @@ const SAVE_STATUS = { too_many: 400, label_required: 400, invalid_time: 400, not
 const MANUAL_STATUS = { not_found: 404, cooldown: 429, no_recipients: 409 } as const
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
-  const g = await gate(ctx)
+  const g = await gate(ctx, 'view')
   if ('error' in g) return g.error
   const view = await readAutopilotView(g.leagueId)
   if (!view) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -41,7 +38,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
-  const g = await gate(ctx)
+  const g = await gate(ctx, 'league')
   if ('error' in g) return g.error
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const result = await saveAutopilotSettings(g.leagueId, { enabled: body.enabled, custom: body.custom })
@@ -50,7 +47,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 }
 
 export async function POST(req: NextRequest, ctx: Ctx) {
-  const g = await gate(ctx)
+  const g = await gate(ctx, 'league')
   if ('error' in g) return g.error
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   if (body.action !== 'remind_now' || typeof body.key !== 'string') {

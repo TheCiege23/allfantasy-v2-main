@@ -91,10 +91,7 @@ export function classifyChimmyIntent(
    * a rule or format works is neither. It is answered as general help, after the commissioner
    * branch so that "how do I change the playoff format?" still reaches the commissioner.
    */
-  const asksHowRulesWork =
-    /\b(how\s+(?:does|do|is|are)|what\s+(?:is|are|does)|explain)\b[^?]*\b(scoring|works?|means?|settings?|format)\b/.test(
-      current
-    ) || /\bhow\s+many\s+points\b/.test(current)
+  const asksHowRulesWork = asksHowARuleWorks(current)
 
   if (
     /\b(recaps?|storylines?|narratives?|tell the story|week\s*\d+\s*recaps?|hall of fame|social\s*clips?|captions?)\b/.test(text)
@@ -237,6 +234,25 @@ export function classifyChimmyIntent(
   ) {
     return score('trade', 3)
   }
+  /*
+   * A league's inactive or abandoned managers, and its health (2026-11-20). These are the questions the
+   * commissioner's health decision and the inactive-flag record answer, and none of them reached the `commissioner`
+   * intent: "which managers are inactive?" was general, so the decision built for it was never requested.
+   *
+   * ⚠ A MANAGER OR A LEAGUE MUST BE NAMED. A bare `inactive` is how a PLAYER's game status is asked ("is Kupp
+   * inactive?", "who's on the Chiefs inactives?"), and `teams?` is not a manager noun here — "which players on my
+   * team are inactive" is that same question.
+   * ⚠ PLACED AFTER TRADE, WAIVER AND LINEUP, so "should I trade with the inactive manager?" stays a trade question.
+   */
+  if (
+    /\binactive\s+(?:managers?|owners?|teams?|users?)\b|\b(?:managers?|owners?)\b[^?.!]{0,30}\binactive\b|\binactive\b[^?.!]{0,30}\b(?:my|our|this|the)\s+league\b/.test(
+      text
+    ) ||
+    /\babandon(?:ed|ing)?\s+(?:teams?|rosters?)\b|\b(?:managers?|owners?)\b[^?.!]{0,30}\babandon(?:ed|ing|s)?\b/.test(text) ||
+    /\bleague['’]?s?\s+health\b|\bhealth\s+of\s+(?:my|our|the)\s+league\b|\baction\s+items?\b/.test(text)
+  ) {
+    return score('commissioner', 2.5)
+  }
   if (
     /\b(values?|worth|ros|rest\s*of\s*season|outlooks?|sell\s*high|buy\s*low|tiers?|rank\s*him)\b/.test(text)
   ) {
@@ -255,4 +271,39 @@ export function classifyChimmyIntent(
     label: LABELS.general,
     confidence: 0.62,
   }
+}
+
+/**
+ * "How does superflex scoring work?", "how many points is a sack worth?" — a question about how a rule or format works.
+ * Answered as general help on purpose, so it is never handed the previous turn's intent either (see below).
+ */
+function asksHowARuleWorks(current: string): boolean {
+  return (
+    /\b(how\s+(?:does|do|is|are)|what\s+(?:is|are|does)|explain)\b[^?]*\b(scoring|works?|means?|settings?|format)\b/.test(
+      current
+    ) || /\bhow\s+many\s+points\b/.test(current)
+  )
+}
+
+/**
+ * THE ONE CLASSIFICATION OF A CHAT TURN (Decision OS hub, routing, 2026-11-20). The chat route asks it once and hands
+ * the same answer to the grounding packet (which facts to assemble) and to the prompt (the intent label and the
+ * specialist agent), so the two can no longer disagree about what the user asked.
+ *
+ * 🛑 THEY DID DISAGREE, ON EVERY FOLLOW-UP. The packet classified the message alone and the prompt classified it with
+ * the last two user turns joined in front. "Should I accept this trade?" then "what about if he adds a 2nd?" — the
+ * prompt said trade, the packet said general and left out the graded offers the trade engine had ready.
+ *
+ * ⚠ AND JOINING THE TURNS WAS WRONG ITSELF, because the branches are ordered: an earlier turn's words could take a
+ * branch that sits above the current question's own. "Who should I pick up?" then "should I accept Bob's offer?" was a
+ * WAIVER turn — waiver sits above trade, and "pick up" was in the joined text.
+ *
+ * So the CURRENT question decides; only when it names nothing at all do the previous turns, which is exactly a
+ * follow-up. A rules question ("how does PPR scoring work?") is general on purpose and keeps that.
+ */
+export function classifyChimmyTurn(message: string, recentUserSnippet?: string | null): ChimmyIntentClassification {
+  const own = classifyChimmyIntent(message)
+  if (own.intent !== 'general') return own
+  if (!recentUserSnippet?.trim() || asksHowARuleWorks(message.toLowerCase())) return own
+  return classifyChimmyIntent(message, recentUserSnippet)
 }

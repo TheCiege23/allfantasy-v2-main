@@ -9,8 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 type Snap = { playerId: string; playerName: string; position: string; season: number; computedAt: Date; adjustmentFactors: unknown; rosWeeksRemaining: number | null }
 const db = vi.hoisted(() => ({
   snaps: [] as Snap[],
-  identities: [] as Array<{ id: string; sleeperId: string | null; rollingInsightsId: string | null }>,
-  rosters: [] as Array<{ playerData: unknown; faabRemaining: number | null }>,
+  identities: [] as Array<{ id: string; sleeperId: string | null; rollingInsightsId: string | null; espnId?: string }>,
+  rosters: [] as Array<{ playerData: unknown; faabRemaining: number | null; redraftRosterId?: string }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -26,14 +26,16 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(async ({ where }: { where: { season: number } }) => db.snaps.filter((s) => s.season === where.season)),
     },
     playerIdentityMap: {
-      findMany: vi.fn(async ({ where, select }: { where: { id: { in: string[] } }; select: Record<string, boolean> }) =>
-        db.identities.filter((i) => where.id.in.includes(i.id)).map((i) => Object.fromEntries(Object.keys(select).map((k) => [k, (i as Record<string, unknown>)[k]])))),
+      findMany: vi.fn(async ({ where, select }: { where: { id?: { in: string[] }; espnId?: { in: string[] } }; select: Record<string, boolean> }) =>
+        db.identities.filter((i) => where.espnId ? where.espnId.in.includes(i.espnId ?? '') : where.id?.in.includes(i.id)).map((i) => Object.fromEntries(Object.keys(select).map((k) => [k, (i as Record<string, unknown>)[k]])))),
     },
     roster: { findMany: vi.fn(async () => db.rosters) },
   },
 }))
 
 import { loadGuillotineContext, loadZombiePlayerContext, leaguePointsPerGame } from '@/lib/decision-os/trade/guillotineContext'
+
+import { gradeGuillotineDeal } from '@/lib/decision-os/trade/guillotineValue'
 
 const SETTINGS = {
   roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN', 'BN', 'BN'],
@@ -69,6 +71,35 @@ describe('loadGuillotineContext', () => {
     if (!out.ok) throw new Error(out.reason)
     // Both rostered, so neither sets the free level: with two live teams, the third free agent does.
     expect(out.ctx.replacementBySlot.get('FLEX')?.name).toBe('Free Three')
+  })
+
+  it('uses only verified ESPN roster IDs in a saved ESPN league', async () => {
+    player('a', 'ESPN A', 'WR', { receptions: 10 }, '22')
+    player('b', 'ESPN B', 'WR', { receptions: 8 }, '11')
+    player('collision', 'Wrong Sleeper Player', 'WR', { receptions: 3 }, '33')
+    db.identities[0]!.espnId = '11'
+    db.identities[1]!.espnId = '22'
+    roster(['11'], 100)
+    roster(['22'], 50)
+    roster(['33'], 200)
+    db.rosters[0]!.redraftRosterId = 'linked-1'
+    db.rosters[1]!.redraftRosterId = 'linked-2'
+    const imported = { ...league, leagueSize: 2, platform: 'espn', settings: { ...SETTINGS, roster_positions: ['WR:2', 'D/ST:1', 'BE:5', 'IR:1', 'FLEX:1'] } }
+    const out = await loadGuillotineContext(imported)
+    if (!out.ok) throw new Error(out.reason)
+    expect(out.ctx.lineupLabel).toBe('2 WR, 1 DEF, 1 FLEX')
+    expect(out.ctx.teamsAlive).toBe(2)
+    expect(out.ctx.startingTeams).toBe(2)
+    expect(out.ctx.liveFaab).toBe(150)
+    const asset = (rosterPlayerId: string, playerId: string) => ({ kind: 'player' as const, rosterPlayerId, playerId })
+    const give = [asset('11', 'b')]
+    const get = [asset('22', 'a')]
+    expect(gradeGuillotineDeal({ give, get, ctx: out.ctx })).toMatchObject({ graded: true, lines: [{ name: 'ESPN A' }, { name: 'ESPN B' }] })
+    expect(gradeGuillotineDeal({ give: [asset('33', 'collision')], get, ctx: out.ctx })).toMatchObject({ graded: false, reason: expect.stringContaining('verified ESPN') })
+    db.identities.push({ id: 'duplicate', sleeperId: null, rollingInsightsId: null, espnId: '11' })
+    const ambiguous = await loadGuillotineContext(imported)
+    if (!ambiguous.ok) throw new Error(ambiguous.reason)
+    expect(ambiguous.ctx.espnRosterIndex?.has('11')).toBe(false)
   })
 
   it('reads a chopped Sleeper team (an empty roster) as gone: not alive, and its FAAB not live', async () => {

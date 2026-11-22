@@ -13,7 +13,6 @@ import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAd
 import { tradeEvidenceFromUnifiedWire } from '@/lib/player-data/adapters/tradePlayerContextAdapter'
 import { matchupContextFromUnifiedWire } from '@/lib/player-data/adapters/matchupPlayerAdapter'
 import { displayPlayerFromUnifiedRow } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import { buildNflRedraftPlayerDataEvents } from '@/lib/player-data/nflRedraftPlayerDataEvents'
 
 const NOW = new Date('2026-07-02T12:00:00.000Z')
 
@@ -270,39 +269,6 @@ describe('G41 NFL redraft player data pipeline', () => {
         'Projection data is stale as of 2026-06-20T00:00:00.000Z.',
         'Injury data is stale as of 2026-06-20T00:00:00.000Z.',
         'News data is stale as of 2026-06-20T00:00:00.000Z.',
-      ]),
-    )
-  })
-
-  it('emits canonical player-data events for refreshes, changes, and fallbacks', () => {
-    const current = canonicalFrom(sampleView())
-    const previous: NflRedraftCanonicalPlayer = {
-      ...current,
-      teamAbbr: 'LAR',
-      activeStatus: 'inactive',
-      injury: { ...current.injury, designation: 'Out' },
-      currentProjection: { ...current.currentProjection, weeklyProjectedPoints: 17.2 },
-    }
-    const currentWithFallback: NflRedraftCanonicalPlayer = {
-      ...current,
-      fallbacks: [{ field: 'newsSummary', reason: 'provider news unavailable', source: 'sports_players' }],
-    }
-
-    const events = buildNflRedraftPlayerDataEvents({
-      leagueId: 'league-1',
-      player: currentWithFallback,
-      previous,
-      occurredAtIso: '2026-07-02T12:00:00.000Z',
-    })
-
-    expect(events.map((event) => event.type)).toEqual(
-      expect.arrayContaining([
-        'player.data.refreshed',
-        'player.status.changed',
-        'player.injury.status_changed',
-        'player.projection.updated',
-        'player.team.changed',
-        'player.data.fallback_used',
       ]),
     )
   })

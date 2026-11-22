@@ -1,5 +1,9 @@
 import { AppStoreServerAPIClient, Environment, SignedDataVerifier } from "@apple/app-store-server-library"
-import type { JWSTransactionDecodedPayload, ResponseBodyV2DecodedPayload } from "@apple/app-store-server-library"
+import type {
+  JWSRenewalInfoDecodedPayload,
+  JWSTransactionDecodedPayload,
+  ResponseBodyV2DecodedPayload,
+} from "@apple/app-store-server-library"
 
 type AppleEnvironment = Environment.PRODUCTION | Environment.SANDBOX
 
@@ -83,6 +87,14 @@ export async function verifyAppleNotification(
     }
   }
   throw new Error("Apple notification verification failed", { cause: lastError })
+}
+
+/** A notification's `signedRenewalInfo`, verified in the environment the notification came from. */
+export async function verifyAppleRenewalInfo(
+  signedRenewalInfo: string,
+  environment: AppleEnvironment
+): Promise<JWSRenewalInfoDecodedPayload> {
+  return verifier(environment).verifyAndDecodeRenewalInfo(signedRenewalInfo)
 }
 
 export function appleIapConfigured(): boolean {

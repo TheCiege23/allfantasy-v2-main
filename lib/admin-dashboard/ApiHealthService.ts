@@ -3,9 +3,9 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import { getAdminProductionReadiness } from "@/lib/admin-dashboard/AdminProductionReadinessService"
 
-export type HealthStatus = "operational" | "degraded" | "down" | "unknown"
+type HealthStatus = "operational" | "degraded" | "down" | "unknown"
 
-export type HealthService = {
+type HealthService = {
   id: string
   name: string
   category: string
@@ -15,13 +15,13 @@ export type HealthService = {
   note: string
 }
 
-export type HealthError = {
+type HealthError = {
   severity: "critical" | "warning"
   source: string
   message: string
 }
 
-export type ApiHealthReport = {
+type ApiHealthReport = {
   generatedAt: string
   summary: { operational: number; degraded: number; down: number; unknown: number }
   services: HealthService[]

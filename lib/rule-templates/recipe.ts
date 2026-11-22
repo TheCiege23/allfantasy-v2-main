@@ -20,7 +20,7 @@
 import { createStateFromImportedLeague } from '@/lib/create-league-v2/import-template'
 import type { CreateLeagueV2State, DynastyRookieOrderMethod, KeeperSetupState } from '@/lib/create-league-v2/state'
 
-export type DynastyRecipe = {
+type DynastyRecipe = {
   regularSeasonLength?: number
   rookieDraftOrderMethod?: DynastyRookieOrderMethod
   rookieDraftRounds?: number
@@ -32,7 +32,7 @@ export type DynastyRecipe = {
   faabBudget?: number
 }
 
-export type KeeperRecipe = Partial<Pick<KeeperSetupState, 'keeperMaxKeepers' | 'keeperMaxYears' | 'keeperRoundPenalty' | 'keeperWaiverAllowed' | 'keeperEligibilityRule'>>
+type KeeperRecipe = Partial<Pick<KeeperSetupState, 'keeperMaxKeepers' | 'keeperMaxYears' | 'keeperRoundPenalty' | 'keeperWaiverAllowed' | 'keeperEligibilityRule'>>
 
 export type TemplateRecipe = {
   v: 2
@@ -208,8 +208,8 @@ export function describeRecipe(recipe: TemplateRecipe): string[] {
 
 // ── Sharing ──────────────────────────────────────────────────────────────────
 
-export type ShareMeta = { public: boolean; uses: number; usedBy: string[] }
-export const USED_BY_MAX = 500
+type ShareMeta = { public: boolean; uses: number; usedBy: string[] }
+const USED_BY_MAX = 500
 
 export function readShare(payload: unknown): ShareMeta {
   const s = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).share : null

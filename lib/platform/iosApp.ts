@@ -95,6 +95,14 @@ export const IOS_APP_PURCHASE_PAGE_PREFIXES: readonly string[] = [
   "/pricing",
   "/commissioner-upgrade",
   "/tokens",
+  /*
+   * /pro (AF Pro) and /all-access (the old All-Access URL, now AF Supreme) render the same
+   * MonetizationPurchaseSurface as /upgrade, with a Buy button — and until 2026-11-17 were on neither
+   * list, so a build that sells nothing opened a checkout page (3.1.1). Segment-boundary matched:
+   * /profile and /projections are not purchase pages.
+   */
+  "/pro",
+  "/all-access",
   "/donate",
   "/support",
 ]
@@ -143,6 +151,9 @@ export const IOS_APP_IAP_PAGE_PREFIXES: readonly string[] = [
   "/pricing",
   "/commissioner-upgrade",
   "/tokens",
+  // Catalog plans through checkout-client, like /upgrade — so an IAP build sells them through Apple.
+  "/pro",
+  "/all-access",
 ]
 
 export function isIosAppIapPage(pathname: string): boolean {

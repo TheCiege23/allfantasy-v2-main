@@ -217,4 +217,3 @@ export function ImportVerifyGate({
   )
 }
 
-export default ImportVerifyGate

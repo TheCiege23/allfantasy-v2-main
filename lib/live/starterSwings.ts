@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { projectionSportScope } from '@/lib/core-app/playerProjections'
 
 /**
  * Where a manager STANDS in a live league-week: platform points, head-to-head pairing,
@@ -29,9 +30,9 @@ export type ScoreRow = {
   points: number
 }
 
-export type PairingRow = { rosterId: string; matchupId: number | null }
+type PairingRow = { rosterId: string; matchupId: number | null }
 
-export type RosterState = {
+type RosterState = {
   rosterId: string
   /** Sum of starters' platform points. 0 when the roster has no scoring yet. */
   total: number
@@ -138,7 +139,7 @@ export function buildLeagueWeekState(input: {
 }
 
 /** A league-week's starter rows, exactly as the platform scored them. */
-export async function snapshotLeagueWeekScores(
+async function snapshotLeagueWeekScores(
   platformLeagueId: string,
   season: number,
   week: number,
@@ -159,6 +160,12 @@ export async function loadLeagueWeekState(input: {
   season: number
   week: number
   settings: unknown
+  /**
+   * The league's sport. Its only caller today reads NFL leagues alone (slateDigest.ts `loadLeagues`),
+   * but a Sleeper NBA league's ids collide with NFL ones, so a known non-NFL sport reads only its own
+   * projection rows (`projectionSportScope`). Absent or NFL sends the read it always did.
+   */
+  sport?: string | null
 }): Promise<LeagueWeekState | null> {
   const { platformLeagueId, season, week } = input
   const [rows, pairing] = await Promise.all([
@@ -176,7 +183,7 @@ export async function loadLeagueWeekState(input: {
   if (scoring && starterIds.length > 0) {
     const projections = await prisma.fantasyProjection.findMany({
       // AF mirror rows carry no component stat line to rescore — same filter as the Matchup screen.
-      where: { playerId: { in: starterIds }, season: String(season), week, source: { not: 'allfantasy' } },
+      where: { playerId: { in: starterIds }, season: String(season), week, source: { not: 'allfantasy' }, ...projectionSportScope(input.sport) },
       select: { playerId: true, stats: true },
     })
     for (const p of projections) {

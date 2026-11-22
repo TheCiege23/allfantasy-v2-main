@@ -25,7 +25,7 @@ export type InviteInfo = {
   }
 }
 
-export function normalizeWorldCupInviteOrigin(value: string | null | undefined): string | null {
+function normalizeWorldCupInviteOrigin(value: string | null | undefined): string | null {
   const raw = value?.trim()
   if (!raw) return null
   try {
@@ -40,7 +40,7 @@ export function normalizeWorldCupInviteOrigin(value: string | null | undefined):
   }
 }
 
-export function buildWorldCupInviteUrl(input: {
+function buildWorldCupInviteUrl(input: {
   inviteCode?: string | null
   origin?: string | null
   configuredOrigin?: string | null

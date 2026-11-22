@@ -35,6 +35,9 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
     const schedule = FantraxScheduleMapper.map(raw)
     const history = FantraxHistoryMapper.map(raw)
     const playerMapCount = Object.keys(raw.playerMap ?? {}).length
+    const soccerUnmapped = raw.league.sport === 'SOCCER'
+      ? Object.entries(raw.playerMap ?? {}).filter(([id, player]) => player.name === `Unknown player (${id})`).length
+      : 0
     const rosterWithPlayersCount = rosters.filter((roster) => roster.player_ids.length > 0).length
     const preDraftEmptyRosters = league.status === 'pre_draft' && rosterWithPlayersCount === 0
     const publishedLineup = raw.settings?.raw?.rosterInfo
@@ -55,6 +58,24 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
       scoring,
       schedule,
       draft_picks: history.draft_picks,
+      /*
+       * Fantrax reports every future pick with its original team and its holder, so the whole
+       * inventory is carried, each pick flagged with whether it has changed hands. That makes the
+       * stored rows complete for a Fantrax league (no round count has to be inferred), and a pick
+       * traded back to its original team is corrected on the next import rather than left stale.
+       * Absent when no inventory is on file, which leaves any rows already stored untouched.
+       */
+      ...(raw.futurePicks
+        ? {
+            traded_picks: raw.futurePicks.map((pick) => ({
+              season: pick.season,
+              round: pick.round,
+              original_roster_id: pick.originalTeamId,
+              current_owner_roster_id: pick.ownerTeamId,
+              traded: pick.originalTeamId !== pick.ownerTeamId,
+            })),
+          }
+        : {}),
       transactions: history.transactions,
       standings: history.standings,
       player_map: raw.playerMap ?? {},
@@ -223,10 +244,12 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
           count: raw.previousSeasons.length,
         },
         playerIdentityMap: {
-          state: playerMapCount > 0 ? 'partial' : 'missing',
-          count: playerMapCount,
+          state: playerMapCount > soccerUnmapped ? 'partial' : 'missing',
+          count: playerMapCount - soccerUnmapped,
           note:
-            playerMapCount > 0
+            soccerUnmapped > 0
+              ? `${soccerUnmapped} Fantrax Soccer player IDs have no verified identity link on file.`
+              : playerMapCount > 0
               ? 'Fantrax player IDs are mapped from imported roster exports and remain stable for future sync.'
               : 'No Fantrax player identity map was available in imported roster exports.',
         },

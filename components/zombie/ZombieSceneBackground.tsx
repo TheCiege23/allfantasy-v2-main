@@ -12,9 +12,16 @@ import { getZombieTheme, zombieThemeImageSrc } from '@/lib/zombie/zombieBackgrou
 export function ZombieSceneBackground({
   themeId,
   className,
+  stackedBelowLg = false,
 }: {
   themeId: string | null | undefined
   className?: string
+  /**
+   * The header's content spans its full width below `lg` (it stacks), so the fade — which leaves the art's
+   * right side bare for a left-aligned title — puts the brightest marks behind content. Adds an even scrim
+   * there. (2026-11-07 Zombie audit: the scene's red cross sat on the outbreak meter's labels on a phone.)
+   */
+  stackedBelowLg?: boolean
 }) {
   const theme = getZombieTheme(themeId)
   return (
@@ -37,6 +44,7 @@ export function ZombieSceneBackground({
       )}
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,8,13,0.92),rgba(7,8,13,0.55)_42%,transparent_72%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(transparent_55%,#07080d)]" />
+      {stackedBelowLg ? <div className="absolute inset-0 bg-[rgba(7,8,13,0.7)] lg:hidden" data-testid="zombie-scene-stacked-scrim" /> : null}
     </div>
   )
 }

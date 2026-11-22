@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -9,7 +10,6 @@ import { getLeagueTradeLedgerForRoster } from '@/lib/provider-trades/providerTra
 import { buildProviderOfferHistoryRows } from '@/lib/provider-trades/providerOfferHistoryRows'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { storedVetoRule, vetoVotesNeeded } from '@/lib/league-trade-engine/vetoRule'
-import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { readTradeBlock, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
@@ -43,6 +43,7 @@ import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 import { gradeProviderCompletedTrades } from '@/lib/provider-trades/providerCompletedGrades'
+import { buildProviderCompletedHistory } from '@/lib/provider-trades/providerCompletedHistory'
 import { pickChipFromTradeItem } from '@/lib/dynasty-core/dynastyDetails'
 
 export const dynamic = 'force-dynamic'
@@ -287,7 +288,7 @@ async function buildNativeActiveTrades(
     return [id, teamByRosterIdentity.get(id)?.avatarUrl ?? teamByRosterIdentity.get(externalId)?.avatarUrl ?? avatarByUserId.get(externalId) ?? null]
   }))
 
-  const isCommissioner = await isElevatedCommissioner(leagueId, userId)
+  const isCommissioner = await canCommissionerAct(leagueId, userId, 'trades')
   const world = await resolveCanonicalWorld(leagueId).catch(() => null)
   // The veto threshold counts every roster in the league, as `castAfTradeVetoVote` does.
   const teamCount = active.some((t) => t.status === 'awaiting_votes')
@@ -299,7 +300,7 @@ async function buildNativeActiveTrades(
    * the one grader prices players by name — so the ids are resolved here, once for the whole panel.
    * One row per id: `SportsPlayer` holds several for many players (see viewerNeedFactors).
    */
-  const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items))
+  const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items), leagueId)
   const idolPlayers = await idolRidesAlongPlayers(leagueId, userId, active.flatMap((t) => t.items))
   /* An asset as the panel draws it, marked when a player-bound Survivor idol rides along with it. */
   const nativeAsset = (item: (typeof active)[number]['items'][number]) => {
@@ -514,7 +515,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   const leagueId = league.id
   const [profile, isCommissioner, trades] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId }, select: { sleeperUserId: true } }).catch(() => null),
-    isElevatedCommissioner(leagueId, userId),
+    canCommissionerAct(leagueId, userId, 'trades'),
     listAfLeagueTrades(leagueId, { take: 200 }),
   ])
   const terminal = trades.filter((trade) => TERMINAL_STATUSES.has(trade.status))
@@ -729,7 +730,7 @@ async function buildNativeExecutedTrades(
   userId: string,
   sport = 'NFL',
 ): Promise<LeagueTradeHistoryItem[]> {
-  const isCommissioner = await isElevatedCommissioner(leagueId, userId)
+  const isCommissioner = await canCommissionerAct(leagueId, userId, 'trades')
   if (!isCommissioner) return []
 
   const trades = await listAfLeagueTrades(leagueId, { status: 'processed', take: 20 })
@@ -1053,11 +1054,35 @@ export async function GET(req: NextRequest) {
 
   if (!sleeperLeagueId) {
     const grader = lazyGrader(leagueId, userId)
-    const [activeTrades, historyTrades] = await Promise.all([
+    const platform = String(league.platform ?? 'manual').toLowerCase()
+    const [activeTrades, nativeHistory, providerHistory] = await Promise.all([
       buildNativeActiveTrades(leagueId, userId, league.sport, grader),
       buildNativeTradeHistory(league, userId),
+      /*
+       * The league's own completed trades on ESPN / Yahoo / MFL / Fleaflicker — synced into `LeagueTrade`,
+       * graded and frozen exactly as /core Trades shows them (`providerCompletedHistory.ts`). Until
+       * 2026-11-17 this tab listed only trades made inside AllFantasy, so an imported league's history read
+       * empty here while /core Trades listed every deal. Read from the database only; a failure costs this
+       * list, never the panel.
+       */
+      resolveWriteAuthority(league.platform) === 'NATIVE'
+        ? Promise.resolve([] as LeagueTradeHistoryItem[])
+        : prisma.leagueTeam
+            .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
+            .then((team) =>
+              buildProviderCompletedHistory({
+                leagueId,
+                userId,
+                platform,
+                platformLeagueId: league.platformLeagueId ?? null,
+                sport: league.sport ?? null,
+                viewerPlatformUserId: team?.platformUserId ?? null,
+              }),
+            )
+            .catch(() => [] as LeagueTradeHistoryItem[]),
     ])
-    const platform = String(league.platform ?? 'manual').toLowerCase()
+    // Provider-completed first, as on a Sleeper league; AllFantasy-native negotiations follow.
+    const historyTrades = [...providerHistory, ...nativeHistory]
 
     /*
      * ── Yahoo ────────────────────────────────────────────────────────────

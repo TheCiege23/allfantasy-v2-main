@@ -20,6 +20,13 @@ export const tradesScreenMessages = defineMessages({
     gradingIntro: 'Grades and recommendations on this page are calculated against ',
     regularSeason: (weeks: number) => `of a ${weeks}-week regular season`,
     sharePct: (pct: number | null) => `received ${pct}% of the traded value`,
+    /** Read aloud while the completed-trade history streams in under the Trade Center (TradesHistorySection). */
+    historyLoading: 'Loading completed trades…',
+    showAllTrades: (n: number) => `Show all ${n} trades`,
+    showFewerTrades: 'Show fewer trades',
+    /** Phone only: opens a trade card's grade reasons and full grade notes (TradeCard). */
+    whyTheseGrades: 'Why these grades',
+    hideGradeDetails: 'Hide grade details',
   },
   es: {
     perspectiveAria: (manager) => `Intercambio desde la perspectiva de ${manager ?? 'el primer mánager'}`,
@@ -29,5 +36,10 @@ export const tradesScreenMessages = defineMessages({
     gradingIntro: 'Las calificaciones y recomendaciones usan las reglas de ',
     regularSeason: (weeks) => `de una temporada regular de ${weeks} semanas`,
     sharePct: (pct) => `recibió el ${pct}% del valor intercambiado`,
+    historyLoading: 'Cargando intercambios completados…',
+    showAllTrades: (n) => `Ver los ${n} intercambios`,
+    showFewerTrades: 'Ver menos intercambios',
+    whyTheseGrades: 'Por qué estas calificaciones',
+    hideGradeDetails: 'Ocultar detalles de la calificación',
   },
 })

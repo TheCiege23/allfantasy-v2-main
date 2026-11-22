@@ -247,7 +247,7 @@ export function CreateLeagueVideoTile({
           'pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br',
           selected
             ? 'from-violet-950/30 via-violet-700/18 to-black/20'
-            : 'from-[color:var(--surface-card-soft)]/90 via-[color:var(--surface-card-soft)]/76 to-black/10 dark:from-slate-950/80 dark:via-slate-950/55 dark:to-black/25',
+            : 'from-[color:color-mix(in_srgb,var(--surface-card-soft)_90%,transparent)] via-[color:color-mix(in_srgb,var(--surface-card-soft)_76%,transparent)] to-black/10 dark:from-slate-950/80 dark:via-slate-950/55 dark:to-black/25',
         )}
         aria-hidden="true"
       />

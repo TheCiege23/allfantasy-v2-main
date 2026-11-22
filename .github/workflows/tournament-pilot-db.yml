@@ -33,7 +33,7 @@ jobs:
       - name: Run the isolated tournament pilot
         run: node artifacts/tournament-pilot-staging-cli.cjs test
       - name: Install Chromium for the authenticated invite rehearsal
-        run: npx playwright install --with-deps chromium
+        run: bash scripts/ci/install-playwright.sh chromium
       - name: Run signed-in invite and frozen-draft rehearsal
         env:
           DATABASE_URL: ${{ secrets.TOURNAMENT_PILOT_DATABASE_URL }}

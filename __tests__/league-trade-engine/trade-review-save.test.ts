@@ -28,6 +28,7 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: vi.fn(async () => undefined) }))
 vi.mock('@/lib/league/settingsLockGuard', () => ({ settingsPatchLockedResponse: vi.fn(async () => null) }))
 vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async () => undefined) }), EVENT: { SETTINGS_CHANGED: 'settings_changed' } }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessAllowAll())
 
 import { normalizeTradeReviewChoice, withTradeReviewMode } from '@/lib/league-trade-engine/leagueTradeReviewSetting'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'

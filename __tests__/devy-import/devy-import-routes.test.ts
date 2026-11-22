@@ -26,6 +26,8 @@ vi.mock('@/lib/devy/conflictResolutionEngine', () => ({ resolveConflict: m.resol
 vi.mock('@/lib/devy/mergeExecutionEngine', () => ({ executeMerge: m.executeMerge, generateImportAudit: vi.fn() }))
 vi.mock('@/lib/devy/importEngine', () => ({ connectSource: m.connectSource, createImportSession: vi.fn() }))
 vi.mock('@/lib/devy/identityMatchingEngine', () => ({ detectMergeConflicts: vi.fn(), matchManagers: vi.fn(), matchPlayers: vi.fn() }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET as sessionGET } from '@/app/api/devy/import/route'
 import { GET as sourcesGET, POST as sourcesPOST } from '@/app/api/devy/import/sources/route'
@@ -52,7 +54,7 @@ describe('GET /api/devy/import?leagueId — past sessions', () => {
     m.commissioner.mockResolvedValue({ ok: false, status: 403 })
     const res = await sessionGET(get('/api/devy/import?leagueId=L1'))
     expect(res.status).toBe(403)
-    expect(m.commissioner).toHaveBeenCalledWith('L1', 'me')
+    expect(m.commissioner).toHaveBeenCalledWith('L1', 'me', 'view')
     expect(m.db.devyImportSession.findMany).not.toHaveBeenCalled()
   })
   it("lists that league's sessions, newest first, without raw source data", async () => {
@@ -163,7 +165,7 @@ describe('POST /api/devy/import/execute', () => {
     m.executeMerge.mockResolvedValue({ ok: true, playersWritten: 1, seasonsWritten: 0, picksWritten: 0, errors: [] })
     const res = await executePOST(send('/api/devy/import/execute', 'POST', { sessionId: 'S1' }))
     expect(res.status).toBe(200)
-    expect(m.commissioner).toHaveBeenCalledWith('L1', 'me')
+    expect(m.commissioner).toHaveBeenCalledWith('L1', 'me', 'league')
     expect(m.executeMerge).toHaveBeenCalledWith('S1', 'creator')
   })
   it('is still commissioner-gated', async () => {

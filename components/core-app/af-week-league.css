@@ -33,24 +33,13 @@
   border-bottom: 1px solid var(--line);
 }
 
-.af-wl-eyebrow {
-  color: var(--faint);
-  letter-spacing: 0.14em;
-}
-
+/* Eyebrow and title: the shared PageHeader (primitives/af-primitives.css); the link sits on the title row. */
 .af-wl-title-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-}
-
-.af-wl-title {
-  margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.03em;
-  color: var(--text);
 }
 
 .af-core .af-wl-allweeks {
@@ -75,7 +64,7 @@
   padding: 22px;
   background: var(--surface);
   border: 1px solid var(--accent-line);
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
 }
 
 .af-wl-hero[data-empty='true'] {
@@ -299,7 +288,7 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border-left: 3px solid var(--line);
 }
@@ -360,7 +349,7 @@
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
 }
 
 .af-wl-card-row {

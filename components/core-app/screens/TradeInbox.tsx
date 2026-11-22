@@ -20,6 +20,8 @@ import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
 import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './TradeReactions'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { TradeMarketEvidence } from './TradeMarketEvidence'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -848,33 +850,36 @@ export function TradeInbox(props: {
             <p>{copy('Where a grade was saved when an offer was made, it stays beside today’s so you can see how the decision aged.')}</p>
           </div>
           {props.historyMode ? (
-            <div className="af-tc-timeline-filters" role="group" aria-label={hm.historyFiltersLabel}>
-              {([
-                ['all', hm.filterAll],
-                ['sent', hm.filterSent],
-                ['received', hm.filterReceived],
-                ['completed', hm.filterComplete],
-                ['closed', hm.filterRejected],
-              ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
-                <button key={key} type="button" data-on={timelineFilter === key} aria-pressed={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <FilterChips<TimelineFilter>
+              className="af-tc-timeline-filters"
+              ariaLabel={hm.historyFiltersLabel}
+              value={timelineFilter}
+              onChange={setTimelineFilter}
+              scrollOnPhone
+              options={[
+                { id: 'all', label: hm.filterAll },
+                { id: 'sent', label: hm.filterSent },
+                { id: 'received', label: hm.filterReceived },
+                { id: 'completed', label: hm.filterComplete },
+                { id: 'closed', label: hm.filterRejected },
+              ]}
+            />
           ) : (
-            <div className="af-tc-timeline-filters" aria-label={copy('Filter trade timeline')}>
-              {([
-                ['all', 'All'],
-                ['needs_you', 'Needs you'],
-                ['sent', 'Sent'],
-                ['completed', 'Completed'],
-                ['closed', 'Declined & expired'],
-              ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
-                <button key={key} type="button" data-on={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
-                  {copy(label)}
-                </button>
-              ))}
-            </div>
+            /* Same chips, and now announced: these buttons had no pressed state at all before. */
+            <FilterChips<TimelineFilter>
+              className="af-tc-timeline-filters"
+              ariaLabel={copy('Filter trade timeline')}
+              value={timelineFilter}
+              onChange={setTimelineFilter}
+              scrollOnPhone
+              options={[
+                { id: 'all', label: copy('All') },
+                { id: 'needs_you', label: copy('Needs you') },
+                { id: 'sent', label: copy('Sent') },
+                { id: 'completed', label: copy('Completed') },
+                { id: 'closed', label: copy('Declined & expired') },
+              ]}
+            />
           )}
         </header>
 
@@ -950,6 +955,8 @@ export function TradeInbox(props: {
                       </ul>
                     ) : null}
                     {withheld ? <p className="af-tc-timeline-gap">{copy('Not graded:')} {copy(withheld)}</p> : null}
+                    {/* Why the values moved, measured from completed trades — open offers and settled trades alike. */}
+                    <TradeMarketEvidence grade={graded} copy={copy} />
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
                     {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
                     {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} original={grade} /> : null}

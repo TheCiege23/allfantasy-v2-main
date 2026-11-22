@@ -2,10 +2,7 @@
  * Zombie collusion flag service: deterministic event flags (PROMPT 353). AI summary is optional/hybrid.
  */
 
-import { prisma } from '@/lib/prisma'
-import { appendZombieAudit } from './ZombieAuditLog'
-
-export interface CollusionFlag {
+interface CollusionFlag {
   leagueId: string
   rosterIdA: string
   rosterIdB: string
@@ -23,12 +20,3 @@ export async function evaluateCollusionFlags(leagueId: string): Promise<Collusio
   return flags
 }
 
-export async function recordCollusionFlags(leagueId: string, flags: CollusionFlag[]): Promise<void> {
-  for (const f of flags) {
-    await appendZombieAudit({
-      leagueId,
-      eventType: 'collusion_flag',
-      metadata: { rosterIdA: f.rosterIdA, rosterIdB: f.rosterIdB, flagType: f.flagType, ...f.metadata },
-    })
-  }
-}

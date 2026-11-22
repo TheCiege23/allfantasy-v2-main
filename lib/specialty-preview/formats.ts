@@ -1,7 +1,16 @@
 /**
  * Static preview data for specialty formats that have ART but NO GAME ENGINE.
  *
- * 🛑 KING OF THE HILL AND PIRATE HAVE NO NATIVE ENGINE (audited 2026-10-18). What exists:
+ * ✅ PIRATE GRADUATED AND IS NO LONGER HERE (2026-11-15). The audit below was true when written;
+ * then #2852 (merged 2026-11-03) shipped a native Pirate engine for NFL, NBA, MLB and NHL, and it
+ * is in the create-league wizard (`pirateProtectionLimit`, `pirateClaimHours`, `piratePlayoffClaims`
+ * in lib/league-creation-wizard/wizard-format-options.ts), the catalog seed and the format demos.
+ * Its page stayed "Coming soon — Native Pirate leagues are not live yet" for twelve days after it
+ * went live. /formats/pirate now 308s to /league-types/pirate (next.config.js), whose rules come
+ * from the demo registry. If King of the Hill ships, retire it the same way: remove it here,
+ * redirect its /formats path, and point every link at its lander.
+ *
+ * 🛑 KING OF THE HILL AND PIRATE HAD NO NATIVE ENGINE (audited 2026-10-18). What existed:
  *   - trade pricing (`lib/trade-intel/kingOfTheHill.ts`, `lib/trade-intel/pirate.ts`,
  *     `lib/trade-value/formats/*`) for leagues IMPORTED from Sleeper,
  *   - a steal detector (`lib/trade-intel/pirateSteal.ts`) that labels commissioner-executed steals,
@@ -18,9 +27,9 @@
  * add a numbered rules list here until the user picks a rule set and an engine exists.
  */
 
-export type SpecialtyPreviewSlug = 'king-of-the-hill' | 'pirate'
+type SpecialtyPreviewSlug = 'king-of-the-hill'
 
-export type SpecialtyPreviewPoint = {
+type SpecialtyPreviewPoint = {
   /** Public path of a 64px status icon, when the art set has one that fits. */
   icon?: string
   label: string
@@ -57,23 +66,9 @@ export const SPECIALTY_PREVIEW_FORMATS: Record<SpecialtyPreviewSlug, SpecialtyPr
     today:
       'Native King of the Hill leagues are not live yet. If you play it on Sleeper and import the league, AllFantasy already prices trades with the crown in mind.',
   },
-  pirate: {
-    slug: 'pirate',
-    conceptId: 'pirate_vampire',
-    shellFormat: 'pirate',
-    name: 'Pirate',
-    art: { banner: '/specialty/pirate/banner.svg', emblem: '/specialty/pirate/emblem.svg' },
-    tagline: 'Win your matchup and take a player off the crew you beat.',
-    points: [
-      { icon: '/specialty/pirate/plunder-chest.svg', label: 'Plunder', body: 'Beat a crew head to head and you take a player from their roster.' },
-      { icon: '/specialty/pirate/anchor.svg', label: 'Protected', body: 'Every crew shields a few players nobody can take. Everyone else is fair game.' },
-    ],
-    today:
-      'Native Pirate leagues are not live yet. If you run one on Sleeper, confirm it as Pirate in League settings: AllFantasy labels each steal and never grades it as a trade.',
-  },
 }
 
 export function getSpecialtyPreview(slug: string | null | undefined): SpecialtyPreviewFormat | null {
-  if (slug === 'king-of-the-hill' || slug === 'pirate') return SPECIALTY_PREVIEW_FORMATS[slug]
+  if (slug === 'king-of-the-hill') return SPECIALTY_PREVIEW_FORMATS[slug]
   return null
 }

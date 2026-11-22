@@ -9,6 +9,7 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
 import { teamWorkspaceCopy } from '@/lib/core-app/teamWorkspaceCopy'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useHoldUnsavedWork } from '@/lib/core-app/unsavedWork'
 import Link from 'next/link'
 import type { MyTeamData } from '@/lib/core-app/myTeam'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -35,6 +36,8 @@ export default function TeamRosterWorkspace({ data }: { data: MyTeamData }) {
   useEffect(() => { setNow(Date.now()); const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id) }, [])
   const [pendingVerification,setPendingVerification] = useState<{index:number;id:string}|null>(null)
   useEffect(()=>{if(pendingVerification && data.starters.available && data.starters.data[pendingVerification.index]?.player?.sleeperId===pendingVerification.id){setMessage("Verified: the refreshed roster contains your saved change.");setPendingVerification(null);setCandidateId('')}},[data,pendingVerification])
+  // A start/sit swap picked but not saved yet: no deploy reload while it is (lib/core-app/unsavedWork).
+  useHoldUnsavedWork((candidateId !== '' || saving) && pendingVerification == null)
   const checks = teamHealth(data, language)
   const comparisons = useMemo(() => eligibleComparisons(data, now), [data, now])
   const reviewAlert = useCallback((index:number)=>{setSlotIndex(index);setCandidateId('');setMessage('')},[])

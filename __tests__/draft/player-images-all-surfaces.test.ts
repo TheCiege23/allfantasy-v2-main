@@ -16,7 +16,6 @@ import { describe, expect, it } from 'vitest'
  *     - components/app/draft-room/QueuePanel.tsx
  *     - components/app/draft-room/DraftChatPanel.tsx (pick announcements + playerContext)
  *   Gap B — name-only (no image, added PlayerAvatar next to name):
- *     - app/draft/components/RecentPicksBar.tsx
  *     - app/league/[leagueId]/tabs/redraft/WaiverCenter.tsx
  *     - components/app/draft-room/DraftRosterStrip.tsx
  *
@@ -54,14 +53,6 @@ describe('player-images-all-surfaces — Gap A (raw <img> swapped to shared Play
 })
 
 describe('player-images-all-surfaces — Gap B (name-only surfaces, image added)', () => {
-  it('RecentPicksBar renders PlayerAvatar next to player name', () => {
-    const src = read('app/draft/components/RecentPicksBar.tsx')
-    expect(src).toMatch(PLAYER_AVATAR_IMPORT)
-    expect(src).toMatch(/<PlayerAvatar\b/)
-    // Type carries optional headshotUrl/teamLogoUrl so callers can pass real images.
-    expect(src).toMatch(/headshotUrl\?: string \| null/)
-    expect(src).toMatch(/teamLogoUrl\?: string \| null/)
-  })
 
   it('WaiverCenter renders PlayerAvatar next to each waiver target name', () => {
     const src = read('app/league/[leagueId]/tabs/redraft/WaiverCenter.tsx')

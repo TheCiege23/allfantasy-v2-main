@@ -24,7 +24,7 @@ const BodySchema = z.object({
   muteType: z.boolean().optional(),
   /** When event='dismissed', also permanently mute the alert class. */
   muteClass: z.boolean().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 export async function POST(request: NextRequest) {

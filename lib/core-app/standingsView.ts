@@ -10,14 +10,14 @@
 export type StandingsViewKey = 'official' | 'power' | 'playoffs'
 export type StandingsLayout = 'table' | 'cards'
 /** `all`, `group` (every division, grouped), or one division's key. */
-export type StandingsDivisionFilter = string
+type StandingsDivisionFilter = string
 
 /**
  * The league table's sortable columns. `seed` is the table's own order, the only one that draws the
  * playoff line — every other key is a lens on the same rows.
  */
 export type StandingsSortKey = 'seed' | 'pct' | 'pf' | 'pa' | 'streak' | 'odds' | 'sos' | 'proj'
-export type StandingsSortDir = 'asc' | 'desc'
+type StandingsSortDir = 'asc' | 'desc'
 export type StandingsSort = { key: StandingsSortKey; dir: StandingsSortDir }
 
 /**

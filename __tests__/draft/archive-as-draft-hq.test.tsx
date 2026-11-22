@@ -5,7 +5,7 @@
  * and end times and active-OTC durations. Now the archive carries the Draft HQ title and a one-line
  * summary, and the provenance folds into a closed "Timing and source details" section.
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
@@ -61,10 +61,40 @@ const detail = () =>
 const props = { choices: [], leagueId: 'L1', page: 1, more: false, total: 1 }
 
 describe('the archive as Draft HQ', () => {
-  it('carries the Draft HQ title and says which draft this is', () => {
-    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+  /*
+   * 2026-11-13: the title says where this league's draft is and where it is made, instead of the word
+   * "Draft HQ" — and the status and pick count are said once, in it, not again in the line under it.
+   */
+  it('leads with where the draft is and where it is made, and says which draft this is', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2026 draft done on Sleeper · 2 picks')
+    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL · snake')
+    expect(document.querySelector('.af-archive-hq-intro')?.textContent).toContain('This draft runs on Sleeper — make your picks there.')
+  })
+
+  it('a draft still running reads as drafting, with its pick count', () => {
+    const d = detail()
+    render(<DraftArchive {...props} detail={{ ...d, choice: { ...d.choice, status: 'drafting' } } as ArchiveDetail} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Drafting on Sleeper · 2 picks made')
+  })
+
+  it('a draft imported without its format or status says what is on file, never "unknown"', () => {
+    // Staging 2026-11-19: a Fantrax draft read "Draft status: unknown" over "2026 · NFL · unknown".
+    const d = detail()
+    const bare = { ...d, choice: { ...d.choice, key: 'legacy:NFL:2026', format: 'unknown', status: 'unknown' } } as ArchiveDetail
+    const view = render(<DraftArchive {...props} detail={bare} asDraftHq platformName="Fantrax" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2026 draft on Fantrax · 2 picks on file')
+    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL')
+    expect(document.body.textContent).not.toMatch(/unknown/i)
+    view.unmount()
+    h.language = 'es'
+    render(<DraftArchive {...props} detail={bare} asDraftHq platformName="Fantrax" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft de 2026 en Fantrax · 2 selecciones registradas')
+  })
+
+  it('with no draft open it is still titled Draft HQ', () => {
+    render(<DraftArchive {...props} detail={null} asDraftHq />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft HQ')
-    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL · snake · complete · 2 picks')
   })
 
   it('folds the source id, UTC clock and coverage notes into a closed details section', () => {
@@ -84,10 +114,90 @@ describe('the archive as Draft HQ', () => {
     expect(document.querySelector('details.af-archive-tech')).not.toBeNull()
   })
 
+  it('says each thing once: no repeated draft heading, no lone "Page 1", a singular record count', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+    expect(document.querySelectorAll('h3')).toHaveLength(3) // Selections and ownership, Draft analysis, Records from this draft — not the draft line again
+    expect([...document.querySelectorAll('h3')].some(h => h.textContent?.startsWith('2026 · NFL'))).toBe(false)
+    expect(screen.queryByRole('navigation', { name: 'Archive pages' })).toBeNull()
+    expect(screen.getByText('1 draft record')).toBeTruthy()
+  })
+
+  it('keeps the page nav when there is somewhere to go', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq more total={30} />)
+    expect(screen.getByRole('navigation', { name: 'Archive pages' }).textContent).toContain('Page 1')
+    expect(screen.getByText('30 draft records')).toBeTruthy()
+  })
+
+  it('names drafts in the picker without the provider id, unless two would read the same', () => {
+    const c = (key: string, sourceId: string, season = 2026) => ({ key, leagueId: 'L1', leagueName: 'L', source: 'imported', sourceId, season, sport: 'NFL', format: 'snake', status: 'complete' })
+    render(<DraftArchive {...props} detail={detail()} choices={[c('imported:139', '1391441779609317376'), c('imported:2025', '1180000000000004242', 2025)] as never} asDraftHq />)
+    expect([...screen.getByRole('combobox', { name: 'Select draft' }).querySelectorAll('option')].map(o => o.textContent)).toEqual(['Choose a draft', '2026 · snake · complete', '2025 · snake · complete'])
+    cleanup()
+    render(<DraftArchive {...props} detail={detail()} choices={[c('imported:139', '1391441779609317376'), c('imported:140', '1400000000000009999')] as never} asDraftHq />)
+    expect([...screen.getByRole('combobox', { name: 'Select draft' }).querySelectorAll('option')].map(o => o.textContent)).toEqual(['Choose a draft', '2026 · snake · complete · …7376', '2026 · snake · complete · …9999'])
+  })
+
+  it('never prints a raw provider user id under Selected by', () => {
+    const d = detail()
+    ;(d.picks[0] as { actor: string | null }).actor = '100561289762'
+    ;(d.picks[1] as { actor: string | null; actorName?: string | null }).actor = 'u2'
+    ;(d.picks[1] as { actorName?: string | null }).actorName = 'GuapCiege'
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(document.querySelector('.af-archive-table')?.textContent).not.toContain('100561289762')
+    expect(document.querySelector('.af-archive-table')?.textContent).toContain('GuapCiege')
+  })
+
+  const picksTable = () => screen.getByRole('region', { name: 'Archived picks' })
+  const heads = () => [...picksTable().querySelectorAll('th')].map(th => th.textContent)
+  const cellsPerRow = () => [...picksTable().querySelectorAll('tbody tr')].map(tr => tr.querySelectorAll('td').length)
+
+  it('drops every column the draft has no data for, and says so', () => {
+    // Live /core 2026-11-06: an imported Sleeper draft read "—" in four columns on all 168 rows.
+    const d = detail()
+    d.picks.forEach((p, i) => Object.assign(p, { slot: i + 1, actorName: 'Manager ' + i, source: 'sleeper' }))
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(heads()).toEqual(['Pick', 'Player', 'Receiving team', 'Original slot', 'Selected by'])
+    expect(cellsPerRow()).toEqual([5, 5])
+    expect((picksTable().querySelector('table') as HTMLElement).style.getPropertyValue('--af-cols')).toBe('5')
+    expect(document.querySelector('.af-archive-cols-note')?.textContent).toContain('Timing and source details')
+    expect(picksTable().textContent).not.toContain('— / sleeper')
+  })
+
+  it('keeps a column when any one pick has a value, so a filter never makes it flicker', () => {
+    const d = detail()
+    Object.assign(d.picks[1], { slot: 2, originalRosterId: 'r1', originalTeamName: 'Club 1', actorName: 'M', selectedAt: '2026-08-30T01:01:00.000Z', elapsedMs: 30_000, activeMs: 25_000, allowanceSeconds: 90, amount: 12, adp: 1.5, adpDifference: 0.5 })
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(heads()).toHaveLength(9)
+    expect(cellsPerRow()).toEqual([9, 9])
+    expect(heads()).toContain('Original slot / owner')
+    expect(document.querySelector('.af-archive-cols-note')).toBeNull()
+  })
+
+  it('shows pick timing behind one switch for the whole table, not a drawer on every row', () => {
+    // Live /core 2026-11-06: 25 "Identity and owner time" drawers nearly doubled the table's height on a phone.
+    const d = detail()
+    Object.assign(d.picks[0], { playerId: '4034', identityBasis: 'Recorded at selection' })
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(picksTable().querySelectorAll('details')).toHaveLength(0)
+    expect(picksTable().textContent).not.toContain('Recorded at selection')
+    const toggle = screen.getByRole('button', { name: 'Show pick details' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: 'Hide pick details' }).getAttribute('aria-pressed')).toBe('true')
+    expect(picksTable().textContent).toContain('4034 · Recorded at selection')
+  })
+
+  it('groups the history drawers in one records card, with no lone timeline page', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+    const card = screen.getByRole('region', { name: 'Records from this draft' })
+    expect(card.querySelectorAll('details').length).toBe(5)
+    expect(screen.queryByRole('navigation', { name: 'Timeline pages' })).toBeNull()
+  })
+
   it('reads Spanish', () => {
     h.language = 'es'
-    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Centro del draft')
+    render(<DraftArchive {...props} detail={detail()} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft 2026 terminado en Sleeper · 2 selecciones')
     expect(document.querySelector('details.af-archive-tech summary')?.textContent).toBe('Detalles de horario y origen')
   })
 })

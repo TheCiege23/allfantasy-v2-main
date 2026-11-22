@@ -137,7 +137,7 @@ const CATALOG: Record<DraftAutomationFeature, DraftFeaturePolicy> = {
     feature: 'explain_ai_queue_reorder_rationale',
     lane: 'ai_optional',
     aiOptional: true,
-    description: 'Optional AI wording for queue reorder rationale.',
+    description: 'Optional Chimmy wording for queue reorder rationale.',
   },
   narrative_league_story_recap: {
     feature: 'narrative_league_story_recap',

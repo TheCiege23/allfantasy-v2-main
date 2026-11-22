@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { buildLineupOptimization, type LineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
+import type { LineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
+import { myTeamLineupOptimization } from './myTeamLineupOptimization'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 import { keepBestPerRealLeague } from '@/lib/core-app/realLeague'
 import { isCategoryAllowedForLeague } from '@/lib/notifications/leagueOverrides'
@@ -41,9 +42,9 @@ import { openSlate, playsInSlate, renderSlateLock, slateIssues } from './slateLo
  * is advice nobody can take. The weekly check, hours earlier, is the one that emails.
  */
 
-export const SLATE_LOCK_ALERT_TYPE = 'slate_lock_check'
+const SLATE_LOCK_ALERT_TYPE = 'slate_lock_check'
 
-export type SlateLockUserOutcome =
+type SlateLockUserOutcome =
   | 'sent'
   | 'would_send'
   | 'clean'
@@ -78,12 +79,12 @@ export type SlateLockRun =
 const DEFAULT_BUDGET_MS = 90_000
 
 /** `chimmy-slate-lock:<season>-w<week>-<slate ISO>` — the dispatcher appends `:<userId>`. */
-export function slateLockDedupeKey(season: string | number, week: number, slate: Date): string {
+function slateLockDedupeKey(season: string | number, week: number, slate: Date): string {
   return `chimmy-slate-lock:${season}-w${week}-${slate.toISOString()}`
 }
 
 /** An empty slot is said once per league per week, whichever slate first sees it. */
-export function emptySlotClaimKey(season: string | number, week: number, leagueId: string): string {
+function emptySlotClaimKey(season: string | number, week: number, leagueId: string): string {
   return `chimmy-slate-lock-empty:${season}-w${week}:${leagueId}`
 }
 
@@ -91,7 +92,11 @@ const defaultDeps: SlateLockDeps = {
   ...proactiveDeliveryDeps,
   latestWeek: latestProjectionWeek,
   loadGames: loadRegularSeasonGames,
-  optimize: (leagueId, userId) => buildLineupOptimization({ leagueId, userId }),
+  /*
+   * My Team's best lineup, not the weekly-feed optimizer (2026-11-21): the alert, the screen it opens and Chimmy are
+   * one answer. See `myTeamLineupOptimization.ts`.
+   */
+  optimize: (leagueId, userId) => myTeamLineupOptimization(leagueId, userId),
 }
 
 export async function runSlateLockCheck(

@@ -35,7 +35,7 @@ import { engineSeasonScope, SCORING_SEASON_STATUSES } from '@/lib/redraft/season
 
 export const WORKSPACE_REFRESH_JOB_TYPE = 'workspace.refreshTasks'
 
-export interface DueWorkspaceLeague {
+interface DueWorkspaceLeague {
   leagueId: string
   idempotencyKey: string
   /**
@@ -50,7 +50,7 @@ export interface DueWorkspaceLeague {
   scheduledFor: Date
 }
 
-export interface DiscoverWorkspaceRefreshOptions {
+interface DiscoverWorkspaceRefreshOptions {
   limit?: number
   now?: Date
   leagueId?: string
@@ -82,7 +82,7 @@ export function buildWorkspaceRefreshIdempotencyKey(leagueId: string, scheduledF
  * fill the batch with dead leagues competing for the same `limit` as live ones. `in_progress` and
  * `paused` are states a draft only reaches once someone actually started it.
  */
-export const ACTIVE_NATIVE_DRAFT_STATUSES: readonly string[] = ['in_progress', 'paused']
+const ACTIVE_NATIVE_DRAFT_STATUSES: readonly string[] = ['in_progress', 'paused']
 
 /**
  * Native AllFantasy leagues that are actively in season, or mid-draft.

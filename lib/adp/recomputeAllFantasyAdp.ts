@@ -36,51 +36,115 @@ import {
  * Upsert computed **`AllFantasyAdpSnapshot`** rows ÃÂ¢ÃÂÃÂ shared by cron/CLI and tests.
  * Does not run aggregation; pass **`AdpSnapshot`** from **`aggregateAdp`** / **`applyTrends`**.
  */
+function snapshotRow(s: AdpSnapshot): Prisma.AllFantasyAdpSnapshotCreateInput {
+  return {
+    playerKey: s.playerKey,
+    playerName: s.playerName,
+    sport: s.context.sport,
+    leagueType: s.context.leagueType,
+    draftType: s.context.draftType,
+    scoringFormat: s.context.scoringFormat,
+    rosterFormat: s.context.rosterFormat,
+    teamCount: s.context.teamCount,
+    season: s.context.season,
+    draftMode: s.draftMode,
+    sampleSize: s.sampleSize,
+    averageOverallPick: s.averageOverallPick,
+    averageRound: s.averageRound,
+    averagePickInRound: s.averagePickInRound,
+    minOverallPick: s.minOverallPick,
+    maxOverallPick: s.maxOverallPick,
+    standardDeviation: s.standardDeviation,
+    sevenDayTrend: s.sevenDayTrend,
+    thirtyDayTrend: s.thirtyDayTrend,
+    contextHash: s.contextHash,
+  }
+}
+
+async function persistSnapshotBatch(rows: readonly Prisma.AllFantasyAdpSnapshotCreateInput[]): Promise<number> {
+  return prisma.$executeRaw`
+    INSERT INTO allfantasy_adp_snapshots (
+      id, "playerKey", "playerName", sport, "leagueType", "draftType", "scoringFormat",
+      "rosterFormat", "teamCount", season, "draftMode", "sampleSize", "averageOverallPick",
+      "averageRound", "averagePickInRound", "minOverallPick", "maxOverallPick", "standardDeviation",
+      "sevenDayTrend", "thirtyDayTrend", "contextHash", "createdAt", "lastUpdatedAt"
+    )
+    SELECT gen_random_uuid()::text, r."playerKey", r."playerName", r.sport, r."leagueType",
+      r."draftType", r."scoringFormat", r."rosterFormat", r."teamCount", r.season, r."draftMode",
+      r."sampleSize", r."averageOverallPick", r."averageRound", r."averagePickInRound",
+      r."minOverallPick", r."maxOverallPick", r."standardDeviation", r."sevenDayTrend",
+      r."thirtyDayTrend", r."contextHash", timezone('UTC', CURRENT_TIMESTAMP), timezone('UTC', CURRENT_TIMESTAMP)
+    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS r(
+      "playerKey" text, "playerName" text, sport text, "leagueType" text, "draftType" text,
+      "scoringFormat" text, "rosterFormat" text, "teamCount" integer, season text, "draftMode" text,
+      "sampleSize" integer, "averageOverallPick" double precision, "averageRound" double precision,
+      "averagePickInRound" double precision, "minOverallPick" integer, "maxOverallPick" integer,
+      "standardDeviation" double precision, "sevenDayTrend" double precision,
+      "thirtyDayTrend" double precision, "contextHash" text
+    )
+    ON CONFLICT ("playerKey", "contextHash", "draftMode") DO UPDATE SET
+      "playerName" = EXCLUDED."playerName",
+      sport = EXCLUDED.sport,
+      "leagueType" = EXCLUDED."leagueType",
+      "draftType" = EXCLUDED."draftType",
+      "scoringFormat" = EXCLUDED."scoringFormat",
+      "rosterFormat" = EXCLUDED."rosterFormat",
+      "teamCount" = EXCLUDED."teamCount",
+      season = EXCLUDED.season,
+      "sampleSize" = EXCLUDED."sampleSize",
+      "averageOverallPick" = EXCLUDED."averageOverallPick",
+      "averageRound" = EXCLUDED."averageRound",
+      "averagePickInRound" = EXCLUDED."averagePickInRound",
+      "minOverallPick" = EXCLUDED."minOverallPick",
+      "maxOverallPick" = EXCLUDED."maxOverallPick",
+      "standardDeviation" = EXCLUDED."standardDeviation",
+      "sevenDayTrend" = EXCLUDED."sevenDayTrend",
+      "thirtyDayTrend" = EXCLUDED."thirtyDayTrend",
+      "lastUpdatedAt" = EXCLUDED."lastUpdatedAt"
+  `
+}
+
 export async function persistAllFantasyAdpSnapshots(
   snapshots: readonly AdpSnapshot[],
 ): Promise<{ written: number; errors: string[] }> {
   let written = 0
   const errors: string[] = []
-  for (const s of snapshots) {
-    const data: Prisma.AllFantasyAdpSnapshotCreateInput = {
-      playerKey: s.playerKey,
-      playerName: s.playerName,
-      sport: s.context.sport,
-      leagueType: s.context.leagueType,
-      draftType: s.context.draftType,
-      scoringFormat: s.context.scoringFormat,
-      rosterFormat: s.context.rosterFormat,
-      teamCount: s.context.teamCount,
-      season: s.context.season,
-      draftMode: s.draftMode,
-      sampleSize: s.sampleSize,
-      averageOverallPick: s.averageOverallPick,
-      averageRound: s.averageRound,
-      averagePickInRound: s.averagePickInRound,
-      minOverallPick: s.minOverallPick,
-      maxOverallPick: s.maxOverallPick,
-      standardDeviation: s.standardDeviation,
-      sevenDayTrend: s.sevenDayTrend,
-      thirtyDayTrend: s.thirtyDayTrend,
-      contextHash: s.contextHash,
-    }
+  async function persistOne(data: Prisma.AllFantasyAdpSnapshotCreateInput) {
     try {
       await prisma.allFantasyAdpSnapshot.upsert({
         where: {
           playerKey_contextHash_draftMode: {
-            playerKey: s.playerKey,
-            contextHash: s.contextHash,
-            draftMode: s.draftMode,
+            playerKey: data.playerKey,
+            contextHash: data.contextHash,
+            draftMode: data.draftMode,
           },
         },
         create: data,
         update: { ...data, lastUpdatedAt: new Date() },
       })
-      written++
+      return null
     } catch (err) {
-      errors.push(
-        `upsert ${s.playerName} (${s.draftMode}): ${err instanceof Error ? err.message : String(err)}`,
-      )
+      return `upsert ${data.playerName} (${data.draftMode}): ${err instanceof Error ? err.message : String(err)}`
+    }
+  }
+  const batchSize = 500
+  const fallbackConcurrency = 16
+  for (let offset = 0; offset < snapshots.length; offset += batchSize) {
+    const rows = snapshots.slice(offset, offset + batchSize).map(snapshotRow)
+    if (rows.length > 1) {
+      try {
+        written += await persistSnapshotBatch(rows)
+        continue
+      } catch {
+        // The statement is atomic. Retry individually to isolate an invalid row.
+      }
+    }
+    for (let start = 0; start < rows.length; start += fallbackConcurrency) {
+      const results = await Promise.all(rows.slice(start, start + fallbackConcurrency).map(persistOne))
+      for (const result of results) {
+        if (result === null) written++
+        else errors.push(result)
+      }
     }
   }
   return { written, errors }
@@ -130,6 +194,8 @@ export interface RecomputeAllFantasyAdpReport {
   filteredOutByMode: number
   /** Commissioner-cleared placeholder slots. Was silently folded into `filteredOutByAsset`. */
   filteredOutByEmptyRow: number
+  /** Autopicks (a timed-out manager or a CPU team picked from our own board) — never ADP evidence. */
+  filteredOutByAutopick?: number
   /** Picks contributed by imported (`DraftFact`) drafts, and what could not be used. */
   importedFactsScanned: number
   importedPicksKept: number
@@ -153,6 +219,8 @@ interface DraftPickWithSession {
   round: number
   roundPick: number | null
   pickedAt: Date | null
+  /** When the row was written — the pick time for every writer that leaves `pickedAt` null. */
+  createdAt?: Date | null
   source: string | null
   assetType: string | null
   pickMetadata: unknown | null
@@ -205,9 +273,13 @@ function deriveContext(row: DraftPickWithSession) {
       leagueVariant: league?.leagueVariant ?? null,
       /* The SESSION is authoritative for both of these - it is the draft these picks came from. */
       leagueSize: null,
-      settings: null,
+      /*
+       * Settings are read for the QB format (superflex vs 1QB boards). They cannot change `draftType` here:
+       * the session's draftType is a required column, and `buildDraftContext` prefers it.
+       */
+      settings: league?.settings ?? null,
     },
-    session: { draftType: row.session.draftType, teamCount: row.session.teamCount },
+    session: { draftType: row.session.draftType, teamCount: row.session.teamCount, playerPool: row.session.playerPool ?? null },
   })
 }
 
@@ -242,6 +314,7 @@ export async function recomputeAllFantasyAdp(
     filteredOutByAsset: 0,
     filteredOutByMode: 0,
     filteredOutByEmptyRow: 0,
+    filteredOutByAutopick: 0,
     importedFactsScanned: 0,
     importedPicksKept: 0,
     importedDraftsCovered: 0,
@@ -260,9 +333,10 @@ export async function recomputeAllFantasyAdp(
    * `sport: null` (CLI "every sport") stays null and skips the filter entirely.
    */
   const sportFilter = sport ? normalizeToSupportedSport(sport) : null
+  const importedOnly = options.draftType?.toLowerCase() === 'imported'
 
   try {
-    const picksRaw = (await prisma.draftPick.findMany({
+    const picksRaw = importedOnly ? [] : (await prisma.draftPick.findMany({
       where: {
         /*
          * Ã°ÂÂÂ SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
@@ -294,6 +368,7 @@ export async function recomputeAllFantasyAdp(
         round: true,
         roundPick: true,
         pickedAt: true,
+        createdAt: true,
         source: true,
         assetType: true,
         pickMetadata: true,
@@ -359,13 +434,27 @@ export async function recomputeAllFantasyAdp(
         }
         continue
       }
+      /*
+       * 🛑 AN AUTOPICK IS OUR OWN RANKING TALKING BACK. A manager who timed out (or a CPU team) is picked for from the
+       * queue and the default board, so counting it would pull AF ADP toward the board AF ADP feeds — a loop that
+       * hides exactly the slide this measures. The AI ADP engine already leaves these out.
+       */
+      if ((row.source ?? '').trim().toLowerCase() === 'auto') {
+        report.filteredOutByAutopick = (report.filteredOutByAutopick ?? 0) + 1
+        continue
+      }
       valid.push({
         playerName: row.playerName,
         position: row.position ?? '',
         overall: row.overall,
         round: row.round,
         roundPick: row.roundPick ?? null,
-        pickedAt: row.pickedAt,
+        /*
+         * WHEN THE PICK WAS MADE, for recency. `pickedAt` is written by one caller only, so the row's insert time
+         * stands in: a pick row is created when the pick is made. (A Sleeper-mirror row is inserted at first sync,
+         * within minutes of a live pick.)
+         */
+        pickedAt: row.pickedAt ?? row.createdAt ?? null,
         context: deriveContext(row),
         draftMode: mode,
       })
@@ -393,7 +482,8 @@ export async function recomputeAllFantasyAdp(
           return true
         })
         report.importedPicksKept = usable.length
-        valid.push(...usable)
+        // Imported history can exceed V8's maximum argument count for a single call.
+        for (const pick of usable) valid.push(pick)
         report.picksKept = valid.length
       } catch (err) {
         report.errors.push(
@@ -402,7 +492,7 @@ export async function recomputeAllFantasyAdp(
       }
     }
 
-    const snapshots = aggregateAdp(valid)
+    const snapshots = aggregateAdp(valid, { now })
     report.uniquePlayers = new Set(snapshots.map((s) => s.playerKey)).size
     report.uniqueContexts = new Set(snapshots.map((s) => s.contextHash)).size
     for (const s of snapshots) report.byDraftMode[s.draftMode]++

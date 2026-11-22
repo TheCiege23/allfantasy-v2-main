@@ -69,28 +69,31 @@ export function BigBrotherTwistsPanel({ leagueId }: { leagueId: string }) {
   return (
     <div className="space-y-4 rounded-2xl border border-violet-500/25 bg-gradient-to-b from-violet-950/25 to-[#07071a]/90 p-5 shadow-[0_12px_48px_rgba(80,40,120,0.18)]">
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-200/85">Twist inventory</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-200/85">Twists · coming soon</h3>
+        {/*
+          🛑 THIS SAID "Enabled for this league. Execution is driven by the phase engine…" AND NO TWIST HAS EVER RUN.
+          Nothing in lib/big-brother performs a double eviction, battle back, secret HOH, hidden power or safety pass;
+          the list was the spec's defaults, written at league creation. Until a twist really runs, the panel says so.
+        */}
         <p className="mt-1 text-[13px] text-white/55">
-          Enabled for this league. Execution is driven by the phase engine, commissioner actions, and @Chimmy automation.
+          Twists aren’t live yet. Every week plays as a classic week: HOH, nominations, veto and an eviction vote.
         </p>
       </div>
-      <ul className="flex flex-wrap gap-2">
-        {enabled.length === 0 ? (
-          <li className="text-sm text-white/45">No twists flagged yet.</li>
-        ) : (
-          enabled.map((k) => (
+      {enabled.length > 0 ? (
+        <ul className="flex flex-wrap gap-2" aria-label="Twists planned for this league">
+          {enabled.map((k) => (
             <li
               key={k}
-              className="rounded-full border border-violet-400/25 bg-violet-500/10 px-3 py-1 text-[12px] font-medium text-violet-100/95"
+              className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-[12px] font-medium text-white/55"
             >
-              {TWIST_LABELS[k] ?? k}
+              {TWIST_LABELS[k] ?? k} · coming soon
             </li>
-          ))
-        )}
-      </ul>
+          ))}
+        </ul>
+      ) : null}
       {weeks.length > 0 ? (
         <p className="text-[12px] text-white/45">
-          Scheduled twist weeks: <span className="text-white/70">{weeks.join(', ')}</span>
+          Planned twist weeks (not active yet): <span className="text-white/70">{weeks.join(', ')}</span>
         </p>
       ) : null}
     </div>

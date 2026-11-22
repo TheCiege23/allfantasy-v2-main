@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cleanup, render, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, within } from '@testing-library/react'
 
 import { StandingsBoardView } from '@/components/core-app/standings/StandingsBoardView'
 import { Standings } from '@/components/core-app/screens/Standings'
@@ -175,6 +175,8 @@ describe('toStandingsOdds', () => {
 describe('StandingsBoardView — odds, schedule and magic numbers', () => {
   it('draws the magic number and next game from the table alone, and no odds columns without a simulation', () => {
     const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    // 2026-11-14: Magic #, Next and Schedule left are behind "More columns".
+    fireEvent.click(within(container).getByTestId('standings-more-columns'))
     const h = headers(container)
     expect(h).toContain('Magic #')
     expect(h).toContain('Next')
@@ -190,6 +192,7 @@ describe('StandingsBoardView — odds, schedule and magic numbers', () => {
 
   it('prints the simulation’s odds and schedule rank when it has them', () => {
     const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    fireEvent.click(within(container).getByTestId('standings-more-columns'))
     const h = headers(container)
     expect(h).toContain('Playoff %')
     expect(h).toContain('SOS left')
@@ -249,8 +252,7 @@ describe('StandingsBoardView — odds, schedule and magic numbers', () => {
   })
 
   it('keeps every new column on the card layout', () => {
-    window.localStorage.setItem('af-standings-layout', 'cards')
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={{ ...DEFAULT_STANDINGS_VIEW, layout: 'cards' }} odds={ODDS} />)
     const you = container.querySelector('.af-stb-card[data-you="true"]')!
     const terms = [...you.querySelectorAll('dt')].map((d) => d.textContent)
     expect(terms).toEqual(expect.arrayContaining(['Magic number', 'Playoff odds', 'Next', 'Schedule left']))
@@ -335,5 +337,58 @@ describe('Standings — what is at stake', () => {
     const { container } = render(<Standings data={data()} odds={stranger} />)
     expect(container.querySelector('.af-st-stakes-odds')).toBeNull()
     expect(container.querySelector('.af-st-stakes-game')).toBeNull()
+  })
+})
+
+/*
+ * 2026-11-14: the table opens short — the columns that answer "where does everyone stand" — and "More
+ * columns" brings back the rest. AF Power and the playoff picture sit under "More views".
+ */
+describe('Standings — a short table by default', () => {
+  it('opens on #, Team, Status, W-L, GB, Playoff %, PF and Streak only', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    expect(headers(container)).toEqual(['#', 'Team', 'Status', 'W-L', 'GB', 'Playoff %', 'PF', 'Strk'])
+  })
+
+  it('"More columns" brings back every other column, and "Fewer columns" takes them away again', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    const btn = within(container).getByTestId('standings-more-columns')
+    expect(btn.textContent).toBe('More columns')
+    fireEvent.click(btn)
+    const all = headers(container)
+    for (const h of ['Pct', 'Magic #', 'PA', 'Diff', 'Move', 'AF', 'Last 5', 'Next', 'SOS left']) expect(all).toContain(h)
+    expect(btn.getAttribute('aria-pressed')).toBe('true')
+    expect(btn.textContent).toBe('Fewer columns')
+    fireEvent.click(btn)
+    expect(headers(container)).toHaveLength(8)
+  })
+
+  it('runs the playoff line across exactly the columns drawn, short or full', () => {
+    for (const more of [false, true]) {
+      const { container, unmount } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+      if (more) fireEvent.click(within(container).getByTestId('standings-more-columns'))
+      const columns = leagueTable(container).querySelectorAll('thead th').length
+      expect(container.querySelector('tr.af-stb-line td')?.getAttribute('colspan')).toBe(String(columns))
+      unmount()
+    }
+  })
+
+  it('folds AF Power and the playoff picture under "More views", with a way back', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    const views = within(container).getByTestId('standings-more-views') as HTMLDetailsElement
+    expect(views.tagName).toBe('DETAILS')
+    expect(views.open).toBe(false)
+    expect(within(container).queryByTestId('standings-back-to-table')).toBeNull()
+    fireEvent.click(within(views).getByRole('radio', { name: 'AF Power' }))
+    fireEvent.click(within(container).getByTestId('standings-back-to-table'))
+    expect(within(container).queryByTestId('standings-back-to-table')).toBeNull()
+    expect(headers(container)[0]).toBe('#')
+  })
+
+  it('keys the statuses on one line of short labels', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    const items = [...within(container).getByTestId('standings-key').querySelectorAll('li')].map((li) => li.textContent?.trim())
+    expect(items.every((t) => (t ?? '').length <= 22)).toBe(true)
+    expect(items.join(' ')).not.toMatch(/Projection, not a result|cannot reach the line/)
   })
 })

@@ -129,6 +129,7 @@ import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
 import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
 import type { ScheduledAnnouncementRun } from '@/lib/commissioner/scheduledAnnouncementService'
 import type { AutopilotRun } from '@/lib/deadline-autopilot/autopilotService'
+import type { WeeklyEngineRun } from '@/lib/decision-os/waiver/weeklyEngineCalls'
 import type { AutoPostRun } from '@/lib/storyline-studio/storylineService'
 import { runFollowFreeAgentCheck, type FollowFreeAgentRun } from '@/lib/follows/followFreeAgentCheck'
 import { followFreeAgentDeps } from '@/lib/follows/followFreeAgentDeps'
@@ -177,6 +178,10 @@ const DEADLINE_AUTOPILOT_JOB = 'cron-deadline-autopilot'
 const STORYLINE_AUTOPOST_JOB = 'cron-storyline-autopost'
 /** A handful of reads per due league; this only stops a backlog from eating the sweep. */
 const STORYLINE_AUTOPOST_BUDGET_MS = 60_000
+/** The waiver engine's weekly #1 claims (lib/decision-os/waiver/weeklyEngineCalls.ts) — recorded only when one was. */
+const WAIVER_ENGINE_WEEKLY_JOB = 'cron-waiver-engine-weekly'
+/** Each league is a pool read and one deterministic engine run; this keeps the sweep's own work first. */
+const WAIVER_ENGINE_WEEKLY_BUDGET_MS = 45_000
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
@@ -204,6 +209,7 @@ type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
 type ScheduledAnnouncementsReport = ScheduledAnnouncementRun | PhaseRefusal
 type DeadlineAutopilotReport = AutopilotRun | PhaseRefusal
 type StorylineAutoPostReport = AutoPostRun | PhaseRefusal
+type WaiverEngineWeeklyReport = WeeklyEngineRun | PhaseRefusal
 
 type PhaseArgs = {
   mode: string
@@ -448,6 +454,39 @@ async function storylineAutoPostPhase(args: PhaseArgs): Promise<StorylineAutoPos
  * 🛑 THE FLAG IS READ HERE, BEFORE THE SERVICE IS LOADED. Off, the sweep never touches a league.
  * The heartbeat is recorded only when reminders went out — an idle run every five minutes is noise.
  */
+/**
+ * THE WAIVER ENGINE'S WEEKLY #1 CLAIMS (2026-11-20). Runs the Decision OS waiver engine for leagues the advice
+ * ledger can grade (Sleeper, redraft, full-PPR NFL) and records each top claim, unshown, so the engine's
+ * confidence learns from how its claims turned out (lib/decision-os/waiver/calibration.ts). Sends nothing.
+ * Rotates: a league runs at most once in six days. Skipped on a dry run or a single-user run — it writes.
+ */
+async function waiverEngineWeeklyPhase(args: PhaseArgs): Promise<WaiverEngineWeeklyReport> {
+  if (args.mode === 'off' || args.mode === '0' || args.dryRun || args.singleUser) return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const { runWeeklyWaiverEngineCalls } = await import('@/lib/decision-os/waiver/weeklyEngineCalls')
+    const r = await runWeeklyWaiverEngineCalls({
+      budgetMs: Math.max(0, Math.min(WAIVER_ENGINE_WEEKLY_BUDGET_MS, SWEEP_CEILING_MS - (Date.now() - args.sweepStartedAt))),
+    })
+    if (r.ran && r.started > 0) {
+      await recordSyncJobRun(
+        { jobName: WAIVER_ENGINE_WEEKLY_JOB, sport: 'NFL', trigger: 'cron' },
+        {
+          status: r.outcomes.error ? 'partial' : 'success',
+          rowsWritten: r.recorded,
+          metadata: { started: r.started, due: r.due, candidates: r.candidates, outcomes: r.outcomes, budgetStopped: r.budgetStopped },
+        },
+        Date.now() - started,
+      )
+    }
+    return r
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/alert-sweep] waiver engine weekly failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
 async function deadlineAutopilotPhase(args: PhaseArgs): Promise<DeadlineAutopilotReport> {
   if (process.env.DEADLINE_AUTOPILOT_ENABLED !== '1') return { ran: false, reason: 'disabled' }
   if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
@@ -1070,6 +1109,13 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    // Last: it sends nothing, so every user-facing phase above gets the run's time first.
+    const waiverEngineWeekly = await waiverEngineWeeklyPhase({
+      mode: (url.searchParams.get('waiverEngine') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
 
     return {
       // Zero alerts is a legitimate outcome (off-season, healthy rosters) and must not fail.
@@ -1108,6 +1154,8 @@ async function handle(req: NextRequest) {
       deadlineAutopilot,
       /** Storyline Studio auto-posts — mostly `{ leagues: 0, posted: 0 }`. */
       storylineAutoPost,
+      /** The waiver engine's weekly #1 claims, recorded for its own grading — sends nothing. */
+      waiverEngineWeekly,
       /** Followed players newly free in one of your leagues — `seeded` counts follows seen for the first time. */
       followFreeAgent,
       durationMs: Date.now() - startedAt,

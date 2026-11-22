@@ -39,7 +39,7 @@ import type { IntelligenceRequestContext, IntelligenceRunRecord, IntelligenceToo
 type PrismaLike = typeof defaultPrisma
 
 /** The tools this resolver can safely serve from persisted league evidence today (behavioral/managerial). */
-export const LEAGUE_EVIDENCE_TOOLS: ReadonlySet<IntelligenceTool> = new Set<IntelligenceTool>([
+const LEAGUE_EVIDENCE_TOOLS: ReadonlySet<IntelligenceTool> = new Set<IntelligenceTool>([
   'manager_intelligence',
 ])
 

@@ -8,7 +8,7 @@ export type AICardVariant =
   | 'draft_grade'
   | 'power_rankings'
 
-export interface AICardPayloadBase {
+interface AICardPayloadBase {
   /** Short title (e.g. "Trade Grade") */
   title: string
   /** AI insight or verdict (1-3 sentences) */

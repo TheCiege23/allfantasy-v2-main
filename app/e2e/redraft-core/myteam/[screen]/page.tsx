@@ -32,6 +32,7 @@ export default async function RedraftCoreMyTeamHarnessPage({
       platform={sp.platform ?? 'allfantasy'}
       leagueType={sp.leagueType ?? 'redraft'}
       identityOff={sp.identity === 'off'}
+      bestBall={sp.bestBall === '1'}
     />
   )
 }

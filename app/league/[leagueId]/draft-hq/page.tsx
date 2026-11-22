@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
@@ -63,10 +64,9 @@ export default async function DraftHQPage({
    * `resolveLeagueMembership` treats as canonical — `Roster` has no `userId`, and
    * `LeagueTeam.platformUserId` is the nullable lookalike that must never prove identity.
    */
-  const viewerRoster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
+  // With several teams this is the manager's first; own teams only, as before.
+  const viewing = await resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false })
+  const viewerRoster = viewing ? { id: viewing.rosterId } : null
 
   /*
    * Lottery odds come from previewLotteryOdds — the engine's READ-ONLY path. It computes weights

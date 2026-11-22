@@ -42,6 +42,8 @@ vi.mock('@/lib/draft-lottery/lotteryConfigStorage', () => ({
   getDraftOrderModeAndLotteryConfig: vi.fn(),
   setDraftOrderModeAndLotteryConfig: vi.fn(),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PUT } from '@/app/api/leagues/[leagueId]/dynasty-settings/handler'
 import { explainLeagueRules, explainRuleChange, groupSettingsChanges } from '@/lib/league-rules-explainer/explain'

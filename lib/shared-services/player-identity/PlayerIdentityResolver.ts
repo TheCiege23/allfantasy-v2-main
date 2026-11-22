@@ -30,13 +30,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizePlayerName, normalizePositionForSport } from '@/lib/team-abbrev'
 import { getProviderCapability } from './ProviderAdapters'
 import { defaultResolutionCache, type InMemoryResolutionCache } from './ResolutionCache'
-import type {
-  AliasMap,
-  CanonicalPlayer,
-  IdentityDiagnostics,
-  ProviderPlayerRef,
-  ResolutionResult,
-} from './types'
+import type { AliasMap, CanonicalPlayer, ProviderPlayerRef, ResolutionResult } from './types'
 import type { ImportProvider } from '@/lib/league-import/types'
 
 export interface ResolveOptions {

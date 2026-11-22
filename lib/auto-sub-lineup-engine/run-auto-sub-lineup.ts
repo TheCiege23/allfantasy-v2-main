@@ -7,7 +7,6 @@ import type {
   TeamContextInput,
   UserLineupPreferenceProfileInput,
 } from '@/lib/lineup-decision-engine/types'
-import { defaultSlotCodesForSport, resolveOptimizerSportKey } from '@/lib/lineup-optimizer-engine/LineupOptimizerEngine'
 import {
   computePreferenceTieBreaker,
   computeReplacementScore,
@@ -38,7 +37,7 @@ export interface AutoSubLineupEngineInput {
   bench: PremiumPlayerInput[]
 }
 
-export interface AutoSubLineupEngineResult {
+interface AutoSubLineupEngineResult {
   autoSubsExecuted: Array<{
     starterName: string
     starterStatus: string
@@ -246,8 +245,3 @@ export function runAutoSubLineupEngine(input: AutoSubLineupEngineInput): AutoSub
   return { autoSubsExecuted, blockedAutoSubs, notifications, auditLog }
 }
 
-/** Resolve default slot codes for sport when building UI legality checks without custom slots. */
-export function defaultSlotsForAutoSubSport(sport?: string): string[] {
-  const key = resolveOptimizerSportKey(sport)
-  return defaultSlotCodesForSport(key)
-}

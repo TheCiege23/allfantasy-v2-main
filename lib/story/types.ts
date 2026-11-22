@@ -21,7 +21,7 @@ export type StoryType = (typeof STORY_TYPES)[keyof typeof STORY_TYPES]
 export const ALL_STORY_TYPES: StoryType[] = Object.values(STORY_TYPES)
 
 /** Why a context/draft is degraded — mirrors the grounding adapter's never-throw contract. */
-export type StoryContextStatus = 'ok' | 'empty' | 'restricted'
+type StoryContextStatus = 'ok' | 'empty' | 'restricted'
 
 /** Privacy-safe action item (no `meta` — that can hold league-internal user ids). */
 export interface StorySafeActionItem {
@@ -31,7 +31,7 @@ export interface StorySafeActionItem {
 }
 
 /** Privacy-safe timeline entry (audit feed already strips payloads/PII). */
-export interface StoryTimelineEntry {
+interface StoryTimelineEntry {
   type: string
   summary: string
   occurredAt: string

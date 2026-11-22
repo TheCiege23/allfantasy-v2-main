@@ -1,0 +1,69 @@
+{
+  "capturedAt": "2026-11-21",
+  "source": "Captured in the league owner's own logged-in Chrome, with their consent, from the Transaction History page of one NFL dynasty league. League and team ids are replaced with placeholders; the sample rows are synthetic and only show the shape.",
+  "page": {
+    "path": "/fantasy/league/<sourceLeagueId>/transactions/history",
+    "tabs": ["Claim/Drop", "Trade", "Lineup"],
+    "filters": ["Teams", "Position", "Executed Only", "Include Deleted"],
+    "dataRequest": {
+      "method": "POST",
+      "path": "/fxpa/req",
+      "query": { "leagueId": "<sourceLeagueId>" },
+      "bodyKeys": ["msgs", "uiv", "refUrl", "dt", "at", "tz", "v"],
+      "msgs": [
+        { "method": "getTransactionDetailsHistory", "data": { "leagueId": "<sourceLeagueId>", "view": "CLAIM_DROP" } },
+        { "method": "getFantasyLeagueInfo", "data": {} },
+        { "method": "getFantasyTeams", "data": {} }
+      ],
+      "viewValuesSeen": ["CLAIM_DROP", "TRADE"],
+      "responseBody": "NOT CAPTURED"
+    }
+  },
+  "download": {
+    "control": "\"Download all as CSV\" button on the page",
+    "method": "GET",
+    "origin": "https://www.fantrax.com",
+    "path": "/fxpa/downloadTransactionHistory",
+    "query": {
+      "leagueId": "<sourceLeagueId>",
+      "pageNumber": "1",
+      "team": "ALL",
+      "positionOrGroup": "ALL",
+      "view": "CLAIM_DROP",
+      "adminMode": "false",
+      "includeDeleted": "false",
+      "executedOnly": "true"
+    },
+    "openedWith": "window.open",
+    "fileName": "Fantrax-Transaction-History-Claims+Drops-<League Name>.csv"
+  },
+  "claimDropCsv": {
+    "header": ["Player", "Team", "Position", "Type", "Team", "Bid", "Date (EST)", "Week"],
+    "note": "Two columns are both named \"Team\": the first is the player's NFL club, the second is the fantasy team. There is no player id column.",
+    "typeValuesSeen": ["Claim", "Drop"],
+    "sampleRows": [
+      ["Sample Receiver", "PHI", "WR", "Claim", "#5 Team A", "7000.00", "Sat Nov 21, 2026, 9:00AM", "11"],
+      ["Sample Back", "NYG", "RB", "Drop", "#23 Team B", "", "Sat Nov 21, 2026, 6:07AM", "11"]
+    ],
+    "measured": {
+      "rows": 78,
+      "claims": 66,
+      "drops": 12,
+      "rowsWithNoBid": 14,
+      "weeksCovered": ["10", "11"],
+      "earliestRow": "Thu Nov 12, 2026",
+      "pagesOnScreen": 4,
+      "perPageOnScreen": 20
+    }
+  },
+  "tradeCsv": {
+    "header": ["Player", "Team", "Position", "From", "To", "# Obj", "Date (EST)", "Week"],
+    "note": "Already read by lib/league-import/fantrax/fantraxTradeHistoryCsv.ts. The Trade tab's download request was NOT captured here; only view=TRADE on the page's data request was seen."
+  },
+  "notCaptured": [
+    "The download with view=TRADE or view=LINEUP",
+    "The response without a login",
+    "The JSON response of getTransactionDetailsHistory, and whether it carries player ids",
+    "Why the Claim/Drop export of an 11-week season starts in week 10: a retention window, a default date filter, or this league's own history"
+  ]
+}

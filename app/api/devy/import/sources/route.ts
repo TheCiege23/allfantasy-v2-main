@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })
   if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-  const gate = await assertLeagueCommissioner(row.leagueId, userId)
+  const gate = await assertLeagueCommissioner(row.leagueId, userId, 'view')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const sources = await prisma.devyImportSource.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' } })
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })
   if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-  const gate = await assertLeagueCommissioner(row.leagueId, userId)
+  const gate = await assertLeagueCommissioner(row.leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const src = await connectSource(
@@ -108,7 +108,7 @@ export async function PATCH(req: NextRequest) {
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })
   if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-  const gate = await assertLeagueCommissioner(row.leagueId, userId)
+  const gate = await assertLeagueCommissioner(row.leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   await prisma.devyImportSource.updateMany({

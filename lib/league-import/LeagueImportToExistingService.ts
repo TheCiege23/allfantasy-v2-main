@@ -30,7 +30,7 @@ export const DEFAULT_EXISTING_LEAGUE_IMPORT_OPTIONS: ExistingLeagueImportApplyOp
   leagueName: true,
 }
 
-export interface ApplyImportedLeagueToExistingResult {
+interface ApplyImportedLeagueToExistingResult {
   leagueId: string
   leagueName: string | null
   applied: ExistingLeagueImportApplyOptions

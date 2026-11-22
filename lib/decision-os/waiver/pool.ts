@@ -102,6 +102,11 @@ export interface WaiverPool {
    */
   teamNeeds: TeamNeedsMap | null
   /**
+   * What the trade market says a hole at each position costs (`learnedInGrades.tradeNeedEvidence`), for the league's
+   * own book — only with `TRADE_LEARNED_NEED=on`, NFL only. Evidence for the "fills a need" line; moves no score.
+   */
+  tradeNeedEvidence?: Readonly<Record<string, string>>
+  /**
    * True when the pool is a bounded slice rather than the whole wire.
    *
    * ⚠ REPORTED, NOT HIDDEN. `runWaiverClaimDecision` takes `poolIncomplete` and the decision's
@@ -128,6 +133,20 @@ const POOL_LIMIT = 300
 const SLEEPER_ID = /^\d+$/
 
 type RosterRow = { id: string; platformUserId: string; playerData: unknown }
+
+/**
+ * The trade market's sentence per position for a hole there, for this league's book — or nothing. NFL only (the need
+ * learner reads NFL trades), and only with `TRADE_LEARNED_NEED=on`, the same switch that lets the measured premium into
+ * the trade grade. Evidence for the pickup's "fills a need" line; it moves no score and no bid.
+ */
+async function loadTradeNeedEvidence(sport: string, traits: { isSF: boolean; isDynasty: boolean }): Promise<Record<string, string> | undefined> {
+  if (String(sport).trim().toUpperCase() !== 'NFL') return undefined
+  const { learnedNeedOn, loadLearnedTables, tradeNeedEvidence } = await import('@/lib/trade-market/learnedInGrades')
+  if (!learnedNeedOn()) return undefined
+  const { bookKey } = await import('@/lib/trade-market/formatMarkets')
+  const book = bookKey({ format: traits.isDynasty ? 'DYNASTY' : 'REDRAFT', qbFormat: traits.isSF ? 'SUPERFLEX' : 'ONE_QB' })
+  return tradeNeedEvidence(await loadLearnedTables(prisma), book)
+}
 
 /** The slots `Roster.playerData` distinguishes, in the vocabulary the scorer reads. */
 function slotsOf(playerData: unknown): Map<string, WaiverRosterPlayer['slot']> {
@@ -384,12 +403,15 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     isDynasty: Boolean(priced.variant?.dynasty || priced.variant?.keeper),
   }
 
+  const tradeNeedEvidence = await loadTradeNeedEvidence(sport, leagueTraits).catch(() => undefined)
+
   return {
     availablePlayers,
     myRoster,
     leagueRosters: allRosters,
     rosterPositions,
     leagueTraits,
+    ...(tradeNeedEvidence && Object.keys(tradeNeedEvidence).length ? { tradeNeedEvidence } : {}),
     currentWeek: projectionWeek?.week ?? null,
     byeWeekByClub,
     teamNeeds,

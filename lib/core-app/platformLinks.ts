@@ -214,23 +214,3 @@ export function handoffFor(league: LinkLeague, screen: SourceScreen): PlatformLi
   return verifiedHandoff(league, screen) ?? (screen === 'league' ? null : verifiedHandoff(league, 'league'))
 }
 
-/**
- * Every screen for a league, with what the link resolves to today and the
- * unverified URL each format would build — the verification pass's worksheet.
- */
-export function deepLinkCandidates(league: LinkLeague): Array<{ screen: SourceScreen; href: string; verified: boolean; candidate: string | null }> {
-  const out: Array<{ screen: SourceScreen; href: string; verified: boolean; candidate: string | null }> = []
-  for (const screen of ['league', 'lineup', 'waivers', 'trade'] as const) {
-    const resolved = resolveSourceScreenLink({
-      platform: league.platform,
-      sourceLeagueId: league.platformLeagueId ?? null,
-      leagueName: league.name ?? null,
-      season: league.season ?? null,
-      teamId: league.teamId ?? null,
-      partnerTeamId: league.partnerTeamId ?? null,
-      screen,
-    })
-    if (resolved) out.push({ screen, href: resolved.href, verified: resolved.verified, candidate: resolved.candidate })
-  }
-  return out
-}

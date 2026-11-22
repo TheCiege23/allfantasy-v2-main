@@ -9,7 +9,7 @@
  * the league enables them. No dead buttons.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Loader2, ShieldQuestion, Skull, Sparkles } from 'lucide-react'
+import { AlertTriangle, Loader2, ShieldQuestion, Skull } from 'lucide-react'
 import {
   analyzeGuillotineWarRoomTrade,
   askGuillotineWarRoom,
@@ -139,7 +139,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
     try {
       const res = await askGuillotineWarRoom(leagueId, q)
       if (res.aiUnavailable) {
-        setAskNote('AI is temporarily unavailable — showing grounded facts only.')
+        setAskNote('Chimmy is temporarily unavailable — showing grounded facts only.')
         setAnswer(null)
       } else setAnswer(res.answer)
     } catch (e) {
@@ -165,7 +165,6 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   }
 
   const tradesEnabled = context.guillotine.tradesEnabled
-  const me = context.standings.find((s) => s.isUserTeam)
 
   return (
     <section className="space-y-3 rounded-xl border border-violet-400/20 bg-[#0a0820] p-4" data-testid="guillotine-war-room-panel">

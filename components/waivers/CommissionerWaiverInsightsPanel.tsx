@@ -81,7 +81,7 @@ export default function CommissionerWaiverInsightsPanel({ leagueId }: { leagueId
     <section className="rounded-xl border border-amber-400/25 bg-amber-500/5 p-4" data-testid="commissioner-waiver-insights-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-amber-100">Commissioner AI Waiver Insights</h2>
+          <h2 className="text-sm font-semibold text-amber-100">Commissioner Chimmy Waiver Insights</h2>
           <p className="mt-1 text-xs text-white/65">
             League-wide waiver settings health and fairness diagnostics. Recommendation-only; no automatic settings changes.
           </p>
@@ -100,7 +100,7 @@ export default function CommissionerWaiverInsightsPanel({ leagueId }: { leagueId
 
       {locked?.error === 'AF_COMMISSIONER_REQUIRED' && (
         <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3" data-testid="commissioner-waiver-insights-locked">
-          <p className="text-sm font-medium text-amber-100">League-wide AI waiver tools require AF Commissioner.</p>
+          <p className="text-sm font-medium text-amber-100">League-wide Chimmy waiver tools require AF Commissioner.</p>
           <Link
             href={locked.upgradePath || '/pricing?plan=af-commissioner&feature=commissioner-waiver-ai'}
             className="mt-2 inline-flex rounded-md border border-amber-300/40 bg-amber-500/20 px-2.5 py-1 text-xs text-amber-100 hover:bg-amber-500/30"

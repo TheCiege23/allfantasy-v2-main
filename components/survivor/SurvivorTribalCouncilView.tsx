@@ -8,7 +8,7 @@ import { SurvivorVoteRevealScrolls } from '@/components/league/survivor/Survivor
 import { SurvivorAvatar } from './weekly/SurvivorAvatar'
 import { SurvivorShareCardsButton } from './share/SurvivorShareCards'
 
-export interface SurvivorTribalCouncilViewProps {
+interface SurvivorTribalCouncilViewProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

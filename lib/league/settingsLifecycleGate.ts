@@ -29,7 +29,7 @@ import {
 export type LifecycleGatedSection = 'scoring' | 'roster'
 
 /** `allowed`: no question asked. `confirm`: only with the explicit flag. `refused`: never. */
-export type SettingsEditPolicy = 'allowed' | 'confirm' | 'refused'
+type SettingsEditPolicy = 'allowed' | 'confirm' | 'refused'
 
 export const SETTINGS_EDIT_POLICY: Record<LeagueLifecycleState, SettingsEditPolicy> = {
   setup: 'allowed',
@@ -44,7 +44,7 @@ export const SETTINGS_EDIT_POLICY: Record<LeagueLifecycleState, SettingsEditPoli
   archived: 'refused',
 }
 
-export type SettingsEditRefusalBody = { error: string; code: string; message?: string }
+type SettingsEditRefusalBody = { error: string; code: string; message?: string }
 
 export type SettingsEditDecision =
   | { ok: true; state: LeagueLifecycleState; midSeason: boolean }
@@ -55,7 +55,7 @@ const ACTION: Record<LifecycleGatedSection, LeagueLifecycleAction> = {
   roster: 'settings_edit_roster',
 }
 
-export function lifecycleRefusalMessage(section: LifecycleGatedSection, state: LeagueLifecycleState): string {
+function lifecycleRefusalMessage(section: LifecycleGatedSection, state: LeagueLifecycleState): string {
   const what = section === 'scoring' ? 'Scoring' : 'Roster slots'
   if (state === 'drafting') return `${what} can't be changed while the draft is in progress. Try again once it finishes.`
   if (state === 'archived') return `${what} can't be changed on an archived league.`
@@ -109,9 +109,34 @@ export async function decideSettingsEdit(
  */
 export async function recordMidSeasonSettingsChange(
   decision: SettingsEditDecision,
-  args: { leagueId: string; userId: string; section: LifecycleGatedSection; source: string; detail?: Record<string, unknown> },
+  args: {
+    leagueId: string
+    userId: string
+    section: LifecycleGatedSection
+    source: string
+    detail?: Record<string, unknown>
+    /**
+     * Record the change in the league log even before the season (2026-11-15). The dedicated scoring and
+     * roster saves pass it: without it a pre-season scoring or roster change was recorded nowhere, so the
+     * league could not see it. The generic settings patch does NOT pass it — it already writes its own
+     * `settings_patch` row for every save.
+     */
+    alwaysLog?: boolean
+  },
 ): Promise<void> {
-  if (!decision.ok || !decision.midSeason) return
+  if (!decision.ok) return
+  if (!decision.midSeason) {
+    if (!args.alwaysLog) return
+    await logAction({
+      leagueId: args.leagueId,
+      userId: args.userId,
+      actionType: 'settings_patch',
+      entityType: 'league',
+      entityId: args.leagueId,
+      metadata: { section: args.section, source: args.source, ...(args.detail ?? {}) },
+    }).catch(() => {})
+    return
+  }
   const { leagueId, userId, section, source, detail } = args
   const metadata = { section, lifecycleState: decision.state, source, confirmed: true, ...(detail ?? {}) }
   await logAction({

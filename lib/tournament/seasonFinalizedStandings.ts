@@ -1,6 +1,6 @@
 import { computeSeasonTournamentStandings } from './seasonTournamentStandings'
 import type { SeasonBlueprint } from './seasonBlueprint'
-export type OpeningStandingEntrant = { id: string; displayName: string; leagueId: string; leagueKey: string; leagueName: string; rosterId: string }
+type OpeningStandingEntrant = { id: string; displayName: string; leagueId: string; leagueKey: string; leagueName: string; rosterId: string }
 export type OpeningStandingWeek = { leagueKey: string; period: number; state: 'finalized' | 'missing' | 'unfinalized' | 'review_required'; revision: number; points?: Array<{ rosterId: string; points: number }>; matchupsState?: 'verified' | 'missing' | 'review_required'; outcomes?: Array<{ rosterId: string; wins: 0 | 0.5 | 1; losses: number; ties: number }> }
 /** Internal aggregation of DB-verified current receipts. Never accepts client scoring evidence. */
 export function buildFinalizedOpeningStandings(input: { entrants: OpeningStandingEntrant[]; periods: number[]; weeks: OpeningStandingWeek[]; tiebreakers: SeasonBlueprint['tiebreakers']; throughPeriod: number }) {

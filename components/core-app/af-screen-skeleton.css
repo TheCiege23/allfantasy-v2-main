@@ -28,3 +28,14 @@
 .af-core .af-sk-chip { width: 34px; height: 20px; border-radius: 6px; }
 .af-core .af-sk-name { flex: 1 1 auto; max-width: 240px; height: 13px; border-radius: 6px; }
 .af-core .af-sk-num { width: 52px; height: 13px; margin-left: auto; border-radius: 6px; }
+
+/*
+ * Trades: the completed-trade history streaming in under a Trade Center that has already painted
+ * (components/core-app/screens/TradesHistorySection.tsx) — the grading banner, the section title,
+ * then trade cards. Full width at every size, so the phone layout needs no rule of its own.
+ */
+.af-core .af-sk-trades { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.af-core .af-sk-trades-banner { height: 72px; border-radius: var(--af-radius-card, 16px); }
+.af-core .af-sk-trades-title { width: min(220px, 60%); height: 22px; border-radius: 8px; }
+.af-core .af-sk-trades-list { display: flex; flex-direction: column; gap: 12px; }
+.af-core .af-sk-trade { height: 132px; border-radius: var(--af-radius-card, 16px); }

@@ -58,4 +58,3 @@ export function DraftClock({ endsAt }: { endsAt: string }) {
   )
 }
 
-export default DraftClock

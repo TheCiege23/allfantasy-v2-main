@@ -63,8 +63,9 @@ describe('matchupReasonText', () => {
     const src = readFileSync(resolve(process.cwd(), 'components/core-app/screens/Matchup.tsx'), 'utf8')
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
     const reads = [...code.matchAll(/data\.\w+\.(?:reason|data\.detail)\b/g)]
-    // The scan must see the reads, or it asserts nothing.
-    expect(reads.length).toBeGreaterThan(8)
+    // The scan must see the reads, or it asserts nothing. 7 since 2026-11-13: the matchup guide removed
+    // "What decides it", whose `yetToPlay.reason` and `projectedFinal.reason` repeated the scoreboard.
+    expect(reads.length).toBeGreaterThan(6)
     const raw = reads.filter((m) => !code.slice(Math.max(0, m.index! - 40), m.index!).includes('matchupReasonText('))
     expect(raw.map((m) => m[0])).toEqual([])
   })

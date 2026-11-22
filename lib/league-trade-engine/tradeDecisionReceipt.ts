@@ -27,6 +27,7 @@ export type PublicTradeDecisionReceipt = {
     reason: string
     valueGiven: number | null
     valueReceived: number | null
+    divisionImpactSummary?: string
     valueDelta: number | null
     lineupPointsDelta: number | null
     outcomeMetric: string | null
@@ -136,6 +137,7 @@ export function publicTradeDecisionReceipt(row: DecisionSnapshotRow): PublicTrad
             reason: item.reason,
             valueGiven: numberOrNull(item.valueGiven),
             valueReceived: numberOrNull(item.valueReceived),
+            ...(typeof item.divisionImpactSummary === 'string' ? { divisionImpactSummary: item.divisionImpactSummary } : {}),
             valueDelta: numberOrNull(item.valueDelta),
             lineupPointsDelta: numberOrNull(item.lineupPointsDelta),
             outcomeMetric: typeof item.outcomeMetric === 'string' ? item.outcomeMetric : null,

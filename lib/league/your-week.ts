@@ -12,7 +12,7 @@ import type { MatchupCenterPayload, MatchupPlayerSlot } from '@/lib/matchup-cent
 
 export type LineupIssue = { code: string; severity?: string; playerName?: string | null; slotType?: string | null }
 
-export type YourWeekInput = {
+type YourWeekInput = {
   matchup?: MatchupCenterPayload | null
   /** NFL only (certified evidence): this week's games with their scheduled start. */
   games?: { scheduledStart: string; final?: boolean; status?: string }[] | null
@@ -21,7 +21,7 @@ export type YourWeekInput = {
   now: string
 }
 
-export type YourWeekMatchup = {
+type YourWeekMatchup = {
   you: { name: string; points: number; projected: number | null }
   them: { name: string; points: number; projected: number | null } | null
   status: MatchupCenterPayload['matchupStatus']

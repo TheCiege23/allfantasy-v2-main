@@ -9,7 +9,7 @@
 import type { LeagueSport } from '@prisma/client'
 
 /** Matches `League.leagueType` / wizard concept ids */
-export type LeagueConceptId = string
+type LeagueConceptId = string
 
 export const SETTINGS_SNAPSHOT_VERSION = 1 as const
 
@@ -43,7 +43,7 @@ export interface SettingsSnapshot {
   [key: string]: unknown
 }
 
-export interface RosterSettingsSlice {
+interface RosterSettingsSlice {
   starterSlots?: Record<string, number>
   benchSlots?: number
   irSlots?: number
@@ -56,7 +56,7 @@ export interface RosterSettingsSlice {
   illegalRosterCommissionerBypass?: boolean
 }
 
-export interface ScoringSettingsSlice {
+interface ScoringSettingsSlice {
   format?: string
   scoringTemplateId?: string
   /** Passed to `server/services/scoringEngine` — supports `thresholdBonuses`, `positionMultipliers`, `idpStatAllowlist`, `matchupTiebreaker`, `standingsTiebreakerOrder`. */
@@ -75,7 +75,7 @@ export interface ScoringSettingsSlice {
   [key: string]: unknown
 }
 
-export interface DraftSettingsSlice {
+interface DraftSettingsSlice {
   draftType?: string
   rounds?: number
   pickOrderRules?: string
@@ -85,7 +85,7 @@ export interface DraftSettingsSlice {
   [key: string]: unknown
 }
 
-export interface WaiverSettingsSlice {
+interface WaiverSettingsSlice {
   waiverType?: string
   faabBudget?: number
   processingDays?: number[]
@@ -93,14 +93,14 @@ export interface WaiverSettingsSlice {
   [key: string]: unknown
 }
 
-export interface PlayoffSettingsSlice {
+interface PlayoffSettingsSlice {
   playoffTeams?: number
   playoffStartWeek?: number
   seedingRule?: string
   [key: string]: unknown
 }
 
-export interface CommissionerSettingsSlice {
+interface CommissionerSettingsSlice {
   tradeReviewMode?: string
   tradeDeadlineWeek?: number
   /** When true, block proposing/accepting/processing trades if either party’s roster fails legality (see `rosterTransactionGates`). */
@@ -114,21 +114,21 @@ export interface CommissionerSettingsSlice {
   [key: string]: unknown
 }
 
-export interface MediaSettingsSlice {
+interface MediaSettingsSlice {
   introVideo?: { url?: string; key?: string }
   [key: string]: unknown
 }
 
-export interface VisualThemeSlice {
+interface VisualThemeSlice {
   accent?: string
   logoUrl?: string
   [key: string]: unknown
 }
 
 /** Minimum create-time specialty payload — extend per concept without new tables */
-export type ConceptSetupSlice = Record<string, unknown>
+type ConceptSetupSlice = Record<string, unknown>
 
-export interface ConceptRulesSlice {
+interface ConceptRulesSlice {
   concept?: LeagueConceptId
   version?: number
   extensions?: Record<string, unknown>

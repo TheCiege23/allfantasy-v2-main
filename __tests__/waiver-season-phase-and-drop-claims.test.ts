@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   claims: [] as unknown[],
   ranks: [] as Array<{ externalId: string; currentRank: number }>,
   drops: [] as Array<{ dropPlayerId: string; processedAt: Date; rosterId: string }>,
+  releases: [] as Array<{ playerId: string; availableAt: Date; eliminatedRosterId: string }>,
   effective: { waiverType: 'faab', normalizedWaiverType: 'faab', waiverEngineConfig: {}, allowZeroFaabBid: true } as Record<string, unknown>,
   claimUpdate: vi.fn(),
   claimCreate: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('@/lib/prisma', () => ({
         h.drops.filter((d) => !where.dropPlayerId?.in || where.dropPlayerId.in.includes(d.dropPlayerId)),
       create: vi.fn(),
     },
+    guillotineWaiverRelease: { findMany: async () => h.releases },
     waiverRun: { create: async () => ({ id: 'run' }), update: async () => ({}) },
     waiverResult: { createMany: async () => ({}) },
     $transaction: async () => [],
@@ -121,6 +123,7 @@ beforeEach(() => {
   h.claims = []
   h.ranks = []
   h.drops = []
+  h.releases = []
   h.claimUpdate.mockReturnValue({})
   h.claimCreate.mockResolvedValue({ id: 'new' })
   setType('faab')
@@ -195,6 +198,17 @@ describe('claims on a dropped player wait for his waiver period, then follow the
     claimsOnDroppedX()
     h.drops = []
     expect(winner(await processWaiverClaimsForLeague('L'))).toBe('A')
+  })
+
+  it('a Guilly chop release is not a drop hold for the run: bids on a chopped player settle at once (blind FAAB)', async () => {
+    claimsOnDroppedX()
+    h.drops = []
+    // Chopped 6h ago. The free-agent path holds him (__tests__/guillotine/chop-release-waiver-hold.test.ts);
+    // the run does not, or every bid on him would miss the blind run before the next lock.
+    h.releases = [{ playerId: 'X', availableAt: new Date('2026-10-20T09:00:00Z'), eliminatedRosterId: 'rr-chopped' }]
+    const results = await processWaiverClaimsForLeague('L')
+    expect(winner(results)).toBe('A')
+    expect(results).toHaveLength(3)
   })
 
   it('once he has cleared waivers, the old owner may claim him like anyone', async () => {

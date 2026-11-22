@@ -1,6 +1,6 @@
 import { getLeagueInfo, type SleeperLeague } from '@/lib/sleeper-client'
 
-export interface SleeperHistoricalLeagueSeason {
+interface SleeperHistoricalLeagueSeason {
   externalLeagueId: string
   season: number
   league: SleeperLeague

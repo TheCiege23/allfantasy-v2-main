@@ -103,7 +103,7 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
               onClick={() => setPlayerModalOpen(true)}
               data-testid="idp-open-player-ai-modal"
             >
-              AI Analysis — {sampleIdp.name}
+              Chimmy Analysis — {sampleIdp.name}
             </Button>
             {/*
               No rosterId here: IDPHome picks a sample defender off the overview payload, which

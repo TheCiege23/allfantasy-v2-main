@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Link2, Check } from 'lucide-react'
 
-export interface MockDraftInviteLinkProps {
+interface MockDraftInviteLinkProps {
   inviteLink: string | null
   draftId: string
   status: string

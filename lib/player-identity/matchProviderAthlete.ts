@@ -32,7 +32,7 @@ import {
   isFreeAgentTeam,
 } from '@/lib/player-identity/playerIdentityResolution'
 
-export type MatchSignal = 'name' | 'dob' | 'position' | 'team'
+type MatchSignal = 'name' | 'dob' | 'position' | 'team'
 
 export type AthleteEvidence = {
   name: string | null | undefined
@@ -45,7 +45,7 @@ export type AthleteEvidence = {
 
 export type CanonicalCandidate = AthleteEvidence & { id: string }
 
-export type AthleteMatch =
+type AthleteMatch =
   | { matched: true; id: string; confidence: number; matchedOn: MatchSignal[] }
   | { matched: false; reason: string; candidates: number }
 

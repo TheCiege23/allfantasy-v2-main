@@ -3,7 +3,7 @@
  * providers/LeagueOfficeContextProvider.ts): what it says, and that each viewer is told only what the
  * app already shows them.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   role: vi.fn(),
@@ -128,7 +128,7 @@ describe('LeagueOfficeContextProvider', () => {
   const provider = new LeagueOfficeContextProvider()
   const load = () => provider.load({ userId: 'u1', leagueId: 'L' })
 
-  beforeEach(() => {
+  function arrange() {
     vi.clearAllMocks()
     m.prisma.league.findUnique.mockResolvedValue({ platform: 'allfantasy', settings: { af_managed_lineups: { 'r-mine': { since: '2026-10-01T00:00:00Z', byUserId: 'c' } } } })
     m.role.mockResolvedValue('member')
@@ -160,7 +160,23 @@ describe('LeagueOfficeContextProvider', () => {
         },
       }
     })
-  })
+  }
+
+  beforeEach(arrange)
+
+  // The provider imports its readers lazily, so the first load() compiled all of them inside the first test —
+  // past 30s when the chat and Chimmy suites run together. One load here pays that once. It runs with the tests' own
+  // setup, as a commissioner of a dynasty league, so it reaches EVERY lazy import; a load that failed early (no mocks)
+  // returned before the later ones and warmed nothing, which is why it must reach the summary.
+  beforeAll(async () => {
+    arrange()
+    m.role.mockResolvedValue('commissioner')
+    m.prisma.league.findUnique.mockResolvedValue({ platform: 'allfantasy', settings: {}, leagueVariant: 'dynasty', isDynasty: true })
+    m.dynasty.mockResolvedValue(null)
+    const warm = await load()
+    expect(warm.error ?? null).toBeNull()
+    expect(warm.data?.summary).toEqual(expect.any(String))
+  }, 300_000)
 
   it('payouts reach the slice; buy-ins collected only for the commissioner, as on the screen', async () => {
     const member = (await load()).data!.summary

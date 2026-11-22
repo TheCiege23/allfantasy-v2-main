@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Shield, Users, FileEdit, Clock, ListChecks, MessageSquare, Settings2, Link2, Loader2, Award, TrendingUp, Heart, Pause, Play, RotateCcw, Undo2, Bot, Megaphone, Crown } from 'lucide-react'
+import { Shield, Users, FileEdit, Clock, ListChecks, Settings2, Loader2, Award, TrendingUp, Heart, Pause, Play, RotateCcw, Undo2, Bot, Megaphone, Crown } from 'lucide-react'
 import type { LeagueTabProps } from '@/components/app/tabs/types'
 import TabDataState from '@/components/app/tabs/TabDataState'
 import { Button } from '@/components/ui/button'
@@ -49,7 +49,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [waiverPending, setWaiverPending] = useState<unknown[]>([])
-  const [waiverSettings, setWaiverSettings] = useState<Record<string, unknown> | null>(null)
+  const [, setWaiverSettings] = useState<Record<string, unknown> | null>(null)
   const [invite, setInvite] = useState<{
     inviteCode: string | null
     inviteLink: string | null
@@ -169,27 +169,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
       toast.error(e?.message || 'Waiver run failed')
     } finally {
       setRunningWaiver(false)
-    }
-  }
-
-  const regenerateInvite = async () => {
-    setSaving('invite')
-    try {
-      const res = await fetch(`${base}/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ regenerate: true }) })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed')
-      setInvite({
-        inviteCode: data.inviteCode,
-        inviteLink: data.inviteLink,
-        joinUrl: data.joinUrl,
-        inviteExpiresAt: data.inviteExpiresAt ?? null,
-        inviteExpired: !!data.inviteExpired,
-      })
-      toast.success('Invite link regenerated')
-    } catch (e: any) {
-      toast.error(e?.message || 'Regenerate failed')
-    } finally {
-      setSaving(null)
     }
   }
 
@@ -414,7 +393,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
 
         <FeatureGate
           featureId="commissioner_automation"
-          featureNameOverride="AI Commissioner"
+          featureNameOverride="Chimmy Commissioner"
           tokenRuleCodeOverride="commissioner_ai_cycle_run"
         >
           <AICommissionerPanel leagueId={leagueId} />
@@ -472,7 +451,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
               className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20"
               data-testid="commissioner-tab-ai-team-managers-link"
             >
-              <Bot className="h-3.5 w-3.5" /> AI team managers
+              <Bot className="h-3.5 w-3.5" /> Chimmy team managers
             </Link>
             <Link
               href={premiumActionHref('league_rankings', `${leagueBase}?tab=Power Rankings`)}
@@ -482,7 +461,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
               <Crown className="h-3.5 w-3.5" /> League rankings
             </Link>
             <Link
-              href={premiumActionHref('draft_rankings', `${leagueBase}?tab=Draft`)}
+              href={premiumActionHref('draft_rankings', `${leagueBase}/draft-results`)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-500/20"
               data-testid="commissioner-tab-draft-rankings-link"
             >

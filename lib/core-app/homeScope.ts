@@ -84,7 +84,7 @@ export function sportOf(league: ScopeLeague): string {
 }
 
 /** The value a scope names this league's provider by. Every AllFantasy-native spelling is one bucket. */
-export const NATIVE_PLATFORM_KEY = 'allfantasy'
+const NATIVE_PLATFORM_KEY = 'allfantasy'
 
 /**
  * ⚠ NORMALISED THROUGH THE SHARED RESOLVER, NOT LOWERCASED. League rows spell a native league
@@ -142,7 +142,7 @@ export function serializeFavoriteIds(ids: Iterable<string>): string {
     .join('.')
 }
 
-export type ScopeOption = { value: string | null; label: string; count: number; group: 'all' | 'favorites' | 'sport' | 'platform' }
+type ScopeOption = { value: string | null; label: string; count: number; group: 'all' | 'favorites' | 'sport' | 'platform' }
 
 /** One label table for the whole app — lib/core-app/platformLinks.ts. */
 export function platformLabel(platform: string): string {

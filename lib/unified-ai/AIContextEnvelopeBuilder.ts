@@ -4,9 +4,9 @@
  */
 
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
-import type { AIContextEnvelope, ToolAIEntryKey } from "./types"
+import type { AIContextEnvelope } from "./types"
 
-export type EnvelopeInput = {
+type EnvelopeInput = {
   featureType: string
   sport?: string | null
   leagueId?: string | null
@@ -49,14 +49,3 @@ export function buildAIContextEnvelope(input: EnvelopeInput): AIContextEnvelope 
   }
 }
 
-/** Convenience: build envelope for a known tool key. */
-export function buildEnvelopeForTool(
-  tool: ToolAIEntryKey,
-  opts: Omit<EnvelopeInput, "featureType"> & { featureType?: string }
-): AIContextEnvelope {
-  return buildAIContextEnvelope({
-    ...opts,
-    featureType: opts.featureType ?? tool,
-    sport: opts.sport ?? undefined,
-  })
-}

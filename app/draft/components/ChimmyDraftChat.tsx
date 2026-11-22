@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DraftPickRecord, DraftStatePayload } from '../types'
 import { slotIndexForOverallPick } from '@/lib/draft/snake'
+import { MockQueueCard, type MockQueueCardState } from '@/components/chimmy/MockQueueCard'
+import { applyMockQueueProposal, readMockQueueProposal, type MockQueueProposal } from '@/lib/mock-draft/mockChimmyBoard'
+import { CHIMMY_PRO_TOOL_UPGRADE_HREF, proUpsellLine, readProUpsell, type ChimmyProOnlyTool } from '@/lib/chimmy/answerPolish'
+import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 
 const QUICK_ACTIONS = [
   { key: 'best-pick', label: 'Best Pick Available', path: '/api/draft/ai/best-pick' },
@@ -35,6 +39,25 @@ type Message = {
   result?: StructuredResult
   source?: string
   timestamp: number
+  /** A plain Chimmy answer (league mock room): rendered as prose, not as a raw payload. */
+  answer?: boolean
+  queueProposal?: MockQueueProposal | null
+  queueProposalState?: MockQueueCardState
+  queueProposalNote?: string
+  proUpsell?: ChimmyProOnlyTool[]
+}
+
+/**
+ * Chimmy in a LEAGUE mock room (stage 4 of drafts, 2026-11-16). Typed questions go to Chimmy itself
+ * (`/api/chat/chimmy`, source `mock-draft-room`), which reads this room's board from the server; a queue
+ * change it proposes is a card applied here only on Confirm. The quick actions are unchanged.
+ */
+export type LeagueMockChimmy = {
+  /** The queue as the user sees it, in order. */
+  queueIds: string[]
+  isDrafted: (playerId: string) => boolean
+  /** Set and save the queue after a Confirm. `added` carries the new players' names for the list. */
+  applyQueue: (ids: string[], added: MockQueueProposal['add']) => void
 }
 
 type ContextShape = {
@@ -47,6 +70,7 @@ type ContextShape = {
 type Props = {
   sessionId: string
   context: ContextShape
+  mock?: LeagueMockChimmy
 }
 
 function genId(): string {
@@ -65,7 +89,7 @@ function parseJsonish(raw: unknown): StructuredResult {
   }
 }
 
-export function ChimmyDraftChat({ sessionId, context }: Props) {
+export function ChimmyDraftChat({ sessionId, context, mock }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -173,17 +197,88 @@ export function ChimmyDraftChat({ sessionId, context }: Props) {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, loading])
 
+  /** League mock room: the question goes to Chimmy, which reads this room's board on the server. */
+  const askChimmy = useCallback(
+    async (question: string, history: Message[]) => {
+      if (!mock) return
+      setLoading(true)
+      try {
+        const form = new FormData()
+        form.set('message', question)
+        form.set('source', 'mock-draft-room')
+        form.set('sport', 'NFL')
+        form.set('mockSessionId', sessionId)
+        form.set('mockQueueIds', JSON.stringify(mock.queueIds))
+        form.set(
+          'conversation',
+          JSON.stringify(
+            history
+              .filter((m) => (m.role === 'user' || (m.role === 'chimmy' && m.answer)) && m.text)
+              .slice(-6)
+              .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
+          ),
+        )
+        const r = await postChimmyRequest(form)
+        const j = (await r.json().catch(() => ({}))) as {
+          response?: string
+          error?: string
+          meta?: { mockQueueProposals?: unknown; proUpsell?: unknown }
+        }
+        if (!r.ok) {
+          append({ role: 'chimmy', answer: true, text: j.error ?? 'Chimmy could not answer just now. Try again.' })
+          return
+        }
+        const proposals = Array.isArray(j.meta?.mockQueueProposals) ? j.meta.mockQueueProposals : []
+        append({
+          role: 'chimmy',
+          answer: true,
+          text: j.response ?? 'Chimmy did not return a message.',
+          queueProposal: readMockQueueProposal(proposals[0]),
+          proUpsell: readProUpsell(j.meta?.proUpsell),
+        })
+      } catch (e) {
+        append({ role: 'chimmy', answer: true, text: e instanceof Error ? e.message : String(e) })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [mock, sessionId, append],
+  )
+
+  /** Confirm applies the card to the queue the user sees now — refused if that queue changed since. */
+  const resolveQueueProposal = (id: string, action: 'confirm' | 'dismiss') => {
+    const target = messages.find((m) => m.id === id)
+    if (!mock || !target?.queueProposal || (target.queueProposalState ?? 'pending') !== 'pending') return
+    let nextState: MockQueueCardState = 'dismissed'
+    let note: string | undefined
+    if (action === 'confirm') {
+      const result = applyMockQueueProposal(mock.queueIds, target.queueProposal, (playerId) => !mock.isDrafted(playerId))
+      if (result.ok) {
+        mock.applyQueue(result.queue, target.queueProposal.add)
+        nextState = 'applied'
+        if (result.skipped.length > 0) note = `Already drafted, so not added: ${result.skipped.join(', ')}.`
+      } else {
+        nextState = 'stale'
+      }
+    }
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, queueProposalState: nextState, ...(note ? { queueProposalNote: note } : {}) } : m)))
+  }
+
   const sendCustom = async () => {
     const t = input.trim()
     if (!t) return
     setInput('')
     append({ role: 'user', text: t })
+    if (mock) {
+      await askChimmy(t, messages)
+      return
+    }
     await callAi('/api/draft/ai/best-pick', { question: t })
   }
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-cyan-500/20 bg-[#0d1117]"
+      className="flex max-h-[70vh] min-h-[360px] flex-1 flex-col overflow-hidden rounded-lg border border-cyan-500/20 bg-[#0d1117]"
       data-testid="chimmy-draft-chat"
     >
       <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
@@ -222,7 +317,7 @@ export function ChimmyDraftChat({ sessionId, context }: Props) {
       </div>
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 text-[11px]">
         {messages.map((m) => (
-          <ChimmyMessageView key={m.id} msg={m} />
+          <ChimmyMessageView key={m.id} msg={m} onResolveQueue={(action) => resolveQueueProposal(m.id, action)} />
         ))}
         {loading ? (
           <p className="px-1 text-[11px] italic text-cyan-300/70">Chimmy is thinking…</p>
@@ -255,7 +350,25 @@ export function ChimmyDraftChat({ sessionId, context }: Props) {
   )
 }
 
-function ChimmyMessageView({ msg }: { msg: Message }) {
+function ChimmyMessageView({ msg, onResolveQueue }: { msg: Message; onResolveQueue: (action: 'confirm' | 'dismiss') => void }) {
+  if (msg.role === 'chimmy' && msg.answer) {
+    return (
+      <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] px-2.5 py-2 text-white/85" data-testid="chimmy-msg-assistant">
+        <p className="whitespace-pre-wrap break-words text-[11px] text-white/85">{msg.text}</p>
+        {msg.queueProposal ? (
+          <MockQueueCard proposal={msg.queueProposal} state={msg.queueProposalState ?? 'pending'} note={msg.queueProposalNote} onResolve={onResolveQueue} />
+        ) : null}
+        {msg.proUpsell && msg.proUpsell.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/10 pt-2" data-testid="mock-draft-pro-upsell">
+            <span className="text-white/60">{proUpsellLine(msg.proUpsell)}</span>
+            <a href={CHIMMY_PRO_TOOL_UPGRADE_HREF} className="rounded-lg bg-white/10 px-2 py-1 font-bold text-white hover:bg-white/15">
+              Get AF Pro
+            </a>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
   if (msg.role === 'user') {
     return (
       <div className="ml-6 rounded-lg bg-white/[0.07] px-2.5 py-1.5 text-white/90" data-testid="chimmy-msg-user">

@@ -12,6 +12,7 @@ import {
   writeLeagueSimCheck,
   type LeagueSimResult,
 } from './seasonOutlookSims'
+import { snapshotFromRun, writeOddsSnapshot } from './seasonOutlookOddsHistory'
 
 /**
  * Season Outlook — re-run the leagues whose inputs changed, before anyone opens the page.
@@ -173,11 +174,14 @@ async function refreshLeagueOutlook(
   if (current && current.hash === leagueSimHash(p.sim, p.seed) && current.iterations >= ITERATIONS) {
     await writeLeagueSims([[p.pid, { ...current, checkedAt }]], now)
     if (p.pid !== leagueId) await writeLeagueSimCheck(leagueId, now)
+    // Odds history: the same run, filed under the current week. Cheap, never throws, no-op without the table.
+    await writeOddsSnapshot(snapshotFromRun(p, current))
     return 'unchanged'
   }
   const result = computeLeagueSim(p.sim, p.seed, ITERATIONS, now)
   await writeLeagueSims([[p.pid, { ...result, checkedAt }]], now)
   if (p.pid !== leagueId) await writeLeagueSimCheck(leagueId, now)
+  await writeOddsSnapshot(snapshotFromRun(p, result))
   return 'computed'
 }
 

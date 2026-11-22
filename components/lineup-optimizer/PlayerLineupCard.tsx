@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { trackPlayerComparisonUsage } from '@/lib/analytics/player-comparison-analytics'
 import type { LineupRosterPlayer, PlayerCardVariant } from './types'
 
-export interface PlayerLineupCardProps {
+interface PlayerLineupCardProps {
   player: LineupRosterPlayer
   slotLabel: string
   variant: PlayerCardVariant

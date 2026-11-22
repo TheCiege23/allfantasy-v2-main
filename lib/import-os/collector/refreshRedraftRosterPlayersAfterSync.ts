@@ -35,7 +35,7 @@ import { prisma } from '@/lib/prisma'
 import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 import type { MaterializeResult } from '@/lib/league-runtime/materializeRedraftRosterPlayers'
 
-export interface LeagueNeedingWork {
+interface LeagueNeedingWork {
   leagueId: string
   /** Active imported rows for players the roster no longer lists anywhere. */
   stale: number
@@ -45,7 +45,7 @@ export interface LeagueNeedingWork {
   unlinked: number
 }
 
-export interface RefreshAfterSyncResult {
+interface RefreshAfterSyncResult {
   /** Distinct leagues whose rosters the sync changed this run. */
   changedLeagues: number
   /** Imported leagues whose redraft rows disagree with their rosters, or null when discovery failed. */
@@ -68,7 +68,7 @@ export interface RefreshAfterSyncResult {
   errors: Array<{ leagueId: string; error: string }>
 }
 
-export interface RefreshAfterSyncInput {
+interface RefreshAfterSyncInput {
   results: ReadonlyArray<{ rosterChangedLeagueIds?: readonly string[] }>
   maxLeagues: number
   budgetMs: number
@@ -102,7 +102,7 @@ async function defaultMaterialize(leagueId: string) {
  * errs toward a wasted refresh, never toward a skipped one. Native leagues are excluded by the
  * same platform values `isNativePlatform` uses: their redraft engines own the roster.
  */
-export async function findLeaguesNeedingWork(limit = 200): Promise<LeagueNeedingWork[]> {
+async function findLeaguesNeedingWork(limit = 200): Promise<LeagueNeedingWork[]> {
   const native = [...NATIVE_PLATFORM_VALUES]
   const rows = await prisma.$queryRaw<
     Array<{ leagueId: string; stale: number; missing: number; unlinked: number }>

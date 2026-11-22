@@ -515,7 +515,7 @@ describe("WC gameplay i18n: locale render smoke", () => {
     ["vi", "wc.thirdPlace.errorChoose8", "Hãy chọn đúng 8 đội hạng ba đi tiếp."],
     // Matchup card
     ["es", "wc.matchup.confidenceTitle", "Bono de confianza"],
-    ["zh", "wc.matchup.aiInsightsLabel", "AI 解析"],
+    ["zh", "wc.matchup.aiInsightsLabel", "Chimmy 解析"],
     ["fil", "wc.matchup.aiSaferPick", "Mas ligtas na pick:"],
     ["vi", "wc.matchup.aiUpsetRisk", "Rủi ro cú sốc:"],
     // Review

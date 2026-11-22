@@ -38,10 +38,10 @@ export function extractPlayerRefs(playerData: unknown): PlayerRef[] {
 
 type CertifiedPlayer = { canonicalPlayerId?: string; providerIds?: Record<string, string>; teamId?: string | null }
 
-export type LineupScheduleEvidence = { contexts: LiveLineupSportsContext[]; runtimeContext: CertifiedSportsRuntimeContext; available: boolean }
+type LineupScheduleEvidence = { contexts: LiveLineupSportsContext[]; runtimeContext: CertifiedSportsRuntimeContext; available: boolean }
 
 /** Evidence values that mean a player's game is already locked/started/final/postponed/suspended. Shared classifier — NOT lock policy (the existing lineupLockService remains the lock authority). */
-export const LOCKED_LINEUP_EVIDENCE = new Set(['at_or_after_start', 'final', 'postponed', 'suspended'])
+const LOCKED_LINEUP_EVIDENCE = new Set(['at_or_after_start', 'final', 'postponed', 'suspended'])
 
 /** Informational (never-blocking) certified schedule description for a set of players. Exposes only what the certified plane supports; injuries/projections/availability are explicitly unavailable (never fabricated). */
 export type CertifiedScheduleDescription = {

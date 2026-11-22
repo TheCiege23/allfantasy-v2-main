@@ -13,6 +13,7 @@ import {
   type ImportCoverageSummary,
 } from './importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { ImportReviewFacts } from '@/lib/league-import/review/types'
 import { getPrimaryLogoUrlForTeam, getTeamByAbbreviation } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { receptionScoringLabel } from './receptionScoringLabel'
 import {
@@ -20,8 +21,9 @@ import {
   mapImportedLeagueToFormat,
   resolveLeagueFormat,
 } from '@/lib/league/format-engine'
+import { expandProviderRosterPositions, footballSlotSpec } from '@/lib/league/importedLineupTemplate'
 
-export interface ImportPreviewLeague {
+interface ImportPreviewLeague {
   id: string
   name: string
   sport: string
@@ -41,7 +43,7 @@ export interface ImportPreviewLeague {
   }
 }
 
-export interface ImportPreviewManager {
+interface ImportPreviewManager {
   rosterId: string
   ownerId: string
   username: string
@@ -50,6 +52,12 @@ export interface ImportPreviewManager {
   teamAbbreviation: string | null
   teamLogo: string | null
   managerAvatar: string | null
+  /**
+   * The provider flags this team as the league's commissioner or co-commissioner. A team picked from
+   * a list without proof may not be one of these (see `espn/espnPublicMemberImport.ts`), so the
+   * picker shows it as needing a connected account. Absent = not flagged.
+   */
+  isCommissionerTeam?: boolean
   /** Backward-compatible avatar field; mirrors managerAvatar. */
   avatar: string | null
   wins: number
@@ -101,7 +109,7 @@ function resolveImportTeamIdentity(
   }
 }
 
-export interface ImportPreviewDataQuality {
+interface ImportPreviewDataQuality {
   fetchedAt: number
   sources: {
     users: boolean
@@ -160,6 +168,11 @@ export interface ImportPreviewResponse {
   transactionCount: number
   matchupWeeks: number
   source: NormalizedImportResult['source']
+  /**
+   * Facts the "Review your import" screen needs that the preview already had in hand and used to
+   * drop. Additive and optional — see `lib/league-import/review/types.ts`.
+   */
+  reviewFacts?: ImportReviewFacts
 }
 
 /**
@@ -299,6 +312,16 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
   const leagueSettings = normalized.league as Record<string, unknown>
   const rosterPositions = (leagueSettings.roster_positions as string[]) ?? []
   /*
+   * One token per seat. ESPN, Yahoo, MFL and Fantrax store `SLOT:COUNT` pairs ("QB:1", "RB:2"), so
+   * every check below that compares slot NAMES must read these, never the raw entries. `rosterPositions`
+   * itself is returned unchanged: the re-import diff compares it with what the league stored.
+   */
+  const isFootballLeague = ['NFL', 'NCAAF'].includes(String(normalized.league.sport ?? '').toUpperCase())
+  const slotTokens = expandProviderRosterPositions(rosterPositions).map((token) =>
+    // ESPN's superflex is `OP`, Yahoo's `Q/W/R/T`: one name, so superflex is detected for all of them.
+    isFootballLeague && footballSlotSpec(token)?.name === 'SUPERFLEX' && token !== 'SUPERFLEX' ? 'SUPER_FLEX' : token,
+  )
+  /*
    * The reception RATE, not a yes/no: `'half'` used to read as 1, and the preview then showed a
    * half-PPR league as "PPR". `ppr` stays a boolean for existing readers; `scoringLabel` names the rate
    * with the Sleeper mapper's labels.
@@ -309,7 +332,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     rateOf(normalized.scoring?.scoring_format) ??
     rateOf(normalized.league.scoring) ??
     0
-  const superflex = rosterPositions.filter((p: string) => p === 'SUPER_FLEX').length > 0
+  const superflex = slotTokens.includes('SUPER_FLEX')
   const tep = (leagueSettings.scoring_settings as Record<string, number>)?.bonus_rec_te ?? 0
 
   const league: ImportPreviewLeague = {
@@ -341,7 +364,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     sport: normalized.league.sport,
     isDynasty: normalized.league.isDynasty,
     scoring: normalized.league.scoring,
-    rosterPositions,
+    rosterPositions: slotTokens,
     leagueType: typeof leagueSettings.league_type === 'string' ? leagueSettings.league_type : null,
   })
   const resolution = resolveLeagueFormat({
@@ -354,12 +377,15 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     leagueType: mappedFormat.formatId,
     requestedModifiers: mappedFormat.modifiers,
   })
-  const unsupportedPositions = rosterPositions.filter((slot) => {
-    const upper = String(slot).toUpperCase()
-    return !(
-      upper in resolution.roster.starterSlots ||
-      ['BENCH', 'BN', 'IR', 'RES', 'TAXI', 'SUPER_FLEX', 'SUPERFLEX'].includes(upper)
-    )
+  const unsupportedPositions = [...new Set(slotTokens)].filter((upper) => {
+    if (upper in resolution.roster.starterSlots) return false
+    if (['BENCH', 'BN', 'IR', 'RES', 'TAXI', 'SUPER_FLEX', 'SUPERFLEX'].includes(upper)) return false
+    // A football provider's own spelling of a slot AF has: ESPN `D/ST`, `BE`, `OP`, Yahoo `W/R/T`.
+    const spec = isFootballLeague ? footballSlotSpec(upper) : null
+    if (spec && (spec.kind !== 'starter' || spec.name in resolution.roster.starterSlots || spec.name === 'SUPERFLEX')) {
+      return false
+    }
+    return true
   })
 
   const managers: ImportPreviewManager[] = normalized.rosters.map((r) => {
@@ -384,6 +410,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
       players: r.player_ids ?? [],
       reserve: r.reserve_ids ?? [],
       taxi: r.taxi_ids ?? [],
+      ...(r.is_commissioner === true || r.is_co_commissioner === true ? { isCommissionerTeam: true } : {}),
     }
   })
 
@@ -406,5 +433,44 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     transactionCount: normalized.transactions?.length ?? 0,
     matchupWeeks: normalized.schedule?.length ?? 0,
     source: normalized.source,
+    reviewFacts: buildImportReviewFacts(normalized),
+  }
+}
+
+function finiteOrNull(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
+  return Number.isFinite(n) ? n : null
+}
+
+/** Pure projection of the normalized league onto the fields the review screen shows. */
+function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
+  const l = normalized.league as NormalizedImportResult['league'] & Record<string, unknown>
+  const rawType = l.league_type ?? l.sleeper_league_type
+  return {
+    rosterSize: finiteOrNull(l.rosterSize),
+    regularSeasonLength: finiteOrNull(l.regular_season_length),
+    playoffStartWeek: finiteOrNull(l.playoff_start_week),
+    playoffTeamCount: finiteOrNull(l.playoff_team_count),
+    isDynasty: Boolean(l.isDynasty),
+    // Only the provider's own keeper flag. `max_keepers` is >= 1 on every imported Sleeper league
+    // (see the note on `is_keeper` in types.ts), so it cannot say "keeper league".
+    isKeeper: l.is_keeper === true,
+    maxKeepers: l.is_keeper === true ? finiteOrNull(l.max_keepers) : null,
+    rawLeagueType: rawType == null ? null : String(rawType),
+    scoringFormat: normalized.scoring?.scoring_format ?? (typeof l.scoring === 'string' ? l.scoring : null),
+    leagueScoring: typeof l.scoring === 'string' ? l.scoring : null,
+    scoringRuleCount: normalized.scoring?.rules.length ?? 0,
+    waiverType: typeof l.waiver_type === 'string' ? l.waiver_type : l.waiver_type == null ? null : String(l.waiver_type),
+    faabBudget: finiteOrNull(l.faab_budget),
+    tradeDeadlineWeek: finiteOrNull(l.trade_deadline_week),
+    taxiSlots: finiteOrNull(l.taxi_slots),
+    reserveSlots: finiteOrNull(l.reserve_slots),
+    orphanTeamIds: normalized.rosters
+      .filter((r) => r.is_orphan === true || !String(r.owner_name ?? '').trim())
+      .map((r) => r.source_team_id),
+    failedRosterTeamIds: normalized.rosters.filter((r) => r.fetch_status === 'failed').map((r) => r.source_team_id),
+    // Fantrax lists untraded picks too (`traded: false`); only the moved ones are "traded picks".
+    tradedPickCount: (normalized.traded_picks ?? []).filter((p) => p.traded !== false).length,
+    standingsCount: normalized.standings?.length ?? 0,
   }
 }

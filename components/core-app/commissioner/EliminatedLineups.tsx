@@ -27,6 +27,8 @@ export function EliminatedLineups({ leagueId }: { leagueId: string }) {
   const [enabled, setEnabled] = useState(false)
   const [standard, setStandard] = useState<LineupStandard>('playable')
   const [autoFill, setAutoFill] = useState(true)
+  // Anti-tanking: the full best lineup, not just the short slots. Off unless chosen (lib/eliminated-lineups).
+  const [optimize, setOptimize] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -40,6 +42,7 @@ export function EliminatedLineups({ leagueId }: { leagueId: string }) {
         setEnabled(Boolean(body.rule))
         setStandard(body.rule?.standard ?? 'playable')
         setAutoFill(body.rule ? body.rule.autoFill : true)
+        setOptimize(body.rule ? body.rule.optimize === true : false)
       }
     } catch {
       setMessage(m.commonPermissionRequired)
@@ -58,7 +61,7 @@ export function EliminatedLineups({ leagueId }: { leagueId: string }) {
       const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rule: enabled ? { enabled: true, standard, autoFill } : { enabled: false } }),
+        body: JSON.stringify({ rule: enabled ? { enabled: true, standard, autoFill, optimize } : { enabled: false } }),
       })
       const body = (await r.json().catch(() => ({}))) as { error?: string }
       if (!r.ok) throw new Error(body.error || '')
@@ -105,6 +108,10 @@ export function EliminatedLineups({ leagueId }: { leagueId: string }) {
                 <label>
                   <input type="checkbox" checked={autoFill} onChange={(e) => setAutoFill(e.target.checked)} />{' '}
                   {m.eliminatedAutoFill}
+                </label>
+                <label>
+                  <input type="checkbox" data-testid="eliminated-optimize" checked={optimize} onChange={(e) => setOptimize(e.target.checked)} />{' '}
+                  {m.eliminatedOptimize}
                 </label>
               </>
             ) : null}

@@ -1,3 +1,5 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -45,13 +47,13 @@ export async function instantAutopickReason(args: {
     args.leagueSettings !== undefined
       ? args.leagueSettings
       : (await prisma.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } }))?.settings
-  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true } })
+  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true, managerUserId: true } })
   // Only a team Chimmy PLAYS picks instantly: without the owner's plan, that is the free team alone.
   const playable = await readPlayableChimmyLineups({ id: args.leagueId, settings })
   if (isAutopilotIn(playable, args.rosterId, roster?.platformUserId ?? null)) return 'autopilot'
 
-  const userId = String(roster?.platformUserId ?? '')
-  if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return null
+  const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
+  if (!userId || isSeatPlaceholderUserId(userId)) return null
   const pref = await prisma.liveDraftAutopickPreference.findUnique({
     where: { draft_session_user_unique: { draftSessionId: args.draftSessionId, userId } },
     select: { enabled: true },
@@ -66,4 +68,44 @@ export async function instantAutopickReason(args: {
 export function shouldPickNow(timerStatus: string, instant: InstantAutopickReason | null): boolean {
   if (timerStatus === 'expired') return true
   return instant != null && (timerStatus === 'running' || timerStatus === 'none')
+}
+
+/**
+ * Every team in this draft that picks by itself right now — the teams the board marks "AUTO".
+ *
+ * Same two rules as `instantAutopickReason`, read in bulk: a Chimmy-run (autopilot) team, or a
+ * manager whose "Auto-pick me" is on. Before this, nothing on the board said a seat was on
+ * auto-pick, so a manager who switched it on saw no sign that it had taken.
+ */
+export async function listAutoDraftRosterIds(args: {
+  leagueId: string
+  draftSessionId: string
+  leagueSettings?: unknown
+}): Promise<string[]> {
+  const [settings, rosters, prefs] = await Promise.all([
+    args.leagueSettings !== undefined
+      ? Promise.resolve(args.leagueSettings)
+      : prisma.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } }).then((l) => l?.settings),
+    prisma.roster.findMany({
+      where: { leagueId: args.leagueId },
+      select: { id: true, platformUserId: true, managerUserId: true },
+    }),
+    prisma.liveDraftAutopickPreference.findMany({
+      where: { draftSessionId: args.draftSessionId, enabled: true },
+      select: { userId: true },
+    }),
+  ])
+  const playable = await readPlayableChimmyLineups({ id: args.leagueId, settings })
+  const autoUsers = new Set(prefs.map((p) => p.userId))
+  const out: string[] = []
+  for (const roster of rosters) {
+    if (isAutopilotIn(playable, roster.id, roster.platformUserId ?? null)) {
+      out.push(roster.id)
+      continue
+    }
+    const userId = rosterManagerKey(roster) ?? ''
+    if (!userId || isSeatPlaceholderUserId(userId)) continue
+    if (autoUsers.has(userId)) out.push(roster.id)
+  }
+  return out
 }

@@ -38,7 +38,7 @@ const QUICK_ACTIONS = [
   },
 ]
 
-export interface AIQuickActionBarProps {
+interface AIQuickActionBarProps {
   className?: string
 }
 

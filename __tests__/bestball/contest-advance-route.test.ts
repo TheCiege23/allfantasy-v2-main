@@ -6,6 +6,8 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league }, bestBallContest: { findFirst: h.contest } } }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerOnly: h.permission }))
 vi.mock('@/lib/bestball/contestEngine', () => ({ advancePodWinners: h.advance }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 import { POST } from '@/app/api/bestball/contest/advance/route'
 const request = (roundNumber: unknown = 1) => new NextRequest('http://localhost/api/bestball/contest/advance', { method: 'POST', body: JSON.stringify({ contestId: 'contest-a', leagueId: 'league-a', roundNumber }) })
 beforeEach(() => {

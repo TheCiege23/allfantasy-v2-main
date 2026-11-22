@@ -37,6 +37,9 @@ vi.mock('@/lib/league/league-roster-draft-gate', () => ({
   isLeagueRosterDraftReady: hm.isLeagueRosterDraftReady,
 }))
 
+// Not a salary-cap league: the post-commit rookie contract signer stops at the config.
+vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({ getSalaryCapConfig: vi.fn(async () => null) }))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: hm.prismaTransaction,
@@ -216,6 +219,7 @@ beforeEach(() => {
       draftPickAuditLog: { create: hm.draftPickAuditLogCreate },
       roster: { count: hm.rosterCount, findMany: hm.rosterFindMany },
       devyPlayer: { findFirst: vi.fn().mockResolvedValue(null) },
+      playerContract: { deleteMany: vi.fn(async () => ({ count: 0 })), updateMany: vi.fn(async () => ({ count: 0 })) },
     }
     return fn(tx)
   })

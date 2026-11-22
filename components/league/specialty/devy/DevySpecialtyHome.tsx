@@ -194,6 +194,7 @@ export function DevySpecialtyHome({
             ) : null}
           </>
         }
+        railClassName={d.railWide}
         rail={
           <>
             <SpecialtyCard label="Your pipeline">

@@ -55,13 +55,13 @@ export const SPORT_INTRO_ELIGIBLE_CONCEPTS: ReadonlySet<string> = new Set([
   'salary_cap',
 ])
 
-export type SportLeagueIntro = {
+type SportLeagueIntro = {
   video: string
   poster: string
   label: string
 }
 
-export function normalizeSportKey(raw: unknown): SupportedSport | null {
+function normalizeSportKey(raw: unknown): SupportedSport | null {
   const key = String(raw ?? '').trim().toUpperCase()
   if (!key) return null
   return key in SPORT_INTRO_VIDEO || key === 'NBA' || key === 'NCAAB'

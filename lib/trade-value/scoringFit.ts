@@ -57,7 +57,7 @@ export const SCORING_FIT_MIN = 0.5
 export const SCORING_FIT_MAX = 2.0
 
 /** Sleeper-shaped scoring settings. Provider-neutral: any `{ rec, bonus_rec_* }` blob works. */
-export type ScoringSettings = Record<string, unknown>
+type ScoringSettings = Record<string, unknown>
 
 function numberAt(settings: ScoringSettings | null | undefined, key: string): number | null {
   const v = settings?.[key]

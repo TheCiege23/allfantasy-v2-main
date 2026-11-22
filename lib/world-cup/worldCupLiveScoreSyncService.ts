@@ -11,7 +11,7 @@ import {
 import type { WorldCupLiveProviderId } from "./live-providers/worldCupLiveProviderTypes"
 import { normalizedLiveMatchToProviderFixture } from "./worldCupLiveScoreNormalizer"
 
-export type WorldCupLiveScoreChainSyncResult = WorldCupLiveScoreSyncResult & {
+type WorldCupLiveScoreChainSyncResult = WorldCupLiveScoreSyncResult & {
   winningProvider: WorldCupLiveProviderId | null
   providersAttempted: WorldCupLiveProviderId[]
   chainWarnings: string[]

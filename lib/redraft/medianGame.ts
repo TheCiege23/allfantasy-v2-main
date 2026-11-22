@@ -12,7 +12,7 @@ import { readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
  * for the games themselves — so a median is never taken over a half-scored week.
  */
 
-export type MedianMatchupRow = {
+type MedianMatchupRow = {
   week: number
   homeRosterId: string
   awayRosterId: string | null
@@ -25,9 +25,9 @@ export type MedianMatchupRow = {
   isMedianMatchup?: boolean | null
 }
 
-export type MedianOutcome = 'W' | 'L' | 'T'
+type MedianOutcome = 'W' | 'L' | 'T'
 
-export type WeeklyMedianResult = {
+type WeeklyMedianResult = {
   week: number
   median: number
   outcomes: Map<string, MedianOutcome>
@@ -130,7 +130,7 @@ export function computeWeeklyMedianResults(rows: readonly MedianMatchupRow[]): W
   return results
 }
 
-export type ByeWeekMedianCredit = { week: number; rosterId: string; median: number }
+type ByeWeekMedianCredit = { week: number; rosterId: string; median: number }
 
 /**
  * Points-for credit for a team on a bye: the week's median team score.

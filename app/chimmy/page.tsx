@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import { CHIMMY_TITLE, CHIMMY_DESCRIPTION } from '@/lib/seo-landing/config'
 import ProductShellLayout from '@/components/navigation/ProductShellLayout'
 import ChimmyLandingClient from './ChimmyLandingClient'
@@ -6,7 +7,7 @@ import EngagementEventTracker from '@/components/engagement/EngagementEventTrack
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
 import { chimmyTrackRecordFor } from '@/lib/chimmy-outcomes/trackRecord'
 
-const BASE = 'https://allfantasy.ai'
+const BASE = getPublicSiteOrigin()
 
 export const metadata: Metadata = {
   title: CHIMMY_TITLE,

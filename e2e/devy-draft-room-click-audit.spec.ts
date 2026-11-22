@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
+import { clearPoolFilters } from './helpers/poolFilters'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -395,13 +396,13 @@ test.describe('@devy-draft-room click audit', () => {
     await expect(desktop).toContainText('Ohio State')
 
     // Promotion markers show in pro pool cards.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Legacy Promote')
     await expect(desktop).toContainText('Promoted')
 
     // Deterministic eligibility blocks pro player in a devy round.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Atlas Runner')
     /*
@@ -421,7 +422,7 @@ test.describe('@devy-draft-room click audit', () => {
     await expect(page.getByText(/devy-only/i)).toBeVisible()
 
     // Devy slot drafting works in devy round.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('Devy')
     await desktop.getByTestId('draft-player-search-input').fill('Future Star')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
@@ -429,7 +430,7 @@ test.describe('@devy-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('D')
 
     // No dead devy toggles/filters.
-    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
+    await clearPoolFilters(desktop)
     await desktop.getByTestId('draft-pool-filter').selectOption('All')
     await expect(desktop.getByTestId('draft-pool-filter')).toBeVisible()
   })

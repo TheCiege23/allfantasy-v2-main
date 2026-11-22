@@ -1,72 +1,93 @@
 /**
- * One solid color per position for filled draft-board tiles, in Sleeper's palette (pink QB, teal
- * RB, blue WR, orange TE…). It is the cue that makes a board readable at a glance ("three WRs in
- * a row"). Filled tiles put dark text on these, so every color here is bright.
+ * One solid color per position for filled draft-board tiles: AllFantasy's own palette (violet QB,
+ * green RB, gold WR, coral TE…), chosen in the 2026-11 room redesign to read at a glance without
+ * borrowing Sleeper's pink / teal / blue / orange. Filled tiles put dark text on these, so every
+ * color here is bright.
  *
- * Covers every sport the draft room runs. A position missing from the table still gets a stable
- * color from a small hash, so a new sport never renders a grey board.
+ * Sport-aware: the same letters mean different positions across sports (`C` is an NBA center, an
+ * NHL center and an MLB catcher; `D`, `F` and `G` collide the same way), so pass the league's sport
+ * when you have it. Without one, the general table answers. A position missing from every table
+ * still gets a stable color from a small hash, so a new sport never renders a grey board.
  */
 
-const PINK = '#ff2a6d'
-const TEAL = '#00ceb8'
-const BLUE = '#58a7ff'
-const ORANGE = '#ffae58'
-const PURPLE = '#bd66ff'
-const BROWN = '#bf755f'
-const LIME = '#a3e635'
-const YELLOW = '#facc15'
+const VIOLET = '#9b7bff'
+const GREEN = '#74d65a'
+const GOLD = '#ffc857'
+const CORAL = '#ff7a59'
+const BLUE = '#5b8cff'
+const ROSE = '#f78fb3'
+const AQUA = '#2fd4c4'
+const SLATE = '#8ea0bf'
+const TAN = '#c49a6c'
+const SKY = '#93b4ff'
 
-const POSITION_HEX: Record<string, string> = {
-  // Football (Sleeper's own colors)
-  QB: PINK,
-  RB: TEAL,
-  WR: BLUE,
-  TE: ORANGE,
-  K: PURPLE,
-  DEF: BROWN,
-  DST: BROWN,
-  DL: ORANGE,
-  LB: YELLOW,
-  DB: TEAL,
+/** Football first (NFL and NCAAF), then every other sport's unambiguous positions. */
+const GENERAL: Record<string, string> = {
+  QB: VIOLET,
+  RB: GREEN,
+  WR: GOLD,
+  TE: CORAL,
+  K: SLATE,
+  DEF: TAN,
+  DST: TAN,
+  // IDP
+  DL: ROSE,
+  DE: ROSE,
+  DT: ROSE,
+  EDGE: ROSE,
+  LB: AQUA,
+  DB: BLUE,
+  CB: BLUE,
+  S: BLUE,
   // Basketball
-  PG: BLUE,
-  SG: TEAL,
-  SF: LIME,
-  PF: ORANGE,
-  // `C` is shared by NBA center and NHL center; one color keeps it consistent.
-  C: PINK,
-  G: PURPLE,
-  F: YELLOW,
+  PG: VIOLET,
+  SG: BLUE,
+  SF: GREEN,
+  PF: GOLD,
+  C: CORAL,
+  G: VIOLET,
+  F: GREEN,
   // Hockey
-  LW: BLUE,
-  RW: TEAL,
-  D: ORANGE,
+  LW: GREEN,
+  RW: GOLD,
+  D: BLUE,
   // Baseball
-  SP: PINK,
-  RP: '#ff6b9a',
-  P: PINK,
-  '1B': ORANGE,
-  '2B': TEAL,
-  '3B': BLUE,
-  SS: YELLOW,
-  OF: LIME,
-  DH: PURPLE,
+  SP: BLUE,
+  RP: SKY,
+  P: BLUE,
+  '1B': GOLD,
+  '2B': GREEN,
+  '3B': ROSE,
+  SS: VIOLET,
+  OF: AQUA,
+  LF: AQUA,
+  CF: AQUA,
+  RF: AQUA,
+  DH: SLATE,
   // Soccer
-  GK: PURPLE,
-  GKP: PURPLE,
-  DF: ORANGE,
-  MID: TEAL,
-  MF: TEAL,
-  FWD: PINK,
-  FW: PINK,
+  GK: CORAL,
+  GKP: CORAL,
+  DF: BLUE,
+  MID: GREEN,
+  MF: GREEN,
+  FWD: GOLD,
+  FW: GOLD,
 }
 
-const FALLBACK = [BLUE, TEAL, ORANGE, PINK, PURPLE, LIME, YELLOW, BROWN]
+/** Where a sport reads a shared letter differently from the general table. */
+const BY_SPORT: Record<string, Record<string, string>> = {
+  NHL: { C: VIOLET, G: CORAL, D: BLUE },
+  MLB: { C: CORAL },
+  SOCCER: { D: BLUE, M: GREEN, F: GOLD, G: CORAL, DEF: BLUE },
+}
 
-export function positionTintHex(position: string | null | undefined): string | null {
+const FALLBACK = [BLUE, GREEN, GOLD, CORAL, VIOLET, AQUA, ROSE, TAN]
+
+export function positionTintHex(position: string | null | undefined, sport?: string | null): string | null {
   const key = (position ?? '').trim().toUpperCase().split(/[\/,\s]/)[0] ?? ''
   if (!key || key === '-' || key === '—') return null
-  const known = POSITION_HEX[key]
+  const sportKey = (sport ?? '').trim().toUpperCase()
+  const known = BY_SPORT[sportKey]?.[key] ?? GENERAL[key]
   if (known) return known
   let hash = 0
   for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0

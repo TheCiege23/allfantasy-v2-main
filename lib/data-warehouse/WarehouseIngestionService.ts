@@ -16,7 +16,7 @@ import type {
 } from './types'
 import { normalizeSportForWarehouse } from './types'
 
-export type WarehouseIngestionWriteClient = Pick<
+type WarehouseIngestionWriteClient = Pick<
   typeof prisma,
   | 'playerGameFact'
   | 'teamGameFact'

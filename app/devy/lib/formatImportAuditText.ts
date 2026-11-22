@@ -3,7 +3,7 @@ import { translations } from '@/lib/i18n/translations'
 import { tInterpolate } from '@/lib/i18n/tInterpolate'
 import { localizeMergeMessage } from '@/app/devy/lib/importWizardModel'
 
-export type ImportAuditTextOptions = {
+type ImportAuditTextOptions = {
   /** The reader's language. Omitted or 'en' gives the English file this function has always written. */
   language?: string
   /** The page's `t` (from useOptionalLanguage). Without it the bundled dictionary is read directly. */

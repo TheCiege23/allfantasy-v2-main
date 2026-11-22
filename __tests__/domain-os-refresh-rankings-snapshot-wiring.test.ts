@@ -14,11 +14,12 @@ import { describe, expect, it } from 'vitest'
 const src = readFileSync(path.join(process.cwd(), 'app/api/cron/domain-os-refresh/route.ts'), 'utf8')
 
 describe('domain-os-refresh → rankings daily snapshot wiring', () => {
-  it('🛑 runs BEFORE the league walk, whose early return would otherwise skip it', () => {
+  it('🛑 cannot be skipped by another writer\'s empty result', () => {
+    // The per-league walk and its `if (leagues.length === 0) return counts` are retired (2026-11-17);
+    // nothing in the run may return early ahead of a writer.
     const snapAt = src.indexOf('counts.snapshot = await runRankingsDailySnapshot()')
-    const walkReturn = src.indexOf('if (leagues.length === 0) return counts')
     expect(snapAt).toBeGreaterThan(0)
-    expect(walkReturn).toBeGreaterThan(snapAt)
+    expect(src).not.toMatch(/^\s*if \([^)]*\) return counts\s*$/m)
     expect(src.slice(snapAt, snapAt + 300)).toMatch(/\.catch\(\(e: unknown\) => \{\s*const out = emptyRankingsSnapshotCounts\(\)\s*out\.failed = 1/)
     expect(src).toMatch(/snapshot: emptyRankingsSnapshotCounts\(\),/)
   })
@@ -65,5 +66,12 @@ describe('domain-os-refresh → rankings daily snapshot wiring', () => {
       '@/lib/rank/levels',
     ])
     expect(staticImports('lib/core-app/careerProfileRefresh.ts')).toEqual([])
+  })
+
+  it('🛑 the retired per-league draft/waiver warm stays retired: nothing read those entries', () => {
+    expect(src).not.toMatch(/from '@\/lib\/decision-os\/draft-os'/)
+    expect(src).not.toMatch(/from '@\/lib\/decision-os\/waiver-os'/)
+    // Anchored to code, not prose: the header names both sources to explain the retirement.
+    expect(src).not.toMatch(/^[^*/\n]*\b(?:draftRulesSource|waiverSettingsSource)\b/m)
   })
 })

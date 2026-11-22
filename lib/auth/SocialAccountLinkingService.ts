@@ -65,7 +65,8 @@ export type SocialAccountProvider = "google" | "apple" | "spotify" | "facebook" 
 
 type LinkedSocialAuthUser = {
   id: string;
-  email: string;
+  /** Null for a phone-only account. */
+  email: string | null;
   username: string;
   displayName: string | null;
   avatarUrl: string | null;
@@ -340,6 +341,28 @@ export async function linkSocialAccountToAppUser(
             console.warn("[social-link] signup funnel event failed (non-blocking):", funnelErr);
           }
         })();
+        /*
+         * 🛑 REFERRAL CREDIT FOR OAUTH SIGN-UPS (2026-11-15). Only the email/phone register route read the
+         * `af_ref` cookie (set by ReferralTracker when a visitor lands on `/?ref=CODE`), so someone who
+         * followed a friend's link and chose Google, Apple, Spotify or Discord was never credited to that
+         * friend. Same attribution as /api/auth/register, from this create branch only — a returning
+         * OAuth login returns before here and is never re-attributed. Best-effort, never blocks sign-in.
+         */
+        void (async () => {
+          try {
+            const { cookies } = await import("next/headers");
+            const code = (await cookies()).get("af_ref")?.value?.trim();
+            if (!code) return;
+            const { attributeSignup } = await import("@/lib/referral");
+            const attribution = await attributeSignup(user.id, code);
+            if (attribution?.referrerId) {
+              const { recordAttribution } = await import("@/lib/viral-loop");
+              await recordAttribution(user.id, "referral", { sourceId: attribution.referrerId, metadata: { authMethod: `oauth:${input.provider}` } });
+            }
+          } catch (referralErr) {
+            console.warn("[social-link] referral attribution failed (non-blocking):", referralErr);
+          }
+        })();
       } catch (error) {
         if (!isUniqueConstraintError(error)) {
           throw error;
@@ -396,7 +419,7 @@ export async function linkSocialAccountToAppUser(
     userUpdates.passwordHash = await hashOAuthOnlyPlaceholder();
   }
 
-  if (user && normalizedEmail && providerVerifiedEmail && user.email.toLowerCase() !== normalizedEmail) {
+  if (user && normalizedEmail && providerVerifiedEmail && user.email?.toLowerCase() !== normalizedEmail) {
     const conflictingEmailOwner = await prisma.appUser.findFirst({
       where: {
         email: { equals: normalizedEmail, mode: "insensitive" },
@@ -410,7 +433,22 @@ export async function linkSocialAccountToAppUser(
     }
   }
 
-  if (user && !user.emailVerified && normalizedEmail && providerVerifiedEmail) {
+  /*
+   * ⚠ ONLY THE ADDRESS THE PROVIDER VOUCHED FOR MAY BE MARKED VERIFIED. When the
+   * provider email could not be copied onto this account (another row holds it),
+   * the account keeps its OWN address — one nobody has proven. Stamping
+   * `emailVerified` there certified an arbitrary, attacker-chosen address: it
+   * passed `isEmailProvenForUser` (admin allowlist) and switched off the
+   * pre-takeover neutralisation above for every later sign-in.
+   */
+  const resultingEmail = (userUpdates.email ?? user?.email ?? "").trim().toLowerCase();
+  if (
+    user &&
+    !user.emailVerified &&
+    normalizedEmail &&
+    providerVerifiedEmail &&
+    resultingEmail === normalizedEmail.toLowerCase()
+  ) {
     userUpdates.emailVerified = new Date();
   }
 
@@ -446,6 +484,17 @@ export async function linkSocialAccountToAppUser(
     // sign-in is about to mint is issued now, and `iat <= cutoff` would
     // otherwise revoke the rightful owner on arrival.
     await revokeAllSessionsForUser(user.id, Math.floor(Date.now() / 1000) - 1).catch(() => undefined);
+
+    /*
+     * The password is not the only credential an unproven holder can plant. An
+     * attacker who linked THEIR OWN Google/Discord login to this account before
+     * switching its email to the victim's keeps signing straight back in through
+     * that link after the password is gone. Every provider identity attached
+     * before this proof is untrusted for the same reason the password is. The
+     * link being created for this sign-in is written below, after this delete.
+     * Not swallowed: a takeover defence that half-applies must fail the sign-in.
+     */
+    await prisma.authAccount.deleteMany({ where: { userId: user.id } });
   }
 
   const accountPayload = {

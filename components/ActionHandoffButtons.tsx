@@ -27,7 +27,7 @@ export function parseAIHandoffs(aiText: string | null, weakPositions?: string[])
       actions.push({ label: 'Open Trade Finder', tab: 'finder', icon: '🔄' })
     }
     if (lower.includes('waiver') || lower.includes('free agent')) {
-      actions.push({ label: 'Run Waiver AI', tab: 'waiver', icon: '📋' })
+      actions.push({ label: 'Run Waiver Chimmy', tab: 'waiver', icon: '📋' })
     }
     if (lower.includes('ranking') || lower.includes('power rank')) {
       actions.push({ label: 'View Rankings', tab: 'rankings', icon: '📊' })

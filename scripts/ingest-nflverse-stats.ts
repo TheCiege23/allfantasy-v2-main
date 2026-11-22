@@ -28,6 +28,7 @@
  */
 import zlib from 'node:zlib'
 import { PrismaClient } from '@prisma/client'
+import { syntheticNflverseGameId, writeNflverseGameRow, type NflverseGameRow, type NflverseWriteOutcome } from './ingest-nflverse-stats-helpers'
 
 const prisma = new PrismaClient()
 
@@ -157,7 +158,7 @@ async function main() {
     ])
 
     let matched = 0, unmatched = 0, written = 0
-    const rows: Array<Record<string, unknown>> = []
+    const rows: NflverseGameRow[] = []
     const unmatchedSample: string[] = []
 
     for (let k = 1; k < lines.length; k++) {
@@ -185,12 +186,14 @@ async function main() {
 
       const week = num(c[iWeek])
       if (week == null) continue
-      const gameId = (iGame >= 0 ? (c[iGame] || '').trim() : '') || `NFL-${season}-W${String(week).padStart(2, '0')}`
+      const rowSeason = num(c[iSeason]) ?? season
+      // No game column: a synthetic per-week id. A later real-id run replaces it — see the helper.
+      const gameId = (iGame >= 0 ? (c[iGame] || '').trim() : '') || syntheticNflverseGameId(rowSeason, week)
 
       rows.push({
         playerId: ourId,
         gameId,
-        season: num(c[iSeason]) ?? season,
+        season: rowSeason,
         week,
         opponent: (c[iOpp] || '').trim().toUpperCase() || null,
         team: iTeam >= 0 ? (c[iTeam] || '').trim().toUpperCase() || null : null,
@@ -208,46 +211,13 @@ async function main() {
       process.exit(1)
     }
 
+    const outcomes: Record<NflverseWriteOutcome, number> = { written: 0, replaced_synthetic: 0, merged_into_real: 0, skipped_ambiguous: 0 }
     for (const r of rows) {
-      await prisma.playerGameStat.upsert({
-        where: {
-          playerId_sportType_gameId: {
-            playerId: r.playerId as string,
-            sportType: 'NFL',
-            gameId: r.gameId as string,
-          },
-        },
-        update: {
-          season: r.season as number,
-          weekOrRound: r.week as number,
-          statPayload: r.stats as object,
-          normalizedStatMap: r.stats as object,
-          opponent: (r.opponent as string) ?? undefined,
-          team: (r.team as string) ?? undefined,
-          source: 'nflverse',
-          updatedAt: new Date(),
-        },
-        create: {
-          playerId: r.playerId as string,
-          sportType: 'NFL',
-          gameId: r.gameId as string,
-          season: r.season as number,
-          weekOrRound: r.week as number,
-          statPayload: r.stats as object,
-          normalizedStatMap: r.stats as object,
-          // ⚠ fantasyPoints stays 0 here ON PURPOSE. Points are league-specific and
-          // computed by leagueScoring.ts from the raw stats above; storing a
-          // single "fantasy points" number would bake one league's rules into a
-          // shared row.
-          fantasyPoints: 0,
-          opponent: (r.opponent as string) ?? null,
-          team: (r.team as string) ?? null,
-          source: 'nflverse',
-        },
-      })
-      written++
+      const outcome = await writeNflverseGameRow(prisma as never, r)
+      outcomes[outcome]++
+      if (outcome !== 'skipped_ambiguous') written++
     }
-    console.log(`  wrote ${written} rows`)
+    console.log(`  wrote ${written} rows | synthetic week ids replaced ${outcomes.replaced_synthetic} | merged into a real-id row ${outcomes.merged_into_real} | skipped (2+ real rows for one player-week) ${outcomes.skipped_ambiguous}`)
   }
 
   const total = await prisma.playerGameStat.count({ where: { source: 'nflverse' } })

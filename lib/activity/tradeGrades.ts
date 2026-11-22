@@ -37,8 +37,10 @@ export function clearActivityTradeGradeMemo(): void {
  * season and round keyed on `owner_id` — the RECEIVER. (`roster_id` on a Sleeper pick is its
  * ORIGINAL owner; reading it as the receiver hands the pick to the wrong side.)
  *
- * Withheld, never guessed: a player Sleeper cannot name, a trade with FAAB in it (the chart does not
- * price FAAB, and grading the rest would call a sweetened deal a steal), three teams.
+ * FAAB moved in the trade (`waiver_budget`) is priced on the league's own waiver budget, by the same grade every
+ * completed trade gets (`gradeArchivedTrade`'s `faab`) — and withheld there when that budget is not on file.
+ *
+ * Withheld, never guessed: a player Sleeper cannot name, three teams.
  */
 export async function gradeSleeperActivityTrade(args: {
   afLeagueId: string
@@ -57,10 +59,9 @@ export async function gradeSleeperActivityTrade(args: {
     if (tx.roster_ids.length !== 2) {
       return { graded: false, reason: 'only two-team trades are graded' }
     }
-    if ((tx.waiver_budget ?? []).some((w) => w.amount > 0)) {
-      return { graded: false, reason: 'FAAB in this trade is not priced on the league chart' }
-    }
     const [a, b] = tx.roster_ids as [number, number]
+    const faabTo = (rid: number) =>
+      (tx.waiver_budget ?? []).filter((w) => w.receiver === rid && Number.isFinite(w.amount) && w.amount > 0).reduce((n, w) => n + w.amount, 0)
     const nameOf = (pid: string): string | null => {
       const p = args.players[pid]
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim()
@@ -79,8 +80,8 @@ export async function gradeSleeperActivityTrade(args: {
       picksIn: picksTo(a),
       picksOut: picksTo(b),
       currentSeason: new Date(now).getUTCFullYear(),
-      // FAAB was read above and is zero both ways, so a one-way move here can be named a Pirate steal.
-      faab: { received: 0, gave: 0 },
+      // FAAB read both ways — priced on the league's budget, and with it in hand a one-way move can be named a Pirate steal.
+      faab: { received: faabTo(a), gave: faabTo(b) },
       labels: { receiver: args.rosterNames.get(a) ?? null, partner: args.rosterNames.get(b) ?? null },
       // The trade's frozen original — the same letter its email and history show (`frozenCompletedGrade.ts`).
       original: { afLeagueId: args.afLeagueId, tradeId: tx.transaction_id, now: new Date(now) },

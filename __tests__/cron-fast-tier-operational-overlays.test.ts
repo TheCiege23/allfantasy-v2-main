@@ -7,6 +7,10 @@ import {
 import { PROBES } from '../scripts/cron-freshness-check.mjs'
 
 describe('fast-tier operational overlays', () => {
+  it('runs Survivor Guillotine provider ingestion every five minutes', () => {
+    expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({ path: '/api/cron/survivor-guillotine-ingest', schedule: '*/5 * * * *' })
+    expect(PROBES['/api/cron/survivor-guillotine-ingest']).toEqual({ heartbeat: 'cron-survivor-guillotine-provider' })
+  })
   it('schedules the active provider lane every five minutes without a Vercel cron entry', () => {
     expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({
       path: '/api/cron/fantasy-os-active-sync',

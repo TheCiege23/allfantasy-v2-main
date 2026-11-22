@@ -22,7 +22,8 @@ test('selected league tab stays visible on arrival and after rotation', async ({
   await page.setViewportSize({ width: 360, height: 800 })
   await page.goto('/dev/league-mobile-preview?screen=support')
   const row = page.getByTestId('mobile-support-preview').locator('.af-lt-compact-row')
-  await expect(row.locator('[aria-current="page"]')).toHaveText('Moves')
+  // Trades, not Moves (2026-11-14): Moves folded into Trades, which took its last slot in the phone strip.
+  await expect(row.locator('[aria-current="page"]')).toHaveText('Trades')
   for (const size of [{ width: 360, height: 800 }, { width: 844, height: 390 }, { width: 320, height: 640 }]) {
     await page.setViewportSize(size)
     await expect.poll(() => row.evaluate(el => {
@@ -96,7 +97,7 @@ test('delete confirmation contains focus and restores the page when cancelled', 
 
 test('sign-in account switch has a full touch target', async ({ page }) => {
   await page.goto('/login')
-  const link = page.locator('.af-au-switch a')
+  const link = page.locator('a.af-au-switch')
   await expect(link).toBeVisible()
   expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
 })

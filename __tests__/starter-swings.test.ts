@@ -101,6 +101,22 @@ describe('loadLeagueWeekState', () => {
     expect(where).toMatchObject({ season: '2026', week: 2, source: { not: 'allfantasy' } })
   })
 
+  /* A Sleeper NBA league's ids are another namespace that collides with NFL ids: its starters must
+     never be priced from NFL rows. The double below honours a `sport` filter as Postgres would. */
+  it('🛑 a non-NFL league reads only its own sport’s rows — an NFL row sharing the id prices nothing', async () => {
+    h.projectionFind.mockImplementation(async (args: { where: { sport?: string } }) =>
+      args.where.sport == null || args.where.sport === 'NFL' ? ['a1', 'a2', 'b1', 'b2'].map(projectionRow) : [])
+    const s = await loadLeagueWeekState({ platformLeagueId: 'SL1', season: 2026, week: 2, settings: SETTINGS, sport: 'NBA' })
+    expect(h.projectionFind.mock.calls[0]![0].where.sport).toBe('NBA')
+    expect(s!.rosters.get('1')!.pWin ?? null).toBeNull()
+  })
+
+  it('control: an NFL league, or one with no sport, sends the read it always did — no sport key', async () => {
+    await loadLeagueWeekState({ platformLeagueId: 'SL1', season: 2026, week: 2, settings: SETTINGS, sport: 'NFL' })
+    await load()
+    for (const [args] of h.projectionFind.mock.calls) expect('sport' in args.where).toBe(false)
+  })
+
   it('is null without a schedule to pair the rosters', async () => {
     h.matchupFind.mockResolvedValue([])
     expect(await load()).toBeNull()

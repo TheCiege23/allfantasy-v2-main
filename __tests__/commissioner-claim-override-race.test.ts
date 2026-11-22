@@ -7,6 +7,7 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: h.role }))
 vi.mock('@/lib/prisma', () => ({ prisma: { waiverClaim: { findFirst: h.find, updateMany: h.update } } }))
 vi.mock('@/server/services/auditService', () => ({ logAction: h.audit }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromRole(() => h.role))
 import { PATCH } from '@/app/api/commissioner/leagues/[leagueId]/waiver-claims/[claimId]/route'
 const request = (body: string) => PATCH(new NextRequest('http://example.test/claim', { method: 'PATCH', body }), { params: Promise.resolve({ leagueId: 'L1', claimId: 'C1' }) })
 beforeEach(() => { vi.clearAllMocks(); h.session.mockResolvedValue({ user: { id: 'U1' } }); h.role.mockResolvedValue('commissioner'); h.find.mockResolvedValue({ id: 'C1', leagueId: 'L1', status: 'pending', metadata: { custom: true } }); h.update.mockResolvedValue({ count: 1 }); h.audit.mockResolvedValue(undefined) })

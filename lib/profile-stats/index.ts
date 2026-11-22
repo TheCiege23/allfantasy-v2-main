@@ -3,4 +3,4 @@
  */
 
 export { getProfileStats } from "./ProfileStatsService"
-export type { ProfileStats, RecordSummary, RankingEntry, AchievementWithEarned } from "./types"
+export type { ProfileStats, RecordSummary, RankingEntry } from "./types"
