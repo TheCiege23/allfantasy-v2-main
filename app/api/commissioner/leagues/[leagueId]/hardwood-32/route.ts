@@ -20,6 +20,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
     const snapshot = await fetchHardwood32Snapshot()
     return NextResponse.json(snapshot, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch {
-    return NextResponse.json({ error: 'Sleeper standings or Week 4 scores are temporarily unavailable.' }, { status: 502 })
+    return NextResponse.json({ error: 'Sleeper standings or weekly scores are temporarily unavailable.' }, { status: 502 })
   }
 }

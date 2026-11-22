@@ -12,6 +12,9 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
   const [snapshot, setSnapshot] = useState<Hardwood32Snapshot | null>(null)
   const [error, setError] = useState(false)
   const [view, setView] = useState<'results' | 'standings'>('results')
+  const [selectedWeek, setSelectedWeek] = useState('latest')
+  const weeks = snapshot?.weeks ?? []
+  const scores = weeks.find(entry => String(entry.week) === selectedWeek) ?? weeks[weeks.length - 1]
 
   useEffect(() => {
     const controller = new AbortController()
@@ -42,15 +45,25 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
         <h2 id="hardwood-32-title" className="text-lg font-semibold">The Hardwood 32</h2>
         <a className="underline" href="https://sleeper.com/beta/leagues/1419790450268635136/matchup">Open in Sleeper</a>
       </div>
-      {!snapshot && !error && <p role="status">Loading standings and Week 4 results…</p>}
+      {!snapshot && !error && <p role="status">Loading standings and weekly results…</p>}
       {error && <p role="status">Sleeper refresh unavailable. {snapshot ? 'Showing the last successful update.' : 'The next refresh will retry.'}</p>}
       {snapshot && (
         <>
           <p className="text-sm">Season {snapshot.season} · Sleeper update {formatTime.format(new Date(snapshot.fetchedAt))}</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="afh-btn" aria-pressed={view === 'results'} onClick={() => setView('results')}>Week 4 results</button>
+            <button type="button" className="afh-btn" aria-pressed={view === 'results'} onClick={() => setView('results')}>Weekly results</button>
             <button type="button" className="afh-btn" aria-pressed={view === 'standings'} onClick={() => setView('standings')}>Standings</button>
           </div>
+          {view === 'results' && scores && (
+            <label className="inline-flex items-center gap-2 text-sm">
+              Scoring week
+              <select className="afh-btn" value={weeks.some(entry => String(entry.week) === selectedWeek) ? selectedWeek : 'latest'} onChange={event => setSelectedWeek(event.target.value)}>
+                <option value="latest">Latest week ({weeks[weeks.length - 1].week})</option>
+                {weeks.map(entry => <option key={entry.week} value={entry.week}>Week {entry.week}</option>)}
+              </select>
+              <span>{scores.completed ? 'Final' : 'In progress'}</span>
+            </label>
+          )}
           <div className="overflow-x-auto">
             {view === 'standings' ? (
               <table className="w-full text-left text-sm" aria-label="Hardwood 32 overall standings">
@@ -63,18 +76,20 @@ export function Hardwood32Results({ leagueId }: { leagueId: string }) {
                   </tr>
                 ))}</tbody>
               </table>
-            ) : (
-              <table className="w-full text-left text-sm" aria-label="Hardwood 32 Week 4 results">
-                <thead><tr>{['Matchup', 'Team', 'Score', 'Opponent', 'Score', 'Winner'].map((label, index) =>
+            ) : scores ? (
+              <table className="w-full text-left text-sm" aria-label={`Hardwood 32 Week ${scores.week} results`}>
+                <thead><tr>{['Matchup', 'Team', 'Score', 'Opponent', 'Score', scores.completed ? 'Winner' : 'Leader'].map((label, index) =>
                   <th key={index} scope="col" className="p-2">{label}</th>)}</tr></thead>
-                <tbody>{snapshot.matchups.map(row => (
+                <tbody>{scores.matchups.map(row => (
                   <tr key={row.id} className="border-t border-current/20">
-                    {[row.id, row.first.team, formatPoints.format(row.first.points), row.second.team, formatPoints.format(row.second.points), row.winner ?? 'Tie'].map((value, index) =>
+                    {[row.id, row.first.team, row.first.points == null ? '—' : formatPoints.format(row.first.points), row.second.team,
+                      row.second.points == null ? '—' : formatPoints.format(row.second.points),
+                      row.winner ?? (row.first.points == null || row.second.points == null ? '—' : 'Tie')].map((value, index) =>
                       <td key={index} className="p-2">{value}</td>)}
                   </tr>
                 ))}</tbody>
               </table>
-            )}
+            ) : <p role="status">Sleeper hasn’t posted any weekly scores yet.</p>}
           </div>
         </>
       )}
