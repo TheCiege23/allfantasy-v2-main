@@ -222,6 +222,39 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
   )
   const [activeYear, setActiveYear] = useState<number>(currentYear)
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null)
+  // Bio and news from Postgres (/api/players/card, 2026-11-21): the board and pool pass little or no
+  // bio, and the analytics payload has no news, so every card showed dashes and "No recent news."
+  const [storedCard, setStoredCard] = useState<{
+    bio?: { age: number | null; heightIn: number | null; weightLbs: number | null; yearsExp: number | null; college: string | null }
+    news?: Array<{ title: string; body: string | null; source: string | null; publishedAt: string | null; url: string | null }>
+  } | null>(null)
+  const [cardLoading, setCardLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !player?.name) return
+    let alive = true
+    setStoredCard(null)
+    setCardLoading(true)
+    const q = new URLSearchParams({ sport: String(sport ?? ''), name: player.name })
+    if (player.id) q.set('playerId', String(player.id))
+    if (player.position) q.set('position', String(player.position))
+    if (player.team) q.set('team', String(player.team))
+    Promise.resolve()
+      .then(() => fetch(`/api/players/card?${q.toString()}`))
+      .then(async (r) => (r?.ok ? r.json() : null))
+      .then((body) => {
+        if (alive) setStoredCard(body)
+      })
+      .catch(() => {
+        if (alive) setStoredCard(null)
+      })
+      .finally(() => {
+        if (alive) setCardLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [open, player?.name, player?.id, player?.position, player?.team, sport])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [gameLogs, setGameLogs] = useState<WeekLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
@@ -325,7 +358,18 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
 
   const colSet = columnSetForPosition(player.position)
   const rankings = analytics?.rankings ?? null
-  const news = analytics?.news ?? []
+  const news =
+    analytics?.news && analytics.news.length > 0
+      ? analytics.news
+      : (storedCard?.news ?? []).map((n) => ({ title: n.title, body: n.body ?? undefined, source: n.source ?? undefined, publishedAt: n.publishedAt ?? undefined, url: n.url ?? undefined }))
+  // What the caller passed wins; the stored bio fills what it left empty.
+  const bio = storedCard?.bio
+  const age = player.age ?? bio?.age ?? null
+  const heightIn = player.heightIn ?? bio?.heightIn ?? null
+  const weightLbs = player.weightLbs ?? bio?.weightLbs ?? null
+  const yearsExp = player.yearsExp ?? bio?.yearsExp ?? null
+  const college = player.college ?? bio?.college ?? null
+  const newsLoading = analyticsLoading || cardLoading
 
   // Rendered into <body>: inside a panel (the phone's player tray is `relative z-10`) a
   // `fixed` overlay is trapped in that panel's stacking context and can land under other layers.
@@ -396,14 +440,14 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
 
                 {/* Physical-stat chip bar */}
                 <div className="mt-3 grid max-w-xl grid-cols-3 gap-2 text-center sm:grid-cols-5 sm:gap-3">
-                  <StatChip label="Age" value={player.age ? String(player.age) : '—'} />
-                  <StatChip label="Height" value={formatHeight(player.heightIn)} />
+                  <StatChip label="Age" value={age ? String(age) : '—'} />
+                  <StatChip label="Height" value={formatHeight(heightIn)} />
                   <StatChip
                     label="Weight"
-                    value={player.weightLbs ? `${player.weightLbs} lbs` : '—'}
+                    value={weightLbs ? `${weightLbs} lbs` : '—'}
                   />
-                  <StatChip label="Exp" value={player.yearsExp != null ? String(player.yearsExp) : '—'} />
-                  <StatChip label="College" value={player.college ?? '—'} />
+                  <StatChip label="Exp" value={yearsExp == null ? '—' : yearsExp === 0 ? 'Rookie' : String(yearsExp)} />
+                  <StatChip label="College" value={college ?? '—'} />
                 </div>
 
                 {/* Rankings bar */}
@@ -772,8 +816,8 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Latest news</p>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {analyticsLoading && <p className="px-4 py-3 text-[12px] text-white/45">Loading…</p>}
-            {!analyticsLoading && news.length === 0 && (
+            {newsLoading && news.length === 0 && <p className="px-4 py-3 text-[12px] text-white/45">Loading…</p>}
+            {!newsLoading && news.length === 0 && (
               <p className="px-4 py-3 text-[12px] text-white/45">No recent news.</p>
             )}
             {news.slice(0, 6).map((n, i) => (
