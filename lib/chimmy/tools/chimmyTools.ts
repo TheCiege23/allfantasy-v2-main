@@ -1356,7 +1356,7 @@ export async function executeChimmyTool(
           : await buildPlayerValueContext({ playerName: asked, leagueId: null })
         if (!asked) return 'Ask which player the manager means.'
         const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
-        const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
+        const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2, afIntelligence: ctx.depth === 'pro' }).catch(() => null)
         if (metrics && sport && metrics.sport !== (sport === 'NCAABB' ? 'NCAAB' : sport)) return 'The requested sport differs from the connected league.'
         if (metrics && metrics.rows.length > 1) return 'Multiple players in this league sport match. Ask for their position or team.'
         const row = metrics?.rows[0]

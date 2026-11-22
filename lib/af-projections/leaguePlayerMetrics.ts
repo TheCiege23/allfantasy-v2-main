@@ -246,6 +246,12 @@ export async function loadLeaguePlayerMetrics(args: {
   valueBoard?: Promise<LeagueValueBoard>
   includeTradeValues?: boolean
   includePlayerPool?: boolean
+  /**
+   * False for a viewer whose plan does not include AF Intelligence: the learned factors are not applied, so the
+   * weekly and daily numbers — and anything a caller sums from them — are the plain ones. Default true (crons,
+   * shared boards); the response gate (lib/core-app/afIntelligenceWithhold.ts) still reverts each row for those.
+   */
+  afIntelligence?: boolean
 }): Promise<LeaguePlayerMetrics | null> {
   const league = await prisma.league.findUnique({
     where: { id: args.leagueId },
@@ -439,7 +445,7 @@ export async function loadLeaguePlayerMetrics(args: {
    * left alone: a streak or a back-to-back is about the next games, not the season. NFL lines are adjusted in
    * `loadAfNflWeek`, upstream of `weekly`.
    */
-  if (sport !== 'NFL' && unit === 'fantasy points') {
+  if (sport !== 'NFL' && unit === 'fantasy points' && args.afIntelligence !== false) {
     const table = await loadFactorTable(prisma, sport, now).catch(() => null)
     const adjustments = table
       ? await liveFactorAdjustments(prisma, {

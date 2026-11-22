@@ -32,7 +32,7 @@ import {
   nhlProspectPoolRow,
   offersNhlProspectFreeAgency,
 } from "@/lib/waiver-wire/nhlProspectFreeAgency"
-import { afJson } from '@/lib/core-app/afIntelligenceGate'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -193,6 +193,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       try {
         const outlook = await loadDailySportOutlook(prisma, {
           league: { sport: String(league.sport), season: league.season ?? null, settings: league.settings },
+          // Without AF Intelligence, priced without AF's learned factors (the response is gated by afJson too).
+          afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked,
           // Keyed by position: `players[i]` is serialized from `available[i]`, whatever id it ends up with.
           players: available.map((p: any, i: number) => ({
             key: String(i),

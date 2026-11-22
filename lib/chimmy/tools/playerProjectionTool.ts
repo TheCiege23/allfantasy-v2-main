@@ -95,6 +95,7 @@ async function buildPlayerProjectionContextFull(args: {
   if (args.leagueId) {
     const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
     const metrics = await loadLeaguePlayerMetrics({
+      afIntelligence: args.afIntelligence !== false,
       leagueId: args.leagueId,
       week: args.week,
       playerName: asked,

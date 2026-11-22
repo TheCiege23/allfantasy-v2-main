@@ -57,7 +57,7 @@ import { getTradeManagerStrategy } from '@/lib/league-trade-engine/managerStrate
 import { signProposalEvidenceToken, type VerifiedProposalAssetEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
-import { afJson } from '@/lib/core-app/afIntelligenceGate'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -740,7 +740,7 @@ export async function GET(
   const stockIds = league?.sport === 'NFL' && platform === 'sleeper' ? rosterIds.filter(id => resolvedForLeague.has(id)) : []
   const [stock, metrics, loadedMarketRows] = await Promise.all([
     stockIds.length ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(() => new Map()) : new Map(),
-    rosterIds.length ? loadLeaguePlayerMetrics({ leagueId, rosterIds, limit: rosterIds.length }).catch(() => null) : null,
+    rosterIds.length ? readAfIntelligenceAccess(userId).then((a) => loadLeaguePlayerMetrics({ leagueId, rosterIds, limit: rosterIds.length, afIntelligence: a.unlocked })).catch(() => null) : null,
     league?.sport === 'NFL' ? (largeLeagueRookiePicks
       ? readFantasyCalcValuesFromDb(chartSettings, { allowStale: false }).then(row => row.players)
       : getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 })).catch(() => null) : null,

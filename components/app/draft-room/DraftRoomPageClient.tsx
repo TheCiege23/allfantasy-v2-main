@@ -144,6 +144,7 @@ import { buildDraftChatPlayerContextFromDisplay } from '@/lib/draft-room/draft-c
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
 import { PlayerDetailModal, type DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 import { readPlanRefusal } from '@/lib/monetization/planRefusal'
+import { AfAdpLockContext, afAdpLockOf } from './afAdpLock'
 
 type DraftRoomPageClientProps = {
   /** Draft session id from URL (`/draft/[draftId]/snake`) — used for telemetry / deep links only. */
@@ -530,6 +531,8 @@ export function DraftRoomPageClient({
   const roundOneBootstrapRef = useRef(false)
   const [pickError, setPickError] = useState<string | null>(null)
   const [draftPool, setDraftPool] = useState<DraftPoolClientPayload | null>(null)
+  // AF ADP's lock for a viewer whose plan does not include it (./afAdpLock.tsx), read off the pool response.
+  const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
   const [poolFetching, setPoolFetching] = useState(true)
   const [poolError, setPoolError] = useState(false)
   const [draftAssistantContext, setDraftAssistantContext] = useState<{
@@ -1184,6 +1187,7 @@ export function DraftRoomPageClient({
         })
       }
       if (res.ok && Array.isArray(data.entries)) {
+        setAfAdpLock(afAdpLockOf(data))
         const nextPool: DraftPoolClientPayload = {
           entries: data.entries,
           sport: data.sport ?? sport,
@@ -4788,7 +4792,7 @@ export function DraftRoomPageClient({
   ) : undefined
 
   return (
-    <>
+    <AfAdpLockContext.Provider value={afAdpLock}>
     <DraftIntroGate
       leagueId={leagueId}
       draftSessionId={session.id}
@@ -5773,6 +5777,6 @@ export function DraftRoomPageClient({
         }}
       />
     )}
-  </>
+  </AfAdpLockContext.Provider>
   )
 }

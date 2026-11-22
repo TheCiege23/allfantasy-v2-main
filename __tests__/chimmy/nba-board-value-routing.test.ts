@@ -19,7 +19,8 @@ describe('get_player_value', () => {
     h.board.mockResolvedValue('NBA VALUE for Nikola Jokic')
     const out = await executeChimmyTool('get_player_value', { player: 'Nikola Jokic' }, { leagueId: 'L1', userId: 'u1' } as ChimmyToolContext)
     expect(out).toContain('Nikola Jokic has an AF trade value of 125.00 fantasy points over replacement')
-    expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'L1', playerName: 'Nikola Jokic', limit: 2 })
+    // No Chimmy plan in this context, so the board is read without AF's learned factors (AF Intelligence).
+    expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'L1', playerName: 'Nikola Jokic', limit: 2, afIntelligence: false })
     expect(h.nfl).not.toHaveBeenCalled()
   })
 

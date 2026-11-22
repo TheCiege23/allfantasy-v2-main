@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
       if (!access.authorized) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
       const playerPool = sport === 'NBA' && sp.get('view') === 'weekly-player-pool'
       const result = await loadLeaguePlayerMetrics({
+        afIntelligence: afAccess.unlocked,
         leagueId,
         week: intParam(sp.get('week')),
         position: sp.get('position'),
