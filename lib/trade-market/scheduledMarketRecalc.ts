@@ -7,8 +7,10 @@ import {
   stampAllTradeFormats,
   writeLineupFactorTable,
   writePickMarketTable,
+  writePostureMarketTable,
   type BookResult,
   type PickBookResult,
+  type PostureBookResult,
   type LineupFactorTable,
   type StampAllResult,
 } from './formatMarkets'
@@ -52,6 +54,9 @@ export type ScheduledMarketRecalcResult = {
   pickMarkets: Array<PickBookResult & { sinceSeason: number }>
   /** False when the pick table could not be stored this run. */
   pickMarketsWritten: boolean
+  /** What contenders and rebuilders pay over middle teams, from the widest window (`postureMarketLearner.ts`, shadow). */
+  postureMarkets: Array<PostureBookResult & { sinceSeason: number }>
+  postureMarketsWritten: boolean
 }
 
 export function marketWindows(now = new Date()): number[] {
@@ -68,6 +73,7 @@ export async function runScheduledMarketRecalc(
     writeLineup?: typeof writeLineupFactorTable
     stampAll?: typeof stampAllTradeFormats
     writePicks?: typeof writePickMarketTable
+    writePosture?: typeof writePostureMarketTable
   } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
@@ -80,6 +86,7 @@ export async function runScheduledMarketRecalc(
   let tradesStamped = 0
   const datedShadow: ScheduledMarketRecalcResult['datedShadow'] = []
   let pickMarkets: ScheduledMarketRecalcResult['pickMarkets'] = []
+  let postureMarkets: ScheduledMarketRecalcResult['postureMarkets'] = []
 
   const windows = marketWindows(opts.now)
   const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
@@ -93,7 +100,10 @@ export async function runScheduledMarketRecalc(
     tradesUsed = Math.max(tradesUsed, r.tradesUsed)
     tradesStamped += r.tradesStamped ?? 0
     // Picks keep the WIDEST window: recency weights already favour fresh trades, and a pick class needs every trade it can get.
-    if (sinceSeason === windows[windows.length - 1]) pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+    if (sinceSeason === windows[windows.length - 1]) {
+      pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+      postureMarkets = (r.postureMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
+    }
     // The freshest window measures every book (nothing is skipped yet), so its comparison is the complete one.
     if (sinceSeason === windows[0]) {
       for (const b of r.books) if (b.dated) datedShadow.push({ concept: b.concept, sinceSeason, learner: b.learner ?? 'current', ...b.dated })
@@ -123,6 +133,7 @@ export async function runScheduledMarketRecalc(
     if (published(r.lineup) > published(lineupTable)) lineupTable = r.lineup
     tradesStamped += r.tradesStamped ?? 0
     pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason: widest }))
+    postureMarkets = (r.postureMarkets ?? []).map((m) => ({ ...m, sinceSeason: widest }))
   }
 
   let lineup: ScheduledMarketRecalcResult['lineup'] = null
@@ -137,6 +148,9 @@ export async function runScheduledMarketRecalc(
   const now = opts.now ?? new Date()
   const pickMarketsWritten = pickMarkets.length
     ? await (opts.writePicks ?? writePickMarketTable)(prisma, pickMarkets, now).then(() => true, () => false)
+    : false
+  const postureMarketsWritten = postureMarkets.length
+    ? await (opts.writePosture ?? writePostureMarketTable)(prisma, postureMarkets, now).then(() => true, () => false)
     : false
   // Last and best-effort: labelling old trades must never cost the markets this run already wrote.
   const formatBackfill = await (opts.stampAll ?? stampAllTradeFormats)(prisma).catch(() => null)
@@ -153,5 +167,7 @@ export async function runScheduledMarketRecalc(
     datedShadow,
     pickMarkets,
     pickMarketsWritten,
+    postureMarkets,
+    postureMarketsWritten,
   }
 }

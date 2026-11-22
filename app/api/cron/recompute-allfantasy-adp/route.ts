@@ -13,6 +13,7 @@ import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJo
 import { prisma } from '@/lib/prisma'
 import { runScheduledMarketRecalc, type ScheduledMarketRecalcResult } from '@/lib/trade-market/scheduledMarketRecalc'
 import { describePickMarket } from '@/lib/trade-market/pickMarketLearner'
+import { describePostureMarket } from '@/lib/trade-market/postureMarketLearner'
 
 /*
  * ⚠ THE AllFantasy TRADE MARKET REBUILD RIDES THIS SLOT (2026-11-11) — the same reason MLB/NBA/NHL
@@ -69,6 +70,12 @@ async function rebuildTradeMarket(startedAt: number): Promise<
             (m) =>
               `${describePickMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
               `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.pickMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What contenders and rebuilders pay over middle teams (shadow).
+          ...(r.postureMarkets ?? []).map(
+            (m) =>
+              `${describePostureMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.postureMarketsWritten ? '' : '; ⚠ not stored this run'}`,
           ),
         ],
       }),
