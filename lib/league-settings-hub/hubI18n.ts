@@ -281,6 +281,9 @@ const ES: Record<string, string> = {
   'Scoring Format': 'Formato de puntuación',
   'League Median Game': 'Partido contra la mediana',
   'Every team also plays the weekly median score': 'Cada equipo también juega contra la mediana semanal',
+  'Count Weeks Before the Draft': 'Contar las semanas antes del draft',
+  'Weeks played before this league drafted. Off: for viewing only. On: they count toward every record, including the league median':
+    'Semanas jugadas antes del draft de esta liga. Desactivado: solo para ver. Activado: cuentan en cada récord, incluida la mediana de la liga',
   'Trade Deadline': 'Fecha límite de traspasos',
   'Trade Review': 'Revisión de traspasos',
   'Time to Review Pending Trades': 'Tiempo para revisar traspasos pendientes',
