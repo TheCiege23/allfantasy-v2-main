@@ -12,6 +12,8 @@ const DATA_API_HOST_PATTERNS = [
   /^api\.x\.com$/i,
   // Draft market references: only ingestion workers may read this provider.
   /^api\.statsguyfantasy\.com$/i,
+  // Official NBA rosters and game logs are read by ingestion. League and OS surfaces read AF's stored projections.
+  /^stats\.nba\.com$/i,
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
   // rosters, standings, schedules, live matchup scores and college ADP, all from
   // www.fantrax.com/fxea/general. It has been read by the import stack since
