@@ -189,6 +189,11 @@ export type LedgerSnapshot = {
    * own confidence (`lib/decision-os/draft/tipCalibration.ts`). Absent before 2026-11-21 and with none graded.
    */
   draftTips?: DraftTipLedger
+  /**
+   * The picks the clock made (Draft like me, queue, best available), by strategy then round band, held up or not
+   * against the board they were made on (2026-11-22). Never mixed into `draftTips`.
+   */
+  autopicks?: Record<string, DraftTipLedger>
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -207,6 +212,7 @@ export function foldLedger(input: {
   tradeLetters?: TradeLetterLedger
   commissionerTradeLetters?: TradeLetterLedger
   draftTips?: DraftTipLedger
+  autopicks?: Record<string, DraftTipLedger>
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -298,6 +304,7 @@ export function foldLedger(input: {
       ? { commissionerTradeLetters: input.commissionerTradeLetters }
       : {}),
     ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
+    ...(input.autopicks && Object.keys(input.autopicks).length > 0 ? { autopicks: input.autopicks } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }

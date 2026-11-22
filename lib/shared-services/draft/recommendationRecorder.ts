@@ -30,7 +30,18 @@ import {
 
 export const DRAFT_RECORDER_ENGINE_VERSION = 'draft-engine/2026-11-14'
 
-export type RecordSurface = 'decision_card' | 'chimmy'
+/**
+ * `autopick` (2026-11-22): a pick the clock made for a team (Draft like me, the queue, best available).
+ * Unlike the two advice surfaces it stores the player ACTUALLY PICKED — in both observe and active, with
+ * `servedMode` active — so the ledger grades what was drafted, not what the engine would have said. The
+ * draft card's confidence never reads these rows (`gradeDraftTips` excludes the surface); they are graded
+ * on their own, per strategy (`gradeAutopicks`).
+ */
+export const AUTOPICK_SURFACE = 'autopick' as const
+export type RecordSurface = 'decision_card' | 'chimmy' | typeof AUTOPICK_SURFACE
+export const AUTOPICK_RECORDER_ENGINE_VERSION = 'autopick/2026-11-22'
+/** Fewer projected alternatives than this and the pick could not be graded anyway. */
+export const AUTOPICK_MIN_PROJECTIONS = 5
 
 export type RecordArgs = {
   surface: RecordSurface
@@ -146,6 +157,78 @@ export async function recordDraftRecommendation(args: RecordArgs, env: NodeJS.Pr
       return 'not_recording_yet'
     }
     console.warn('[draft-recorder] record failed', error instanceof Error ? error.message : error)
+    return 'failed'
+  }
+}
+
+export type AutopickRecordArgs = {
+  sport: string
+  leagueId: string
+  sessionKey: string
+  rosterKey: string
+  overallPick: number
+  round: number
+  picked: { name: string; position: string; team: string | null; adp: number | null }
+  /** `draft-as-me`, `queue`, `bpa`, `need-based`… — graded separately. */
+  strategy: string
+  reason: string
+  /** The pool's season projections at the moment, `name|position` → points (names as the pool spells them). */
+  projections: ReadonlyMap<string, number> | Readonly<Record<string, number>>
+  poolSize: number
+}
+
+/** PURE. The auto-pick's row, or null when there are too few projections to ever grade it. */
+export function buildAutopickRecord(args: AutopickRecordArgs): RecommendationRecordRow | null {
+  const projections: Record<string, number> = {}
+  const entries = args.projections instanceof Map ? [...args.projections.entries()] : Object.entries(args.projections)
+  for (const [k, v] of entries) if (typeof v === 'number' && Number.isFinite(v) && v > 0) projections[k] = v
+  const projectionCount = Object.keys(projections).length
+  if (projectionCount < AUTOPICK_MIN_PROJECTIONS || !args.picked.name.trim()) return null
+  const key = `${args.picked.name}|${args.picked.position}`
+  const picked: Picked = {
+    name: args.picked.name,
+    position: args.picked.position,
+    team: args.picked.team,
+    adp: args.picked.adp,
+    projectedPoints: projections[key] ?? null,
+  }
+  return {
+    dedupeKey: recordDedupeKey({ surface: AUTOPICK_SURFACE, sessionKey: args.sessionKey, rosterKey: args.rosterKey, overallPick: args.overallPick }),
+    surface: AUTOPICK_SURFACE,
+    sport: args.sport.toUpperCase(),
+    leagueId: args.leagueId,
+    sessionKey: args.sessionKey.slice(0, 191),
+    rosterKey: args.rosterKey.slice(0, 191),
+    overallPick: args.overallPick,
+    round: args.round,
+    servedMode: 'active',
+    observeName: args.picked.name,
+    observePosition: args.picked.position,
+    activeName: args.picked.name,
+    activePosition: args.picked.position,
+    agree: true,
+    projectionCount,
+    poolSize: args.poolSize,
+    detail: { observe: picked, active: picked, projections, autopick: { strategy: args.strategy, reason: args.reason.slice(0, 500) } } as RecommendationRecordRow['detail'],
+    engineVersion: AUTOPICK_RECORDER_ENGINE_VERSION,
+  }
+}
+
+/** Same switches and table as the advice recorder; never throws. */
+export async function recordAutopickDecision(args: AutopickRecordArgs, env: NodeJS.ProcessEnv = process.env): Promise<RecordOutcome> {
+  if (String(env['DRAFT_RECOMMENDATION_RECORDER'] ?? '').trim().toLowerCase() === 'off') return 'disabled'
+  if (tableMissing) return 'not_recording_yet'
+  try {
+    const row = buildAutopickRecord(args)
+    if (!row) return 'nothing_to_record'
+    const { count } = await prisma.draftRecommendationRecord.createMany({ data: [row], skipDuplicates: true })
+    return count > 0 ? 'recorded' : 'duplicate'
+  } catch (error) {
+    if (isMissingTable(error)) {
+      tableMissing = true
+      return 'not_recording_yet'
+    }
+    console.warn('[draft-recorder] autopick record failed', error instanceof Error ? error.message : error)
     return 'failed'
   }
 }
