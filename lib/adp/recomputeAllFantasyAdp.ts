@@ -194,6 +194,8 @@ export interface RecomputeAllFantasyAdpReport {
   filteredOutByMode: number
   /** Commissioner-cleared placeholder slots. Was silently folded into `filteredOutByAsset`. */
   filteredOutByEmptyRow: number
+  /** Autopicks (a timed-out manager or a CPU team picked from our own board) — never ADP evidence. */
+  filteredOutByAutopick?: number
   /** Picks contributed by imported (`DraftFact`) drafts, and what could not be used. */
   importedFactsScanned: number
   importedPicksKept: number
@@ -217,6 +219,8 @@ interface DraftPickWithSession {
   round: number
   roundPick: number | null
   pickedAt: Date | null
+  /** When the row was written — the pick time for every writer that leaves `pickedAt` null. */
+  createdAt?: Date | null
   source: string | null
   assetType: string | null
   pickMetadata: unknown | null
@@ -269,9 +273,13 @@ function deriveContext(row: DraftPickWithSession) {
       leagueVariant: league?.leagueVariant ?? null,
       /* The SESSION is authoritative for both of these - it is the draft these picks came from. */
       leagueSize: null,
-      settings: null,
+      /*
+       * Settings are read for the QB format (superflex vs 1QB boards). They cannot change `draftType` here:
+       * the session's draftType is a required column, and `buildDraftContext` prefers it.
+       */
+      settings: league?.settings ?? null,
     },
-    session: { draftType: row.session.draftType, teamCount: row.session.teamCount },
+    session: { draftType: row.session.draftType, teamCount: row.session.teamCount, playerPool: row.session.playerPool ?? null },
   })
 }
 
@@ -306,6 +314,7 @@ export async function recomputeAllFantasyAdp(
     filteredOutByAsset: 0,
     filteredOutByMode: 0,
     filteredOutByEmptyRow: 0,
+    filteredOutByAutopick: 0,
     importedFactsScanned: 0,
     importedPicksKept: 0,
     importedDraftsCovered: 0,
@@ -359,6 +368,7 @@ export async function recomputeAllFantasyAdp(
         round: true,
         roundPick: true,
         pickedAt: true,
+        createdAt: true,
         source: true,
         assetType: true,
         pickMetadata: true,
@@ -424,13 +434,27 @@ export async function recomputeAllFantasyAdp(
         }
         continue
       }
+      /*
+       * 🛑 AN AUTOPICK IS OUR OWN RANKING TALKING BACK. A manager who timed out (or a CPU team) is picked for from the
+       * queue and the default board, so counting it would pull AF ADP toward the board AF ADP feeds — a loop that
+       * hides exactly the slide this measures. The AI ADP engine already leaves these out.
+       */
+      if ((row.source ?? '').trim().toLowerCase() === 'auto') {
+        report.filteredOutByAutopick = (report.filteredOutByAutopick ?? 0) + 1
+        continue
+      }
       valid.push({
         playerName: row.playerName,
         position: row.position ?? '',
         overall: row.overall,
         round: row.round,
         roundPick: row.roundPick ?? null,
-        pickedAt: row.pickedAt,
+        /*
+         * WHEN THE PICK WAS MADE, for recency. `pickedAt` is written by one caller only, so the row's insert time
+         * stands in: a pick row is created when the pick is made. (A Sleeper-mirror row is inserted at first sync,
+         * within minutes of a live pick.)
+         */
+        pickedAt: row.pickedAt ?? row.createdAt ?? null,
         context: deriveContext(row),
         draftMode: mode,
       })
@@ -468,7 +492,7 @@ export async function recomputeAllFantasyAdp(
       }
     }
 
-    const snapshots = aggregateAdp(valid)
+    const snapshots = aggregateAdp(valid, { now })
     report.uniquePlayers = new Set(snapshots.map((s) => s.playerKey)).size
     report.uniqueContexts = new Set(snapshots.map((s) => s.contextHash)).size
     for (const s of snapshots) report.byDraftMode[s.draftMode]++
