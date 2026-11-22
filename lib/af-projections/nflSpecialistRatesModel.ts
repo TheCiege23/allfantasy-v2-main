@@ -64,3 +64,22 @@ export function summarizeSpecialistGames(games: ReadonlyArray<Record<string, unk
   }
   return { kind, games: rows.length, perGame }
 }
+
+/**
+ * A team defense's component line for one NFL week, from its season rate: each count and each
+ * points-allowed bracket frequency scaled by the games the club plays that week.
+ *
+ * Null for a week the club does not play (a bye, or no game on file): no line, so the lineup
+ * surfaces say "no projection — a bye" rather than pricing a defense at zero.
+ *
+ * ⚠ RAW `pts_allow` STAYS ON THE LINE, PER GAME, UNSCALED. It is not a Sleeper scoring stat (the
+ * bracket frequencies carry it), but it is what marks the line as a defense for
+ * `computeLeagueProjectedPoints` — an ESPN league whose D/ST rule could not be translated is refused
+ * rather than under-priced — and what an ESPN `pts_allow_range_*` rule buckets.
+ */
+export function teamDefenseWeekLine(rate: SpecialistRate | undefined, weekGames: number | null | undefined): Record<string, number> | null {
+  if (rate?.kind !== 'DEF' || weekGames == null || !(weekGames > 0)) return null
+  const line: Record<string, number> = {}
+  for (const [stat, perGame] of Object.entries(rate.perGame)) line[stat] = stat === 'pts_allow' ? perGame : perGame * weekGames
+  return line
+}

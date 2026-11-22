@@ -21,8 +21,8 @@ export type NativeScreen = 'matchup' | 'lineup' | 'waivers' | 'trades' | 'standi
  *
  * A league hosted here gets all five. Since 2026-11-22 an IMPORTED league shown in the workspace (not embedded in
  * the dashboard iframe) gets Matchup, Team, Trades and Standings too, so every league looks the same. An import keeps
- * the classic Waivers, and the classic Team tab when it has a college roster (`collegeRoster`: C2C / devy, whose
- * two-lineup roster lives there). Everywhere, IDP / best ball / college-variant leagues keep the classic Team tab and
+ * the classic Team tab when it has a college roster (`collegeRoster`: C2C / devy, whose two-lineup roster lives
+ * there). It gets Waivers too (owner, the same day); that screen says a claim on an import stays in AllFantasy. Everywhere, IDP / best ball / college-variant leagues keep the classic Team tab and
  * Big Brother keeps its own standings.
  */
 export function nativeScreenFor(tab: string, league: {
@@ -44,7 +44,7 @@ export function nativeScreenFor(tab: string, league: {
     case 'squad':
       return usesNativeLineupScreen(league) && (league.hosted || !league.collegeRoster) ? 'lineup' : null
     case 'waivers':
-      return league.hosted ? 'waivers' : null
+      return 'waivers'
     case 'trades':
       return 'trades'
     case 'standings':

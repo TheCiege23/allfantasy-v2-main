@@ -4,7 +4,7 @@
  * and a team defense had no AF number at all.
  */
 import { describe, expect, it } from 'vitest'
-import { summarizeSpecialistGames } from '@/lib/af-projections/nflSpecialistRatesModel'
+import { summarizeSpecialistGames, teamDefenseWeekLine } from '@/lib/af-projections/nflSpecialistRatesModel'
 import { computeLeagueProjectedPoints, extractScoringSettings, scoreTeamDefenseRate } from '@/lib/projections/leagueScoring'
 
 const panel = {
@@ -79,5 +79,39 @@ describe('pricing a team defense in an imported league (stored rulebook)', () =>
     const rate = summarizeSpecialistGames(defenseGames)!
     expect(scoreTeamDefenseRate(rate.perGame, { scoring_settings: { rec: 1, pass_td: 4 } })).toBeNull()
     expect(scoreTeamDefenseRate(rate.perGame, null)).toBeNull()
+  })
+})
+
+/*
+ * Owner report 2026-11-22: Chimmy's week 11 lineup check told two managers their 49ers and Lions
+ * defenses had "no week 11 projection — a bye, ruled out, or released". The weekly pool the lineup
+ * is priced from had no team defense in it at all.
+ */
+describe("a team defense's line for the lineup week", () => {
+  const sleeperRules = { sack: 1, int: 2, fum_rec: 2, safe: 2, blk_kick: 2, def_st_td: 6,
+    pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1, pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
+    rec: 1, pass_td: 4, fgm_30_39: 3, xpm: 1 }
+
+  it('is priced under a Sleeper rulebook in a week the club plays', () => {
+    const line = teamDefenseWeekLine(summarizeSpecialistGames(defenseGames)!, 1)!
+    const scored = computeLeagueProjectedPoints(line, sleeperRules)
+    // sack 3*1 + int 0.5*2 + fum_rec 0.5*2 + safe 0.5*2 + blk 0.5*2 + PA 1-6 0.5*7 + PA 21-27 0.5*0
+    expect(scored?.points).toBeCloseTo(10.5, 5)
+  })
+
+  it('has no line on a bye or with no game on file, so it still reads as a bye', () => {
+    const rate = summarizeSpecialistGames(defenseGames)!
+    expect(teamDefenseWeekLine(rate, 0)).toBeNull()
+    expect(teamDefenseWeekLine(rate, null)).toBeNull()
+  })
+
+  it("is never built from a kicker's rate", () => {
+    expect(teamDefenseWeekLine(summarizeSpecialistGames(kickerGames)!, 1)).toBeNull()
+  })
+
+  it('keeps raw points allowed per game, so a range rule buckets the average', () => {
+    const line = teamDefenseWeekLine(summarizeSpecialistGames(defenseGames)!, 2)!
+    expect(line.pts_allow).toBeCloseTo(13.5, 5)
+    expect(line.sack).toBeCloseTo(6, 5)
   })
 })

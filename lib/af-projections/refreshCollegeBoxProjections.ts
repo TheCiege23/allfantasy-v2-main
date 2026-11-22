@@ -10,7 +10,7 @@ export async function refreshCollegeBoxProjections(sport: CollegeSport, season: 
   const now = new Date()
   const ingested = await ingestCollegeFinalBoxes(sport, season, players, now)
   const result = { boxesWritten: ingested.written, requested: [] as string[], written: 0,
-    warnings: ingested.warnings, linkedPlayers: ingested.players.filter(p => p.owner.fantraxId).length }
+    warnings: ingested.warnings, noGameDates: ingested.noGameDates, linkedPlayers: ingested.players.filter(p => p.owner.fantraxId).length }
   // Basketball's canonical points board already builds its rates from the saved game rows.
   if (!ingested.players.length) return result
   if (sport === 'NCAAB') {

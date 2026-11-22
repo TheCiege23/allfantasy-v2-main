@@ -2,6 +2,7 @@ import 'server-only'
 
 import { latestProjectionWeek, lookupProjections, type PlayerProjection } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
+import { loadAfNflDefenseLines } from '@/lib/af-projections/nflLeagueWeek'
 import type { ImpactPlayer } from './rosterImpact'
 import { scoringRulesFrom } from './scoringContextFromWorld'
 
@@ -45,10 +46,23 @@ export interface LeagueWeekPricingDeps {
   }) => Promise<ReadonlyMap<string, WeekLine>>
 }
 
+const TEAM_DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
+
 export const defaultLeagueWeekPricingDeps: LeagueWeekPricingDeps = {
   latestWeek: latestProjectionWeek,
-  loadWeekLines: ({ week, playerIds, rules, positions }) =>
-    lookupProjections(playerIds, week, { scoringSettings: rules, positionBySleeperId: positions }, 'NFL'),
+  loadWeekLines: async ({ week, playerIds, rules, positions }) => {
+    const lines = new Map<string, WeekLine>(
+      await lookupProjections(playerIds, week, { scoringSettings: rules, positionBySleeperId: positions }, 'NFL'),
+    )
+    // Team defenses are not in the weekly pool (see `loadAfNflDefenseLines`). A failed read leaves
+    // them unpriced, as before, and never fails the rest of the roster.
+    const defenseIds = playerIds.filter((id) => !lines.has(id) && TEAM_DEFENSE_POSITIONS.has(String(positions.get(id) ?? '').toUpperCase()))
+    if (defenseIds.length > 0) {
+      const defenses = await loadAfNflDefenseLines(week, defenseIds).catch(() => new Map<string, WeekLine>())
+      for (const [id, line] of defenses) lines.set(id, line)
+    }
+    return lines
+  },
 }
 
 export type LeagueWeekBasis = { rules: Record<string, unknown>; week: LeagueWeek }
