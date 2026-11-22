@@ -39,6 +39,20 @@ const base = (settings: Record<string, unknown>) => ({
 })
 
 describe('NativeWaiversScreen', () => {
+  it('an imported league is told up front that a claim here stays in AllFantasy; a native league is not', async () => {
+    // The settings route's Write Authority (lib/league/write-authority.ts) marks an imported league `shadow`.
+    stubFetch(base({ waiverType: 'faab', faabBudget: 100, writeAuthority: { shadow: true, sourceLabel: 'Fantrax' } }))
+    const { unmount } = render(<NativeWaiversScreen league={{ ...league, platform: 'fantrax' } as UserLeague} />)
+    await screen.findByText('Tank Bigsby')
+    expect(screen.getByTestId('shadow-league-waiver-notice').textContent).toContain('nothing is submitted to Fantrax')
+    unmount()
+
+    stubFetch(base({ waiverType: 'faab', faabBudget: 100, writeAuthority: { shadow: false } }))
+    render(<NativeWaiversScreen league={league} />)
+    await screen.findByText('Tank Bigsby')
+    expect(screen.queryByTestId('shadow-league-waiver-notice')).toBeNull()
+  })
+
   it('a FAAB league claims through the claim drawer, never an instant add', async () => {
     const calls = stubFetch(base({ waiverType: 'faab', faabBudget: 100 }))
     render(<NativeWaiversScreen league={league} />)
