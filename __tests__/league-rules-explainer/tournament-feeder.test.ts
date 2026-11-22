@@ -38,6 +38,14 @@ describe('tournament feeder settings', () => {
     expect(expected.every((change) => explainRuleChange(change, { sport: 'NFL' }))).toBe(true)
   })
 
+  // 🛑 The route merged ANY key into League.settings — the season's settings lock included (2026-11-15).
+  it('refuses keys the feeder editor does not own, and writes nothing', async () => {
+    const res = await PATCH(new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ leagueId: 'L', changes: { rosterSize: 16, settings_lock: null, nfl_scoring_config: {} } }) }), { params: Promise.resolve({ tournamentId: 'T' }) })
+    expect(res.status).toBe(400)
+    expect((await res.json()).fields).toEqual(['settings_lock', 'nfl_scoring_config'])
+    expect(m.update).not.toHaveBeenCalled()
+  })
+
   it('sends no rule changes when the editor saves the same settings', async () => {
     const res = await PATCH(new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ leagueId: 'L', changes: { rosterSize: 15 } }) }), { params: Promise.resolve({ tournamentId: 'T' }) })
     expect(res.status).toBe(200)

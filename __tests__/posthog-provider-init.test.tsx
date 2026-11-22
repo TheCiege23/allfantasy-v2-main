@@ -36,6 +36,16 @@ describe("PHProvider posthog.init", () => {
     expect(config.capture_exceptions).toBe(true)
   })
 
+  it("labels every event with the platform once PostHog has loaded", () => {
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN", "phc_test")
+    render(<PHProvider>child</PHProvider>)
+
+    const [, config] = initMock.mock.calls[0]
+    const register = vi.fn()
+    config.loaded({ register })
+    expect(register).toHaveBeenCalledWith({ app_platform: "web" })
+  })
+
   it("does not initialise without a token", () => {
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN", "")
     render(<PHProvider>child</PHProvider>)

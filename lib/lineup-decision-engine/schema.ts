@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const LineupDecisionModeSchema = z.enum([
+const LineupDecisionModeSchema = z.enum([
   'Best Lineup',
   'Safe Lineup',
   'Upside Lineup',
@@ -87,4 +87,3 @@ export const PremiumLineupDecisionJsonSchema = z.object({
   alerts: z.array(z.string()),
 })
 
-export type PremiumLineupDecisionJsonZ = z.infer<typeof PremiumLineupDecisionJsonSchema>

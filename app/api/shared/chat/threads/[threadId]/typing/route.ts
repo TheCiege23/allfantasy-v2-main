@@ -12,7 +12,16 @@ import { clearTyping, markTyping, readTyping } from "@/lib/chat-core/durableTypi
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { prisma } from "@/lib/prisma"
 
+/**
+ * The draft room's own typing channel when its chat is NOT linked to league chat (2026-11-19):
+ * `league:<leagueId>:draft`. Same members as the league; a separate key, so someone typing in
+ * league chat is not shown as typing in the draft room.
+ */
+const DRAFT_ROOM_SUFFIX = ':draft'
+
 async function canAccessThread(threadId: string, appUserId: string): Promise<boolean> {
+  const draftBase = threadId.endsWith(DRAFT_ROOM_SUFFIX) ? threadId.slice(0, -DRAFT_ROOM_SUFFIX.length) : null
+  if (draftBase && isLeagueVirtualRoom(draftBase)) return canAccessThread(draftBase, appUserId)
   if (isLeagueVirtualRoom(threadId)) {
     const leagueId = getLeagueIdFromVirtualRoom(threadId)
     if (!leagueId) return false

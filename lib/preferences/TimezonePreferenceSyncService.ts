@@ -3,7 +3,7 @@ import {
   isValidTimezone,
 } from "@/lib/preferences/TimezonePreferenceService"
 
-export interface TimezonePreferenceSyncInput {
+interface TimezonePreferenceSyncInput {
   profileTimezone: string | null
   browserTimezone: string | null
 }

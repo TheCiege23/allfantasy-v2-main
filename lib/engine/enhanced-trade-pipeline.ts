@@ -14,13 +14,7 @@
  * Performance target: <300ms total for the math layer.
  */
 
-import type {
-  TradeEngineRequest,
-  TradeEngineResponse,
-  TradePlayerAsset,
-  Asset,
-  SportKey,
-} from './trade-types'
+import type { TradeEngineRequest, SportKey } from './trade-types'
 import { computeMultiFactorValue, type PlayerValuationInput } from './multi-factor-valuation'
 import { computeRiskScore, applyRiskDiscount, type RiskInput } from './risk-model'
 import { computeUTV, computePickUTV, normalizeToUTV } from './utv'
@@ -31,7 +25,7 @@ import { computeEnhancedFairness, type FairnessInput } from './enhanced-fairness
 // Types
 // ---------------------------------------------------------------------------
 
-export interface EnhancedAssetValuation {
+interface EnhancedAssetValuation {
   name: string
   type: 'player' | 'pick' | 'faab'
   position?: string
@@ -53,7 +47,7 @@ export interface EnhancedAssetValuation {
   confidence: 'high' | 'medium' | 'low'
 }
 
-export interface EnhancedTradeAnalysis {
+interface EnhancedTradeAnalysis {
   /** Assets with enhanced valuations */
   sideA: EnhancedAssetValuation[]
   sideB: EnhancedAssetValuation[]

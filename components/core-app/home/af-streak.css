@@ -158,6 +158,15 @@
 .af-streak-chip[data-tone='warn'] > span {
   color: var(--warn);
 }
+/*
+ * The streak chips are links ("2 lineups to fix"), 40px tall on a phone: 44 here (2026-11-07 tap-target
+ * pass). `a.` outranks the 40px phone rule further down without editing it. Top-level @media, depth 0.
+ */
+@media (max-width: 640px) {
+  .af-core a.af-streak-chip {
+    min-height: 44px;
+  }
+}
 
 /* The visit that extends the streak gets one small celebration; every later load that day is quiet. */
 .af-streak[data-celebrate='true'] .af-streak-flame {

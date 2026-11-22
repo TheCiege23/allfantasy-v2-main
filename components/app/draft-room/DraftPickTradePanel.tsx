@@ -85,7 +85,7 @@ export type DraftPickTradePanelProps = {
     receiveRound?: number
     receiverRosterId?: string
   } | null
-  /** Bump when draft board / traded picks advance so traded UI can invalidate AI caches. */
+  /** Bump when draft board / traded picks advance so traded UI can invalidate Chimmy caches. */
   draftStateFingerprint?: string
   /** League rule for the timer when an on-clock pick changes hands mid-draft. */
   onClockTradeTimerBehavior?: 'inherit_remaining' | 'reset_timer'

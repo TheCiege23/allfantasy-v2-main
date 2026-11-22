@@ -34,4 +34,11 @@ describe("formatProgramSms", () => {
     const body = "AllFantasy alert: waivers ran. Reply STOP to opt out."
     expect(formatProgramSms(body)).toBe(body)
   })
+
+  it("🛑 a link to allfantasy.ai does not count as naming the sender", () => {
+    expect(formatProgramSms("Final call: Puka Nacua is out and still starting. Fix: https://allfantasy.ai/core/players")).toBe(
+      `AllFantasy: Final call: Puka Nacua is out and still starting. Fix: https://allfantasy.ai/core/players\n${SMS_OPT_OUT_LINE}`,
+    )
+    expect(formatProgramSms("AllFantasy: open https://allfantasy.ai/x")).toBe(`AllFantasy: open https://allfantasy.ai/x\n${SMS_OPT_OUT_LINE}`)
+  })
 })

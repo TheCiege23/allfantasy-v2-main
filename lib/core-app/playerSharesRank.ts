@@ -17,7 +17,7 @@ export type RosterForShares = {
   players: readonly string[]
 }
 
-export type ShareCount = {
+type ShareCount = {
   sleeperId: string
   /** Rosters of yours holding him. */
   leagues: number

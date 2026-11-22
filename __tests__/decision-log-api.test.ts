@@ -12,12 +12,26 @@ vi.mock('@/lib/rate-limit', () => ({
   getClientIp: vi.fn(() => '127.0.0.1'),
 }))
 
+// Origin is CSRF protection only. Identity comes from the shared legacy gate: the caller here is
+// signed in as the account linked to Sleeper user `user1` (Sleeper user id 730000000000000001).
 vi.mock('@/lib/api-auth', () => ({
-  requireAuthOrOrigin: vi.fn(() => ({
-    authenticated: true,
-  })),
+  validateRequestOrigin: vi.fn(() => true),
   forbiddenResponse: vi.fn((msg) => new NextResponse(JSON.stringify({ error: msg }), { status: 403 })),
 }))
+
+const gateMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/legacy/requireLegacySleeperIdentity', () => ({
+  requireLegacySleeperIdentity: (...args: unknown[]) => gateMock(...args),
+}))
+const OWN_SLEEPER_ID = '730000000000000001'
+const signedInAsUser1 = () => ({
+  ok: true,
+  identity: { sleeperUsername: 'user1', actorId: 'appuser-1', source: 'session' },
+})
+const anonymous = () => ({
+  ok: false,
+  response: NextResponse.json({ error: 'Sign in to use this.' }, { status: 401 }),
+})
 
 vi.mock('@/lib/decision-log', () => ({
   logDecision: vi.fn(async (input) => ({
@@ -86,6 +100,9 @@ vi.mock('@/lib/decision-log', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    legacyUser: {
+      findUnique: vi.fn(async () => ({ sleeperUserId: OWN_SLEEPER_ID })),
+    },
     decisionLog: {
       findMany: vi.fn(async ({ where, include, orderBy, take }) => [
         {
@@ -115,6 +132,7 @@ vi.mock('@/lib/telemetry/usage', () => ({
 describe('decision-log API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    gateMock.mockResolvedValue(signedInAsUser1())
   })
 
   describe('POST /api/legacy/decision-log', () => {
@@ -447,6 +465,94 @@ describe('decision-log API', () => {
       expect(data.summary).toBeDefined()
       // Rate limit info would be in response if withApiUsage captured it
       expect(response.status).toBe(200)
+    })
+  })
+  describe('authorization — the caller can only touch their OWN decision log', () => {
+    const postBody = (userId: string) =>
+      JSON.stringify({
+        userId,
+        leagueId: 'league123',
+        decisionType: 'trade',
+        aiRecommendation: { summary: 'planted' },
+        confidenceScore: 0.5,
+        riskProfile: 'low',
+      })
+
+    it('GET refuses an anonymous caller (Origin alone is not authentication)', async () => {
+      gateMock.mockResolvedValueOnce(anonymous())
+      const { getDecisionLogsForCoach } = await import('@/lib/decision-log')
+      const response = await legacyGet(
+        new NextRequest('http://localhost:3000/api/legacy/decision-log?userId=user1&view=coach', {
+          method: 'GET',
+          headers: { origin: 'https://allfantasy.ai' },
+        }),
+      )
+      expect(response.status).toBe(401)
+      expect(getDecisionLogsForCoach).not.toHaveBeenCalled()
+    })
+
+    it("GET refuses a signed-in caller naming someone else's userId (403)", async () => {
+      const { getDecisionLogsForCoach } = await import('@/lib/decision-log')
+      const { prisma } = await import('@/lib/prisma')
+      const response = await legacyGet(
+        new NextRequest('http://localhost:3000/api/legacy/decision-log?userId=victim&view=coach', { method: 'GET' }),
+      )
+      expect(response.status).toBe(403)
+      expect(getDecisionLogsForCoach).not.toHaveBeenCalled()
+      expect(prisma.decisionLog.findMany).not.toHaveBeenCalled()
+    })
+
+    it("GET accepts the caller's own Sleeper user id (the key waiver/analyze writes under)", async () => {
+      const { getDecisionSummary } = await import('@/lib/decision-log')
+      const response = await legacyGet(
+        new NextRequest(`http://localhost:3000/api/legacy/decision-log?userId=${OWN_SLEEPER_ID}&view=summary`, {
+          method: 'GET',
+        }),
+      )
+      expect(response.status).toBe(200)
+      expect(getDecisionSummary).toHaveBeenCalledWith(OWN_SLEEPER_ID, undefined)
+    })
+
+    it('POST refuses an anonymous caller and writes nothing', async () => {
+      gateMock.mockResolvedValueOnce(anonymous())
+      const { logDecision } = await import('@/lib/decision-log')
+      const response = await legacyPost(
+        new NextRequest('http://localhost:3000/api/legacy/decision-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', origin: 'https://allfantasy.ai' },
+          body: postBody('user1'),
+        }),
+      )
+      expect(response.status).toBe(401)
+      expect(logDecision).not.toHaveBeenCalled()
+    })
+
+    it("POST refuses writing into someone else's log (403)", async () => {
+      const { logDecision } = await import('@/lib/decision-log')
+      const response = await legacyPost(
+        new NextRequest('http://localhost:3000/api/legacy/decision-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: postBody('victim'),
+        }),
+      )
+      expect(response.status).toBe(403)
+      expect(logDecision).not.toHaveBeenCalled()
+    })
+
+    it('POST keeps the CSRF origin check', async () => {
+      const { validateRequestOrigin } = await import('@/lib/api-auth')
+      vi.mocked(validateRequestOrigin).mockReturnValueOnce(false)
+      const { logDecision } = await import('@/lib/decision-log')
+      const response = await legacyPost(
+        new NextRequest('http://localhost:3000/api/legacy/decision-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: postBody('user1'),
+        }),
+      )
+      expect(response.status).toBe(403)
+      expect(logDecision).not.toHaveBeenCalled()
     })
   })
 })

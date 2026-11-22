@@ -102,7 +102,7 @@ export function providerNeedsCredential(provider: ImportProvider): boolean {
  * Sleeper and Fleaflicker stay out: their reads are public AND their refresh is unowned, so a
  * league whose only importing user was deleted must still refresh.
  */
-export const USER_SCOPED_PROVIDERS = new Set<ImportProvider>([
+const USER_SCOPED_PROVIDERS = new Set<ImportProvider>([
   ...CREDENTIALED_PROVIDERS,
   'fantrax',
 ])
@@ -201,7 +201,7 @@ export type LeagueSyncScope = (typeof LEAGUE_SYNC_SCOPES)[number]
  * Sleeper-specific — every scope maps to a canonical table any provider can fill — so this is
  * purely a rename, kept aliased for the existing call sites.
  *
- * ⚠ `traded_picks` IS EMITTED BY SLEEPER ALONE TODAY, and that is a provider coverage gap
+ * ⚠ `traded_picks` IS EMITTED BY SLEEPER, MFL AND FANTRAX ONLY, and that is a provider coverage gap
  * rather than a scope-set problem: the scope applies an empty list for the others, which is
  * correct and idempotent. It starts doing real work the moment another adapter emits them.
  */
@@ -226,12 +226,3 @@ export function emptyApplyResult(): ApplyScopeResult {
   return { imported: 0, unchanged: 0, rejected: 0, removed: 0, notes: [] }
 }
 
-export function mergeApplyResults(a: ApplyScopeResult, b: ApplyScopeResult): ApplyScopeResult {
-  return {
-    imported: a.imported + b.imported,
-    unchanged: a.unchanged + b.unchanged,
-    rejected: a.rejected + b.rejected,
-    removed: a.removed + b.removed,
-    notes: [...a.notes, ...b.notes],
-  }
-}

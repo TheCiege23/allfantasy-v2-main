@@ -2,7 +2,7 @@
 
 import { ResponsiveNavSystem } from "./ResponsiveNavSystem"
 
-export interface GlobalShellClientProps {
+interface GlobalShellClientProps {
   isAuthenticated: boolean
   isAdmin: boolean
   userLabel: string | null

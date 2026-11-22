@@ -70,9 +70,20 @@ async function recordAdpHeartbeat(
       rowsRead: result.providerRowsRead,
       rowsWritten: result.imported,
       rowsSkipped: Math.max(0, result.providerRowsRead - result.providerRowsWritten),
+      /*
+       * An OLD FFC sample is a warning, not a failure. FFC's ADP comes from users' mock drafts, which
+       * dry up once NFL drafting ends: from 2026-11-02 the standard, 2QB and dynasty samples aged past
+       * the 7-day freshness window every day while every feed answered (~5,500 rows read, all Fantrax
+       * boards ok), so the heartbeat read FAILED and the freshness monitor reported DEGRADED all
+       * season. A warning records it as `partial`, which still names the stale formats.
+       * A format that returned NO rows is still an error: that is the feed failing, not ageing.
+       */
+      warnings: Object.entries(result.ffcByFormat ?? {}).flatMap(([format, sample]) =>
+        sample.rows > 0 && !sample.fresh ? ['FFC ' + format + ' draft sample is stale or undated'] : [],
+      ),
       errors: [
         ...(result.providerRowsRead > 0 ? [] : ["ADP import read 0 provider rows"]),
-        ...Object.entries(result.ffcByFormat ?? {}).flatMap(([format, sample]) => sample.fresh ? [] : ['FFC ' + format + ' draft sample is stale or undated']),
+        ...Object.entries(result.ffcByFormat ?? {}).flatMap(([format, sample]) => sample.rows > 0 ? [] : ['FFC ' + format + ' draft sample returned no rows']),
         // A failed Fantrax feed must be visible here: the rest of the run still writes NFL rows, so the
         // row counts alone would read healthy while those boards quietly went back to name order.
         // Same for MLB and NHL, which read the same Fantrax board.
@@ -85,6 +96,7 @@ async function recordAdpHeartbeat(
         season: result.season,
         fantraxNba: result.fantraxNba,
         fantraxBySport: result.fantraxBySport,
+        ffcByFormat: result.ffcByFormat,
       },
     },
     durationMs,

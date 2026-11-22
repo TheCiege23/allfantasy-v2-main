@@ -19,7 +19,7 @@
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW' | 'INSUFFICIENT'
 
-export type ExclusionReason =
+type ExclusionReason =
   | 'NO_DATA_SOURCE'
   | 'INSUFFICIENT_SAMPLE'
   | 'STALE_DATA'
@@ -41,7 +41,7 @@ export const TIER_WEIGHT: Record<ConfidenceTier, number> = {
   INSUFFICIENT: 0,
 }
 
-export type FactorContribution = {
+type FactorContribution = {
   /** Stable identifier, e.g. 'opponent_history', 'weather', 'coaching'. */
   factor: string
   /** False means it contributed NOTHING — weightApplied is 0 and points is 0. */

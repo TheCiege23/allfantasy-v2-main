@@ -11,6 +11,7 @@ import {
   sendTestNotification,
   describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
+  IMPORTED_NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_CATEGORY_LABEL_KEYS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
@@ -726,7 +727,7 @@ export function NotificationsSettingsSection({
           </p>
         ) : null}
         <ul className="space-y-2">
-          {VISIBLE_CATEGORY_IDS.map((categoryId) => (
+          {VISIBLE_CATEGORY_IDS.filter((id) => !id.startsWith("imported_")).map((categoryId) => (
             <li key={categoryId}>
               <NotificationCategoryRenderer
                 categoryId={categoryId}
@@ -760,6 +761,28 @@ export function NotificationsSettingsSection({
           ))}
         </ul>
       </div>
+
+      <section aria-labelledby="imported-league-alerts-title" className="space-y-2" data-testid="imported-league-alerts">
+        <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.importedTitle")}</h3>
+        <p className="text-xs text-[var(--muted)]">
+          {t("settings.notifications.importedHint")}
+        </p>
+        <ul className="space-y-2">
+          {IMPORTED_NOTIFICATION_CATEGORY_IDS.map((categoryId) => (
+            <li key={categoryId}>
+              <NotificationCategoryRenderer
+                categoryId={categoryId}
+                prefs={prefs.categories?.[categoryId] ?? { enabled: false, inApp: true, push: true, email: false, sms: false }}
+                deliveryAvailability={deliveryAvailability}
+                expanded={expandedCategory === categoryId}
+                onToggleExpand={() => setExpandedCategory((c) => c === categoryId ? null : categoryId)}
+                onToggleEnabled={(enabled) => updateCategory(categoryId, { enabled })}
+                onToggleChannel={(channel, value) => updateCategory(categoryId, { [channel]: value })}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {remoteUpdatePending && (
         <div className="rounded-xl border border-[var(--accent-cyan)] bg-[color-mix(in_srgb,var(--accent-cyan)_12%,transparent)] px-3 py-2 text-sm text-[var(--text)]">

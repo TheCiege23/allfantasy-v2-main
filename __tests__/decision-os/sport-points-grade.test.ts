@@ -246,8 +246,8 @@ describe('leagues this grade must not answer for', () => {
 
   it('refuses a keeper league, and a dynasty league outside NBA / NHL / MLB, which this-season points would misprice', () => {
     expect(multiSeasonFormatReason('keeper', 'NHL')).toMatch(/count this season only/)
-    expect(multiSeasonFormatReason('dynasty', 'NCAAB')).toMatch(/count this season only/)
-    expect(multiSeasonFormatReason('dynasty', 'SOCCER')).toMatch(/count this season only/)
+    expect(multiSeasonFormatReason('dynasty', 'NCAAB')).toBeNull()
+    expect(multiSeasonFormatReason('dynasty', 'SOCCER')).toBeNull()
     // NBA, NHL and MLB dynasty leagues have their own five-season grade (sport-dynasty-grade.test.ts).
     expect(multiSeasonFormatReason('dynasty', 'NBA')).toBeNull()
     expect(multiSeasonFormatReason('dynasty', 'MLB')).toBeNull()

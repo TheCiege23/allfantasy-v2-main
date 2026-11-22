@@ -10,7 +10,7 @@ import {
  * to draw locks, and the tile endpoint (`GET .../survivor/premium?tile=`) reads it to refuse: a
  * lock is enforced on the server with the plan the server resolves, never the one a page shows.
  */
-export type SurvivorPremiumCommandTileId =
+type SurvivorPremiumCommandTileId =
   | 'threat_map'
   | 'social_pulse'
   | 'challenge_outlook'
@@ -119,14 +119,14 @@ export const SURVIVOR_PREMIUM_COMMAND_TILES: readonly SurvivorPremiumTileGate[] 
   },
 ]
 
-export function canAccessSurvivorPremiumTile(plan: AfPlanId | null, tile: SurvivorPremiumTileGate): boolean {
+function canAccessSurvivorPremiumTile(plan: AfPlanId | null, tile: SurvivorPremiumTileGate): boolean {
   if (!plan) return false
   if (tile.requiredPlan === 'af_pro') return hasAfProTier(plan)
   if (tile.requiredPlan === 'af_commissioner') return hasAfCommissionerTier(plan)
   return hasAfSupremeTier(plan)
 }
 
-export function getSurvivorPremiumTile(tileId: string): SurvivorPremiumTileGate | null {
+function getSurvivorPremiumTile(tileId: string): SurvivorPremiumTileGate | null {
   return SURVIVOR_PREMIUM_COMMAND_TILES.find(tile => tile.tileId === tileId) ?? null
 }
 

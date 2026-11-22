@@ -5,7 +5,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 import AIFailureStateRenderer from '@/components/ai-reliability/AIFailureStateRenderer'
 import type { ReliabilityMetadata } from '@/lib/ai-reliability/types'
 
-export interface AIErrorFallbackProps {
+interface AIErrorFallbackProps {
   /** User-facing message */
   message: string
   /** Retry handler; when provided, shows Retry button */

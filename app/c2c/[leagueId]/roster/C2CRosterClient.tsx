@@ -12,7 +12,7 @@ import { NBA_CBB_DEFAULTS, NFL_CFB_DEFAULTS } from '@/lib/c2c/sportDefaults'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 import type { RosterBalanceReport } from '@/lib/c2c/ai/c2cChimmy'
 
-type RosterBuckets = {
+export type RosterBuckets = {
   campusStarters: C2CPlayerRow[]
   cantonStarters: C2CPlayerRow[]
   bench: C2CPlayerRow[]
@@ -35,7 +35,7 @@ export function C2CRosterClient({
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [cfg, setCfg] = useState<C2CConfigClient | null>(null)
-  const [rosterId, setRosterId] = useState<string | null>(null)
+  const [, setRosterId] = useState<string | null>(null)
   const [buckets, setBuckets] = useState<RosterBuckets | null>(null)
   const [seasonId, setSeasonId] = useState<string | null>(null)
   const [week, setWeek] = useState(1)

@@ -37,7 +37,7 @@ export function emptyStarterSlots(playerData: unknown, slotCount: number): numbe
   return out
 }
 
-export type FillEmptyStartersPlan =
+type FillEmptyStartersPlan =
   | {
       kind: 'set'
       nextPlayerData: Record<string, unknown>

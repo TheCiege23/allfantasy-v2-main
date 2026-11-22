@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const actorUserId = session?.user?.id
   if (!actorUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId, claimId } = await ctx.params
-  const gate = await assertLeagueCommissioner(leagueId, actorUserId)
+  const gate = await assertLeagueCommissioner(leagueId, actorUserId, 'rosters')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
   if (!isPirateLeague(gate.league)) return NextResponse.json({ error: 'Not a Pirate League' }, { status: 400 })
   const body = await req.json().catch(() => ({})) as Record<string, unknown>

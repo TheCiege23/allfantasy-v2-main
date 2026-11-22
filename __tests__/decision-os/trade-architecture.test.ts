@@ -27,7 +27,6 @@ const ALL_TRADE = [
   'lib/decision-os/trade/shadow.ts',
   'lib/decision-os/trade/index.ts',
   'lib/decision-os/trade/tradeCardAdapter.ts',
-  'lib/decision-os/trade/outcome.ts',
 ].map((p) => [p, read(p)] as const)
 
 // Execution / mutation / AI surfaces the Decision OS trade slice must NEVER import or consume.

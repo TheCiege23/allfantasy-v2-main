@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import Link from 'next/link'
 import { usePathname, useParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -152,7 +154,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
       <SpecialtyLeagueAtmosphere variant="tournament" mood={atmosphereMood} />
       <div className="relative z-[1] flex min-h-dvh w-full">
         <aside
-          className={`relative hidden shrink-0 flex-col border-r border-[var(--tournament-border)] bg-[var(--tournament-panel)]/82 backdrop-blur-xl md:flex ${
+          className={`relative hidden shrink-0 flex-col border-r border-[var(--tournament-border)] bg-tournament-panel/[0.82] backdrop-blur-xl md:flex ${
             collapsed ? 'w-16' : 'w-[220px]'
           } transition-[width] duration-200`}
         >
@@ -259,6 +261,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
                 </span>
               </p>
             </div>
+            <LeagueFormatFaqLink league={{ leagueType: 'tournament' }} className="text-white" />
             {conference ? (
               <span
                 className="hidden max-w-[140px] truncate rounded-full border border-white/10 px-3 py-1 text-[11px] font-semibold text-white/90 sm:inline-block"

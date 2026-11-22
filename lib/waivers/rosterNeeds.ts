@@ -14,7 +14,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
  *   schedule on file. ⚠ A WEEK WITH NO GAMES ON FILE IS SKIPPED, NOT REPORTED AS EVERYONE ON BYE.
  */
 
-export type RosterNeedPlayer = {
+type RosterNeedPlayer = {
   id: string
   name: string
   position: string | null

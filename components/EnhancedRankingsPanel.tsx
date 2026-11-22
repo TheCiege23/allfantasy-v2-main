@@ -98,13 +98,6 @@ const POS_BAR_COLORS: Record<string, string> = {
   TE: 'bg-amber-400',
 }
 
-const POS_BG: Record<string, string> = {
-  QB: 'bg-rose-500/15 border-rose-500/20',
-  RB: 'bg-cyan-500/15 border-cyan-500/20',
-  WR: 'bg-emerald-500/15 border-emerald-500/20',
-  TE: 'bg-amber-500/15 border-amber-500/20',
-}
-
 const VIEW_CONFIG: { key: EnhancedView; label: string; desc: string; emoji: string }[] = [
   { key: 'this_year', label: 'This Year', desc: 'Impact-heavy contender ranking', emoji: '&#x1F3C6;' },
   { key: 'dynasty_horizon', label: 'Dynasty 3-5yr', desc: 'Value + demand for the future', emoji: '&#x1F4C8;' },
@@ -236,7 +229,7 @@ function PlanCard({ plan, goal }: { plan: PlanItem[]; goal: string }) {
         <span className="text-lg">&#x1F5FA;</span>
         <div>
           <h4 className="text-sm font-bold text-white">Your 3-5 Year Roadmap</h4>
-          <p className="text-[11px] text-white/40">AI-generated plan constrained by your roster data ({goal})</p>
+          <p className="text-[11px] text-white/40">Chimmy-generated plan constrained by your roster data ({goal})</p>
         </div>
       </div>
       <div className="space-y-3">
@@ -433,8 +426,6 @@ export default function EnhancedRankingsPanel({ username, leagueId, leagueName }
     }
     return sorted
   }, [players, posFilter, sortField, rosterOnly])
-
-  const userRosterPlayers = useMemo(() => players.filter(p => p.isOnUserRoster), [players])
 
   return (
     <div className="space-y-4">

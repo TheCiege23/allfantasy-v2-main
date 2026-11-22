@@ -13,7 +13,7 @@ import { ageText } from './shellCopy'
  * renders it in English as written — a whole English stamp, never half of one. PURE, client-safe.
  */
 
-export type StampText = {
+type StampText = {
   /** What the time describes. */
   source: string
   /** The word before the age: "updated" / "actualizado(s)" / "revisado". */

@@ -13,7 +13,7 @@ import { monitorLeagueHealth } from '@/lib/league-health/league-health-engine'
 const PROVIDER_TERMS = /\b(sleeper|espn|yahoo|fantrax|mfl|draftkings|fanduel|underdog)\b/i
 
 /** Documented thresholds (transparent, testable — not learned). */
-export const ANOMALY_THRESHOLDS = {
+const ANOMALY_THRESHOLDS = {
   /** Urgent alerts at/above this for one league reads as over-eager escalation worth review. */
   excessiveUrgentAlerts: 5,
   /** Active-manager ratio below this while status is excellent/healthy is implausible. */

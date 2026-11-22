@@ -10,6 +10,7 @@ import {
   listFeatureMonetizationMatrix,
 } from '@/lib/monetization/feature-monetization-matrix'
 import {
+  monthlyUpgradeHref,
   normalizePlanFamilyInput,
   pricingIntentRedirect,
   purchaseReturnPath,
@@ -190,6 +191,18 @@ describe('🛑 every lock lands on checkout for a plan that unlocks it', () => {
   })
 })
 
+describe('focused monthly upgrade links', () => {
+  it('focuses the appropriate plan and preserves the return destination', () => {
+    expect(monthlyUpgradeHref('/commissioner-upgrade?back=%2Fcreate-league')).toBe(
+      '/upgrade?plan=commissioner&back=%2Fcreate-league&offer=monthly',
+    )
+  })
+
+  it('falls back to pricing when a lock has no destination', () => {
+    expect(monthlyUpgradeHref(undefined)).toBe('/pricing')
+  })
+})
+
 describe('🛑 every literal /pricing link that names a plan resolves to one', () => {
   const root = resolve(__dirname, '..')
   function sourceFiles(dir: string, out: string[] = []): string[] {
@@ -209,8 +222,7 @@ describe('🛑 every literal /pricing link that names a plan resolves to one', (
         for (const m of readFileSync(file, 'utf8').matchAll(/["'`](\/pricing\?[^"'`$\s]*)["'`]/g)) links.push(m[1]!)
       }
     }
-    // Positive control: the census must find the World Cup and create-league links this rule exists for.
-    expect(links).toContain('/pricing?plan=commissioner')
+    // Positive control: the census must still find the World Cup pricing link.
     expect(links).toContain('/pricing?highlight=af-pro&intent=world-cup')
 
     const named = links.filter((l) => /[?&](plan|highlight)=/.test(l))

@@ -17,7 +17,7 @@ import type { PoolIdolCandidate } from './survivorIdolPoolPlacement'
 import { postSurvivorIntroAnnouncement } from './survivorAnnouncementService'
 import type { TribeAssignmentMode } from './survivorTribeAssignmentEngine'
 
-export interface SurvivorPhase2InitOptions {
+interface SurvivorPhase2InitOptions {
   actorUserId?: string
   /** Override assignment mode (defaults to league setting). */
   mode?: TribeAssignmentMode
@@ -32,7 +32,7 @@ export interface SurvivorPhase2InitOptions {
   completedDraftSessionId?: string
 }
 
-export interface SurvivorPhase2InitResult {
+interface SurvivorPhase2InitResult {
   ok: boolean
   /** True only if every step succeeded (or was already done). */
   complete: boolean

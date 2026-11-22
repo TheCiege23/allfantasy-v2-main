@@ -106,3 +106,15 @@ describe('settings lock (pure)', () => {
     expect(lockedMessage(['scoring', 'trades', 'waivers'])).toMatch(/^Scoring, trades and waivers settings/)
   })
 })
+
+describe('rules no lock used to reach (2026-11-15)', () => {
+  it('pick terms, the third-place game, tiebreakers, games limits and sport config are now locked with their area', () => {
+    expect(groupForSettingsKey('pick_terms_rule')).toBe('trades')
+    expect(groupForSettingsKey('thirdPlaceGameEnabled')).toBe('playoffs')
+    expect(groupForSettingsKey('tiebreaker_order')).toBe('playoffs')
+    expect(groupForSettingsKey('gamesLimits')).toBe('scoring')
+    expect(groupForSettingsKey('sportConfig')).toBe('scoring')
+    // The waiver tiebreak stays a waiver rule.
+    expect(groupForSettingsKey('waiverTiebreakRule')).toBe('waivers')
+  })
+})

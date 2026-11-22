@@ -366,4 +366,3 @@ export function SleeperCheck({ initialUsername }: { initialUsername: string }) {
   )
 }
 
-export default SleeperCheck

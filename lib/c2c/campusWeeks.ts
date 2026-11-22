@@ -11,7 +11,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 
-export type ScheduledGame = { week: number | null; startTime: Date | string | null }
+type ScheduledGame = { week: number | null; startTime: Date | string | null }
 
 const DAY = 86_400_000
 /** Tuesday 08:00 UTC: after Monday night football ends in every US zone. */
@@ -84,4 +84,20 @@ export async function loadCfbWeeksForNflWeek(
     db.sportsGame.findMany({ where: { sport: 'NCAAF', source: 'cfbd', season: args.season, seasonType: 'regular' }, select: { week: true, startTime: true } }),
   ])
   return cfbWeeksByNflWeek(nfl, cfb).get(args.nflWeek) ?? []
+}
+
+/**
+ * This NFL week's window `[start, end)` from the stored NFL schedule, or null when it has no games
+ * on file. Rows that carry a game DATE rather than a week number (Rolling Insights college lines,
+ * whose week numbering need not match CFBD's) are selected by this window.
+ */
+export async function loadNflWeekWindow(
+  db: Pick<PrismaClient, 'sportsGame'>,
+  args: { season: number; nflWeek: number },
+): Promise<{ start: number; end: number } | null> {
+  const nfl = await db.sportsGame.findMany({
+    where: { sport: { in: ['NFL', 'nfl'] }, season: args.season, week: args.nflWeek, OR: [{ seasonType: 'regular' }, { seasonType: null }] },
+    select: { week: true, startTime: true },
+  })
+  return nflWeekWindows(nfl).get(args.nflWeek) ?? null
 }

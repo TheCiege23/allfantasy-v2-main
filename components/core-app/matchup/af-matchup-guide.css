@@ -1,0 +1,40 @@
+/*
+ * The Matchup guide (Matchup.tsx headline, folded win-chance detail, betting lines). Builds on the
+ * home guide's `af-hg-*` headline so every /core page reads as one product. Token layer only. No text
+ * below 11px (__tests__/core-app/type-floor.test.ts).
+ */
+.af-core .af-mug-head { margin-bottom: 14px; }
+.af-core .af-mug-head .af-mu-head { margin: 0; }
+.af-core .af-mug-chip { cursor: default; }
+.af-core .af-mug-chip:hover { border-color: var(--line2); }
+
+/* "How sure is this?" — the win model's sentence, one tap away under the percentage. */
+.af-core .af-mug-sure > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* "Why it matters" under the slot board. */
+.af-core .af-mug-teach {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-core .af-mug-teach b { color: var(--accent); }
+
+/* Betting lines, folded: the summary is the section head. */
+.af-core .af-mu-market-summary { cursor: pointer; list-style: none; min-height: 44px; display: flex; align-items: center; }
+.af-core .af-mu-market-summary::-webkit-details-marker { display: none; }
+.af-core .af-mu-market-summary::after { content: '▾' / ''; margin-left: auto; color: var(--accent); }
+.af-core details[open] > .af-mu-market-summary::after { content: '▴' / ''; }
+
+@media (max-width: 560px) {
+  .af-core .af-mug-sure > summary { min-height: 44px; }
+}

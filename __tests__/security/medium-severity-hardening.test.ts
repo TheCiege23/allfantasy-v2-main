@@ -53,6 +53,12 @@ vi.mock("@/lib/prisma", () => ({
     league: { findUnique: m.leagueFindUnique, update: m.leagueUpdate },
   },
 }))
+// Routes that called assertCommissioner ask commissionerAccessResponse; routes that called isCommissioner ask
+// canCommissionerAct (lib/league/commissionerAccess.ts, 2026-11-16) — each still answered by the mock it used to call.
+vi.mock('@/lib/league/commissionerAccess', async () => {
+  const base = (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => m.assertCommissioner)
+  return { ...base, canCommissionerAct: async (l: string, u: string) => Boolean(await m.isCommissioner(l, u)) }
+})
 
 const ME = "user-me"
 const RIVAL = "user-rival"

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 
 /**
  * The viewer's own team and roster row in one league.
@@ -21,7 +22,24 @@ export type ViewerLeagueRoster =
       gap: string
     }
 
-export async function resolveViewerLeagueRoster(leagueId: string, userId: string): Promise<ViewerLeagueRoster> {
+export async function resolveViewerLeagueRoster(leagueId: string, userId: string, rosterId?: string | null): Promise<ViewerLeagueRoster> {
+  /*
+   * A manager who runs several teams in one league: the team and the roster below are found by two
+   * separate reads, which with several teams could describe two different ones. So the roster is chosen
+   * first (the named team, else their first: this is a read, lib/league/viewerTeams.ts) and the team is
+   * the one that roster belongs to. A manager with one team takes the original path below, unchanged.
+   */
+  const viewing = await resolveViewingRoster(leagueId, userId, rosterId, { allowCoOwner: false }).catch(() => null)
+  if (viewing && (viewing.heldCount > 1 || rosterId)) {
+    const [ownRoster, ownTeam] = await Promise.all([
+      prisma.roster.findFirst({ where: { leagueId, id: viewing.rosterId }, select: { id: true, playerData: true } }).catch(() => null),
+      prisma.leagueTeam.findFirst({ where: { leagueId, externalId: viewing.rosterId }, select: { platformUserId: true, externalId: true } }).catch(() => null),
+    ])
+    if (ownRoster && ownTeam) {
+      return { ok: true, team: { platformUserId: ownTeam.platformUserId ?? userId, externalId: ownTeam.externalId ?? null }, roster: ownRoster }
+    }
+  }
+
   /*
    * The viewer's own roster in this league. Matched through LeagueTeam because
    * `Roster.platformUserId` is the PLATFORM's id for them, not ours — the same

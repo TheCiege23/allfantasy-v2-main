@@ -2,7 +2,7 @@ import "server-only"
 import { createHash } from 'node:crypto'
 import { recordSportsDelivery } from "./sportsDeliveryAudit"
 import { deliverDurably } from "./durableTransport"
-import { allowsLeagueEventSms } from "./channelPolicy"
+import { allowsLeagueEventSms, emailsByDefaultForEvent } from "./channelPolicy"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
 import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences, resolvePushDevices } from "@/lib/notification-settings/NotificationPreferenceResolver"
@@ -284,8 +284,15 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       // Unsubscribe link, which wrote `EmailPreference.unsubscribedAt` — and this dispatcher never
       // read it, so alerts kept arriving after the user had clicked it (found 2026-10-03). Account
       // notices (`system_account`) still send, as the unsubscribe page says; a failed read withholds.
+      /*
+       * Chimmy's weekly lineup check emails by default though `lineup_reminders` email starts off
+       * (channelPolicy `emailsByDefaultForEvent`) — only while the person has not saved an email choice
+       * for the category, so an explicit "off" stays off.
+       */
+      const savedEmailChoice = (profile.notificationPreferences as NotificationPreferences | null)?.categories?.[category]?.email
+      const emailOn = catPrefs.email || (savedEmailChoice === undefined && emailsByDefaultForEvent(category, { type }))
       if (
-        catPrefs.email &&
+        emailOn &&
         !quiet.push &&
         availability.email &&
         profile.email &&
@@ -326,7 +333,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           set('email',{status:'failed',reason:'persistence_failed',attempts})
           console.warn("[NotificationDispatcher] email send failed after retry for user", userId, e)
         }
-      } else set('email',{status:'suppressed',reason:!catPrefs.email?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
+      } else set('email',{status:'suppressed',reason:!emailOn?'channel_off':quiet.push?'quiet_hours':skipChannels?.email?'caller_excluded':!availability.email||!profile.email?'contact_unavailable':isUndeliverableEmailDomain(profile.email)?'undeliverable_domain':'unsubscribed'})
 
       if (allowsLeagueEventSms(category, effectiveLeagueId, { type, severity }) && catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         const smsClaim = dedupePrefix ? await claimSmsEvent(userId, dedupePrefix) : undefined

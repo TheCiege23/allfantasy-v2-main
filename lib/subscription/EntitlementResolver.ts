@@ -8,6 +8,7 @@ import {
   isSubscriptionEntitlementBypassUserId,
 } from "@/lib/dev-admin/access"
 import { prisma } from "@/lib/prisma"
+import { provenPrivilegedEmail } from "@/lib/auth/provenPrivilegedEmail"
 import {
   hasFeatureAccessForPlans,
   isActiveOrGraceStatus,
@@ -114,7 +115,7 @@ export class EntitlementResolver {
   }
 
   async resolveSnapshot(userId: string, email?: string | null, options?: { strictReads?: boolean }): Promise<EntitlementSnapshot> {
-    if (isSubscriptionEntitlementBypassUserId(userId, email)) {
+    if (isSubscriptionEntitlementBypassUserId(userId, await provenPrivilegedEmail(userId, email))) {
       return buildDevAdminEntitlementSnapshot()
     }
 

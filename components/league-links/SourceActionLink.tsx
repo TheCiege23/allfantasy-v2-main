@@ -25,7 +25,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
  * call site had to pass a redundant field the component would then ignore, or
  * fail to compile. Pass EITHER a resolved `link` OR the context to resolve from.
  */
-export interface SourceActionLinkProps extends Partial<SourceLinkContext> {
+interface SourceActionLinkProps extends Partial<SourceLinkContext> {
   className?: string
   style?: CSSProperties
   /** Pass a pre-resolved link (e.g. resolved server-side) instead of resolving from context. */

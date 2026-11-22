@@ -3,6 +3,7 @@ import '@/components/core-app/af-core-lock.css'
 import type { ReactNode } from 'react'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { coreDepthLockCopy, depthLabelText } from '@/lib/core-app/coreDepthLockCopy'
+import { CoreDepthLockCta } from '@/components/core-app/CoreDepthLockCta'
 
 /*
  * The two faces of the /core depth paywall (lib/core-app/coreDepthAccess.ts).
@@ -47,7 +48,16 @@ function LockIcon() {
  * steering, which 3.1.3 forbids. So that build says only what is true there: this part is not
  * included with the account. An account that already has the plan never sees a lock.
  */
-export function CoreDepthLock({ access, what, lang }: { access: CoreDepthAccess; what?: string; lang?: string }) {
+export function CoreDepthLock({
+  access, what, lang, benefit, source, children,
+}: {
+  access: CoreDepthAccess
+  what?: string
+  lang?: string
+  benefit?: string
+  source?: string
+  children?: ReactNode
+}) {
   const c = coreDepthLockCopy(lang)
   const subject = what ?? depthLabelText(access.depth, access.label, lang)
   return (
@@ -58,14 +68,18 @@ export function CoreDepthLock({ access, what, lang }: { access: CoreDepthAccess;
         <span data-ios-purchase-alt>{c.headAlt(subject)}</span>
       </p>
       <p className="af-core-lock-body">
-        <span data-ios-purchase>{c.body}</span>
+        <span data-ios-purchase>{benefit ?? c.body}</span>
         <span data-ios-purchase-alt>{c.bodyAlt}</span>
       </p>
       {/* The /upgrade href is hidden in a non-IAP app build by the link rule already; marked too,
           in case the plan's path ever stops starting with /upgrade. */}
-      <a className="af-core-lock-cta" href={access.upgradePath} data-ios-purchase>
+      {/* `from=lock_<depth>` (2026-11-15) is how a purchase is traced back to the lock that sold it —
+          lib/monetization/upgradeEntrySource.ts. */}
+      {/* …and `back=<this page>` (2026-11-17) is where the success panel returns them — lib/monetization/lockReturn.ts. */}
+      <CoreDepthLockCta href={access.upgradePath} source={source ?? `lock_${access.depth}`} requiredPlan={access.planName}>
         {c.cta(access.planName)}
-      </a>
+      </CoreDepthLockCta>
+      {children}
     </section>
   )
 }

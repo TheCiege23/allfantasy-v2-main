@@ -25,12 +25,12 @@ const APP_SURFACES = [
   },
   {
     title: 'Bracket challenges',
-    description: 'Bracket analysis, simulations, and AI-assisted tournament strategy.',
+    description: 'Bracket analysis, simulations, and Chimmy-assisted tournament strategy.',
     href: '/brackets',
   },
   {
-    title: 'AI tools',
-    description: 'Unified AI Workbench for run, compare, and provider-aware reasoning.',
+    title: 'Chimmy tools',
+    description: 'Unified Chimmy Workbench for run, compare, and provider-aware reasoning.',
     href: '/ai/tools',
   },
   {
@@ -40,7 +40,7 @@ const APP_SURFACES = [
   },
   {
     title: 'Creator leagues',
-    description: 'Creator-facing league experiences with AI-enhanced growth and content support.',
+    description: 'Creator-facing league experiences with Chimmy-enhanced growth and content support.',
     href: '/creator-leagues',
   },
   {
@@ -86,14 +86,14 @@ export default function AISystemExplainerPage() {
         <div className="mx-auto max-w-3xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200">
             <BrainCircuit className="h-3.5 w-3.5" />
-            AI System Explainer
+            Chimmy System Explainer
           </div>
           <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            How AllFantasy AI works across the entire app
+            How AllFantasy Chimmy works across the entire app
           </h1>
           <p className="mt-4 text-base leading-relaxed" style={{ color: 'var(--muted)' }}>
-            AllFantasy uses a deterministic-first AI architecture. Core engines compute the facts,
-            then AI explains, compares, and recommends without overriding deterministic rules.
+            AllFantasy uses a deterministic-first Chimmy architecture. Core engines compute the facts,
+            then Chimmy explains, compares, and recommends without overriding deterministic rules.
             This powers Chimmy, tools, leagues, bracket strategy, dynasty workflows, creator systems,
             legacy history, and analytics surfaces.
           </p>
@@ -105,7 +105,7 @@ export default function AISystemExplainerPage() {
                 className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-black shadow-lg hover:bg-emerald-400 transition-colors"
               >
                 <Sparkles className="h-5 w-5 shrink-0" />
-                Try AI Tools
+                Try Chimmy Tools
                 <ArrowRight className="h-4 w-4 shrink-0" />
               </Link>
               <Link
@@ -114,7 +114,7 @@ export default function AISystemExplainerPage() {
                 className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 transition-colors"
               >
                 <BookmarkCheck className="h-5 w-5 shrink-0" />
-                Open Saved AI Results
+                Open Saved Chimmy Results
               </Link>
             </div>
           </div>
@@ -125,7 +125,7 @@ export default function AISystemExplainerPage() {
               Chimmy overview
             </h2>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Chimmy is the conversational face of AllFantasy AI. Chimmy turns your natural-language
+              Chimmy is the conversational face of AllFantasy Chimmy. Chimmy turns your natural-language
               question into a structured context envelope that includes sport, league context,
               deterministic evidence, confidence metadata, and risk caveats. Chimmy is designed
               to stay calm, clear, and trustworthy.
@@ -135,13 +135,13 @@ export default function AISystemExplainerPage() {
           <section className="mt-10">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <Cpu className="h-5 w-5 text-cyan-400" aria-hidden />
-              Deterministic-first AI
+              Deterministic-first Chimmy
             </h2>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Before AI generates any narrative, deterministic layers compute the numbers: trade
+              Before Chimmy generates any narrative, deterministic layers compute the numbers: trade
               fairness, lineup impact, rankings and tiers, waiver priority, simulation outcomes,
               legacy scoring, reputation signals, and draft value context. Those outputs are passed
-              into model prompts as hard evidence. AI explains and extends; it does not replace
+              into model prompts as hard evidence. Chimmy explains and extends; it does not replace
               deterministic computation.
             </p>
           </section>
@@ -184,10 +184,10 @@ export default function AISystemExplainerPage() {
           <section className="mt-10">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <Layers3 className="h-5 w-5 text-emerald-400" aria-hidden />
-              AI across AllFantasy
+              Chimmy across AllFantasy
             </h2>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              AI is not a separate product tier. It is a system layer integrated across core
+              Chimmy is not a separate product tier. It is a system layer integrated across core
               AllFantasy experiences.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -226,7 +226,7 @@ export default function AISystemExplainerPage() {
               Safety and trust boundaries
             </h2>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              AllFantasy AI is constrained to avoid invented stats, unsupported claims, and
+              AllFantasy Chimmy is constrained to avoid invented stats, unsupported claims, and
               deterministic conflicts. Risk and uncertainty are surfaced explicitly. This keeps
               recommendations actionable without pretending to have certainty where data is missing.
             </p>
@@ -235,10 +235,10 @@ export default function AISystemExplainerPage() {
           <section className="mt-10 rounded-2xl border p-6" style={{ borderColor: 'var(--border)', background: 'var(--panel)' }}>
             <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
               <Gauge className="h-5 w-5 text-cyan-400" />
-              Explore the AI system live
+              Explore Chimmy system live
             </h2>
             <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
-              Open the Unified AI Workbench to run tools, compare providers, and inspect confidence-aware outputs.
+              Open the Unified Chimmy Workbench to run tools, compare providers, and inspect confidence-aware outputs.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Link
@@ -247,7 +247,7 @@ export default function AISystemExplainerPage() {
                 className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-black shadow-lg hover:bg-emerald-400 transition-colors"
               >
                 <Sparkles className="h-5 w-5 shrink-0" />
-                Try AI Tools
+                Try Chimmy Tools
                 <ArrowRight className="h-4 w-4 shrink-0" />
               </Link>
               <Link
@@ -256,7 +256,7 @@ export default function AISystemExplainerPage() {
                 className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 transition-colors"
               >
                 <BookmarkCheck className="h-5 w-5 shrink-0" />
-                Saved AI Results
+                Saved Chimmy Results
               </Link>
             </div>
           </section>

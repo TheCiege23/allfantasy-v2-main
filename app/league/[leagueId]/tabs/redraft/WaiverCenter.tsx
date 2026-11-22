@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ClipboardList, Loader2, TrendingUp, Zap } from 'lucide-react'
 import { ProjectionChip } from '@/components/sports/ProjectionCard'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
 import {
   fetchRedraftWaiverClaims,
   fetchRedraftWaiverRuntime,
@@ -185,7 +186,7 @@ export function WaiverCenter({
           {targets.map((t, i) => (
             <Link
               key={`${t.name}-${i}`}
-              href={`/player/${encodeURIComponent(t.name.toLowerCase().replace(/\s+/g, '-'))}?${new URLSearchParams({ sport: sport ?? 'NFL', position: t.position ?? '', team: t.team ?? '' })}`}
+              href={playerProfileHref({ name: t.name, sport: sport ?? 'NFL', position: t.position, team: t.team }) ?? '/players'}
               className="flex items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5 transition hover:border-white/[0.1] hover:bg-white/[0.04]"
             >
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/10 text-[11px] font-bold text-[#ff9ec0]">

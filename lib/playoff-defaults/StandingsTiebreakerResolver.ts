@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { getDefaultLeagueSettingsForVariant } from '@/lib/sport-defaults/LeagueDefaultSettingsService'
 
-export interface StandingsTiebreakerConfig {
+interface StandingsTiebreakerConfig {
   tiebreakers: string[]
   sport: string
   variant: string | null

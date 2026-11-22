@@ -60,7 +60,7 @@ function sportMatchesFilter(item: SearchResultItem, sportFilter: SportFilterValu
   return item.sport.toUpperCase() === sportFilter
 }
 
-export interface SearchOverlayProps {
+interface SearchOverlayProps {
   open: boolean
   onClose: () => void
 }
@@ -307,7 +307,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search leagues, players, tools, pages, settings, and AI..."
+            placeholder="Search leagues, players, tools, pages, settings, and Chimmy..."
             className="flex-1 bg-transparent py-2 text-sm outline-none"
             style={{ color: "var(--text)" }}
             autoComplete="off"

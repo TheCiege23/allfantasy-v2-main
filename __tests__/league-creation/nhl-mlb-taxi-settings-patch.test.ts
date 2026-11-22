@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
     league: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     leagueWaiverSettings: { findUnique: vi.fn() },
     leagueSettings: { upsert: vi.fn() },
+    dynastyLeagueConfig: { updateMany: vi.fn() },
   },
 }))
 
@@ -87,5 +88,15 @@ describe('PATCH league settings: taxiSlots for NHL / MLB', () => {
     const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', taxiSlots: 5 })
     expect(res.status).not.toBe(400)
     expect(taxiWrites().length).toBeGreaterThan(0)
+  })
+})
+
+describe('one taxi size (2026-11-15)', () => {
+  it('a taxi size saved here also reaches the dynasty config taxi moves are enforced from', async () => {
+    m.prisma.league.findFirst.mockResolvedValue(leagueRow('NFL', 2))
+    m.prisma.dynastyLeagueConfig.updateMany.mockResolvedValue({ count: 1 })
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', taxiSlots: 5 })
+    expect(res.status).not.toBe(400)
+    expect(m.prisma.dynastyLeagueConfig.updateMany).toHaveBeenCalledWith({ where: { leagueId: 'L' }, data: { taxiSlots: 5 } })
   })
 })

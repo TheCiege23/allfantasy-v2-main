@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { isZombieLeague } from '@/lib/zombie/ZombieLeagueConfig'
 import { finalizeWeek } from '@/lib/zombie/ZombieResultFinalizationService'
 import { prisma } from '@/lib/prisma'
@@ -22,8 +22,10 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const allowed = await canAccessLeagueDraft(leagueId, session.user.id)
-  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 🛑 A commissioner action (finalizing a week (infections, awards, winnings)). This checked league MEMBERSHIP, so any manager in the league could
+  // run it (2026-11-16).
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
 
   const isZombie = await isZombieLeague(leagueId)
   if (!isZombie) return NextResponse.json({ error: 'Not a zombie league' }, { status: 404 })

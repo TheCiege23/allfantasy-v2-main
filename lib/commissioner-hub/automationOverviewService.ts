@@ -6,6 +6,7 @@ import { getLeagueRole } from '@/lib/league/permissions'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
 import { ownerHasAfCommissionerPlan } from '@/lib/stat-corrections/applyStatCorrections'
+import { autopilotEntitled } from '@/lib/inactive-manager/inactiveManagerService'
 import { resolveRookieDraftAutoOpen } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { readLiveRookieOrderSettings } from '@/lib/rookie-order/liveRookieOrderService'
 import { readTankingPenaltyPolicy } from '@/lib/integrity/tankingPenalties'
@@ -19,8 +20,9 @@ export async function readAutomationFacts(leagueId: string) {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true, leagueType: true, isDynasty: true, season: true } })
   if (!league) return null
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { league, native: false as const }
-  const [commissionerPlan, integrity] = await Promise.all([
+  const [commissionerPlan, autopilotPlan, integrity] = await Promise.all([
     ownerHasAfCommissionerPlan(league.userId),
+    autopilotEntitled(league.userId),
     prisma.leagueIntegritySettings.findUnique({ where: { leagueId }, select: { tankingMonitorEnabled: true } }).catch(() => null),
   ])
   return {
@@ -31,6 +33,7 @@ export async function readAutomationFacts(leagueId: string) {
       settings: league.settings,
       dynasty: isDynastyFamilyLeague(league),
       commissionerPlan,
+      autopilotPlan,
       rookieDraftAutoOpen: resolveRookieDraftAutoOpen({ settings: league.settings, commissionerPlan, offseasonStartedAt: new Date() }).autoOpen,
       liveRookieOrderOn: readLiveRookieOrderSettings(league.settings).enabled,
       tankingMonitorOn: Boolean(integrity?.tankingMonitorEnabled),

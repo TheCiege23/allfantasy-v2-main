@@ -4,7 +4,6 @@
  */
 
 import type { AITraceRecord } from './types'
-import type { OrchestrationResult } from '@/lib/unified-ai/types'
 import { logAiOutput } from '@/lib/ai/output-logger'
 
 const TRACE_PREFIX = 'ai_'

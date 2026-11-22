@@ -1,22 +1,19 @@
-const ESPN_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl'
+/**
+ * Legacy stateless ESPN read for `/api/legacy/espn-import` (guest trial funnel) and the redraft
+ * provider wiring. HTTP and the id tables are shared with the importer — see
+ * `lib/league-import/espn/espnFantasyClient.ts` and `espnLookups.ts` — so this file only shapes the
+ * response. Output labels are kept exactly as this route has always returned them ('DEF', 'UNK').
+ */
+import {
+  EspnApiResponseError,
+  espnDefaultSeasonCandidates,
+  fetchEspnLeagueJsonFirstSeason,
+} from '@/lib/league-import/espn/espnFantasyClient'
+import { classifyEspnLineupSlot, espnPositionLabel, espnProTeamAbbreviation } from '@/lib/league-import/espn/espnLookups'
 
-const ESPN_POS_MAP: Record<number, string> = {
-  1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DEF',
-}
-
-const ESPN_SLOT_MAP: Record<number, string> = {
-  0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE', 16: 'D/ST', 17: 'K',
-  20: 'Bench', 21: 'IR', 23: 'FLEX', 7: 'OP',
-}
-
-const ESPN_TEAM_MAP: Record<number, string> = {
-  1: 'ATL', 2: 'BUF', 3: 'CHI', 4: 'CIN', 5: 'CLE',
-  6: 'DAL', 7: 'DEN', 8: 'DET', 9: 'GB', 10: 'TEN',
-  11: 'IND', 12: 'KC', 13: 'LV', 14: 'LAR', 15: 'MIA',
-  16: 'MIN', 17: 'NE', 18: 'NO', 19: 'NYG', 20: 'NYJ',
-  21: 'PHI', 22: 'ARI', 23: 'PIT', 24: 'LAC', 25: 'SF',
-  26: 'SEA', 27: 'TB', 28: 'WAS', 29: 'CAR', 30: 'JAX',
-  33: 'BAL', 34: 'HOU',
+function legacyPositionLabel(positionId: unknown): string {
+  const label = espnPositionLabel(positionId, 'UNK')
+  return label === 'D/ST' ? 'DEF' : label
 }
 
 export type EspnTeam = {
@@ -45,14 +42,17 @@ export type EspnLeagueData = {
   teams: EspnTeam[]
 }
 
-async function fetchEspnJson(url: string) {
-  const res = await fetch(url, { next: { revalidate: 0 } })
-  if (!res.ok) {
-    if (res.status === 404) throw new Error('League not found. Make sure the league ID is correct and the league is public.')
-    if (res.status === 401) throw new Error('This league is private. Go to ESPN League Settings and enable "Make League Viewable to Public".')
-    throw new Error(`ESPN API error: ${res.status}`)
+/** An explicit season is tried alone; without one, the importer's season candidates are tried in order. */
+async function fetchEspnJson(leagueId: string, seasons: readonly number[]): Promise<{ season: number; raw: any }> {
+  try {
+    return await fetchEspnLeagueJsonFirstSeason({ game: 'ffl', seasons, leagueId, views: ['mRoster', 'mTeam', 'mSettings'] })
+  } catch (error) {
+    if (error instanceof EspnApiResponseError) {
+      if (error.status === 404) throw new Error('League not found. Make sure the league ID is correct and the league is public.')
+      if (error.status === 401 || error.status === 403) throw new Error('This league is private. Go to ESPN League Settings and enable "Make League Viewable to Public".')
+    }
+    throw error
   }
-  return res.json()
 }
 
 function detectScoringType(scoringItems: any[]): string {
@@ -65,16 +65,19 @@ function detectScoringType(scoringItems: any[]): string {
 }
 
 function slotToRosterSlot(slotId: number): 'Starter' | 'Bench' | 'IR' {
-  if (slotId === 20) return 'Bench'
-  if (slotId === 21) return 'IR'
-  return 'Starter'
+  const placement = classifyEspnLineupSlot(slotId)
+  return placement === 'ir' ? 'IR' : placement === 'bench' ? 'Bench' : 'Starter'
 }
 
-export async function fetchEspnLeague(leagueId: string | number, season?: number): Promise<EspnLeagueData> {
-  const yr = season || new Date().getFullYear()
-  const url = `${ESPN_API_BASE}/seasons/${yr}/segments/0/leagues/${leagueId}?view=mRoster&view=mTeam&view=mSettings`
-
-  const data = await fetchEspnJson(url)
+export async function fetchEspnLeague(
+  leagueId: string | number,
+  season?: number,
+  now: Date = new Date(),
+): Promise<EspnLeagueData> {
+  const { season: yr, raw: data } = await fetchEspnJson(
+    String(leagueId),
+    season ? [season] : espnDefaultSeasonCandidates(now),
+  )
 
   const settings = data.settings || {}
   const leagueName = settings.name || `ESPN League ${leagueId}`
@@ -85,14 +88,12 @@ export async function fetchEspnLeague(leagueId: string | number, season?: number
     const overall = t.record?.overall || {}
     const roster: EspnRosterEntry[] = (t.roster?.entries || []).map((e: any) => {
       const player = e.playerPoolEntry?.player || {}
-      const posId = player.defaultPositionId || 0
-      const proTeamId = player.proTeamId || 0
 
       return {
         playerId: e.playerId,
         name: player.fullName || `Player ${e.playerId}`,
-        position: ESPN_POS_MAP[posId] || 'UNK',
-        nflTeam: ESPN_TEAM_MAP[proTeamId] || '',
+        position: legacyPositionLabel(player.defaultPositionId),
+        nflTeam: espnProTeamAbbreviation(player.proTeamId),
         slot: slotToRosterSlot(e.lineupSlotId ?? 20),
       }
     })

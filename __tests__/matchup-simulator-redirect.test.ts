@@ -66,11 +66,6 @@ describe('the LLM win-% path is gone', () => {
 })
 
 describe('links to the tool point at the destination, not at the hop', () => {
-  it('the landing tool card links /core/matchup', () => {
-    const src = read('components/landing/LandingFeatureCards.tsx')
-    expect(src).not.toContain("href: '/matchup-simulator'")
-    expect(src).toContain("href: '/core/matchup'")
-  })
 
   // Owner decision 2026-10-20: the tool card (hub + /tools/matchup-simulator CTA) opens the Simulation
   // Lab, not /core/matchup. It still never links the /matchup-simulator hop. Covered in depth by

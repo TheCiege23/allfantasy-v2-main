@@ -289,4 +289,3 @@ export const FloatingMusicWidget: React.FC = () => {
   );
 };
 
-export default FloatingMusicWidget;

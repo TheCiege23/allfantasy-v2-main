@@ -199,7 +199,7 @@ export default function MarketTimingAlerts() {
             </svg>
             Market Timing Alerts
           </h3>
-          <p className="text-xs text-white/40 mt-0.5">AI-powered buy/sell signals based on dynasty market data</p>
+          <p className="text-xs text-white/40 mt-0.5">Chimmy-powered buy/sell signals based on dynasty market data</p>
         </div>
         <button
           onClick={fetchAlerts}
@@ -298,7 +298,7 @@ export default function MarketTimingAlerts() {
 
       {!loading && data && (
         <p className="text-[11px] text-white/20 text-center pt-2">
-          Market data refreshed {formatTimeInTimezone(data.generatedAt)} · Powered by FantasyCalc + AI
+          Market data refreshed {formatTimeInTimezone(data.generatedAt)} · Powered by FantasyCalc + Chimmy
         </p>
       )}
     </div>

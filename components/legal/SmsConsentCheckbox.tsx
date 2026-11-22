@@ -61,4 +61,3 @@ export function SmsConsentCheckbox({
   )
 }
 
-export default SmsConsentCheckbox

@@ -33,7 +33,7 @@
  */
 
 /** One defense per NFL team. */
-export const DEFENSE_SUPPLY = 32
+const DEFENSE_SUPPLY = 32
 
 /**
  * Share of DEF1's points per game by rank, averaged over the seven measured seasons.

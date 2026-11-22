@@ -1,3 +1,4 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -48,6 +49,7 @@ export async function PATCH(req: NextRequest, ctx: Context) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const access = await resolveSurvivorAccessContext(leagueId, userId)
   if (!access?.isLeagueMember || !access.decisions.canUpdateSettings) return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+  { const refusedScope = await commissionerAccessResponse(leagueId, userId, 'league'); if (refusedScope) return refusedScope }
 
   const tribe = await prisma.survivorTribe.findFirst({ where: { id: tribeId, leagueId }, select: TRIBE_SELECT })
   if (!tribe) return NextResponse.json({ error: 'Tribe not found' }, { status: 404 })

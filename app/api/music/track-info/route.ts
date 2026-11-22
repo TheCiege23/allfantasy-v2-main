@@ -1,5 +1,5 @@
-import { getTheAudioDbApiKeyOrFallback } from '@/lib/env/sports-media-keys';
-import { fetchJsonWithTimeout, fetchPreviewUrl } from '@/lib/music/preview-url';
+import { fetchPreviewUrl } from '@/lib/music/preview-url';
+import { topTracksCached } from '@/lib/music/musicCatalog';
 import type { NextRequest } from 'next/server';
 
 type AudioDbTrack = {
@@ -62,24 +62,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const apiKey = getTheAudioDbApiKeyOrFallback('2');
-    const baseUrl = `https://www.theaudiodb.com/api/v1/json/${apiKey}`;
-
     const lookup = (artistName || artistId || '').toString().trim();
-    let topTracksData: any = null;
-
-    try {
-      topTracksData = await fetchJsonWithTimeout<any>(
-        `${baseUrl}/track-top10.php?s=${encodeURIComponent(lookup)}`,
-        5000
-      );
-    } catch {
-      // fall through to synthetic track below
-    }
-
-    const rawTracks: AudioDbTrack[] = Array.isArray(topTracksData?.track)
-      ? topTracksData.track
-      : [];
+    /*
+     * Read through the durable cache (lib/music/musicCatalog.ts); the key-bearing URL lives only in
+     * lib/music/theAudioDbFetch.ts. No answer falls through to the synthetic track below, as before.
+     */
+    const rawTracks: AudioDbTrack[] = (await topTracksCached(lookup)) ?? [];
 
     const limitedTracks = rawTracks.slice(0, 20);
 

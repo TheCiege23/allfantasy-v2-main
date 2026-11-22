@@ -237,7 +237,8 @@ describe('Trade timeline', () => {
 /* ── The cross-league offer strip ─────────────────────────────────────────────────────────── */
 
 describe('Offers across your leagues', () => {
-  const STRIP = 'Yahoo offers are read · Sleeper shows a trade only once it’s accepted · other platforms are not, and say so'
+  // Yahoo is named only while its import is live (provider-ui-config); it is coming soon today.
+  const STRIP = 'Sleeper shows a trade only once it’s accepted · other platforms are not, and say so'
   it('no longer says Sleeper offers are read — Sleeper shares a trade only once it is accepted', () => {
     fetchTradesPanel.mockReturnValue(new Promise(() => {}))
     const { container } = render(<TradeLeagueStrip leagues={[{ id: 'l1', name: 'L', platform: 'sleeper', mark: 'S', meta: null } as never]} activeLeagueId={null} />)

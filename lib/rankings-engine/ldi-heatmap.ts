@@ -1,8 +1,8 @@
 import { getV2Rankings, getPosTotalsFromPartnerCounts } from "./v2-adapter"
 
-export type HeatmapPos = "QB" | "RB" | "WR" | "TE" | "FLEX" | "PICKS"
+type HeatmapPos = "QB" | "RB" | "WR" | "TE" | "FLEX" | "PICKS"
 
-export type HeatmapCell = {
+type HeatmapCell = {
   pos: HeatmapPos
   ldi: number
   trend: number
@@ -20,7 +20,7 @@ export type HeatmapCell = {
   evidence: Array<{ key: string; value: string | number }>
 }
 
-export type LDIHeatmapResponse = {
+type LDIHeatmapResponse = {
   leagueId: string
   leagueName: string
   season: string

@@ -13,9 +13,9 @@ export type UniverseRow = {
   leagueName?: string
 }
 
-export type UniverseCell = 'whisperer' | 'zombie' | 'survivor'
+type UniverseCell = 'whisperer' | 'zombie' | 'survivor'
 
-export type UniverseLeague = {
+type UniverseLeague = {
   leagueId: string
   leagueName: string
   cells: UniverseCell[]
@@ -82,7 +82,7 @@ export function daysUntilResolution(resolutionDay: string, now: Date = new Date(
   return (target - now.getDay() + 7) % 7
 }
 
-export type InfectionHeadline = { head: string; tone: 'bitten' | 'turned' | 'human' | 'revived' | 'feeding' }
+type InfectionHeadline = { head: string; tone: 'bitten' | 'turned' | 'human' | 'revived' | 'feeding' }
 
 /**
  * The big line on Infection night for the viewer's resolved week. `moment` is the summary's

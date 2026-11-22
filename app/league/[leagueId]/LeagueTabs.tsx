@@ -23,8 +23,6 @@ export const NFL_REDRAFT_CORE_TAB_IDS = [
   'commissioner',
 ] as const
 
-export type NflRedraftCoreTabId = (typeof NFL_REDRAFT_CORE_TAB_IDS)[number]
-
 const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
   { id: 'home', label: 'Home' },
   { id: 'draft', label: 'Draft' },
@@ -118,7 +116,7 @@ const TAB_ALIASES: Record<string, string> = {
   MLS: 'SOCCER',
 }
 
-export function getLeagueTabs(sport: string): TabDef[] {
+function getLeagueTabs(sport: string): TabDef[] {
   const key = sport.trim().toUpperCase()
   const resolved = TAB_ALIASES[key] ?? key
   const tabs = SPORT_TABS[resolved]

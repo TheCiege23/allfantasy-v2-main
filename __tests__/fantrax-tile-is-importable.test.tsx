@@ -123,6 +123,33 @@ describe('the Fantrax tile', () => {
   })
 
   /**
+   * What an import cannot bring. Fantrax has no completed-trade feed and lists future picks for
+   * rounds 1-4 only, so both come from the commissioner's trade-history upload, on another screen.
+   *
+   * ⚠ THE NOTE MUST NAME THE EXPORT. Fantrax offers Trades and Claims/Drops side by side under
+   * near-identical file names, and the Claims/Drops file is refused by the uploader. A note that
+   * said only "upload your transaction history" would send people to the wrong one.
+   */
+  it('tells a Fantrax importer where trades and later-round picks come from', async () => {
+    render(<ImportV4 />)
+    expect(document.querySelector('.af-im-fx-after')).toBeNull()
+    fireEvent.click(fantraxTile())
+    await waitFor(() => expect(screen.queryByText(/Fantrax league ID/i)).toBeTruthy())
+
+    const note = document.querySelector('.af-im-fx-after')
+    expect(note).toBeTruthy()
+    const text = note!.textContent ?? ''
+    expect(text).toMatch(/past round 4/i)
+    expect(text).toMatch(/Trades\s*\(not Claims\/Drops\)/)
+    expect(text).toMatch(/Commissioner screen/)
+    expect(text).toMatch(/Trades and draft archive/)
+    expect(text).toMatch(/Upload trade history CSV/)
+    expect(note!.querySelectorAll('ol > li')).toHaveLength(3)
+    /* Collapsed by default, so it is one click away rather than the first thing an importer meets. */
+    expect((note!.closest('details') as HTMLDetailsElement).open).toBe(false)
+  })
+
+  /**
    * ⚠ AND IT MUST NOT ASK FOR THE SECRET ID. That is a credential; the whole
    * reason discovery is shaped around a public league id is to avoid it.
    */

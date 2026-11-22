@@ -1,6 +1,6 @@
 import type { SeasonBlueprint } from '@/lib/tournament/seasonBlueprint'
 import { positionArtwork, seasonRuleAsset, seasonRuleLabels, seasonRosterPresets, withSeasonRosterPreset } from '@/lib/tournament/seasonRuleLabels'
-export function SeasonPositionChip({ position, count = 1 }: { position: string; count?: number }) {
+function SeasonPositionChip({ position, count = 1 }: { position: string; count?: number }) {
   const art = positionArtwork(position)
   return <span className="inline-flex min-h-8 items-center gap-1 rounded-md border border-white/15 px-2 py-1 text-xs font-bold" style={{ backgroundColor: art?.fill ?? '#1d2130', color: art?.text ?? '#fff' }}>{position}{count !== 1 ? ' ×' + count : ''}</span>
 }

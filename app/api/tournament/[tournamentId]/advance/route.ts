@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getAdvanceReadiness } from '@/lib/tournament-mode/advanceReadiness'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -150,6 +151,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tou
       where: { tournamentId, status: { in: ['active', 'completed'] } },
       orderBy: { roundIndex: 'desc' },
     })
+
+    // A round is not cut while one of its leagues is drafting, and not before its weeks are played
+    // unless the commissioner confirms that (lib/tournament-mode/advanceReadiness.ts).
+    const readiness = await getAdvanceReadiness(tournamentId, activeRound?.roundIndex ?? 0)
+    if (readiness.blockers.length > 0) {
+      return NextResponse.json({ error: readiness.blockers.join(' '), code: 'ROUND_DRAFTING', canConfirm: false }, { status: 409 })
+    }
+    if (readiness.warnings.length > 0 && body.confirmEarly !== true) {
+      return NextResponse.json(
+        { error: readiness.warnings.join(' '), code: 'ROUND_NOT_FINISHED', canConfirm: true },
+        { status: 409 },
+      )
+    }
 
     if (!activeRound || activeRound.roundIndex === 0) {
       // Qualification round — run qualification advancement

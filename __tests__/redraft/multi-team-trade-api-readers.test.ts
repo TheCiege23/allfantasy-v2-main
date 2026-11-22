@@ -12,6 +12,8 @@ import { NextRequest } from 'next/server'
 
 const m = vi.hoisted(() => ({
   session: vi.fn(),
+  createGrader: vi.fn(),
+  gradeDeal: vi.fn(),
   prisma: {
     league: { findFirst: vi.fn(), findUnique: vi.fn() },
     redraftTradeProposal: { findMany: vi.fn() },
@@ -26,6 +28,10 @@ vi.mock('server-only', () => ({}))
 vi.mock('next-auth', () => ({ getServerSession: m.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({
+  createLeagueTradeGrader: m.createGrader,
+  gradeDeal: m.gradeDeal,
+}))
 vi.mock('@/lib/live-draft-engine/auth', () => ({ getCurrentUserRosterIdForLeague: vi.fn() }))
 vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: vi.fn() }))
 vi.mock('@/lib/trade-intel/importedTradeLedgerService', () => ({ getImportedTradeLedger: vi.fn() }))
@@ -99,10 +105,14 @@ describe('GET /api/league/trade-grades?view=proposals', () => {
     }])
     const data = await (await GET(request())).json()
     expect(data.proposals[0]).toMatchObject({ grade: null, explanation: MULTI_TEAM_GRADE_WITHHELD })
+    expect(m.createGrader).not.toHaveBeenCalled()
   })
 
-  it('two teams: exactly the old shape and copy, with no multi-team keys', async () => {
+  it('two teams: shows the proposer’s shared grade instead of the stored fairness letter', async () => {
     m.session.mockResolvedValue({ user: { id: 'uA' } })
+    const grader = { leagueId: 'L' }
+    m.createGrader.mockResolvedValue(grader)
+    m.gradeDeal.mockResolvedValue({ graded: true, letter: 'D', recommendation: 'Consider a counter.' })
     m.prisma.redraftTradeProposal.findMany.mockResolvedValue([{
       id: 'p2', status: 'pending', createdAt: new Date('2026-10-20T00:00:00Z'),
       proposerRosterId: 'rA', receiverRosterId: 'rB', additionalRosterIds: [],
@@ -116,8 +126,13 @@ describe('GET /api/league/trade-grades?view=proposals', () => {
       title: 'Aces → Bees',
       involvesYou: true,
       assets: ['Ann', '2027 round 2 pick'],
-      grade: 'B+',
-      explanation: 'Fair. Close.',
+      grade: 'D',
+      explanation: 'Consider a counter.',
+    })
+    expect(m.gradeDeal).toHaveBeenCalledWith(grader, {
+      give: { assets: [{ kind: 'player', name: 'Ann' }], unpriceable: [] },
+      get: { assets: [{ kind: 'pick', year: 2027, round: 2 }], unpriceable: [] },
+      viewerSide: false,
     })
     // Only multi-team rows need the extra teams' names.
     expect(m.prisma.redraftRoster.findMany).toHaveBeenCalledTimes(1)

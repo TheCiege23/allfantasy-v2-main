@@ -36,6 +36,11 @@ export type DisplayPlayerRecord = SlimPlayer & {
   opponent?: string | null
   homeAway?: string | null
   kickoffTimeIso?: string | null
+  /** The opponent's rank against this player's position: 1 allows the fewest points. */
+  opponentRank?: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  opponentLogoUrl?: string | null
+  /** The cached forecast at this week's game (a roofed stadium reads as indoors). */
+  gameWeather?: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
   gameStatus?: string | null
   liveGameStatus?: string | null
   gameClock?: string | null
@@ -98,12 +103,15 @@ export function displayPlayerFromUnifiedRow(row: UnifiedPlayerWireDto): DisplayP
     statsSource: row.statsSource ?? null,
     projectionsSource: row.projectionsSource ?? null,
     positionRankLabel: row.positionRankLabel ?? null,
-    byeWeek: metadata?.byeWeek ?? canonical?.byeWeek ?? row.product?.byeWeek ?? null,
+    byeWeek: metadata?.byeWeek ?? canonical?.byeWeek ?? row.product?.byeWeek ?? row.teamByeWeek ?? null,
     activeStatus: metadata?.activeStatus ?? canonical?.activeStatus ?? null,
     // NBA / NHL / MLB carry no NFL game context; a daily-lineup row carries the selected day's opponent.
     opponent: gameContext?.isByeWeek ? 'BYE' : gameContext?.opponent.teamAbbr ?? row.periodOpponent ?? null,
     homeAway: gameContext?.homeAway ?? row.periodHomeAway ?? null,
-    kickoffTimeIso: gameContext?.kickoffTimeIso ?? null,
+    kickoffTimeIso: gameContext?.kickoffTimeIso ?? row.periodKickoffIso ?? null,
+    opponentRank: row.opponentRank ?? null,
+    opponentLogoUrl: row.opponentLogoUrl ?? null,
+    gameWeather: row.periodWeather ?? null,
     gameStatus: liveGameStatus ?? gameContext?.gameStatus ?? null,
     liveGameStatus,
     gameClock: liveScoringContext?.gameClock.display ?? null,
@@ -180,8 +188,3 @@ export function resolveDisplayPlayer(
   }
 }
 
-export function displayPlayersFromUnifiedRows(
-  rows: UnifiedPlayerWireDto[] | null | undefined,
-): DisplayPlayerRecord[] {
-  return (rows ?? []).map(displayPlayerFromUnifiedRow)
-}

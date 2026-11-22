@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       where: { id: leagueId },
       select: { id: true, sport: true, userId: true },
     }),
-    (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    (prisma as any).roster.findFirst({ where: managedRosterWhere(leagueId, userId), select: { id: true } }),
   ])
 
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })

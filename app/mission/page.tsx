@@ -1,6 +1,7 @@
 import Link from "next/link"
 import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import { availableImportPlatformsPhrase } from "@/lib/league-import/provider-ui-config"
 
 interface MissionPageProps {
   searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
@@ -30,7 +31,7 @@ export default async function MissionPage(props: MissionPageProps) {
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">Why AllFantasy Exists</h2>
         <p>
           AllFantasy helps fantasy sports players draft smarter, manage better, and build a lasting legacy across
-          every league, season, and sport — powered by AI, built for commissioners, and designed without gambling.
+          every league, season, and sport — powered by Chimmy, built for commissioners, and designed without gambling.
         </p>
         <p className="mt-3">
           Fantasy sports live and die on the work commissioners do behind the scenes: setting up scoring, chasing
@@ -48,7 +49,7 @@ export default async function MissionPage(props: MissionPageProps) {
             not just the players in it.
           </li>
           <li>
-            <strong>AI should help, not replace.</strong> Our AI features are optional guidance — the platform is
+            <strong>Chimmy should help, not replace.</strong> Our AI features are optional guidance — the platform is
             fully useful with AI turned off. See our{" "}
             <Link href="/ai-transparency" className="text-cyan-400 hover:text-cyan-300">
               AI Transparency
@@ -84,7 +85,7 @@ export default async function MissionPage(props: MissionPageProps) {
         <p>
           Commissioners and managers running season-long leagues across the NFL, NBA, MLB, NHL, and NCAA football —
           in redraft, dynasty, and keeper formats — plus bracket and World Cup pools. AllFantasy imports leagues
-          from Sleeper, Yahoo, ESPN, MFL, and Fantrax so you can bring your existing league with you.
+          from {availableImportPlatformsPhrase('and')} so you can bring your existing league with you.
         </p>
       </section>
 

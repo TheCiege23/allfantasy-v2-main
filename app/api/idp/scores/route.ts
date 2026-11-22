@@ -1,3 +1,4 @@
+import { viewingRosterWhere } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -116,7 +117,7 @@ export async function GET(req: NextRequest) {
 
   if (scope === 'mine') {
     const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: await viewingRosterWhere(leagueId, userId),
       select: { playerData: true },
     })
     playerIds = parseIdpRowsFromPlayerData(roster?.playerData).map((r) => r.playerId)
@@ -166,7 +167,7 @@ export async function POST(req: NextRequest) {
 
   if (scope === 'mine') {
     const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
+      where: await viewingRosterWhere(leagueId, userId),
       select: { playerData: true },
     })
     playerIds = parseIdpRowsFromPlayerData(roster?.playerData).map((r) => r.playerId)

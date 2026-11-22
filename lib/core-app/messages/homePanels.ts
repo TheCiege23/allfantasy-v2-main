@@ -19,6 +19,8 @@ export const homePanelsMessages = defineMessages({
     readFailure: 'We could not read your leagues just now. This is a read failure on our side, not a sign that you have none.',
     sectionsHidden: (n: number) => `${n} ${n === 1 ? 'section' : 'sections'} hidden · Choose what shows here →`,
     tooMuch: 'Too much? Choose what shows here →',
+    /* The home's "More detail" fold (2026-11-20) — what is inside, in a few words. */
+    moreNote: 'Your season so far · when things happen · league formats · evaluate a trade · what we can see',
   },
   es: {
     showAllLeagues: 'Mostrar todas las ligas',
@@ -31,5 +33,6 @@ export const homePanelsMessages = defineMessages({
     readFailure: 'No pudimos leer tus ligas en este momento. Es un fallo de lectura de nuestra parte, no una señal de que no tengas ninguna.',
     sectionsHidden: (n) => `${n} ${n === 1 ? 'sección oculta' : 'secciones ocultas'} · Elegir qué se muestra aquí →`,
     tooMuch: '¿Demasiado? Elige qué se muestra aquí →',
+    moreNote: 'Tu temporada hasta ahora · cuándo pasa cada cosa · formatos de liga · evaluar un intercambio · qué podemos ver',
   },
 })

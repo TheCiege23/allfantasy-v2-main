@@ -5,13 +5,9 @@
  */
 
 export { default as MediaPreviewPlayer } from './MediaPreviewPlayer'
-export type { MediaPreviewPlayerProps } from './MediaPreviewPlayer'
 
 export { default as MediaActionBar } from './MediaActionBar'
-export type { MediaActionBarProps } from './MediaActionBar'
 
 export { default as PublishConfirmationModal } from './PublishConfirmationModal'
-export type { PublishConfirmationModalProps } from './PublishConfirmationModal'
 
 export { default as MediaGenerationPanel } from './MediaGenerationPanel'
-export type { MediaGenerationPanelProps } from './MediaGenerationPanel'

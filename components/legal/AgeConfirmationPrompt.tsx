@@ -83,6 +83,15 @@ export default function AgeConfirmationPrompt() {
 
   if (!needsConfirm) return null
 
+  /*
+   * 🛑 EVERY TOKEN BELOW CARRIES A LITERAL FALLBACK, AND THE BUTTONS ARE STYLED INLINE. The
+   * `--color-*` / `--radius-lg` tokens and the `.btn-primary` / `.btn-secondary` classes are
+   * defined only in nocturne-auth.css and the landing's nocturne.css — and this prompt is
+   * suppressed on auth routes (SafeGlobalChrome), so on every screen where it DOES render they
+   * were unset. Measured 2026-11-20 on /core at 393x852: card background `rgba(0, 0, 0, 0)`, no
+   * border, and both buttons as bare text, so the dialog read as loose text printed over the
+   * page. The fallbacks are the app's dark palette; where the tokens exist they still win.
+   */
   return (
     <div
       role="dialog"
@@ -96,24 +105,27 @@ export default function AgeConfirmationPrompt() {
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        background: "rgba(0,0,0,0.6)",
+        background: "rgba(2,6,23,0.72)",
       }}
     >
       <div
         style={{
           maxWidth: 420,
           width: "100%",
-          padding: 28,
-          borderRadius: "var(--radius-lg)",
-          border: "1px solid var(--color-neutral-800)",
-          background: "var(--color-surface)",
-          color: "var(--color-neutral-200)",
+          maxHeight: "calc(100dvh - 40px)",
+          overflowY: "auto",
+          padding: 24,
+          borderRadius: "var(--radius-lg, 16px)",
+          border: "1px solid var(--color-neutral-800, #1e293b)",
+          background: "var(--color-surface, #0f172a)",
+          color: "var(--color-neutral-200, #e2e8f0)",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
         }}
       >
         <h2 id="af-age-prompt-title" style={{ fontSize: 20, margin: "0 0 10px" }}>
           Quick confirmation
         </h2>
-        <p style={{ fontSize: 14, lineHeight: 1.6, margin: "0 0 18px", color: "var(--color-neutral-400)" }}>
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: "0 0 18px", color: "var(--color-neutral-400, #94a3b8)" }}>
           We don&apos;t have your age confirmation on file. Please confirm you&apos;re 18 or
           older and agree to the{" "}
           <Link href={getTermsUrl()} style={{ fontWeight: 600 }}>
@@ -127,7 +139,7 @@ export default function AgeConfirmationPrompt() {
         </p>
 
         {error && (
-          <p role="alert" style={{ fontSize: 13, margin: "0 0 14px", color: "var(--color-error)" }}>
+          <p role="alert" style={{ fontSize: 13, margin: "0 0 14px", color: "var(--color-error, #f87171)" }}>
             {error}
           </p>
         )}
@@ -138,7 +150,19 @@ export default function AgeConfirmationPrompt() {
             onClick={() => void confirm()}
             disabled={submitting}
             className="btn btn-primary"
-            style={{ flex: 1, minHeight: 44 }}
+            style={{
+              flex: 1,
+              minHeight: 44,
+              padding: "10px 16px",
+              borderRadius: 12,
+              border: "none",
+              background: "#22d3ee",
+              color: "#020617",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              opacity: submitting ? 0.7 : 1,
+            }}
           >
             {submitting ? "Saving…" : "I'm 18+ and agree"}
           </button>
@@ -147,7 +171,17 @@ export default function AgeConfirmationPrompt() {
             onClick={dismiss}
             disabled={submitting}
             className="btn btn-secondary"
-            style={{ minHeight: 44 }}
+            style={{
+              minHeight: 44,
+              padding: "10px 16px",
+              borderRadius: 12,
+              border: "1px solid var(--color-neutral-800, #334155)",
+              background: "transparent",
+              color: "var(--color-neutral-200, #e2e8f0)",
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
           >
             Not now
           </button>

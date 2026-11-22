@@ -146,7 +146,7 @@ export const ROLLING_INSIGHTS_NFL_ROOKIE_FALLBACK_POLICY = {
   note: 'NFL RI doc reviewed does not document rookie/experience/draftYear fields.',
 } as const
 
-export type RollingInsightsNflFieldDomain =
+type RollingInsightsNflFieldDomain =
   | 'profile'
   | 'player_stats'
   | 'live'

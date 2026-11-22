@@ -45,8 +45,8 @@ export const PROACTIVE_MIN_GAIN = 3
  * runs every 15 minutes, so the first run inside it sends; the last hour is left alone because a
  * message then arrives too late to act on for anyone not already looking.
  */
-export const LINEUP_CHECK_OPENS_BEFORE_MS = 4 * 60 * 60 * 1000
-export const LINEUP_CHECK_CLOSES_BEFORE_MS = 60 * 60 * 1000
+const LINEUP_CHECK_OPENS_BEFORE_MS = 4 * 60 * 60 * 1000
+const LINEUP_CHECK_CLOSES_BEFORE_MS = 60 * 60 * 1000
 
 /** The question the link puts in Chimmy's box — the same words as the drawer's quick prompt. */
 export const LINEUP_CHECK_PROMPT = 'Set my best lineup for this week'
@@ -92,7 +92,7 @@ export function mainSlateKickoff(games: readonly ScheduledGame[]): Date | null {
   return best == null ? null : new Date(best)
 }
 
-export type LineupCheckWindow = 'early' | 'open' | 'closed'
+type LineupCheckWindow = 'early' | 'open' | 'closed'
 
 export function lineupCheckWindow(mainSlate: Date, now: Date): LineupCheckWindow {
   const until = mainSlate.getTime() - now.getTime()
@@ -226,7 +226,7 @@ function names(ps: readonly OptimizerPlayer[]): string {
 }
 
 /** One sentence per issue, in the order a manager should fix them. */
-export function describeIssue(issue: LineupIssue, week: number): string {
+function describeIssue(issue: LineupIssue, week: number): string {
   switch (issue.kind) {
     case 'empty_slots':
       return issue.count === 1 ? 'A starting spot is empty.' : `${issue.count} starting spots are empty.`
@@ -256,7 +256,7 @@ function shortName(name: string): string {
   return t.length > 32 ? `${t.slice(0, 31)}…` : t
 }
 
-export type LineupCheckMessage = {
+type LineupCheckMessage = {
   title: string
   /** Plain text for the bell and the phone. Capped; the email carries everything. */
   body: string

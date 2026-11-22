@@ -24,7 +24,7 @@ export async function getTotalIdpStarterSlots(leagueId: string): Promise<number>
 /**
  * Count players that are IDP-eligible (position in DE, DT, LB, CB, S, SS, FS).
  */
-export function countIdpEligible(positions: (string | null | undefined)[]): number {
+function countIdpEligible(positions: (string | null | undefined)[]): number {
   return positions.filter((p) => p && IDP_POSITIONS.has((p as string).trim().toUpperCase())).length
 }
 

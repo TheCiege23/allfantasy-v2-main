@@ -10,6 +10,7 @@ import type { WaiverSchedule } from './waiverRunClock'
 import { loadSleeperWaiverSchedules } from '@/lib/waivers/sleeperWaiverSchedule'
 import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
 import { platformLabel } from './platformLinks'
+import { createRenderTimer } from './renderTiming'
 
 /**
  * Waivers — "targets, bids and claim order, priced against this league's FAAB
@@ -294,10 +295,30 @@ export async function getWaiversData(
   ctx?: LeagueContext | null,
 ): Promise<WaiversData | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  const timer = createRenderTimer('waivers')
   const league = await lc.league()
   if (!league) return null
 
-  const rules = await resolveWaiverRules(leagueId, String(league.platform ?? 'manual').trim().toLowerCase())
+  /*
+   * ⚠ THE THREE READS THAT NEED ONLY THE LEAGUE ROW START NOW, TOGETHER (2026-11-14). The rules
+   * (settings row plus Sleeper's observed schedule), the claimed team and the league's rosters used
+   * to run one after another although none reads another's result. Each is still awaited where it
+   * was used, in the same order, so the values and the error that surfaces first are unchanged; only
+   * the waiting overlaps. The two reads that need YOUR roster row (its blob and its pending claims)
+   * still wait for it — see below. `renderTiming` logs per-read durations for any render over 1.5s.
+   *
+   * ⚠ A read started here and awaited later must never reject unobserved: `timer.time` attaches
+   * a handler, which is why every early read goes through it. None of these has a `.catch` that the
+   * original lacked — a failure still throws out of this loader at the await, as it did before.
+   */
+  const rulesRead = timer.time('rules', resolveWaiverRules(leagueId, String(league.platform ?? 'manual').trim().toLowerCase()))
+  const myTeamRead = timer.time('myTeam', lc.claimedTeam())
+  const allRostersRead = timer.time('rosters', prisma.roster.findMany({
+    where: { leagueId },
+    select: { id: true, platformUserId: true, faabRemaining: true, waiverPriority: true },
+  }))
+
+  const rules = await rulesRead
 
   const base = {
     league: {
@@ -313,7 +334,7 @@ export async function getWaiversData(
     claimLimits: rules.claimLimits,
   }
 
-  const myTeam = await lc.claimedTeam()
+  const myTeam = await myTeamRead
 
   /*
    * ⚠ THIS WAS THE TWO-CANDIDATE JOIN, AND IT IS WHY ALL FOUR TILES READ "we cannot tell which
@@ -349,23 +370,33 @@ export async function getWaiversData(
    * the selection byte-identical to what shipped. The second hop is a few milliseconds now that
    * the database sits in the same region as the app.
    */
-  const allRosters = await prisma.roster.findMany({
-    where: { leagueId },
-    select: { id: true, platformUserId: true, faabRemaining: true, waiverPriority: true },
-  })
+  const allRosters = await allRostersRead
 
   const mineRow =
     candidates.length > 0
       ? allRosters.find((r) => candidates.includes(r.platformUserId)) ?? null
       : null
 
-  const minePlayerData = mineRow
-    ? (
-        await prisma.roster
-          .findUnique({ where: { id: mineRow.id }, select: { playerData: true } })
-          .catch(() => null)
-      )?.playerData ?? null
-    : null
+  /*
+   * ⚠ YOUR ROSTER'S BLOB AND YOUR PENDING CLAIMS BOTH NEED ONLY `mineRow`, SO THEY RUN TOGETHER
+   * (2026-11-14). The claim count used to wait for the blob and the whole roster-load arithmetic.
+   * Same conditions as before: neither is read without a roster row, and the claim count is read
+   * only for a league AllFantasy runs (`importedFrom` is null).
+   */
+  const importedFrom = normalizeSourcePlatform(league.platform)
+  const minePlayerDataRead = timer.time('playerData', mineRow
+    ? prisma.roster
+        .findUnique({ where: { id: mineRow.id }, select: { playerData: true } })
+        .catch(() => null)
+        .then((row) => row?.playerData ?? null)
+    : Promise.resolve(null))
+  const claimCountRead = timer.time('claims', mineRow && !importedFrom
+    ? prisma.waiverClaim
+        .count({ where: { status: 'pending', roster: { leagueId, platformUserId: mineRow.platformUserId } } })
+        .catch(() => null)
+    : Promise.resolve(null))
+
+  const minePlayerData = await minePlayerDataRead
 
   const mine = mineRow ? { ...mineRow, playerData: minePlayerData } : null
 
@@ -374,6 +405,7 @@ export async function getWaiversData(
       available: false as const,
       reason: 'we cannot tell which roster in this league is yours',
     }
+    timer.done({ platform: String(league.platform ?? '') })
     return {
       ...base,
       budget: unknown,
@@ -464,12 +496,7 @@ export async function getWaiversData(
    *    fact about our table, presented as a fact about the manager's week. Now an imported league says we
    *    cannot see them, and only a league AllFantasy runs counts its own pending claims.
    */
-  const importedFrom = normalizeSourcePlatform(league.platform)
-  const claimCount = importedFrom
-    ? null
-    : await prisma.waiverClaim
-        .count({ where: { status: 'pending', roster: { leagueId, platformUserId: mine.platformUserId } } })
-        .catch(() => null)
+  const claimCount = await claimCountRead
 
   const claimsQueued: SectionState<{ count: number; committed: number | null }> = importedFrom
     ? {
@@ -480,5 +507,6 @@ export async function getWaiversData(
       ? { available: false, reason: 'waiver claims could not be read for this league' }
       : { available: true, data: { count: claimCount, committed: null } }
 
+  timer.done({ platform: String(league.platform ?? '') })
   return { ...base, budget, waiverPriority, rosterLoad, claimsQueued }
 }

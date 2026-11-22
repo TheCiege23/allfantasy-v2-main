@@ -92,6 +92,14 @@ export const finderTradeValueMessages = defineMessages<TradeValueCopy>({
     sharesTitleIn: (league) => `Your shares · in ${league}`,
     sharesSub: (players, rosters) => `${players} players across ${rosters} ${rosters === 1 ? 'roster' : 'rosters'}`,
     sharesUnsupported: (n) => ` · ${n} on a platform we can't read yet`,
+    sharesUnidentified: (n) => ` · ${n} ${n === 1 ? 'player' : 'players'} we couldn't identify`,
+    sharesNotCounted: (unsupported, unidentified) =>
+      `Not counted: ${[
+        unsupported > 0 ? `${unsupported} ${unsupported === 1 ? 'league' : 'leagues'} on a platform we can't read yet` : null,
+        unidentified > 0 ? `${unidentified} ${unidentified === 1 ? 'player' : 'players'} we couldn't identify` : null,
+      ]
+        .filter(Boolean)
+        .join(', ')}.`,
     sharesNone: 'No rostered players found in the leagues read.',
     sharesOf: 'of',
     sharesStarting: (n) => `${n} starting`,
@@ -211,6 +219,14 @@ export const finderTradeValueMessages = defineMessages<TradeValueCopy>({
     sharesSub: (players, rosters) =>
       `${players} ${plural(players, 'jugador', 'jugadores')} en ${rosters} ${plural(rosters, 'plantilla', 'plantillas')}`,
     sharesUnsupported: (n) => ` · ${n} en una plataforma que aún no podemos leer`,
+    sharesUnidentified: (n) => ` · ${n} ${plural(n, 'jugador', 'jugadores')} que no pudimos identificar`,
+    sharesNotCounted: (unsupported, unidentified) =>
+      `Sin contar: ${[
+        unsupported > 0 ? `${unsupported} ${plural(unsupported, 'liga', 'ligas')} en una plataforma que aún no podemos leer` : null,
+        unidentified > 0 ? `${unidentified} ${plural(unidentified, 'jugador', 'jugadores')} que no pudimos identificar` : null,
+      ]
+        .filter(Boolean)
+        .join(', ')}.`,
     sharesNone: 'No se encontraron jugadores en las plantillas de las ligas leídas.',
     sharesOf: 'de',
     sharesStarting: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,

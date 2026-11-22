@@ -10,7 +10,6 @@ const loadWaiver = vi.fn()
 
 vi.mock('@/lib/decision-os/grounding/decisionBridge', () => ({
   loadWaiverDecisionSlice: loadWaiver,
-  loadLineupDecisionSlice: vi.fn(async () => null),
   loadCommissionerHealthDecisionSlice: vi.fn(async () => null),
 }))
 vi.mock('@/lib/decision-os/import-os', () => ({ createImportOsLoaders: () => ({ loadAssertions: vi.fn(async () => null) }) }))
@@ -29,8 +28,9 @@ vi.mock('@/lib/chimmy-context/ChimmyContextEngine', () => ({
 vi.mock('@/lib/intelligence/chimmy/resolveChimmyGrounding', () => ({ resolveCommissionerGroundingOutcome: vi.fn(async () => null) }))
 vi.mock('@/lib/intelligence/chimmy/leagueIntelligenceGrounding', () => ({ resolveLeagueIntelligenceGrounding: vi.fn(async () => null) }))
 vi.mock('@/lib/intelligence/chimmy/portfolioGrounding', () => ({ resolvePortfolioGrounding: vi.fn(async () => null) }))
+const killedFeeds = new Set<string>()
 vi.mock('@/lib/decision-os/flags', () => ({
-  resolveDecisionOsFeedFlags: async () => ({ enabled: () => true, killed: [] }),
+  resolveDecisionOsFeedFlags: async () => ({ enabled: (f: string) => !killedFeeds.has(f), killed: [...killedFeeds] }),
 }))
 
 const { buildDecisionOsGroundingPacket } = await import('@/lib/decision-os/grounding/packet')
@@ -47,6 +47,7 @@ const waiverSlice = {
 
 describe('grounding packet — onWaiverClaims side channel', () => {
   beforeEach(() => {
+    killedFeeds.clear()
     loadWaiver.mockReset()
     loadWaiver.mockResolvedValue(waiverSlice)
   })
@@ -68,5 +69,16 @@ describe('grounding packet — onWaiverClaims side channel', () => {
   it('does not run the waiver bridge (or reach the sink) when the slice is not wanted', async () => {
     await buildDecisionOsGroundingPacket({ leagueId: 'lg1', userId: 'u1', sport: 'NFL', season: 2026, want: {}, onWaiverClaims: vi.fn() })
     expect(loadWaiver).not.toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE KILL SWITCH (2026-11-16, re-score item 9): the one slice that runs a live decision engine per turn can now
+   * be shed by an operator. Killed, the engine is not run at all and the packet SAYS it is off.
+   */
+  it('a killed waiverDecision feed does not run the engine, and leaves a named gap', async () => {
+    killedFeeds.add('waiverDecision')
+    const packet = await buildDecisionOsGroundingPacket({ leagueId: 'lg1', userId: 'u1', sport: 'NFL', season: 2026, want: { waiverDecision: true } })
+    expect(loadWaiver).not.toHaveBeenCalled()
+    expect(packet.waiverDecision).toMatchObject({ present: false, gap: { reason: 'disabled', detail: 'The waiverDecision feed is switched off.' } })
   })
 })

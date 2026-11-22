@@ -27,7 +27,7 @@ const VARIANT_ACCENT: Record<AICardVariant, string> = {
 
 export const AI_INSIGHT_CARD_ID = 'ai-insight-card-capture'
 
-export interface AICardRendererProps {
+interface AICardRendererProps {
   payload: AICardPayload
   /** Use this id so html2canvas can find the element */
   captureId?: string
@@ -184,6 +184,6 @@ function getVariantLabel(v: AICardVariant): string {
     case 'matchup_prediction': return 'Matchup'
     case 'draft_grade': return 'Draft Grade'
     case 'power_rankings': return 'Power Rankings'
-    default: return 'AI Insight'
+    default: return 'Chimmy Insight'
   }
 }

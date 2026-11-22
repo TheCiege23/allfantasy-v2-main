@@ -31,7 +31,7 @@ export interface SurvivorImportConfig {
   idolCount?: number
 }
 
-export interface SurvivorImportResult {
+interface SurvivorImportResult {
   leagueId: string
   playerCount: number
   tribeCount: number

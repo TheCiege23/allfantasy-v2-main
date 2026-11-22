@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, named: result.named })
   }
 
-  const gate = await assertLeagueCommissioner(body.leagueId, userId)
+  const gate = await assertLeagueCommissioner(body.leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const hostDenied = await survivorHostGuard(body.leagueId, userId)

@@ -48,14 +48,14 @@ export const UNREADABLE_IP_GEO: ParsedIpGeo = {
  */
 const REGION_CODE = /^[A-Z0-9]{1,3}$/
 
-export function asRegionCode(value: unknown): string | null {
+function asRegionCode(value: unknown): string | null {
   if (typeof value !== "string") return null
   const normalised = normaliseRegion(value.trim() === "" ? null : value)
   if (!normalised) return null
   return REGION_CODE.test(normalised) ? normalised : null
 }
 
-export function asCountryCode(value: unknown): string | null {
+function asCountryCode(value: unknown): string | null {
   if (typeof value !== "string") return null
   const normalised = normaliseCountry(value.trim() === "" ? null : value)
   if (!normalised) return null
@@ -155,7 +155,7 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
 const PRIVACY_RELAY_ASNS = new Set(["13335", "36183", "54113"])
 const PRIVACY_RELAY_ORGS = ["cloudflare", "akamai", "fastly"]
 
-export function isPrivacyRelayNetwork(asn: unknown, org: unknown): boolean {
+function isPrivacyRelayNetwork(asn: unknown, org: unknown): boolean {
   const asnDigits = String(asn ?? "").trim().toUpperCase().replace(/^AS/, "")
   if (PRIVACY_RELAY_ASNS.has(asnDigits)) return true
   const name = String(org ?? "").toLowerCase()
@@ -251,27 +251,14 @@ export function parseProxycheckPayload(data: Record<string, unknown> | null, ip:
   }
 }
 
-/**
- * The one rule for "is this client hiding where it is": Tor, a proxy or VPN, a
- * data centre, or a privacy relay. `true` when any signal says so, `false` when
- * a vendor answered and none did, `null` when nothing could answer.
- *
- * ⚠ `null` is NOT "clean", and callers must not cache or report it as such.
- * The gate fails open on it — deliberately, because a vendor outage must not
- * take the product down — but it is an absence of evidence, not evidence.
- */
-export function combineAnonymizerSignals(s: AnonymizerSignals): boolean | null {
-  return combineAnonymizerDetail(s).anonymized
-}
-
-export interface AnonymizerSignals {
+interface AnonymizerSignals {
   tor: boolean
   proxycheck: ProxycheckVerdict | null
   ipapi: ParsedIpGeo | null
 }
 
 export interface AnonymizerDetail {
-  /** Same meaning as `combineAnonymizerSignals`: true, false, or null for "nobody could tell". */
+  /** True, false, or null for "nobody could tell". */
   anonymized: boolean | null
   /** Set only when `anonymized` is true. */
   kind: AnonymizerKind | null
@@ -280,9 +267,9 @@ export interface AnonymizerDetail {
 }
 
 /** The three things that can call a connection anonymized. */
-export type AnonymizerSource = "tor" | "proxycheck" | "ipapi"
+type AnonymizerSource = "tor" | "proxycheck" | "ipapi"
 
-/** `combineAnonymizerSignals`, plus which signal decided it. One rule, two shapes. */
+/** Whether any signal calls the connection anonymized, plus which signal decided it. */
 export function combineAnonymizerDetail(s: AnonymizerSignals): AnonymizerDetail {
   if (s.tor) return { anonymized: true, kind: "tor", decidedBy: "tor" }
   if (s.proxycheck?.anonymized) return { anonymized: true, kind: s.proxycheck.kind ?? "proxy", decidedBy: "proxycheck" }

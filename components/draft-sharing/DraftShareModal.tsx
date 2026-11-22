@@ -5,7 +5,7 @@ import { DraftShareCard, DRAFT_SHARE_CARD_ID } from './DraftShareCard'
 import { DraftShareBar } from './DraftShareBar'
 import type { DraftShareCardPayload, DraftShareVariant } from '@/lib/draft-sharing/types'
 
-export interface DraftShareModalProps {
+interface DraftShareModalProps {
   leagueId: string
   season: string
   /** Roster options for "Share my grade" (rosterId, optional name) */
@@ -26,7 +26,7 @@ export function DraftShareModal({
   const [error, setError] = useState<string | null>(null)
   const [shareUrl, setShareUrl] = useState('')
   const [payload, setPayload] = useState<DraftShareCardPayload | null>(null)
-  const [variant, setVariant] = useState<DraftShareVariant>('draft_rankings')
+  const [, setVariant] = useState<DraftShareVariant>('draft_rankings')
   const [selectedRosterId, setSelectedRosterId] = useState<string | null>(null)
 
   const createShare = useCallback(

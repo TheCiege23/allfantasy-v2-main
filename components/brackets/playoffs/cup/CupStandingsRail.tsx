@@ -9,7 +9,7 @@ import { tipoffLabel } from "./cupFormat"
 import { useClientTime } from "./useClientTime"
 import "./af-nba-cup.css"
 
-export type CupStandingsRailProps = {
+type CupStandingsRailProps = {
   groups: CupGroup[]
   series: PlayoffSeriesView[]
   sport: string

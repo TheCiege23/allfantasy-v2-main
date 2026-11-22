@@ -29,7 +29,7 @@ type RedraftRosterDb = {
   findMany(args: { where: { id: { in: string[] } }; select: { id: true; faabBalance: true } }): Promise<Array<{ id: string; faabBalance: number | null }>>
   updateMany(args: { where: { id: string }; data: { faabBalance: number } }): Promise<unknown>
 }
-export type FaabMirrorDb = { roster: GenericRosterDb; redraftRoster: RedraftRosterDb }
+type FaabMirrorDb = { roster: GenericRosterDb; redraftRoster: RedraftRosterDb }
 
 /** After writing `Roster.faabRemaining`: copy it onto each linked `RedraftRoster.faabBalance`. */
 export async function copyGenericFaabToRedraft(db: FaabMirrorDb, genericRosterIds: string[]): Promise<void> {

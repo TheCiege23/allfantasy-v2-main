@@ -2,11 +2,13 @@
 
 import { useLeagueSectionData } from '@/hooks/useLeagueSectionData'
 import { useEffect, useState } from 'react'
+import { MAX_GAMES_PER_WEEK } from '@/lib/schedule-runtime/gamesPerWeek'
 import { toast } from 'sonner'
 
 type ScheduleConfig = {
   schedule_unit?: string
   regular_season_length?: number
+  games_per_week?: number
   matchup_frequency?: string
   matchup_cadence?: string
   schedule_generation_strategy?: string
@@ -24,6 +26,7 @@ type ScheduleConfig = {
 type EditableScheduleForm = {
   scheduleUnit: string
   regularSeasonLength: number
+  gamesPerWeek: number
   matchupFrequency: string
   matchupCadence: string
   scheduleGenerationStrategy: string
@@ -50,6 +53,7 @@ function toEditableForm(config: ScheduleConfig): EditableScheduleForm {
   return {
     scheduleUnit: config.schedule_unit ?? 'week',
     regularSeasonLength: Number(config.regular_season_length ?? 18),
+    gamesPerWeek: Number(config.games_per_week ?? 1),
     matchupFrequency: config.matchup_frequency ?? 'weekly',
     matchupCadence: config.matchup_cadence ?? 'weekly',
     scheduleGenerationStrategy: config.schedule_generation_strategy ?? 'round_robin',
@@ -206,6 +210,22 @@ export default function ScheduleSettingsPanel({ leagueId }: { leagueId: string }
                   <option key={value} value={value}>{value}</option>
                 ))}
               </select>
+            </label>
+            <label className="text-xs text-white/70">
+              Games per team each week
+              <select
+                aria-label="Games per team each week"
+                value={form.gamesPerWeek}
+                onChange={(e) => setForm((prev) => (prev ? { ...prev, gamesPerWeek: Number(e.target.value) || 1 } : prev))}
+                className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
+              >
+                {Array.from({ length: MAX_GAMES_PER_WEEK }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <span className="mt-1 block text-[11px] text-white/45">
+                Takes effect the next time the schedule is generated or regenerated.
+              </span>
             </label>
             <label className="text-xs text-white/70">
               Regular season length
@@ -410,6 +430,10 @@ export default function ScheduleSettingsPanel({ leagueId }: { leagueId: string }
         <div>
           <dt className="text-white/50">Regular season length</dt>
           <dd className="text-white/90">{config.regular_season_length ?? '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-white/50">Games per team each week</dt>
+          <dd className="text-white/90">{config.games_per_week ?? 1}</dd>
         </div>
         <div>
           <dt className="text-white/50">Matchup frequency</dt>

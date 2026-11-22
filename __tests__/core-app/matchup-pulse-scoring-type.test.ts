@@ -69,24 +69,13 @@ const OUT = new Set<string>()
 const lookups = vi.hoisted(() => [] as Array<{ at: unknown; sport: unknown }>)
 /* When set, the feed holds nothing for week 4 — only its newest week, 5. */
 const feed = vi.hoisted(() => ({ missingWeek4: false }))
-vi.mock('@/lib/core-app/playerProjections', () => ({
-  /* The feed's NEWEST week is week 5 — a week AHEAD of the matchups, as production's usually is. */
-  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 5 })),
-  lookupProjections: vi.fn(async (ids: string[], at: unknown, _idp: unknown, sport: unknown) => {
-    lookups.push({ at, sport })
-    if (feed.missingWeek4 && (at as { week?: number } | null)?.week === 4) return new Map()
-    return new Map(
-      ids
-        .filter((id) => PLAYERS[id])
-        .map((id) => [
-          id,
-          {
-            projectedPoints: PLAYERS[id][0],
-            team: PLAYERS[id][1],
-            componentStats: GENERIC_ONLY.has(id) ? null : { rec: PLAYERS[id][0] },
-          },
-        ]),
-    )
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: vi.fn(async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => {
+    lookups.push({ at: { season: '2026', week }, sport: 'NFL' })
+    return { sport: 'NFL', season: 2026, week, unit: 'fantasy points',
+      rows: feed.missingWeek4 && week === 4 ? [] : rosterIds.filter(id => PLAYERS[id]).map(id => ({
+        rosterPlayerId: id, availabilityId: id, team: PLAYERS[id][1], weekly: GENERIC_ONLY.has(id) ? null : PLAYERS[id][0],
+      })) }
   }),
 }))
 vi.mock('@/lib/core-app/unavailableStarters', () => ({

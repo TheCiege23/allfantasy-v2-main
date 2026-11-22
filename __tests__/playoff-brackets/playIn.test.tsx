@@ -53,10 +53,10 @@ describe('the plans', () => {
     expect(checkByePlan(twelve.seeds, twelve.plan).ok).toBe(true)
   })
 
-  it('never a play-in that is just a bigger bracket, takes a bye seed, or passes 16 seeds', () => {
+  it('never a play-in that is just a bigger bracket, takes a bye seed, or passes 32 seeds', () => {
     expect(playInFor(2, 2)).toBeNull() // every seed would be in it: that is the four-team bracket
-    expect(playInFor(16, 1)).toBeNull()
-    expect(playInFor(15, 2)).toBeNull()
+    expect(playInFor(32, 1)).toBeNull()
+    expect(playInFor(31, 2)).toBeNull()
     expect(playInFor(6, 3)).toBeNull()
     expect(playInFor(1, 1)).toBeNull()
     expect(playInOptions(6).map((p) => p.spots)).toEqual([1, 2])

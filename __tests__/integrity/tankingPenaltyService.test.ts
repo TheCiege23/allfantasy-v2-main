@@ -11,11 +11,28 @@ const m = vi.hoisted(() => ({
   inventory: vi.fn(),
   settings: {} as Record<string, unknown>,
 }))
+/*
+ * 🛑 THE REAL ID SPACES. A native tanking flag names a `RedraftRoster` ('r1'); the league's `Roster`
+ * row is a different record ('gen-r1') linked by `redraftRosterId`. This mock used to return a
+ * roster for ANY id, which is how the service shipped looking up the flag's id in the wrong table —
+ * no warning sent, no pick or FAAB ever found — with this suite green.
+ */
+const { findRoster } = vi.hoisted(() => {
+  const ROSTERS = [
+    { id: 'gen-r1', redraftRosterId: 'r1', platformUserId: 'user-r1' },
+    { id: 'gen-orphan', redraftRosterId: 'orphan-team', platformUserId: 'orphan-x' },
+  ]
+  type RosterWhere = { leagueId: string; OR: Array<{ id?: string; redraftRosterId?: string }> }
+  const findRoster = async ({ where }: { where: RosterWhere }) =>
+    ROSTERS.find((r) => where.OR.some((c) => (c.id != null && c.id === r.id) || (c.redraftRosterId != null && c.redraftRosterId === r.redraftRosterId))) ?? null
+  return { findRoster }
+})
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     integrityFlag: { findUnique: m.flag, count: m.strikes },
     redraftSeason: { findFirst: vi.fn(async () => ({ createdAt: new Date('2026-08-01') })) },
-    roster: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({ platformUserId: where.id === 'orphan-team' ? 'orphan-x' : `user-${where.id}` })) },
+    roster: { findFirst: vi.fn(findRoster) },
+    redraftRoster: { findFirst: vi.fn(async () => null) },
     appUser: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id })) },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn({ futureDraftPick: { upsert: m.upsert } })),
   },
@@ -32,7 +49,8 @@ const pick = (season: number, round: number, owner: string, original: string) =>
 beforeEach(() => {
   vi.clearAllMocks()
   m.settings = {}
-  m.inventory.mockResolvedValue({ picks: [pick(2027, 1, 'r1', 'r1'), pick(2027, 2, 'r1', 'r1')] })
+  // The pick inventory is keyed on `Roster.id`, never the flag's redraft id.
+  m.inventory.mockResolvedValue({ picks: [pick(2027, 1, 'gen-r1', 'gen-r1'), pick(2027, 2, 'gen-r1', 'gen-r1')] })
 })
 
 describe('a flag is opened', () => {
@@ -68,10 +86,12 @@ describe('the commissioner confirms a flag', () => {
     const r = await onTankingFlagConfirmed('f1', 'commish')
     expect(r[0]).toMatchObject({ step: { kind: 'forfeit_pick' }, forfeited: { season: 2027, round: 1, label: '2027 1st-round pick' } })
     expect(m.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { leagueId_pickSeason_round_originalRosterId: { leagueId: 'L', pickSeason: 2027, round: 1, originalRosterId: 'r1' } },
-      update: expect.objectContaining({ status: 'forfeited', currentOwnerId: 'r1' }),
+      where: { leagueId_pickSeason_round_originalRosterId: { leagueId: 'L', pickSeason: 2027, round: 1, originalRosterId: 'gen-r1' } },
+      update: expect.objectContaining({ status: 'forfeited', currentOwnerId: 'gen-r1' }),
     }))
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TANKING_PICK_FORFEITED_ACTION, entityId: 'r1' }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TANKING_PICK_FORFEITED_ACTION, entityId: 'gen-r1' }))
+    // The manager is found through the link too.
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ userIds: ['user-r1'] }))
     expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Draft pick forfeited for tanking' }))
   })
 

@@ -92,8 +92,14 @@ describe('WaiverLineupBoard — the per-league panel', () => {
     render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(screen.getByTestId('waiver-lineup-board')).toBeTruthy())
     const text = screen.getByTestId('waiver-lineup-board').textContent ?? ''
-    expect(text).toContain('AF 15.6')
-    expect(text).toContain('AF 10.4')
+    /*
+     * Since the 2026-11-13 guide the row carries ONE projection; AllFantasy's own figure is one hover
+     * away, in the projection's title. The starter he replaces shows his provider projection only.
+     */
+    const proj = screen.getByTestId('waiver-lineup-board').querySelector('.af-wlb-proj') as HTMLElement
+    expect(proj.getAttribute('title')).toBe('AllFantasy’s own projection: 15.6')
+    expect(text).not.toContain('AF 15.6')
+    expect(text).toContain('replaces Incumbent (11.1)')
     // The gain is still the provider's.
     expect(text).toContain('+3.1')
   })

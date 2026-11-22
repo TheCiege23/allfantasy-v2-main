@@ -18,7 +18,7 @@ import type { UserOsContext } from '../userOsContext'
 import { buildRecommendation, isFreshnessSafeForPriority } from '../userOsRecommendationHelpers'
 import type { LeagueRecommendation } from '../types'
 
-export type StrategyClassification =
+type StrategyClassification =
   | 'strong_contender'
   | 'contender'
   | 'fringe_contender'
@@ -26,7 +26,7 @@ export type StrategyClassification =
   | 'rebuild'
   | 'insufficient_evidence'
 
-export interface StrategyClassificationResult {
+interface StrategyClassificationResult {
   classification: StrategyClassification
   confidence: number
   posture: string

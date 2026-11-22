@@ -86,7 +86,7 @@ import { ChimmyFreshnessChip } from "./ChimmyFreshnessChip"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type WorldCupDailyEdgeReportCardProps = {
+type WorldCupDailyEdgeReportCardProps = {
   challengeId: string
   /** Whether the user has AI entitlement (subscription covers coaching). */
   aiEntitled: boolean

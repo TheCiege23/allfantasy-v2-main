@@ -45,14 +45,6 @@ export function resolveSocialOAuthErrorMessage(
   return error
 }
 
-export function resolveSleeperLoginErrorMessage(error: string | null | undefined): string {
-  if (!error) return 'Unable to sign in with Sleeper. Please try again.'
-  if (error.includes('SLEEPER_LOOKUP_UNAVAILABLE')) {
-    return 'Sleeper sign-in is temporarily unavailable. Please try again in a moment.'
-  }
-  return 'We could not find that Sleeper account. Please check the username and try again.'
-}
-
 export function resolvePasswordResetErrorMessage(
   errorCode: string | null | undefined
 ): string {

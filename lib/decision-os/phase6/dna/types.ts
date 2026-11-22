@@ -13,7 +13,7 @@
 
 export type PatternConfidenceInput = 'high' | 'medium' | 'low'
 
-export interface EvidenceWindowInput {
+interface EvidenceWindowInput {
   startedAt: string
   endedAt: string
   durationDays: number
@@ -41,7 +41,7 @@ export interface ManagerPatternGroupInput {
 
 export type ManagerEngagementTier = 'elite' | 'active' | 'moderate' | 'passive' | 'dormant'
 
-export interface ManagerActivityRatesInput {
+interface ManagerActivityRatesInput {
   lineupEditsPerWeek: number
   waiverClaimsPerWeek: number
   tradeProposalsPerWeek: number

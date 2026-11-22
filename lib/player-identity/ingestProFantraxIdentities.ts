@@ -34,7 +34,7 @@ export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun 
     const universe = universeKey ? await prisma.sportsDataCache.findUnique({ where: { cacheKey: universeKey }, select: { cacheKey: true } }) : true
     if (universe) return { skipped: 'weekly cadence', updated: 0 }
   }
-  const map = await getFantraxPlayerIds(sport)
+  const map = await getFantraxPlayerIds(sport === 'SOCCER' ? 'EPL' : sport)
   if (!map.ok) throw new Error(map.failure.message)
   let universeStored = 0
   if (universeKey && !dryRun) {
@@ -45,7 +45,7 @@ export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun 
     universeStored = rows.length
   }
   const rows = await prisma.playerIdentityMap.findMany({ where: { sport }, select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true, rollingInsightsId: true } })
-  const { links, ...coverage } = planProFantraxIdentityLinks(sport, Object.values(map.data), rows)
+  const { links, ...coverage } = planProFantraxIdentityLinks(sport, Object.values(map.data), rows, { fullDirectory: true })
   const updated = dryRun || !links.length ? 0 : await prisma.$executeRaw`
     WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(links)}::jsonb) AS l(id text, "fantraxId" text, "rollingInsightsId" text))
     UPDATE "PlayerIdentityMap" p SET "fantraxId"=l."fantraxId", "updatedAt"=NOW(), "lastSyncedAt"=NOW()
@@ -63,3 +63,4 @@ export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun 
 
 export const ingestNbaFantraxIdentities = (dryRun = false) => ingestProFantraxIdentities('NBA', dryRun)
 export const ingestNhlFantraxIdentities = (dryRun = false) => ingestProFantraxIdentities('NHL', dryRun)
+export const ingestSoccerFantraxIdentities = (dryRun = false) => ingestProFantraxIdentities('SOCCER', dryRun)

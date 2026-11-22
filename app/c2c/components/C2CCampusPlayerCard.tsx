@@ -49,7 +49,7 @@ export function C2CCampusPlayerCard({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="truncate text-[12px] font-bold text-white">{player.playerName}</span>
+          <span className="line-clamp-2 max-w-full break-words text-[12px] font-bold text-white">{player.playerName}</span>
           <span className="rounded-full bg-violet-600/30 px-1.5 py-0.5 text-[11px] font-bold uppercase text-violet-100">
             🎓 Campus
           </span>

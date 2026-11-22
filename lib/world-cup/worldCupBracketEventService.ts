@@ -114,7 +114,7 @@ export async function updateWorldCupCommissionerSettings(input: {
   })
 }
 
-export type EmitWorldCupBracketEventInput = {
+type EmitWorldCupBracketEventInput = {
   challengeId: string
   eventType: string
   eventTitle: string
@@ -293,8 +293,6 @@ export async function listWorldCupBracketChatEvents(
   })
   return Array.isArray(rows) ? rows.filter(isPublicWorldCupFeedEvent) : []
 }
-
-export { WORLD_CUP_BRACKET_EVENT_TYPES }
 
 export function isPublicWorldCupFeedEvent(event: { metadata?: unknown; eventType?: string | null }) {
   const metadata = event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)

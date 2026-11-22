@@ -27,7 +27,7 @@ async function commissionerOrResponse(ctx: Ctx): Promise<{ leagueId: string } | 
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (e) {
     if (e instanceof Response) return e
     throw e

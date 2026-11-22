@@ -37,6 +37,12 @@ export type DraftWarRoomInput = {
   aiAdpByKey?: Record<string, number>
   mode?: 'needs' | 'bpa'
   /**
+   * The room's one pick, already decided on the server (`sharedDraftPickForUser`, lib/shared-services/draft/
+   * pickDecision.ts). When given it replaces the engine run on `availablePlayers`, so the War Room cannot name a
+   * different player from the draft card. Absent, the engine runs on the posted pool as before.
+   */
+  precomputed?: RecommendationResult | null
+  /**
    * Pre-assembled grounded draft context from DraftAdvisorContextService.
    * When present, enriches the LLM prompt with injury flags, bye weeks,
    * positional scarcity ratings, and roster needs derived from DB data.
@@ -45,7 +51,7 @@ export type DraftWarRoomInput = {
   groundedContext?: DraftAdvisorContext
 }
 
-export type DraftWarRoomOutput = {
+type DraftWarRoomOutput = {
   bestPick: WarRoomPlayer
   confidence: number
   reasoning: string[]
@@ -66,7 +72,7 @@ export type DraftWarRoomOutput = {
   fieldSources?: Record<string, 'deterministic' | 'deterministic_ranked' | 'ai'>
 }
 
-export type DraftCompareInput = {
+type DraftCompareInput = {
   sport: string
   playerA: WarRoomPlayer
   playerB: WarRoomPlayer
@@ -74,7 +80,7 @@ export type DraftCompareInput = {
   rosterContext?: string
 }
 
-export type DraftCompareOutput = {
+type DraftCompareOutput = {
   winner: 'A' | 'B'
   confidence: number
   breakdown: {
@@ -286,7 +292,7 @@ export async function runDraftWarRoomRecommendation(input: DraftWarRoomInput): P
     }
   }
 
-  const det = computeDraftRecommendation({
+  const det = input.precomputed ?? computeDraftRecommendation({
     available,
     teamRoster: input.userRoster,
     rosterSlots: input.rosterSlots ?? [],
@@ -440,7 +446,7 @@ export async function runDraftPlayerCompare(input: DraftCompareInput): Promise<D
       winner: aWins ? 'A' : 'B',
       confidence: 58,
       breakdown: {
-        projection: 'ADP-based tiebreak (AI unavailable).',
+        projection: 'ADP-based tiebreak (Chimmy unavailable).',
         matchup: 'Compare schedules post-draft.',
         usage: 'Verify camp depth charts.',
         risk: 'Injury and role volatility apply to both.',

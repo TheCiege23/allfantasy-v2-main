@@ -1,4 +1,4 @@
-export const WORLD_CUP_GROUP_KEYS = [
+const WORLD_CUP_GROUP_KEYS = [
   "A",
   "B",
   "C",
@@ -15,24 +15,18 @@ export const WORLD_CUP_GROUP_KEYS = [
 
 export type WorldCupGroupKey = (typeof WORLD_CUP_GROUP_KEYS)[number]
 
-export type WorldCupGroupDefinition = {
+type WorldCupGroupDefinition = {
   groupKey: WorldCupGroupKey
   displayName: string
   sortOrder: number
 }
 
-export type WorldCupValidationResult =
+type WorldCupValidationResult =
   | { ok: true }
   | { ok: false; error: string }
 
-const WORLD_CUP_GROUP_KEY_SET = new Set<string>(WORLD_CUP_GROUP_KEYS)
-
 function hasDuplicates(values: readonly string[]): boolean {
   return new Set(values).size !== values.length
-}
-
-export function isWorldCupGroupKey(value: unknown): value is WorldCupGroupKey {
-  return typeof value === "string" && WORLD_CUP_GROUP_KEY_SET.has(value)
 }
 
 export function validateWorldCupGroupRanking(teamIds: readonly string[]): WorldCupValidationResult {

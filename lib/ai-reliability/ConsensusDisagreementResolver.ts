@@ -2,13 +2,13 @@
  * When multiple providers disagree, produce explanation and optional merged stance (Prompt 127).
  */
 
-export interface VerdictStance {
+interface VerdictStance {
   verdict: string;
   confidence: number;
   provider: string;
 }
 
-export interface DisagreementResult {
+interface DisagreementResult {
   hasDisagreement: boolean;
   explanation: string;
   primaryVerdict: string;

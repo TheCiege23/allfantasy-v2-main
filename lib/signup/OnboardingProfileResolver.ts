@@ -19,7 +19,7 @@ import { isAllowedSignupTimezone, resolveSignupTimezone } from "@/lib/signup/Tim
 import { resolvePreferredLanguage } from "@/lib/signup/LanguagePreferenceResolver"
 import { resolveAvatarPreset } from "@/lib/signup/AvatarPickerService"
 
-export interface OnboardingProfileInput {
+interface OnboardingProfileInput {
   displayName?: unknown
   username?: unknown
   phone?: unknown
@@ -28,7 +28,7 @@ export interface OnboardingProfileInput {
   avatarPreset?: unknown
 }
 
-export interface ResolvedOnboardingProfile {
+interface ResolvedOnboardingProfile {
   displayName: string
   /** Normalized (case-preserving) username, or null when the user left it unchanged/blank. */
   username: string | null
@@ -39,14 +39,14 @@ export interface ResolvedOnboardingProfile {
   avatarPreset: string | null
 }
 
-export type OnboardingProfileError =
+type OnboardingProfileError =
   | "DISPLAYNAME_REQUIRED"
   | "DISPLAYNAME_PROFANE"
   | "USERNAME_INVALID"
   | "USERNAME_PROFANE"
   | "TIMEZONE_INVALID"
 
-export type OnboardingProfileResolution =
+type OnboardingProfileResolution =
   | { ok: true; value: ResolvedOnboardingProfile }
   | { ok: false; error: string; code: OnboardingProfileError }
 

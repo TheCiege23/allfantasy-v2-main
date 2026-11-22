@@ -5,7 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { splitChoppedFaab } from './faabOnChop'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
-export type FaabRedistribution = { pool: number; perTeam: number; survivors: number; shares: Map<string, number> }
+/**
+ * `taken` is what each chopped team gave up — recorded in the `faab_split` event so an undone chop can give
+ * each team back exactly its own balance (./chopUndo.ts), not a guessed share of the pool.
+ */
+export type FaabRedistribution = { pool: number; perTeam: number; survivors: number; shares: Map<string, number>; taken: Map<string, number> }
 
 /**
  * Move the chopped teams' FAAB to the survivors, in one transaction.
@@ -34,11 +38,15 @@ export async function redistributeChoppedFaab(input: {
     if (survivors.length === 0) return null
 
     let pool = 0
+    const taken = new Map<string, number>()
     for (const id of input.choppedRosterIds) {
       const balance = byId.get(id)
       if (balance == null || balance <= 0) continue
-      const taken = await tx.roster.updateMany({ where: { id, faabRemaining: balance }, data: { faabRemaining: 0 } })
-      if (taken.count === 1) pool += balance
+      const zeroed = await tx.roster.updateMany({ where: { id, faabRemaining: balance }, data: { faabRemaining: 0 } })
+      if (zeroed.count === 1) {
+        pool += balance
+        taken.set(id, balance)
+      }
     }
 
     const split = splitChoppedFaab(pool, survivors)
@@ -47,6 +55,6 @@ export async function redistributeChoppedFaab(input: {
       if (amount > 0) await tx.roster.update({ where: { id: rosterId }, data: { faabRemaining: { increment: amount } } })
     }
     await copyGenericFaabToRedraft(tx, [...input.choppedRosterIds, ...split.shares.keys()])
-    return { pool: split.pool, perTeam: Math.floor(split.pool / survivors.length), survivors: survivors.length, shares: split.shares }
+    return { pool: split.pool, perTeam: Math.floor(split.pool / survivors.length), survivors: survivors.length, shares: split.shares, taken }
   })
 }

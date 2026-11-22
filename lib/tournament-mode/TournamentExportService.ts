@@ -6,7 +6,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface TournamentExportRow {
+interface TournamentExportRow {
   userName: string
   wins: number
   losses: number

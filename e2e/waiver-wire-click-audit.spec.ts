@@ -156,7 +156,7 @@ test.describe('@waiver waiver wire click audit', () => {
     await expect(page.getByTestId('waiver-tab-dropped')).toBeVisible()
 
     await page.getByTestId('waiver-tab-available').click()
-    await expect(page.getByTestId('waiver-player-detail-link-player-1')).toHaveAttribute('href', /\/player-comparison\?/)
+    await expect(page.getByTestId('waiver-player-detail-link-player-1')).toHaveAttribute('href', /\/player-comparison-lab\?playerA=/)
     await expect(page.getByTestId('waiver-ai-help-link')).toHaveAttribute('href', /\/messages\?tab=ai/)
     await expect(page.getByTestId('waiver-ai-help-link')).toHaveAttribute('href', /insightType=waiver/)
     const analyzeButton = page.getByTestId('waiver-ai-engine-analyze')

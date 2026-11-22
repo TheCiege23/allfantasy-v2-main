@@ -232,7 +232,6 @@ export function buildRecommendationPresentation(
 // ── Presentation set ──────────────────────────────────────────────────────────
 
 const PRIORITY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
-const SEVERITY_ORDER: Record<string, number> = { urgent: 4, elevated: 3, standard: 2, advisory: 1 }
 
 export function buildRecommendationPresentationSet(
   recs: RecommendationPresentation[],
@@ -261,8 +260,3 @@ export function buildRecommendationPresentationSet(
 
 // ── Batch builder ─────────────────────────────────────────────────────────────
 
-export function buildRecommendationPresentations(
-  recs: Parameters<typeof buildRecommendationPresentation>[0][],
-): RecommendationPresentation[] {
-  return recs.map((r) => buildRecommendationPresentation(r))
-}

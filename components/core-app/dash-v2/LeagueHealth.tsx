@@ -58,4 +58,3 @@ export function LeagueHealth({ state }: { state: SectionState<HealthReading> }) 
   )
 }
 
-export default LeagueHealth

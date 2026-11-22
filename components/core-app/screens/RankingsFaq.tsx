@@ -140,7 +140,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
           <ul className="af-rk-method">
             <li>
               <b>Win rate</b> is counted per game, so a 13-week and a 17-week season weigh by games played. It is blended
-              with {WIN_RATE_PRIOR_GAMES} games at .500 so a short hot streak cannot outrank a long record.{' '}
+              with {WIN_RATE_PRIOR_GAMES} games at .500 to reduce the effect of a short hot streak.{' '}
               {Math.round(WIN_RATE_FLOOR * 100)}% earns nothing; {Math.round(WIN_RATE_CEILING * 100)}% earns full credit.
             </li>
             <li>
@@ -312,7 +312,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
         <section className="af-rk-card">
           <h2 className="af-rk-q">Does my old Sleeper history count?</h2>
           <p className="af-rk-a">
-            Yes. Imported seasons from Sleeper, ESPN and Yahoo count the same as leagues played inside
+            Yes. Imported seasons count the same as leagues played inside
             AllFantasy. Each league-season is counted once, and imported data wins when two sources
             describe the same season.
           </p>
@@ -327,6 +327,28 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
             {data.ladder[data.ladder.length - 1].firstLevel} starts at{' '}
             {data.ladder[data.ladder.length - 1].minXp.toLocaleString(getAppIntlLocale())} XP. Thresholds are fixed —
             you&apos;re never ranked against other people for your level.
+          </p>
+        </section>
+
+        <section className="af-rk-card">
+          <h2 className="af-rk-q">How does league difficulty affect my score?</h2>
+          <p className="af-rk-a">
+            A title in a larger league earns more credit. Playoff results use the league’s own playoff cut, and scoring
+            uses comparable leagues. Redraft, keeper and dynasty are filters with the same scoring rules.
+          </p>
+          <p className="af-rk-a">
+            Guillotine and Survivor use the share of verified scoring periods you survived in a completed season.
+            Ten of fourteen periods earns 71.4, and two of fourteen earns 14.3. A season without recorded survival
+            results stays unscored. Combined scores weight survival by its share of your scored league-seasons.
+          </p>
+        </section>
+
+        <section className="af-rk-card">
+          <h2 className="af-rk-q">Which leagues can I join?</h2>
+          <p className="af-rk-a">
+            Your Career Level comes from XP. Public and private fantasy leagues allow direct joins within three Career
+            Levels of the league’s level. Outside that range, request commissioner approval. Class Division describes
+            weekly NFL performance and helps Find a League sort matches.
           </p>
         </section>
 

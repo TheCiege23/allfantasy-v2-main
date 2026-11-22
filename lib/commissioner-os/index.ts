@@ -11,25 +11,18 @@
 
 export {
   composeCapabilities,
-  capabilitiesForConcept,
-  capabilitiesForFormat,
-  hasCapabilityDomain,
   type CommissionerCapabilityId,
 } from './capabilities'
 
 export {
   resolveActionAuthority,
-  describeActionAuthority,
   type ActionAuthority,
   type EffectScope,
-  type ResolveActionAuthorityInput,
 } from './authority'
 
 export {
   RULE_EFFECTS,
-  RULE_EFFECT_TYPES,
   getRuleEffect,
-  type RuleEffectDefinition,
   type RuleEffectExecutorStatus,
   type RuleEffectType,
 } from './ruleEffects'
@@ -46,7 +39,6 @@ export {
 export {
   resolveCommissionerLeagueProfile,
   type CommissionerLeagueRow,
-  type ResolveCommissionerLeagueProfileInput,
 } from './profile/resolveCommissionerLeagueProfile'
 
 export {
@@ -58,15 +50,10 @@ export {
 export {
   templateKey,
   validateTemplateDefinition,
-  type CommissionerAutomationPolicy,
-  type ExternalPlatformBehavior,
   type LeagueTemplateDefinition,
   type LeagueTemplateId,
   type LeagueTemplateKey,
   type ScheduledRuleEffect,
-  type TemplatePhase,
-  type TemplatePhaseGraph,
-  type TemplateValidationIssue,
 } from './template/types'
 
 export {
@@ -79,7 +66,4 @@ export {
 
 export {
   planTemplateActions,
-  type PlannedTemplateAction,
-  type PlanTemplateActionsInput,
-  type TemplatePlan,
 } from './template/planTemplateActions'

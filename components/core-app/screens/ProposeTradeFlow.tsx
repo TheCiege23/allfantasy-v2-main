@@ -45,14 +45,14 @@ export type FlowAsset = {
   value: number | null
 }
 
-export const EXPIRY_HOURS = [24, 48, 72, 168] as const
+const EXPIRY_HOURS = [24, 48, 72, 168] as const
 
 /** Position → tint key, the same buckets the builder's position labels use. */
 const POSITION_TINT: Record<string, string> = {
   QB: 'qb', RB: 'rb', WR: 'wr', TE: 'te', K: 'k', DEF: 'def', DST: 'def',
   DL: 'dl', DE: 'dl', DT: 'dl', NT: 'dl', LB: 'lb', DB: 'db', CB: 'db', S: 'db', SS: 'db', FS: 'db',
 }
-export function positionTint(position: string | null | undefined): string {
+function positionTint(position: string | null | undefined): string {
   return POSITION_TINT[(position ?? '').toUpperCase()] ?? 'other'
 }
 

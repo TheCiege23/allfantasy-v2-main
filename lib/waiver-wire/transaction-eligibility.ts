@@ -53,6 +53,8 @@ export type WaiverClaimEligibilityInput = {
    * A first-come add in an offseason the commissioner opened to free agency
    * (lib/waiver-wire/season-phase-policy.ts): a `completed` season does not lock it.
    */
+  /** True only for the immediate-add service, not a submitted waiver claim. */
+  freeAgent?: boolean
   offseasonFreeAgency?: boolean
   /** Told what the gate let through but wants said — an imported roster's IR findings. Never a refusal. */
   onNotice?: (message: string) => void
@@ -153,6 +155,7 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
     throw new Error('This league season is complete; roster moves are locked.')
   }
 
+  if (league.leagueVariant === 'survivor_guillotine' && input.freeAgent) throw new Error('Survivor Guilly acquisitions use blind FAAB waivers; immediate free-agent adds are disabled.')
   await assertCurrentNbaWaiverPlayer(league, addId)
 
   const engineConfig = parseWaiverEngineConfig(settingsRow?.waiverEngineConfig ?? null)
@@ -271,6 +274,15 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
     // of whether the move ever touched a starter slot.
     const blocking = ev.result.blockingReasons.filter((r) => {
       if (r.code === 'LEAGUE_LINEUP_LOCK_ACTIVE') return false
+      // An empty starting slot never blocks a claim. A roster that is ALREADY short (an auction team that
+      // won no catcher, a QB lost to injury) could otherwise claim no one at all — not even the player who
+      // fills the gap — and the request failed as an unhandled 500 (dynasty simulation, 2026-11-09: MLB,
+      // "Not enough starters (22/23)"). A claim whose DROP opens the gap is already the manager's call:
+      // the claims route asks once (lib/waiver-wire/lineup-fill-warning.ts) — a warning, never a block.
+      if (r.code === 'STARTER_SLOT_EMPTY_WHEN_REQUIRED') {
+        notices.push(r.message)
+        return false
+      }
       if (imported && isImportedProviderStateIssue(r)) {
         notices.push(r.message)
         return false

@@ -1,8 +1,17 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from "next/server";
-import { verifyAdminMagicToken, signAdminSessionCookie } from "@/lib/adminSession";
+import {
+  verifyAdminMagicToken,
+  signAdminSessionCookie,
+  signAdminMfaPending,
+  ADMIN_MFA_PENDING_COOKIE,
+  ADMIN_MFA_PENDING_TTL_SECONDS,
+} from "@/lib/adminSession";
 import { isAdminEmailAllowed } from "@/lib/adminAuth";
+import { adminTotpRequired } from "@/lib/security/adminTotp";
 import { getDeploymentLinkOrigin } from "@/lib/site-public-origin";
+import { consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
+import { createHash } from "crypto";
 
 function sanitizeNext(next?: string) {
   if (!next) return "/admin";
@@ -44,7 +53,34 @@ export const GET = withApiUsage({ endpoint: "/api/auth/admin-magic/consume", too
     return NextResponse.redirect(new URL("/admin-login?err=magic", baseUrl));
   }
 
+  // The email calls this link one-time; make it so. The token is a stateless HMAC valid for
+  // its whole window, so a forwarded or logged link otherwise mints a fresh admin session on
+  // every click. Claim it once (shared store; the window outlives the token's own expiry).
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const claim = await consumeSharedRateLimit(`admin-magic-used:${tokenHash}`, 1, 30 * 60);
+  if (!claim.success) {
+    return NextResponse.redirect(new URL("/admin-login?err=magic", baseUrl));
+  }
+
   const next = sanitizeNext(payload.next || "/admin");
+
+  // While admin codes are required, the link proves the EMAIL and nothing more: whoever
+  // can read that inbox still has to produce the authenticator code. Hold the proven
+  // address in a short-lived pending cookie and send the browser to the code step.
+  if (adminTotpRequired()) {
+    const codeStep = new URL("/admin-login", baseUrl);
+    codeStep.searchParams.set("step", "code");
+    codeStep.searchParams.set("next", next);
+    const pending = NextResponse.redirect(codeStep, { status: 303 });
+    pending.cookies.set(ADMIN_MFA_PENDING_COOKIE, signAdminMfaPending(payload.email), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: ADMIN_MFA_PENDING_TTL_SECONDS,
+    });
+    return pending;
+  }
 
   const cookie = signAdminSessionCookie({
     authenticated: true,

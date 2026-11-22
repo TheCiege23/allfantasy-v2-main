@@ -1,6 +1,6 @@
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export type AiPlayerComparisonBridgeParams = {
+type AiPlayerComparisonBridgeParams = {
   sport?: string | null
   leagueId?: string | null
   teamId?: string | null
@@ -26,10 +26,3 @@ export function buildAiPlayerCompareToolUrl(params: AiPlayerComparisonBridgePara
   return `/tools/player-decision?${q.toString()}`
 }
 
-/**
- * Server-safe: return path + query only (no origin).
- */
-export function buildChimmyStartSitHandoffMarkdown(params: AiPlayerComparisonBridgeParams): string {
-  const url = buildAiPlayerCompareToolUrl(params)
-  return `[Open Start A vs B tool](${url})`
-}

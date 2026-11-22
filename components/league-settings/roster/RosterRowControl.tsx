@@ -31,7 +31,7 @@ const SLOT_DOT_CLASS: Record<string, string> = {
 }
 
 /** Position dot colour: a known slot key first, then its category, then neutral. */
-export function rosterDotClass(def: SlotDef): string {
+function rosterDotClass(def: SlotDef): string {
   return SLOT_DOT_CLASS[def.key] ?? CATEGORY_DOT_CLASS[def.category] ?? 'bg-white/60'
 }
 

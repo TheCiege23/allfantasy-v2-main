@@ -12,7 +12,7 @@ import { positionColor } from '@/lib/draft/positions'
 import { formatAdpDelta, type ManagerTendencyKind } from '@/lib/draft-room/draftPulse'
 import type { LookaheadResult, LookaheadRow } from '@/lib/draft-room/draftIntelLookahead'
 
-export type DraftIntelPanelProps = {
+type DraftIntelPanelProps = {
   lookahead: LookaheadResult | null
   /** True when the draft has not started or is complete — there is nothing to look ahead to. */
   idle: boolean

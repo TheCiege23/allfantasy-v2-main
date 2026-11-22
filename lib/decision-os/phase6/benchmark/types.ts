@@ -15,7 +15,7 @@ export type BenchmarkRiskLevel = 'low' | 'medium' | 'high' | 'critical'
 export type BenchmarkWorkloadLevel = 'light' | 'moderate' | 'heavy' | 'critical'
 
 /** Minimal activity signal needed from Phase 5.3 LeagueActivityDimension. */
-export interface BenchmarkActivityInput {
+interface BenchmarkActivityInput {
   perManagerRate: number
 }
 

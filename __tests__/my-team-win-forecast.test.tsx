@@ -133,23 +133,24 @@ function screen(forecast: unknown) {
   } as unknown as MyTeamData
 }
 
-describe('the win line on the card', () => {
-  it('prints the percentage, margin and confidence', () => {
+describe('the win chance, on the top number (2026-11-14)', () => {
+  it('says the percentage once, beside both projections, and opens Matchup', () => {
     const { container } = render(
       <MyTeam data={screen({ available: true, pWin: 0.734, projectedMargin: 12.96, confidence: 'MEDIUM', detail: '' })} />,
     )
-    const line = container.querySelector('.af-mt-mu-win')!
-    expect(line.getAttribute('data-favoured')).toBe('true')
-    expect(line.textContent).toContain('73% to win')
-    expect(line.textContent).toContain('projected margin +13.0') // rounds to one place
-    expect(line.textContent).toContain('confidence medium')
+    const chip = container.querySelector('[data-chip=projected]')!
+    expect(chip.querySelector('b')?.textContent).toBe('35.0 vs 22.0')
+    expect(chip.querySelector('span')?.textContent).toBe('Projected · 73% to win')
+    expect(chip.getAttribute('href')).toMatch(/^\/core\/matchup\?league=/)
+    // No second card repeating the numbers with its own margin.
+    expect(container.querySelector('.af-mt-mu-win')).toBeNull()
+    expect(container.textContent).not.toContain('projected margin')
   })
 
-  it('prints the reason instead of a number when the forecast declines', () => {
+  it('shows no percentage when the forecast declines', () => {
     const { container } = render(<MyTeam data={screen({ available: false, refusal: 'unattributed', reason: UNATTRIBUTED_REASON })} />)
-    const line = container.querySelector('.af-mt-mu-win')!
-    expect(line.getAttribute('data-available')).toBe('false')
-    expect(line.textContent).toContain('No win probability')
-    expect(line.textContent).not.toMatch(/\d+%/)
+    const chip = container.querySelector('[data-chip=projected]')!
+    expect(chip.querySelector('span')?.textContent).toBe('Projected, you vs them')
+    expect(chip.textContent).not.toMatch(/\d+%/)
   })
 })

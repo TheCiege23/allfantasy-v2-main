@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 
-export type LeagueStructuredContextNotes = {
+type LeagueStructuredContextNotes = {
   /** Playoff / season outcome from `LeagueSeason` when synced */
   playoffNote: string | null
   /** Top ranks from `SeasonStandingFact` when present */

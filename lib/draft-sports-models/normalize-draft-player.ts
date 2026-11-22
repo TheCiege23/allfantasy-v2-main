@@ -4,15 +4,7 @@
  */
 
 import type { DraftSport } from './types'
-import type {
-  PlayerDisplayModel,
-  PlayerAssetModel,
-  PlayerDraftMetadataModel,
-  PlayerStatSnapshotModel,
-  TeamDisplayModel,
-  NormalizedDraftEntry,
-  NflRookieYearsExpProvenance,
-} from './types'
+import type { PlayerDisplayModel, PlayerDraftMetadataModel, PlayerStatSnapshotModel, NormalizedDraftEntry, NflRookieYearsExpProvenance } from './types'
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { resolvePlayerAssets, buildTeamDisplayModel, looksLikeSleeperExternalId } from './player-asset-resolver'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'

@@ -19,6 +19,7 @@ import {
 } from './seasonRatePool'
 import { bestLineup, type Scored, type WaiverBoard, type WaiverBoardState, type WaiverCandidate } from './waiverBoard'
 import { noSeasonProjectionsReason, waiverBasisSentence, waiverSportLabel, type WaiverSportPlan } from './waiverSportBasis'
+import { boardPerGame, boardRateRows, boardSample, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 
 /**
  * The one-league "Worth adding" board for the sports priced on a SEASON RATE — NBA, NCAAB, NHL,
@@ -35,6 +36,13 @@ import { noSeasonProjectionsReason, waiverBasisSentence, waiverSportLabel, type 
  *     use AllFantasy's default scoring (see waiverSportBasis.ts for why a league re-score would be
  *     partial there, which is worse than a stated default);
  *   - ids are hopped through the league's own identity column and never read as Sleeper ids.
+ *
+ * 🛑 A SPORT ON A LEAGUE VALUE BOARD (NBA first, 2026-11-16) IS PRICED ON THAT BOARD INSTEAD: the trade
+ * grade's board, scored under THIS league's points or categories (lib/sport-values/leagueValueBoard.ts).
+ * So the Waivers board, the FAAB plan, the player card and the Trade Center read one number per player.
+ * A free agent whose projection rests on too few games is not offered (the grade's sample bar), and
+ * every add shows the games behind it. When the board cannot be built here, the default basis below
+ * prices the wire as before and a note says why.
  */
 
 /** How many projected players to consider. Well past the depth of any real wire. */
@@ -62,18 +70,33 @@ export async function loadSeasonRateWaiverBoard(args: {
   plan: WaiverSportPlan
   userId: string
   limit: number
+  /** The league's value board. Injectable for tests; defaults to `loadLeagueValueBoard`. */
+  valueBoard?: (leagueId: string) => Promise<LeagueValueBoard>
 }): Promise<WaiverBoard> {
-  const { prisma, league, plan, userId, limit } = args
-  const label = waiverSportLabel(plan.sport)
+  const { prisma, league, userId, limit } = args
+  const label = waiverSportLabel(args.plan.sport)
 
-  if (plan.kind !== 'per_game') {
-    return empty('no_producer', plan, plan.kind === 'none' ? [plan.reason] : [])
+  if (args.plan.kind !== 'per_game') {
+    return empty('no_producer', args.plan, args.plan.kind === 'none' ? [args.plan.reason] : [])
   }
-  const sport = plan.sport
-  const basis = plan.basis
+  const sport = args.plan.sport
+
+  /* The league's own value board, for a sport valued on one. Not a board sport: nothing is read. */
+  const valueBoard = await (args.valueBoard ?? loadLeagueValueBoard)(league.id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
+  if (args.plan.basis === 'league_value_board' && valueBoard.kind !== 'ok') {
+    const reason = valueBoard.kind === 'unavailable' ? valueBoard.reason : noSeasonProjectionsReason(sport)
+    return empty('no_projections', args.plan, [reason])
+  }
+  const onBoard = valueBoard.kind === 'ok' ? valueBoard : null
+  const basis: Extract<WaiverSportPlan, { kind: 'per_game' }>['basis'] = onBoard ? 'league_value_board' : args.plan.basis
+  const plan: WaiverSportPlan = { sport, kind: 'per_game', basis }
+  const boardNote =
+    valueBoard.kind === 'unavailable'
+      ? `This league's own ${label} value board is not available (${valueBoard.reason.replace(/[.]\s*$/, '')}), so the wire is priced on the basis below instead.`
+      : null
 
   const scoring = extractScoringSettings(league.settings)
-  if (basis === 'season_per_game_league' && !scoring) return empty('no_scoring_settings', plan)
+  if (!onBoard && basis === 'season_per_game_league' && !scoring) return empty('no_scoring_settings', plan)
 
   const slots = startingSlots(league.settings)
   if (!slots || slots.length === 0) return empty('no_slots', plan)
@@ -83,14 +106,18 @@ export async function loadSeasonRateWaiverBoard(args: {
   const myIds = allRosterIds(mine.playerData)
   if (myIds.length === 0) return empty('no_roster', plan)
 
-  const column = leagueIdColumn(league.platform)
+  const column = leagueIdColumn(league.platform, sport)
   const unreadable = `This league's ${label} player ids can't be matched to our projections yet, so free agents cannot be told apart from rostered players.`
   if (!column) return empty('ids_unreadable', plan, [unreadable])
 
-  const season = await newestSeasonRateSeason(prisma, sport)
+  const season = onBoard?.ctx.window.season ?? await newestSeasonRateSeason(prisma, sport)
   if (season == null) return empty('no_projections', plan, [noSeasonProjectionsReason(sport)])
 
   const myKeys = await resolveRosterIdsToKeys(prisma, sport, column, myIds)
+  for (const id of myIds) {
+    const key = onBoard?.ctx.rosterIndex?.get(id)?.id
+    if (key) myKeys.set(id, key)
+  }
   if (myKeys.size / myIds.length < SEASON_RATE_ID_FLOOR) return empty('ids_unreadable', plan, [unreadable], season)
 
   /* Everyone rostered anywhere in the league, in the LEAGUE's id space — the only space a roster speaks. */
@@ -100,7 +127,8 @@ export async function loadSeasonRateWaiverBoard(args: {
   const taken = new Set<string>(myIds)
   for (const r of allRosters) for (const id of allRosterIds(r.playerData)) taken.add(id)
 
-  const [pool, rosterRows] = await Promise.all([
+  const boardRows = onBoard ? boardRateRows(onBoard) : null
+  const [pool, rosterRows] = boardRows ? [boardRows, new Map(boardRows.map(r => [r.key, r]))] as const : await Promise.all([
     loadSeasonRatePool(prisma, sport, season, SEASON_RATE_POOL),
     loadSeasonRateRows(prisma, sport, season, [...myKeys.values()]),
   ])
@@ -108,13 +136,27 @@ export async function loadSeasonRateWaiverBoard(args: {
 
   const fits = (slot: string, position: string | null) => canFillSlotForSport(sport, slot, position)
 
+  /* One pricing path for both sides of the comparison: the board, or the season rate — never a mix. */
+  const priceOf = (key: string, row: { perGame: number; components?: unknown } | undefined, use: 'wire' | 'roster'): number | null =>
+    onBoard ? boardPerGame(onBoard, key, use) : row ? priceSeasonRate(row as never, basis, scoring, sport) : null
+  /*
+   * On a board, the board's position: it files a baseball pitcher SP or RP by his innings per outing and an
+   * outfielder as OF, where the projection files every pitcher `P` — which would let a reliever fill a
+   * starter's slot. Off a board, the projection's position, as before.
+   */
+  const positionOf = (key: string, filed: string | null) => onBoard?.byId.get(key)?.position ?? filed
+  const sampleOf = (key: string) => {
+    const p = onBoard?.byId.get(key)
+    return p ? boardSample(p) : null
+  }
+
   const roster: Scored[] = []
   for (const key of new Set(myKeys.values())) {
     const row = rosterRows.get(key)
     if (!row) continue
-    const pts = priceSeasonRate(row, basis, scoring)
+    const pts = priceOf(key, row, 'roster')
     if (pts == null) continue
-    roster.push({ sleeperId: key, name: row.name, position: row.position, team: null, points: Math.round(pts * 100) / 100 })
+    roster.push({ sleeperId: key, name: row.name, position: positionOf(key, row.position), team: null, points: Math.round(pts * 100) / 100 })
   }
   if (roster.length === 0) {
     return empty('no_projections', plan, [`None of your rostered players has a ${label} season projection we can price here.`], season)
@@ -126,23 +168,23 @@ export async function loadSeasonRateWaiverBoard(args: {
   const candidatesPool: Scored[] = []
   for (const row of pool) {
     if (myKeySet.has(row.key)) continue
-    const leagueId = leagueIdOf(identity.get(row.key), column)
+    const leagueId = onBoard?.byId.get(row.key)?.rosterAlias ?? leagueIdOf(identity.get(row.key), column)
     if (!leagueId) {
       // Cannot be looked for on this league's rosters, so cannot be called a free agent.
       unprovable++
       continue
     }
     if (taken.has(leagueId)) continue
-    if (!isStartableInSport(sport, slots, row.position)) {
+    if (!isStartableInSport(sport, slots, positionOf(row.key, row.position))) {
       ineligible++
       continue
     }
-    const pts = priceSeasonRate(row, basis, scoring)
+    const pts = priceOf(row.key, row, 'wire')
     if (pts == null) continue
     candidatesPool.push({
       sleeperId: row.key,
       name: row.name,
-      position: row.position,
+      position: positionOf(row.key, row.position),
       team: identity.get(row.key)?.team ?? null,
       points: Math.round(pts * 100) / 100,
     })
@@ -168,6 +210,7 @@ export async function loadSeasonRateWaiverBoard(args: {
         ? { sleeperId: null, playerKey: dropped.sleeperId, name: dropped.name, projectedPoints: dropped.points }
         : null,
       basis: 'season_rate',
+      ...(sampleOf(cand.sleeperId) ? { sample: sampleOf(cand.sleeperId)! } : {}),
     })
   }
   candidates.sort((a, b) => b.gain - a.gain)
@@ -175,8 +218,12 @@ export async function loadSeasonRateWaiverBoard(args: {
   const notes: string[] = [
     `Ranked by how much each adds to your best starting lineup per game, not by raw projection — ` +
       `a big name who would not crack your lineup is worth nothing here.`,
-    waiverBasisSentence(basis, sport),
+    ...(boardNote ? [boardNote] : []),
+    waiverBasisSentence(basis, sport, onBoard ? { categoryList: onBoard.ctx.valueKind === 'categories' ? (onBoard.ctx.categoryList ?? 'as configured') : null } : null),
   ]
+  if (onBoard?.ctx.window.baselineSeasonLabel) {
+    notes.push(`Values still lean on the ${onBoard.ctx.window.baselineSeasonLabel} season while this one has few games; each add shows what its value rests on.`)
+  }
   if (candidates.length > limit) {
     notes.push(`${candidates.length} free agents would improve your lineup; showing the top ${limit}.`)
   }
@@ -201,3 +248,4 @@ export async function loadSeasonRateWaiverBoard(args: {
     basis,
   }
 }
+

@@ -7,17 +7,15 @@ import type { LeagueSport } from '@prisma/client'
 
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
-/** @alias ProviderTierId — explicit vendor tier ids */
-export type SportsDataProvider =
+/** Explicit vendor tier ids */
+type SportsDataProvider =
   | 'rolling_insights'
   | 'thesportsdb'
   | 'clearsports'
   | 'sleeper'
   | 'internal'
 
-export type ProviderTierId = SportsDataProvider
-
-export type ProviderField =
+type ProviderField =
   | 'player_profile'
   | 'player_stats'
   | 'projections'
@@ -146,12 +144,3 @@ export function isSleeperRookieFallbackForNfl(field: string): boolean {
   return field === 'rookie_years_exp'
 }
 
-/**
- * Ordered vendor chain for merging cached/imported rows (first hit wins per merge rules).
- * Does not replace field-specific logic in `resolvePlayerExperience` (e.g. ClearSports stats JSON
- * without experience keys must not imply rookie/veteran).
- */
-export function getProviderFallbackChainForField(sport: string, field: ProviderField | string): SportsDataProvider[] {
-  void field
-  return [...getProviderPriorityForSport(sport)]
-}

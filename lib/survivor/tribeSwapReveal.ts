@@ -38,7 +38,7 @@ export function readTribeSnapshot(value: unknown): TribeSnapshot[] {
   })
 }
 
-export type SwapMemberStatus = { rosterId: string; tribeId: string; fromTribeId: string | null; moved: boolean }
+type SwapMemberStatus = { rosterId: string; tribeId: string; fromTribeId: string | null; moved: boolean }
 
 export function swapMemberStatuses(before: ReadonlyArray<TribeSnapshot>, after: ReadonlyArray<TribeSnapshot>): SwapMemberStatus[] {
   const oldTribe = new Map<string, string>()

@@ -10,7 +10,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
-import { feederSettingsSnapshot, normalizeEditableLeagueSettings, type EditableFeederLeagueSettings } from '@/lib/tournament/feederLeagueSettings'
+import { feederSettingsSnapshot, normalizeEditableLeagueSettings, unknownFeederSettingsKeys } from '@/lib/tournament/feederLeagueSettings'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
@@ -128,6 +128,11 @@ export async function PATCH(
 
   if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
     return NextResponse.json({ error: 'Missing or invalid changes' }, { status: 400 })
+  }
+  // Only the editor's own fields (lib/tournament/feederLeagueSettings.ts FEEDER_EDITABLE_KEYS).
+  const unknownKeys = unknownFeederSettingsKeys(changes)
+  if (unknownKeys.length) {
+    return NextResponse.json({ error: 'These settings cannot be changed here.', fields: unknownKeys }, { status: 400 })
   }
 
   try {

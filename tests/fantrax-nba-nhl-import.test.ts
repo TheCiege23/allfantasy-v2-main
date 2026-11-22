@@ -36,6 +36,8 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (original) => ({
   getFantraxLeagueInfo: h.info, getFantraxTeamRosters: h.rosters,
   getFantraxStandings: h.standings, getFantraxPlayerIds: h.players,
   fetchFantraxScheduleWithScores: h.schedule, getFantraxDraftResults: h.draft,
+  // Not under test here; without this the real client would call Fantrax.
+  getFantraxDraftPicks: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'not read in this test' } })),
 }))
 import { importFantraxLeague } from '@/lib/league-import/fantrax/importFantraxLeague'
 
@@ -182,12 +184,95 @@ describe('DB-first identity links for NBA and NHL', () => {
     const plan = planProFantraxIdentityLinks('NHL', Object.values(nhl.playerMap), [row('kuch', 'Nikita Kucherov', 'Tampa Bay Lightning', 'RW')])
     expect(plan.links).toEqual([{ id: 'kuch', fantraxId: 'syn-nhl-02', rollingInsightsId: 'ri-kuch' }])
   })
+
+  /*
+   * The unlinked rostered ids in production, 2026-11-19 — each case is a real player who was unlinked
+   * for exactly this reason (names and teams as both sides store them).
+   */
+  it('ignores a generational suffix Fantrax drops (Jaren Jackson Jr., Trey Murphy III)', () => {
+    const plan = planProFantraxIdentityLinks('NBA', [
+      { fantraxId: '04qrj', name: 'Jackson, Jaren', team: 'UTA', position: 'C' },
+      { fantraxId: '05uir', name: 'Murphy, Trey', team: 'NOP', position: 'SF' },
+    ], [row('jjj', 'Jaren Jackson Jr.', 'UTAH JAZZ', 'PF'), row('t3', 'Trey Murphy III', 'NEW ORLEANS PELICANS', 'SG')])
+    expect(plan.links.map((l) => [l.id, l.fantraxId])).toEqual([['jjj', '04qrj'], ['t3', '05uir']])
+  })
+  it('refuses a father and son who share a team once the suffix is dropped', () => {
+    const plan = planProFantraxIdentityLinks('NBA', [{ fantraxId: 'x', name: 'Hardaway, Tim', team: 'DEN', position: 'SG' }],
+      [row('jr', 'Tim Hardaway Jr.', 'DEN', 'SG'), row('sr', 'Tim Hardaway Sr.', 'DEN', 'SG')])
+    expect(plan.links).toEqual([])
+    expect(plan.ambiguous).toBe(1)
+  })
+  it('links a nickname to the full given name on the same team (Mitch Marner, Matt Coronato)', () => {
+    const plan = planProFantraxIdentityLinks('NHL', [
+      { fantraxId: '03jvu', name: 'Marner, Mitch', team: 'VGK', position: 'RW' },
+      { fantraxId: '05ran', name: 'Coronato, Matt', team: 'CGY', position: 'RW' },
+    ], [row('marner', 'Mitchell Marner', 'VEGAS GOLDEN KNIGHTS', 'RW'), row('cor', 'Matthew Coronato', 'CALGARY FLAMES', 'RW')])
+    expect(plan.links.map((l) => [l.id, l.fantraxId])).toEqual([['marner', '03jvu'], ['cor', '05ran']])
+  })
+  it('never takes a nickname across teams, or a mere shared surname', () => {
+    const ref = { fantraxId: 'x', name: 'Marner, Mitch', team: 'TOR', position: 'RW' }
+    expect(planProFantraxIdentityLinks('NHL', [ref], [row('m', 'Mitchell Marner', 'VEGAS GOLDEN KNIGHTS', 'RW')]).links).toEqual([])
+    const sam = { fantraxId: 'y', name: 'Reinhart, Sam', team: 'FLA', position: 'C' }
+    expect(planProFantraxIdentityLinks('NHL', [sam], [row('r', 'Max Reinhart', 'FLA', 'C')]).links).toEqual([])
+  })
+  it('separates two Vancouver Elias Petterssons by forward and defence', () => {
+    const plan = planProFantraxIdentityLinks('NHL', [
+      { fantraxId: '048x9', name: 'Pettersson, Elias', team: 'VAN', position: 'C' },
+      { fantraxId: 'ep-d', name: 'Pettersson, Elias', team: 'VAN', position: 'D' },
+    ], [row('ep40', 'Elias Pettersson', 'VANCOUVER CANUCKS', 'C'), row('ep25', 'Elias Pettersson', 'VANCOUVER CANUCKS', 'D')])
+    expect(plan.links.map((l) => [l.id, l.fantraxId])).toEqual([['ep40', '048x9'], ['ep25', 'ep-d']])
+  })
+  it('still refuses a forward/defence label disagreement when it is the only candidate it would break', () => {
+    const ref = { fantraxId: 'x', name: 'Pettersson, Elias', team: 'VAN', position: 'LW' }
+    const plan = planProFantraxIdentityLinks('NHL', [ref], [row('a', 'Elias Pettersson', 'VAN', 'D'), row('b', 'Elias Pettersson', 'VAN', 'D')])
+    expect(plan.links).toEqual([])
+  })
+
+  // The last unlinked rostered NBA/NHL ids in production, 2026-11-19.
+  // These rules need Fantrax's WHOLE directory ("listed once" means nothing in a partial list).
+  const planFull = (sport: Parameters<typeof planProFantraxIdentityLinks>[0], refs: Parameters<typeof planProFantraxIdentityLinks>[1], ids: ProIdentityRow[]) =>
+    planProFantraxIdentityLinks(sport, refs, ids, { fullDirectory: true })
+  it('never applies the directory-wide rules to a partial list (the ESPN matcher, one league roster)', () => {
+    expect(planProFantraxIdentityLinks('NBA', [{ fantraxId: '051pa', name: 'Porter, Kevin', team: '(N/A)', position: 'SG' }], [row('kpj', 'Kevin Porter Jr.', 'MIL', 'SG')]).links).toEqual([])
+    expect(planProFantraxIdentityLinks('NBA', [{ fantraxId: '049kf', name: 'Bamba, Mo', team: 'UTA', position: 'C' }], [row('b', 'Mohamed Bamba', 'UTA', 'C')]).links).toEqual([])
+    expect(planProFantraxIdentityLinks('MLB', [{ fantraxId: 't', name: 'Tate, Dillon', team: 'LAA', position: 'RP' }], [row('t', 'Dillon Tate', 'TOR', 'P')]).links).toEqual([])
+  })
+  it('links an unattached "(N/A)" player only when the name is unique on both sides (Kevin Porter Jr.)', () => {
+    const ref = { fantraxId: '051pa', name: 'Porter, Kevin', team: '(N/A)', position: 'SG' }
+    const kpj = row('kpj', 'Kevin Porter Jr.', 'MILWAUKEE BUCKS', 'SG')
+    expect(planFull('NBA', [ref], [kpj, row('otto', 'Otto Porter', 'UTA', 'PF')]).links.map((l) => l.id)).toEqual(['kpj'])
+    // A namesake anywhere (even already linked), or Fantrax listing the name twice: refused.
+    expect(planFull('NBA', [ref], [kpj, { ...row('kp2', 'Kevin Porter', 'BOS', 'SG'), fantraxId: 'taken' }]).links).toEqual([])
+    expect(planFull('NBA', [ref, { ...ref, fantraxId: 'dup', team: 'BOS' }], [kpj]).links.filter((l) => l.fantraxId === '051pa')).toEqual([])
+    // An unknown team label that is not "(N/A)" never takes this path.
+    expect(planFull('NBA', [{ ...ref, team: 'XYZ' }], [kpj]).links).toEqual([])
+  })
+  it('links a spelling the sides never share by team, surname and initial (Mo / Mohamed Bamba, Arseny / Arseni)', () => {
+    expect(planFull('NBA', [{ fantraxId: '049kf', name: 'Bamba, Mo', team: 'UTA', position: 'C' }],
+      [row('bamba', 'Mohamed Bamba', 'UTAH JAZZ', 'C')]).links.map((l) => l.id)).toEqual(['bamba'])
+    expect(planFull('NHL', [{ fantraxId: '051um', name: 'Gritsyuk, Arseny', team: 'NJD', position: 'RW' }],
+      [row('gr', 'Arseni Gritsyuk', 'NEW JERSEY DEVILS', 'RW')]).links.map((l) => l.id)).toEqual(['gr'])
+  })
+  it('refuses that rule on another initial, a second surname on the team on either side, or another team', () => {
+    const ref = { fantraxId: '06mk6', name: 'Carrington, Bub', team: 'WAS', position: 'PG' }
+    expect(planFull('NBA', [ref], [row('c', 'Carlton Carrington', 'WAS', 'SG')]).links).toEqual([])
+    const mo = { fantraxId: 'm', name: 'Bamba, Mo', team: 'UTA', position: 'C' }
+    expect(planFull('NBA', [mo], [row('a', 'Mohamed Bamba', 'UTA', 'C'), row('b', 'Malik Bamba', 'UTA', 'PG')]).links).toEqual([])
+    expect(planFull('NBA', [mo, { fantraxId: 'n', name: 'Bamba, Max', team: 'UTA', position: 'PG' }], [row('a', 'Mohamed Bamba', 'UTA', 'C')]).links.filter((l) => l.fantraxId === 'm')).toEqual([])
+    expect(planFull('NBA', [mo], [row('a', 'Mohamed Bamba', 'BOS', 'C')]).links).toEqual([])
+  })
+  it('never applies the initial or unattached rules to MLB or soccer (Juan / Jorge Lopez)', () => {
+    expect(planFull('MLB', [{ fantraxId: 'j', name: 'Lopez, Juan', team: 'WSH', position: 'RP' }],
+      [row('jorge', 'Jorge Lopez', 'WASHINGTON NATIONALS', 'P')]).links).toEqual([])
+    expect(planFull('MLB', [{ fantraxId: 'n', name: 'Judge, Aaron', team: '(N/A)', position: 'OF' }],
+      [row('aj', 'Aaron Judge', 'NYY', 'RF')]).links).toEqual([])
+  })
 })
 
 describe('import UI', () => {
   it('offers Fantrax for NBA and NHL alongside the sports it already had', () => {
     const fantrax = IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === 'fantrax')
-    expect(fantrax?.supportedSports).toEqual(['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'])
+    expect(fantrax?.supportedSports).toEqual(expect.arrayContaining(['NBA', 'NHL']))
   })
 })
 

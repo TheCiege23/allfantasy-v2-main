@@ -80,10 +80,10 @@ export async function readAccountGeoLockFresh(userId: string): Promise<AccountGe
  * restricted state. Leaves `detectedStateCode` alone either way: that column
  * records where the account was SEEN, and a card is not a sighting.
  *
- * A WASHINGTON card is the full lock (owner's decision, 2026-09-25): Washington
- * bans even free play, and a Washington billing address is as strong a sign of
- * where the buyer lives as a Washington sighting. Any other restricted state is
- * the card lock — paid surfaces only — and never downgrades a full lock.
+ * A card from a FULL-BLOCK state is the full lock; any other restricted state is
+ * the card lock — paid surfaces only — and never downgrades a full lock. Since
+ * November 2026 no state is full-block (Washington moved to paid-block), so a
+ * Washington card now takes the card lock like Hawaii, Idaho, Montana and Nevada.
  *
  * ⚠ The filter spells out the NULL case. `{ not: "full_block" }` alone is SQL
  * `<> 'full_block'`, which is NULL — not true — for an account with no level at

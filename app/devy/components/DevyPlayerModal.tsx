@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 
-export type NflModalPayload = {
+type NflModalPayload = {
   kind: 'nfl'
   name: string
   position: string
@@ -13,7 +13,7 @@ export type NflModalPayload = {
   scoringLabel?: string
 }
 
-export type DevyModalPayload = {
+type DevyModalPayload = {
   kind: 'devy'
   playerId: string
   name: string
@@ -172,7 +172,7 @@ export function DevyPlayerModal({
                   className="w-full rounded-xl border border-cyan-500/35 bg-cyan-500/10 py-2.5 text-[12px] font-semibold text-cyan-100 min-h-[44px] disabled:opacity-50"
                   data-testid="devy-ai-evaluate-prospect"
                 >
-                  {evalBusy ? 'Analyzing…' : 'AI evaluation (Chimmy)'}
+                  {evalBusy ? 'Analyzing…' : 'Chimmy evaluation (Chimmy)'}
                 </button>
                 {evalErr ? <p className="text-[11px] text-amber-200/90">{evalErr}</p> : null}
                 {evalText ? (
@@ -182,7 +182,7 @@ export function DevyPlayerModal({
                 ) : null}
               </div>
             ) : (
-              <p className="text-[11px] text-white/35">AI prospect evaluation requires AfSub.</p>
+              <p className="text-[11px] text-white/35">Chimmy prospect evaluation requires AF Commissioner.</p>
             )}
             {payload.hasEnteredNfl ? (
               <section className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-[12px]">
@@ -204,7 +204,7 @@ export function DevyPlayerModal({
               </section>
             ) : null}
             <div className="flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
-              <span className="text-[11px] text-white/40">Trade rights · Drop · History (wiring soon)</span>
+              <span className="text-[11px] text-white/40">Trade rights · Drop · History (coming soon)</span>
             </div>
           </div>
         )}

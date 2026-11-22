@@ -121,3 +121,34 @@ describe('CommissionerCenter', () => {
     expect(screen.getByTestId('cc-copy-invite')).toBeTruthy()
   })
 })
+
+describe('CommissionerCenter back button', () => {
+  const center = (exitTo?: 'home' | 'settings') => {
+    const onExit = vi.fn()
+    render(
+      <CommissionerCenter
+        leagueName="Blah"
+        sections={buildLeagueSettingsHome(input())}
+        renderSubPage={(() => ({ title: 'Edit', content: <p>editor</p> })) as never}
+        inSeason={false}
+        managers={{ joined: 3, total: 12, inviteUrl: null }}
+        onExit={onExit}
+        exitTo={exitTo}
+      />,
+    )
+    return onExit
+  }
+
+  it('says "Back to settings" when it returns to the Settings tab hub', () => {
+    const onExit = center('settings')
+    const back = screen.getByTestId('cc-back')
+    expect(back.textContent).toContain('Back to settings')
+    fireEvent.click(back)
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps "Back to league home" when opened from the Commissioner link', () => {
+    center()
+    expect(screen.getByTestId('cc-back').textContent).toContain('Back to league home')
+  })
+})

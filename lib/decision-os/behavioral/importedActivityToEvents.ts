@@ -37,7 +37,7 @@ export interface ImportedActivityEventRow {
   appUserId: string | null
 }
 
-export interface ImportedActivitySkip {
+interface ImportedActivitySkip {
   externalSourceKey: string
   reason: 'UNKNOWN_ACTIVITY_TYPE' | 'NO_MANAGER_KEYS' | 'BAD_TIMESTAMP'
 }

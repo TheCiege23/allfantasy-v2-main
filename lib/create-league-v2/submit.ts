@@ -75,7 +75,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     isPublic: state.privacy === 'public',
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
-    medianGame: state.medianGame === true && lt !== 'guillotine',
+    medianGame: state.medianGame === true && lt !== 'guillotine' && lt !== 'survivor_guillotine',
     // TE premium: NFL only, and only once the commissioner has chosen the per-catch amount.
     ...(state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number'
       ? { tePremiumPoints: state.tePremiumPoints }
@@ -102,12 +102,18 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     )
   }
   if (lt === 'zombie') conceptSetup.zombieLeagueCount = state.zombieLeagueCount ?? 1
+  // Two-week elimination periods: MLB Guilly only. Sent only when chosen, so every other league's body is unchanged.
+  if (lt === 'guillotine' && state.sport === 'MLB' && state.guillotineTwoWeekPeriods === true) {
+    conceptSetup.guillotinePeriodWeeks = 2
+  }
+  // The server fits the season schedule to the team count; the tribe count is the one rule chosen here.
+  if (lt === 'survivor_guillotine') conceptSetup.survivorGuillotineTribeCount = state.survivorGuillotineTribeCount ?? 2
   if (lt === 'guillotine' && state.guillotineBestBall === true) {
     conceptSetup.guillotineBestBall = true
   }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
-    conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'non_participating_host'
+    conceptSetup.commissionerParticipationMode = state.survivorCommissionerParticipationMode ?? 'participating_player'
     conceptSetup.survivorEntryFeeMode = state.survivorEntryFeeMode === 'paid' ? 'paid' : 'free'
     conceptSetup.survivorTwistPreset = isSurvivorTwistPresetId(state.survivorTwistPreset) ? state.survivorTwistPreset : SURVIVOR_TWIST_PRESET_DEFAULT
     if (state.survivorEntryFeeMode === 'paid') {
@@ -146,6 +152,8 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     conceptSetup.commissionerAi = d.commissionerAi
     conceptSetup.userAi = d.userAi
     if (d.introVideoUrl) conceptSetup.introVideoUrl = d.introVideoUrl
+    // Devy / C2C: two startup drafts unless one merged draft was chosen (lib/draft-defaults/startupCollegeDraft.ts).
+    if ((lt === 'devy' || lt === 'c2c') && d.mergedCollegeDraft === true) conceptSetup.mergedCollegeDraft = true
     if (lt === 'dynasty' && state.sport === 'NFL' && d.devyRoundsEnabled === true) {
       conceptSetup.devyRoundsEnabled = true
       conceptSetup.devyRoundCount = d.devyRoundCount ?? 2
@@ -376,7 +384,13 @@ function summarizeSubmittedPayload(payload: unknown): Record<string, unknown> {
 
 // ── Main submit ─────────────────────────────────────────────────────
 
-export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string, acceptWeeklyLineups = false): Promise<CreateLeagueV2Result> {
+export async function submitCreateLeagueV2(
+  state: CreateLeagueV2State,
+  sourceLeagueId?: string,
+  acceptWeeklyLineups = false,
+  /** "Create a test league": the server fills open seats with placeholder AI managers. */
+  testLeague = false,
+): Promise<CreateLeagueV2Result> {
   if (!getEffectiveLeagueType(state)) {
     return { ok: false, error: 'Choose a league concept to continue.' }
   }
@@ -394,7 +408,7 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLea
     payload = buildTournamentPayload(state)
   } else {
     const canonical = buildCanonicalPayload(state)
-    payload = { ...canonical, ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), ...(getEffectiveLeagueType(state) === 'zombie' ? { zombieLeagueCount: 1 } : {}), acceptWeeklyLineups } } : {}) }
+    payload = { ...canonical, ...(testLeague && !sourceLeagueId ? { testLeague: true } : {}), ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), ...(getEffectiveLeagueType(state) === 'zombie' ? { zombieLeagueCount: 1 } : {}), acceptWeeklyLineups } } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -459,7 +473,8 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLea
   const redirectTo = parseRedirectUrl(state, json)
   const warnings = Array.isArray(json.warnings) ? json.warnings as Array<{ code?: string; message?: string }> : []
   const warning = warnings.find((item) => item.code === 'IMPORT_MATERIALIZATION_PENDING')?.message
-  trackMetaEventsFromResponse(json)
+  // A test league is not a lead; the server sends no metaEvent for one, and the client must not either.
+  if (!testLeague) trackMetaEventsFromResponse(json)
 
   return { ok: true, leagueId, redirectTo, warning }
 }

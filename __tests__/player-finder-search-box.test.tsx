@@ -51,7 +51,7 @@ function ok(body: unknown) {
 }
 
 async function typeAndSettle(text: string) {
-  fireEvent.change(screen.getByRole('combobox', { name: 'Search any player' }), { target: { value: text } })
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search a player or team' }), { target: { value: text } })
   await act(async () => {
     await vi.advanceTimersByTimeAsync(350)
   })
@@ -77,7 +77,7 @@ describe('PlayerSearchBox', () => {
     expect(form).toHaveAttribute('action', '/core/players')
     expect(form).toHaveAttribute('method', 'get')
     expect(container.querySelector('input[name="league"]')).toHaveAttribute('value', 'L-gang')
-    expect(screen.getByRole('combobox', { name: 'Search any player' })).toHaveValue('Dalton Kincaid')
+    expect(screen.getByRole('combobox', { name: 'Search a player or team' })).toHaveValue('Dalton Kincaid')
     expect(screen.getByRole('button', { name: 'Search' })).toHaveAttribute('type', 'submit')
     expect(screen.getByRole('combobox', { name: 'Sport' })).toHaveValue('')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -110,7 +110,7 @@ describe('PlayerSearchBox', () => {
     // The headshot is borrowed from the folded row; the crest rides along.
     expect(link.querySelector('img.af-pf-avatar')).toHaveAttribute('src', 'https://img/kincaid.png')
     expect(link.querySelector('img.af-pf-team-logo')).toHaveAttribute('src', 'https://a.espncdn.com/i/teamlogos/nfl/500/buf.png')
-    expect(screen.getByRole('combobox', { name: 'Search any player' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('combobox', { name: 'Search a player or team' })).toHaveAttribute('aria-expanded', 'true')
     // The chip says where he is in your leagues; a row without presence has none.
     expect(screen.getByText('@tashaR has him in Gridiron Gang')).toHaveAttribute('data-tone', 'warn')
     expect(link.querySelector('.af-pf-suggest-chip')).toBeNull()
@@ -134,7 +134,7 @@ describe('PlayerSearchBox', () => {
     fetchMock.mockResolvedValueOnce(ok([KINCAID, KING]))
     render(<PlayerSearchBox query="" selectedLeagueId={null} signedIn />)
     await typeAndSettle('kin')
-    const input = screen.getByRole('combobox', { name: 'Search any player' })
+    const input = screen.getByRole('combobox', { name: 'Search a player or team' })
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(within(screen.getByRole('listbox', { name: 'Suggestions' })).getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true')
@@ -148,7 +148,7 @@ describe('PlayerSearchBox', () => {
     fetchMock.mockResolvedValueOnce(ok([KINCAID]))
     render(<PlayerSearchBox query="" selectedLeagueId={null} signedIn />)
     await typeAndSettle('kin')
-    const input = screen.getByRole('combobox', { name: 'Search any player' })
+    const input = screen.getByRole('combobox', { name: 'Search a player or team' })
     const enter = fireEvent.keyDown(input, { key: 'Enter' })
     expect(enter).toBe(true) // not prevented — the browser submits the GET form
     expect(push).not.toHaveBeenCalled()

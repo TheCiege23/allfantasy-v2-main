@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 
-export interface CaveatsBlockProps {
+interface CaveatsBlockProps {
   /** Caveats when confidence is capped or risks apply. */
   caveats: string[]
   /** Optional title. */

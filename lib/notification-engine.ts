@@ -14,6 +14,7 @@ import 'server-only'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { livePushTier, splitByLivePushBudget } from '@/lib/notifications/liveGamePushBudget'
 import { prisma } from '@/lib/prisma'
+import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 
 // ── Event Types ──
@@ -338,7 +339,7 @@ export function injuryAlert(opts: {
     userIds: opts.userIds,
     leagueId: opts.leagueId,
     // A bare name slug used to bind to any namesake in any sport; the page now scopes by these.
-    actionHref: `/player/${encodeURIComponent(opts.playerName.toLowerCase().replace(/\s+/g, '-'))}?${new URLSearchParams({ sport: opts.sport ?? 'NFL', team: opts.team ?? '' })}`,
+    actionHref: playerProfileHref({ name: opts.playerName, sport: opts.sport ?? 'NFL', team: opts.team }) ?? '/players',
     actionLabel: 'View Player',
     meta: {
       playerName: opts.playerName,
@@ -472,7 +473,7 @@ export function storylineGenerated(opts: {
   return {
     type: 'storyline_generated',
     title: `New Storyline: ${opts.title}`,
-    body: 'A new AI-generated league storyline is ready.',
+    body: 'A new Chimmy-generated league storyline is ready.',
     leagueId: opts.leagueId,
     actionHref: `/league/${opts.leagueId}?tab=league`,
     actionLabel: 'Read Story',

@@ -12,7 +12,7 @@ import type { SleeperHistoricalMatchupSyncSummary } from './SleeperHistoricalMat
  *
  * ⚠ PURE. The route owns the loop; this only adds numbers.
  */
-export type MatchupSeasonCounters = {
+type MatchupSeasonCounters = {
   /** Seasons whose matchups and bracket were fetched and written. */
   processed: number
   /** Completed seasons left alone because their stored row is settled. */

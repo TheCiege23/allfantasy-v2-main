@@ -1,0 +1,87 @@
+/*
+ * The /core/trades guide (AllLeaguesTradeHub in TradeCenter.tsx, TradesBoard `embedded`, TradeLeagueStrip
+ * `waitingOnly`). Builds on the home guide's `af-hg-*` headline so Home, Week, Live and Trades read as one
+ * product. Token layer only — the light-mode clamp rewrites bare colours. No text below 11px
+ * (__tests__/core-app/type-floor.test.ts).
+ */
+.af-tg-head { margin-bottom: 16px; }
+.af-tg-chip { cursor: default; }
+.af-tg-chip:hover { border-color: var(--line2); }
+.af-tg-head a.af-hg-chip { color: inherit; text-decoration: none; }
+
+/* A section's own heading: what it is in words, then one line on what it is for. */
+.af-tg-sec-head { margin: 0 0 12px; }
+.af-tg-sec-head h2 { margin: 0; color: var(--text); font-size: 18px; font-weight: 800; letter-spacing: 0; text-transform: none; }
+.af-tg-sec-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+/* "Why it matters" — one line per section, the same treatment as the other guides. */
+.af-tg-teach {
+  margin: 14px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-tg-teach b { color: var(--accent); }
+
+/* Offers waiting: a plain line when there are none; tiles only for leagues that have one. */
+.af-tg-offers { margin: 0 0 18px; }
+.af-tg-offers .af-tg-sec-head { margin-bottom: 8px; }
+.af-tg-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-tg-hint { margin: 6px 0 10px; color: var(--text2); font-size: 13px; line-height: 1.45; }
+.af-tg-hint a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.af-tg-hint a:hover { text-decoration: underline; }
+
+.af-tg-market { margin: 18px 0; }
+
+/* Grading notes, folded under the trades list. */
+.af-tg-how > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tg-how > p { margin: 4px 0 0; }
+
+/* "All your leagues (N)" — the league grid, folded. */
+.af-tg-all {
+  margin: 18px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.af-tg-all > summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  padding: 14px 18px;
+  cursor: pointer;
+}
+.af-tg-all > summary b { color: var(--text); font-size: 15px; font-weight: 800; }
+.af-tg-all > summary span { color: var(--muted); font-size: 12.5px; }
+.af-tg-all[open] > summary { border-bottom: 1px solid var(--line); }
+.af-tg-all > .af-tc-hub-search { display: block; margin: 14px 18px 0; }
+.af-tg-all > .af-tc-hub-league-grid { padding: 14px 18px 18px; }
+.af-tg-all > .af-tc-timeline-empty { padding: 0 18px 18px; }
+
+@media (max-width: 560px) {
+  .af-tg-more,
+  .af-tg-how > summary { min-height: 44px; }
+}

@@ -5,7 +5,7 @@
  * To enable:
  * 1. npm install @sentry/nextjs
  * 2. Set NEXT_PUBLIC_SENTRY_DSN and/or SENTRY_DSN
- * 3. In app layout (client), call initSentryClient() after initFrontendErrorTracking
+ * 3. The client is initialised by sentry.client.config.ts, which withSentryConfig injects
  * 4. In instrumentation.ts (or server entry), call initSentryServer()
  *
  * This module provides no-op stubs when Sentry is not installed.
@@ -31,7 +31,6 @@ export function sentryTags(ctx?: Record<string, unknown>): Record<string, string
   return Object.keys(out).length ? out : undefined
 }
 
-let clientInitDone = false
 let serverInitDone = false
 let sentryLoadPromise: Promise<SentryModuleLike | null> | null = null
 
@@ -41,6 +40,8 @@ function loadOptionalSentryModule(): Promise<SentryModuleLike | null> {
   sentryLoadPromise = (async () => {
     try {
       // Avoid static module analysis so optional Sentry does not trigger bundler warnings when unused.
+      // SERVER ONLY: this is an eval, and the site's CSP refuses eval in the browser. It used to run
+      // there too, from initSentryClient — see evalRollback in lib/security/cspReportOnly.ts.
       const dynamicImport = new Function(
         'specifier',
         'return import(specifier)'
@@ -60,30 +61,12 @@ function loadOptionalSentryModule(): Promise<SentryModuleLike | null> {
   return sentryLoadPromise
 }
 
-/**
- * Initialize Sentry on the client. Call once from a client root (e.g. layout wrapper).
- * No-op if NEXT_PUBLIC_SENTRY_DSN is not set or Sentry is not installed.
+/*
+ * There is deliberately no initSentryClient. The one that lived here loaded @sentry/nextjs through
+ * a bare-specifier dynamic import() built with `new Function` — which a browser cannot resolve, so it
+ * never initialised anything — and it ran an eval on every page. sentry.client.config.ts is the
+ * client init (withSentryConfig injects it). Do not add a second one.
  */
-export function initSentryClient(): void {
-  if (clientInitDone || typeof window === 'undefined') return
-  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN
-  if (!dsn?.trim()) return
-  clientInitDone = true
-  void (async () => {
-    const Sentry = await loadOptionalSentryModule()
-    if (!Sentry) return
-    Sentry.init({
-      dsn,
-      environment: process.env.NODE_ENV,
-      tracesSampleRate: 0.1,
-      replaysOnErrorSampleRate: 0.1,
-    })
-    const capture: SentryCapture = (error, ctx) => {
-      Sentry.captureException(error, { extra: ctx, tags: sentryTags(ctx) })
-    }
-    setErrorReporter(capture)
-  })()
-}
 
 /**
  * Initialize Sentry on the server. Call from instrumentation.ts or server entry.

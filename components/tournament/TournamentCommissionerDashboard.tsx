@@ -46,6 +46,9 @@ import { DRAFT_PHASE_KEYS } from '@/lib/tournament/draft-schedule-types'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import type { AiAutomationV1State } from '@/lib/tournament/ai-automation-hub'
 import { defaultAiAutomationV1 } from '@/lib/tournament/ai-automation-hub'
+import { roundPhaseLabel, tournamentStatusLabel } from '@/lib/tournament/commissionerLabels'
+
+export type TournamentCommissionerTabId = TabId
 
 type TabId =
   | 'overview'
@@ -60,6 +63,9 @@ type TabId =
   | 'subscription'
   | 'approvals'
   | 'history'
+
+/** GET /api/tournament/[id]/commissioner-dashboard. */
+export type TournamentCommissionerSummary = Summary
 
 type Summary = {
   tournament: { id: string; name: string; sport: string; season: number; status: string; lockedAt: string | null }
@@ -159,7 +165,7 @@ type LegacyStandingsSnapshot = {
   }>
 }
 
-type AnnouncementFeedItem = {
+export type AnnouncementFeedItem = {
   id: string
   title: string | null
   body: string
@@ -168,11 +174,18 @@ type AnnouncementFeedItem = {
   createdAt: string
 }
 
-export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId: string }) {
+export function TournamentCommissionerDashboard({
+  tournamentId,
+  initialTab = 'overview',
+}: {
+  tournamentId: string
+  /** The tab shown first. The page always opens on the overview; the visual-review harness opens any tab. */
+  initialTab?: TabId
+}) {
   const { t, tInterpolate } = useLanguage()
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
-  const [tab, setTab] = useState<TabId>('overview')
+  const [tab, setTab] = useState<TabId>(initialTab)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -241,7 +254,7 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
   const phaseRoadmap = useMemo(() => {
     if (!summary?.rounds?.length) return []
     return summary.rounds.map((r) => ({
-      label: r.name ?? r.phase,
+      label: r.name ?? roundPhaseLabel(r.phase),
       phase: r.phase,
       status: r.status,
       weeks: r.startWeek != null && r.endWeek != null ? `W${r.startWeek}–${r.endWeek}` : '—',
@@ -298,7 +311,7 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
                       sport: summary.tournament.sport,
                       season: String(summary.tournament.season),
                     })}{' '}
-                    <span className="font-medium text-cyan-100/90">{summary.tournament.status}</span>
+                    <span className="font-medium text-cyan-100/90">{tournamentStatusLabel(summary.tournament.status)}</span>
                   </>
                 ) : (
                   t('tournament.commissioner.loadingTournament')
@@ -337,7 +350,9 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
           </div>
         ) : null}
 
-        <div className="flex gap-1.5 overflow-x-auto px-2 py-3 sm:px-3">
+        {/* Wraps rather than scrolls: as a sideways scroller it hid 3 of the 12 tabs at 1440, 8 at 820 and 10 on a
+            phone, with nothing showing more existed (tournament gaps audit, 2026-11-09). Two columns on a phone. */}
+        <div className="grid grid-cols-2 gap-1.5 px-2 py-3 [&>button]:text-left sm:flex sm:flex-wrap sm:px-3" data-testid="tournament-commissioner-tabs">
           {tabs.map((tb) => (
             <WarRoomTabButton
               key={tb.id}
@@ -364,7 +379,7 @@ export function TournamentCommissionerDashboard({ tournamentId }: { tournamentId
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <WarRoomStatOrb
                 label={t('tournament.commissioner.stat.currentPhase')}
-                value={summary.tournament.status}
+                value={tournamentStatusLabel(summary.tournament.status)}
                 hint={t('tournament.commissioner.stat.currentPhaseHint')}
                 accent="cyan"
               />
@@ -683,9 +698,18 @@ async function copyText(value: string, successMessage: string, errorMessage: str
   toast.error(errorMessage)
 }
 
-function resolvePublicTournamentUrl(tournamentId: string): string {
-  if (typeof window === 'undefined') return `/tournament/${tournamentId}`
-  return `${window.location.origin}/tournament/${tournamentId}`
+/**
+ * The public hub link, absolute once mounted. The first render returns the bare path on BOTH sides: reading
+ * `window.location.origin` during render made the server print `/tournament/<id>` and the browser print
+ * `https://…/tournament/<id>`, so a dashboard opened straight on the Media tab failed hydration.
+ */
+function usePublicTournamentUrl(tournamentId: string): string {
+  const path = `/tournament/${tournamentId}`
+  const [url, setUrl] = useState(path)
+  useEffect(() => {
+    setUrl(`${window.location.origin}${path}`)
+  }, [path])
+  return url
 }
 
 function StandingsTab({ tournamentId, summary }: { tournamentId: string; summary: Summary | null }) {
@@ -1025,7 +1049,7 @@ function ChatTab({
 
 function MediaTab({ tournamentId, feederLeagues }: { tournamentId: string; feederLeagues: Summary['feederLeagues'] }) {
   const { t, tInterpolate } = useLanguage()
-  const publicUrl = resolvePublicTournamentUrl(tournamentId)
+  const publicUrl = usePublicTournamentUrl(tournamentId)
 
   return (
     <Panel title={t('tournament.commissioner.media.title')} subtitle={t('tournament.commissioner.media.subtitle')}>
@@ -1235,9 +1259,8 @@ function MembersTab({
                 key={row.userId}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
               >
-                <span>
-                  <span className="text-white/40">#{row.order}</span> {row.displayName}{' '}
-                  <span className="font-mono text-[11px] text-white/35">({row.userId.slice(0, 8)}…)</span>
+                <span className="min-w-0">
+                  <span className="text-white/40">#{row.order}</span> {row.displayName}
                 </span>
                 <button
                   type="button"

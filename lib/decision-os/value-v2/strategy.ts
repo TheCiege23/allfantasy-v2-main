@@ -1,4 +1,4 @@
-export type Strategy = 'win-now' | 'balanced' | 'rebuild'
+type Strategy = 'win-now' | 'balanced' | 'rebuild'
 export interface StrategyState {
   active: Strategy
   revision: number

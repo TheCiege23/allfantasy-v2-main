@@ -7,7 +7,9 @@
  *
  * These tests drive the REAL page, not a stub of it: pick a league, expand a team, and look at
  * the coach card. The roadmap button is the positive control — it proves the card rendered and
- * that job POSTs still flow, so "no insight button" cannot pass on an empty screen.
+ * that the plan request still flows and renders, so "no insight button" cannot pass on an empty
+ * screen. The plan is requested straight from `/api/rankings/dynasty-roadmap` under the viewer's
+ * session; the BullMQ job route it once went through had no consumer in production.
  */
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -91,6 +93,16 @@ const RAW_TEAM = {
   rankSparkline: [1, 1],
 }
 
+/** A roadmap answer that ALSO carries the retired label, so a render path that read it would show it. */
+const ROADMAP = {
+  horizon: '3-5 years',
+  currentPhase: 'Contend',
+  overallStrategy: 'Push for a title while the receiver room is young.',
+  yearPlans: [{ year: 2026, label: 'Win now', priorities: ['Add a TE'], targetPositions: ['TE'], keyMoves: ['Trade a 2nd'] }],
+  riskFactors: ['Thin at TE'],
+  confidence: 'MEDIUM',
+}
+
 const RANKINGS = {
   leagueId: '999',
   leagueName: 'Test League',
@@ -127,12 +139,12 @@ beforeEach(() => {
         })
       }
       if (url.startsWith('/api/rankings/league-v2')) return json(RANKINGS)
-      if (url === '/api/power-rankings/worker' && method === 'POST') return json({ jobId: 'job-1', status: 'queued' })
-      if (url.startsWith('/api/power-rankings/worker?jobId=')) {
-        // Answer every job as if the retired generator had run, so a surviving render path
-        // WOULD put the label on screen. Only its absence from the page can make this pass.
-        return json({ status: 'completed', progress: 100, result: { psychology: LABEL_PAYLOAD, roadmap: null } })
+      if (url === '/api/rankings/dynasty-roadmap' && method === 'POST') {
+        // Answer as if the retired generator had run alongside, so a surviving render path WOULD
+        // put the label on screen. Only its absence from the page can make this pass.
+        return json({ roadmap: ROADMAP, psychology: LABEL_PAYLOAD })
       }
+      if (url.startsWith('/api/rankings/manager-psychology')) return json(LABEL_PAYLOAD)
       return json({ error: 'unexpected' }, 404)
     }),
   )
@@ -162,26 +174,22 @@ describe('power rankings — no manager characterisation label', () => {
     expect(screen.queryByRole('button', { name: /coaching insight/i })).toBeNull()
   })
 
-  it('never queues a psychology job and never renders an archetype, whatever a job returns', async () => {
+  it('never asks for a psychology profile and never renders an archetype, whatever the plan returns', async () => {
     const plan = await openTeam()
 
     // Press every action the coach card offers. Before the retirement one of them queued the
-    // psychology job; the stubbed worker then answered with a label.
+    // psychology job, which fetched the profile and rendered its label.
     fireEvent.click(plan)
     for (const b of screen.queryAllByRole('button', { name: /insight/i })) fireEvent.click(b)
 
-    await waitFor(() => {
-      expect(calls.some((c) => c.url === '/api/power-rankings/worker' && c.method === 'POST')).toBe(true)
-    })
-    await waitFor(() => {
-      expect(calls.some((c) => c.url.startsWith('/api/power-rankings/worker?jobId='))).toBe(true)
-    })
+    // Positive control: the plan request went out and its answer rendered.
+    expect(await screen.findByText(/Push for a title while the receiver room is young/)).toBeTruthy()
+    const planRequests = calls.filter((c) => c.url === '/api/rankings/dynasty-roadmap' && c.method === 'POST')
+    expect(planRequests).toHaveLength(1)
+    expect(planRequests[0].body).toMatchObject({ sport: 'NFL', leagueType: 'Dynasty', isSF: false, leagueName: 'Test League' })
 
-    const jobTypes = calls
-      .filter((c) => c.url === '/api/power-rankings/worker' && c.method === 'POST')
-      .map((c) => (c.body as { jobType?: string }).jobType)
-    expect(jobTypes).toContain('dynasty-roadmap')
-    expect(jobTypes).not.toContain('psychology')
+    expect(calls.some((c) => c.url.startsWith('/api/rankings/manager-psychology'))).toBe(false)
+    expect(calls.some((c) => c.url.startsWith('/api/power-rankings/'))).toBe(false)
 
     expect(screen.queryByText(/The Aggressive Trader/)).toBeNull()
     expect(screen.queryByText(/Moves early and overpays/)).toBeNull()

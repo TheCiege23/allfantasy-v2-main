@@ -22,7 +22,7 @@ export function shadeHex(hex: string, f: number): string {
 }
 
 /** Inputs are interpolated into markup, so only plain #rrggbb colours and safe ids are accepted. */
-export function safeBuffColor(value: string | null | undefined, fallback: string): string {
+function safeBuffColor(value: string | null | undefined, fallback: string): string {
   return typeof value === 'string' && HEX.test(value.trim()) ? value.trim().toLowerCase() : fallback
 }
 

@@ -6,36 +6,12 @@ export type BonusFlags = {
   insuranceEnabled?: boolean
 }
 
-export type ScoringRules = {
-  mode: ScoringMode
-  maxEntriesPerUser?: number
-  isPaidLeague?: boolean
-  insuranceEnabled?: boolean
-  insurancePerEntry?: number
-  upsetDeltaEnabled?: boolean
-  leverageBonusEnabled?: boolean
-  allowCopyBracket?: boolean
-  pickVisibility?: "visible" | "hidden_until_lock"
-}
-
 export function scoringConfigKey(mode: ScoringMode, flags: BonusFlags): string {
   const parts: string[] = [mode]
   if (flags.upsetDeltaEnabled) parts.push("upset")
   if (flags.leverageBonusEnabled) parts.push("leverage")
   if (flags.insuranceEnabled) parts.push("insurance")
   return parts.join("+")
-}
-
-export function parseScoringConfigKey(key: string): { mode: ScoringMode; flags: BonusFlags } {
-  const parts = key.split("+")
-  return {
-    mode: parts[0] as ScoringMode,
-    flags: {
-      upsetDeltaEnabled: parts.includes("upset"),
-      leverageBonusEnabled: parts.includes("leverage"),
-      insuranceEnabled: parts.includes("insurance"),
-    },
-  }
 }
 
 export function bonusFlagsFromRules(rules: any): BonusFlags {
@@ -75,7 +51,7 @@ export function pointsForRound(round: number, roundPoints?: Record<number, numbe
   }
 }
 
-export function edgePointsForRound(round: number, roundPoints?: Record<number, number>): number {
+function edgePointsForRound(round: number, roundPoints?: Record<number, number>): number {
   if (roundPoints && Number.isFinite(roundPoints[round])) {
     return Math.max(0, Number(roundPoints[round]))
   }
@@ -190,7 +166,7 @@ export function scoreFanCredEdge(
   return { total, breakdown }
 }
 
-export function scoreMomentum(
+function scoreMomentum(
   picks: PickResult[],
   roundPoints?: Record<number, number>
 ): {
@@ -226,7 +202,7 @@ export function scoreMomentum(
   return { total, breakdown }
 }
 
-export function scoreAccuracyBoldness(
+function scoreAccuracyBoldness(
   picks: PickResult[],
   leagueDistribution: LeaguePickDistribution,
   roundPoints?: Record<number, number>
@@ -270,7 +246,7 @@ export function scoreAccuracyBoldness(
   return { total, breakdown }
 }
 
-export function scoreStreakSurvival(
+function scoreStreakSurvival(
   picks: PickResult[],
   roundPoints?: Record<number, number>
 ): {
@@ -340,23 +316,4 @@ export function scoreEntry(
       return { total: result.total, details: result }
     }
   }
-}
-
-export const SCORING_MODE_INFO: Record<ScoringMode, { label: string; description: string }> = {
-  fancred_edge: {
-    label: "AF March Madness",
-    description: "Headline scoring: R64=1, R32=2, S16=5, E8=10, F4=18, CH=30. Upset Delta Bonus + Leverage Bonus from league pick rarity. Optional Insurance Token protects one pick.",
-  },
-  momentum: {
-    label: "Momentum Scoring",
-    description: "Base points per round + upset seed-gap bonus. Rewards correctly picking underdogs with bonus points that scale by round depth.",
-  },
-  accuracy_boldness: {
-    label: "Accuracy + Boldness",
-    description: "Base points per round + uniqueness bonus based on league pick distribution. Bold, less popular correct picks earn extra points.",
-  },
-  streak_survival: {
-    label: "Streak & Survival",
-    description: "Base points per round + streak bonuses that scale deeper into the tournament. Consecutive correct picks build multiplying bonuses.",
-  },
 }

@@ -1,6 +1,6 @@
 import type { DynastyLeagueContext, PlayerDynastyAsset, DraftPickValueBreakdown } from './types'
 
-export interface ProjectionConfidenceInputs {
+interface ProjectionConfidenceInputs {
   players: PlayerDynastyAsset[]
   picks: DraftPickValueBreakdown
   leagueContext: DynastyLeagueContext

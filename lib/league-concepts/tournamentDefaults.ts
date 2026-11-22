@@ -27,18 +27,18 @@ import type { LeagueSport } from '@prisma/client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TournamentEligibleSport = 'NFL' | 'NCAAF'
+type TournamentEligibleSport = 'NFL' | 'NCAAF'
 
 export const TOURNAMENT_DRAFT_TYPE_IDS = ['snake', 'linear', 'auction'] as const
-export type TournamentDraftType = (typeof TOURNAMENT_DRAFT_TYPE_IDS)[number]
+type TournamentDraftType = (typeof TOURNAMENT_DRAFT_TYPE_IDS)[number]
 
 type EngineDraftType = 'snake' | 'linear' | 'auction'
 
-export type TournamentChildLeagueStatus = 'not_started' | 'pending' | 'generated' | 'partially_generated'
-export type TournamentPhase = 'setup' | 'registration' | 'drafting' | 'round_1' | 'round_2' | 'finals' | 'complete'
-export type TournamentAdvancementMode = 'top_n_per_league' | 'points_wildcard' | 'hybrid'
+type TournamentChildLeagueStatus = 'not_started' | 'pending' | 'generated' | 'partially_generated'
+type TournamentPhase = 'setup' | 'registration' | 'drafting' | 'round_1' | 'round_2' | 'finals' | 'complete'
+type TournamentAdvancementMode = 'top_n_per_league' | 'points_wildcard' | 'hybrid'
 
-export interface TournamentStructure {
+interface TournamentStructure {
   participantCount: number
   conferenceCount: number
   leaguesPerConference: number
@@ -54,7 +54,7 @@ export interface TournamentStructure {
   tiebreakers: string[]
 }
 
-export interface TournamentRosterTemplate {
+interface TournamentRosterTemplate {
   rosterMode: 'tournament'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -68,7 +68,7 @@ export interface TournamentRosterTemplate {
   defensePosition: 'DST' | 'DEF'
 }
 
-export interface TournamentDraftSettings {
+interface TournamentDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: TournamentDraftType
   rounds: number
@@ -85,7 +85,7 @@ export interface TournamentDraftSettings {
   auctionBudgetPerTeam: number | null
 }
 
-export interface TournamentDefaultContract {
+interface TournamentDefaultContract {
   sport: TournamentEligibleSport
   league_type: 'tournament'
   leagueType: 'tournament'
@@ -672,7 +672,7 @@ export function normalizeTournamentSettingsSnapshot(input: {
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-export interface TournamentValidationResult {
+interface TournamentValidationResult {
   valid: boolean
   errors: string[]
   warnings: string[]

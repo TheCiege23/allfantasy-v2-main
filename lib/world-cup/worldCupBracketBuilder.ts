@@ -53,8 +53,8 @@ type LockChallengeLike = {
   settings?: { testMode?: boolean | null } | null
   sourcePayload?: unknown
 }
-export type WorldCupChallengeLockReason = "manual_lock" | "tournament_started" | "entry_locked" | "none"
-export type WorldCupChallengeLockState = {
+type WorldCupChallengeLockReason = "manual_lock" | "tournament_started" | "entry_locked" | "none"
+type WorldCupChallengeLockState = {
   locked: boolean
   reason: WorldCupChallengeLockReason
   lockAt?: Date | string | null
@@ -84,7 +84,7 @@ function isWorldCupTestModeChallenge(challenge: LockChallengeLike): boolean {
 }
 
 /** Earliest scheduled kickoff for the challenge; used when pickLockStrategy is tournament_start and pickLockAt is unset. */
-export function inferWorldCupTournamentLockAt(matches: LockMatchLike[]): Date | null {
+function inferWorldCupTournamentLockAt(matches: LockMatchLike[]): Date | null {
   let best: Date | null = null
   for (const m of matches) {
     if (!m.startsAt) continue
@@ -176,7 +176,7 @@ const WORLD_CUP_KNOCKOUT_EDIT_ROUNDS = new Set([
   "final",
 ])
 
-export function isWorldCupKnockoutRound(round?: string | null): boolean {
+function isWorldCupKnockoutRound(round?: string | null): boolean {
   return WORLD_CUP_KNOCKOUT_EDIT_ROUNDS.has(String(round ?? ""))
 }
 

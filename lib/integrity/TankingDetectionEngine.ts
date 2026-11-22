@@ -4,18 +4,35 @@ import "server-only"
 // Monitoring is based solely on lineup decisions, waiver activity,
 // and on-field performance data.
 
-import Anthropic from "@anthropic-ai/sdk"
 import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/prisma"
 import { ourIdOrSleeperIdWhere, playerRowKeys } from "@/lib/player-identity/externalIdNamespace"
 import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
+import { isBestBallLeagueRow } from "@/lib/core-app/leagueBestBall"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { loadNativeLineupCards, type LineupCard } from "./nativeLineupCards"
 import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS, TANKING_IDLE_STARTS_PER_WEEK } from "./sensitivity"
 import { loadDailySportIdleStarts } from "./dailySportTankingScan"
-import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
+import {
+  adjustForPickOwnership,
+  lineupIntegrityPattern,
+  percent,
+  pickOwnershipNote,
+} from "./lineupIntegrityScore"
+import { ownFirstRoundPicks, scoreLineupIntegrityWeek, scoredWeeks, type TeamLineupScores } from "./lineupIntegrityWeek"
+import {
+  consecutiveRun,
+  eligibleBench,
+  maxSeverity,
+  severityRank,
+  starterSlot,
+  tankingSeverity,
+  tankingSummary,
+  unplayableReason,
+  type CardPlayer,
+} from "./tankingRules"
 
 export type TankingEvidence = {
   rosterId: string
@@ -32,13 +49,36 @@ export type TankingEvidence = {
     startedPlayerProjection?: number
     /** NBA / NHL / MLB daily lineups: the Eastern day of an idle start (`YYYY-MM-DD`). */
     day?: string
+    /** The week this start happened in; an open case collects every week it was flagged for. */
+    week?: number
   }[]
   consecutiveWeeksWithSuspiciousLineup: number
-  winsBelowExpected: number
+  /** Every week this case was flagged for, ascending. Absent on flags raised before it was tracked. */
+  weeksFlagged?: number[]
   pointsLeftOnBench: number
   eliminatedFromPlayoffs: boolean
   weeksUntilPlayoffs: number | null
   redFlags: string[]
+  /** `rules`: raised by the lineup rules (lib/integrity/tankingRules.ts), which carry no model confidence. */
+  detector?: "rules"
+  /** The flagged manager's explanation (lib/integrity/managerReply.ts). Carried across when a week extends the case. */
+  managerReply?: { userId: string; text: string; submittedAt: string }
+  /** The Lineup Integrity score behind this case (lib/integrity/lineupIntegrityScore.ts). Absent before snapshots existed. */
+  lineupIntegrity?: LineupIntegrityEvidence
+}
+
+export type LineupIntegrityEvidence = {
+  weeks: Array<{ week: number; ratio: number | null; startedTopCount: number | null; starterCount: number | null; skipReason: string | null }>
+  /** Several scored weeks in a row under the line. */
+  pattern: boolean
+  /** The line (0..1) and how many weeks the league's sensitivity needs. */
+  below: number
+  needed: number
+  /** The low weeks that make the run, ascending. */
+  run: number[]
+  /** Null when the league has no tradeable picks. */
+  ownsOwnFirst: boolean | null
+  pickNote: string | null
 }
 
 export type TankingScanResult = {
@@ -53,81 +93,19 @@ export type TankingScanResult = {
   scannedAt: string
 }
 
-async function runClaudeTankingPrompt(input: {
-  leagueId: string
-  weekNumber: number
-  evidence: TankingEvidence
-}): Promise<{
-  verdict: "clean" | "suspicious" | "likely_tanking"
-  confidence: number
-  severity: "low" | "medium" | "high"
-  summary: string
-  redFlags: string[]
-} | null> {
-  const key = process.env.ANTHROPIC_API_KEY?.trim()
-  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
-  // already returns null when the key is absent, so a spend refusal behaves
-  // identically to an unconfigured provider. Above the key check because when
-  // both are missing the switch is the actionable one.
-  if (!isAiSpendEnabled()) return null
+/*
+ * No model is asked. The verdict, severity and summary come from lib/integrity/tankingRules.ts: the
+ * model this scan used to call named an id that returns 404, so every flag it ever filed was the
+ * same fallback "suspicious · medium · 50%".
+ */
 
-  if (!key) return null
-  /*
-   * ⚠ ONE try/catch AROUND THE WHOLE CALL. Identical bug to the one fixed in
-   * CollusionDetectionEngine: `client.messages.create()` was unguarded and only
-   * the trailing JSON.parse had a catch, so any API failure aborted the entire
-   * weekly tanking scan instead of falling back to the caller's deterministic
-   * verdict. The model id below currently returns 404, so with a key configured
-   * that failure was certain, not occasional.
-   */
-  try {
-  const client = new Anthropic({ apiKey: key })
-  const user = `League: ${input.leagueId}. Week ${input.weekNumber}.
-Team: ${input.evidence.teamName} (${input.evidence.currentRecord.wins}-${input.evidence.currentRecord.losses}, eliminated: ${input.evidence.eliminatedFromPlayoffs}).
-Suspicious lineup slots: ${JSON.stringify(input.evidence.illegalOrSuspiciousStarters)}
-Pattern: ${input.evidence.consecutiveWeeksWithSuspiciousLineup} consecutive weeks with suspicious lineups.
-Points left on bench (heuristic): ${input.evidence.pointsLeftOnBench}
-Analyze for tanking using ONLY this lineup data.`
+/** A legacy array-shaped snapshot card. Nothing writes one today; honoured if a writer adds it. */
+type SnapshotCard = { rosterId: string; starters: CardPlayer[]; bench: CardPlayer[] }
 
-  const res = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 400,
-    system: `You are an anti-tanking AI for fantasy sports leagues.
-You analyze lineup decisions using ONLY on-field data.
-Respond ONLY with JSON: {
-  "verdict": "clean" | "suspicious" | "likely_tanking",
-  "confidence": 0.0,
-  "severity": "low" | "medium" | "high",
-  "summary": "plain English",
-  "redFlags": ["..."]
-}`,
-    messages: [{ role: "user", content: user }],
-  })
-  const text = res.content.find((b) => b.type === "text")
-  if (!text || text.type !== "text") return null
-  const raw = text.text.trim()
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return null
-  return JSON.parse(jsonMatch[0]) as {
-    verdict: "clean" | "suspicious" | "likely_tanking"
-    confidence: number
-    severity: "low" | "medium" | "high"
-    summary: string
-    redFlags: string[]
-  }
-  } catch (err) {
-    console.warn(
-      "[integrity] tanking AI pass unavailable, falling back to deterministic scoring:",
-      err instanceof Error ? err.message : String(err),
-    )
-    return null
-  }
-}
-
-function parseLineupSnapshots(raw: unknown): { rosterId: string; starters: { playerId: string; status?: string; proj?: number }[]; bench: { playerId: string; proj?: number }[] }[] {
+function parseLineupSnapshots(raw: unknown): SnapshotCard[] {
   if (raw == null) return []
   if (!Array.isArray(raw)) return []
-  const out: { rosterId: string; starters: { playerId: string; status?: string; proj?: number }[]; bench: { playerId: string; proj?: number }[] }[] = []
+  const out: SnapshotCard[] = []
   for (const block of raw) {
     if (!block || typeof block !== "object") continue
     const o = block as Record<string, unknown>
@@ -141,12 +119,16 @@ function parseLineupSnapshots(raw: unknown): { rosterId: string; starters: { pla
         playerId: String(x.playerId ?? x.id ?? ""),
         status: typeof x.injuryStatus === "string" ? x.injuryStatus : typeof x.status === "string" ? x.status : undefined,
         proj: typeof x.projection === "number" ? x.projection : undefined,
+        position: typeof x.position === "string" ? x.position : null,
+        slot: typeof x.slot === "string" ? x.slot : undefined,
       }))
     const mapB = bench
       .filter((x): x is Record<string, unknown> => x != null && typeof x === "object")
       .map((x) => ({
         playerId: String(x.playerId ?? x.id ?? ""),
+        status: typeof x.injuryStatus === "string" ? x.injuryStatus : typeof x.status === "string" ? x.status : undefined,
         proj: typeof x.projection === "number" ? x.projection : undefined,
+        position: typeof x.position === "string" ? x.position : null,
       }))
     out.push({ rosterId: rid, starters: mapS, bench: mapB })
   }
@@ -221,6 +203,27 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
   const checkIllegalLineups = settings.tankingIllegalLineupCheck !== false
   const checkBenchPattern = settings.tankingBenchPatternCheck !== false
 
+  const league = await prisma.league.findFirst({
+    where: { id: leagueId },
+    select: { playoffStartWeek: true, sport: true, platform: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+  })
+
+  /*
+   * 🛑 BEST BALL HAS NO LINEUP DECISION TO JUDGE. A Best Ball league, or a best ball Guilly league
+   * (`settings.best_ball`), is scored on the best lineup its players could have filled
+   * (lib/redraft/scoringEngine.ts `scoreRosterBestBall`); nobody sets the slots, so a starter who was
+   * out, on bye or idle, or a better player "left on the bench", is what the stored card happens to say,
+   * not anything a manager chose. Every signal this scan has is one of those, so the scan files nothing
+   * — it would otherwise accuse innocent managers. `isBestBallLeagueRow` is the test Chimmy's lineup
+   * alerts skip by (lib/core-app/leagueBestBall.ts); the imported scan already refuses best ball the
+   * same way (lib/lineup-integrity/lineupIntegrityService.ts `reason: 'best_ball'`). Collusion
+   * detection is trade-based and unaffected.
+   */
+  if (league && isBestBallLeagueRow(league)) {
+    await prisma.leagueIntegritySettings.update({ where: { leagueId }, data: { lastTankingScanAt: new Date() } })
+    return { leagueId, weekNumber, flags: [], scannedAt }
+  }
+
   const matchups = await prisma.redraftMatchup.findMany({
     where: { leagueId, week: weekNumber, ...(seasonId ? { seasonId } : {}) },
     include: {
@@ -229,14 +232,10 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       season: { select: { season: true } },
     },
   })
-
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { playoffStartWeek: true, sport: true, platform: true, settings: true },
-  })
   // A foreign platform's player ids collide with Sleeper's; a stranger's name in an accusation is
   // worse than the bare id, so those are left unresolved (the same rule as nativeLineupScan).
   const resolvableIds = !isForeignIdSpace(league?.platform)
+  const sport = String(league?.sport ?? "NFL")
   const playoffWeek = league?.playoffStartWeek ?? 15
   const weeksUntilPlayoffs = Math.max(0, playoffWeek - weekNumber)
 
@@ -251,6 +250,37 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
     seasonYear != null && rosterIds.length > 0
       ? await loadNativeLineupCards(prisma, { redraftRosterIds: rosterIds, season: seasonYear, week: weekNumber })
       : new Map<string, LineupCard>()
+
+  /*
+   * The Lineup Integrity score (lib/integrity/lineupIntegrityWeek.ts): each team's started projection
+   * against its best possible, from the projections it could see at kickoff. Empty until the snapshot
+   * migration is applied and a week has been snapshotted — then every claim below is the old one.
+   *
+   * ⚠ THE KICKOFF SNAPSHOT ALSO FILLS THE CARD. The card had no projection at all (so the bench check
+   * never fired) and an injury status as last synced (so a Monday-night injury read as a Sunday start
+   * of an OUT player). Where the snapshot has the player, its projection, status and bye are what the
+   * rules below judge.
+   */
+  const integrityScores =
+    seasonYear != null && rosterIds.length > 0
+      ? await scoreLineupIntegrityWeek({ leagueId, season: seasonYear, week: weekNumber, cards }).catch((error) => {
+          console.warn("[tanking] lineup integrity score failed; scan continues without it", { leagueId, weekNumber, error: String(error) })
+          return new Map<string, TeamLineupScores>()
+        })
+      : new Map<string, TeamLineupScores>()
+  for (const [rid, scores] of integrityScores) {
+    const card = cards.get(rid)
+    const snap = scores.snapshot?.players
+    if (!card || !snap) continue
+    for (const p of [...card.starters, ...card.bench]) {
+      const seen = snap[p.playerId]
+      if (!seen) continue
+      if (typeof seen.proj === "number") p.proj = seen.proj
+      if (seen.status !== undefined) p.status = seen.status ?? undefined
+      if (typeof seen.bye === "number") p.byeWeek = seen.bye
+    }
+  }
+  const picks = integrityScores.size > 0 ? await ownFirstRoundPicks(leagueId).catch(() => ({ season: null, owns: new Map<string, boolean>() })) : { season: null, owns: new Map<string, boolean>() }
 
   /*
    * NBA / NHL / MLB: idle starters, which the bye-week test below cannot see (these sports have no bye).
@@ -301,35 +331,45 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       const suspicious: TankingEvidence["illegalOrSuspiciousStarters"] = []
       let pointsLeft = 0
       if (block) {
-        const benchBest = Math.max(0, ...block.bench.map((b) => b.proj ?? 0))
+        /*
+         * ⚠ ONLY A BENCH PLAYER WHO COULD LEGALLY TAKE THE SLOT COUNTS (lib/integrity/tankingRules.ts).
+         * This compared every starter against the best bench player of ANY position, and flagged any
+         * unplayable starter whatever the bench held — so an OUT running back with only a healthy
+         * quarterback behind him read as tanking. Each bench player answers for one starter at most,
+         * so two OUT receivers and one healthy receiver on the bench is one choice, not two.
+         */
+        const usedBench = new Set<string>()
         for (const st of block.starters) {
           const stProj = st.proj ?? 0
-          const status = (st.status ?? "").toUpperCase()
-          // A starter whose club had no game that week cannot score — the plainest illegal lineup.
-          const onBye = "byeWeek" in st && typeof st.byeWeek === "number" && st.byeWeek === weekNumber
-          const out =
-            onBye || status.includes("OUT") || status.includes("IR") || status === "DOUBTFUL" || status === "D"
-          if (out) {
-            if (!checkIllegalLineups) continue
+          const alternatives = eligibleBench(st, block.bench, sport, weekNumber).filter((b) => !usedBench.has(b.playerId))
+          const best = alternatives[0]
+          const reason = unplayableReason(st, weekNumber)
+          const slot = starterSlot(st) || "STARTER"
+          if (reason) {
+            if (!checkIllegalLineups || !best) continue
+            usedBench.add(best.playerId)
             suspicious.push({
-              slotPosition: "FLEX",
+              slotPosition: slot,
               startedPlayerId: st.playerId,
               startedPlayerName: st.playerId,
-              startedPlayerStatus: onBye ? "BYE" : status || "OUT",
-              benchedBetterOption: benchBest > stProj ? "bench" : undefined,
-              benchedBetterOptionProjection: benchBest > stProj ? benchBest : undefined,
-              startedPlayerProjection: stProj,
+              startedPlayerStatus: reason,
+              benchedBetterOption: best.playerId,
+              ...(typeof best.proj === "number" ? { benchedBetterOptionProjection: best.proj } : {}),
+              ...(typeof st.proj === "number" ? { startedPlayerProjection: stProj } : {}),
+              week: weekNumber,
             })
-          } else if (checkBenchPattern && benchBest - stProj >= benchGapPoints) {
-            pointsLeft += benchBest - stProj
+          } else if (checkBenchPattern && best && typeof best.proj === "number" && best.proj - stProj >= benchGapPoints) {
+            usedBench.add(best.playerId)
+            pointsLeft += best.proj - stProj
             suspicious.push({
-              slotPosition: "FLEX",
+              slotPosition: slot,
               startedPlayerId: st.playerId,
               startedPlayerName: st.playerId,
               startedPlayerStatus: "ACTIVE",
-              benchedBetterOption: "higher projection on bench",
-              benchedBetterOptionProjection: benchBest,
+              benchedBetterOption: best.playerId,
+              benchedBetterOptionProjection: best.proj,
               startedPlayerProjection: stProj,
+              week: weekNumber,
             })
           }
         }
@@ -343,6 +383,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
             startedPlayerId: start.playerId,
             startedPlayerName: start.playerId,
             startedPlayerStatus: "NO GAMES THIS WEEK",
+            week: weekNumber,
           })
         }
       }
@@ -355,88 +396,156 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
             startedPlayerStatus: "NO GAME THAT DAY",
             benchedBetterOption: start.benchPlayerId ?? undefined,
             ...(start.day ? { day: start.day } : {}),
+            week: weekNumber,
           })
         }
       }
 
-      if (suspicious.length === 0) continue
+      /*
+       * ⚠ ONE WEEK OF BENCHING BETTER PLAYERS IS NOT AN ACCUSATION ANY MORE. With kickoff projections
+       * on the card the bench check could fire on any single 5-point gap — a manager who forgot their
+       * lineup once. Where the week has a Lineup Integrity score, a bench-gap claim stands only when
+       * the score shows a PATTERN (several scored weeks in a row under the league's line); and a
+       * pattern opens a case on its own, without any single glaring start. An unplayable starter with
+       * a healthy sub on the bench is a fact, not a judgement, and is untouched.
+       */
+      const scores = integrityScores.get(roster.id)
+      const integrity = scores?.thisWeek?.scored ? lineupIntegrityPattern(scoredWeeks(scores), sensitivity) : null
+      if (integrity && !integrity.pattern) {
+        for (let i = suspicious.length - 1; i >= 0; i--) if (suspicious[i].startedPlayerStatus === "ACTIVE") suspicious.splice(i, 1)
+        pointsLeft = 0
+      }
+      const integrityCase = Boolean(integrity?.pattern && checkBenchPattern)
+      if (suspicious.length === 0 && !integrityCase) continue
+      const ownsOwnFirst = picks.owns.has(roster.id) ? picks.owns.get(roster.id)! : null
+      const lineupIntegrity: LineupIntegrityEvidence | undefined =
+        scores && integrity
+          ? {
+              weeks: scores.weeks,
+              pattern: integrity.pattern,
+              below: integrity.below,
+              needed: integrity.needed,
+              run: integrity.run,
+              ownsOwnFirst,
+              pickNote: pickOwnershipNote(ownsOwnFirst, picks.season),
+            }
+          : undefined
 
       // Resolve ids to names before the evidence is persisted, so the stored
       // payload is readable rather than needing a second lookup at render time.
+      // The bench alternative is a player id on every path now, so it resolves too.
       const nameById = resolvableIds
         ? await resolvePlayerNames(
-            suspicious.flatMap((x) => (x.day ? [x.startedPlayerName, x.benchedBetterOption ?? ""] : [x.startedPlayerName])),
-            String(league?.sport ?? "NFL"),
+            suspicious.flatMap((x) => [x.startedPlayerName, x.benchedBetterOption ?? ""]).filter(Boolean),
+            sport,
           )
         : new Map<string, string>()
       for (const row of suspicious) {
         const resolved = nameById.get(row.startedPlayerName)
         if (resolved) row.startedPlayerName = resolved
-        const bench = row.day && row.benchedBetterOption ? nameById.get(row.benchedBetterOption) : undefined
+        const bench = row.benchedBetterOption ? nameById.get(row.benchedBetterOption) : undefined
         if (bench) row.benchedBetterOption = bench
       }
 
       const eliminated = roster.isEliminated === true
+      const thisWeekPlayers = new Set(suspicious.map((x) => x.startedPlayerId)).size
+      const idleOnly = suspicious.length > 0 && suspicious.every((x) => x.startedPlayerStatus.startsWith("NO GAME"))
+
+      /*
+       * ⚠ ONE OPEN TANKING CASE PER MANAGER — AND A REPEAT WEEK EXTENDS IT. The first version of this
+       * dedupe skipped any manager with an open case, so a manager who tanked three weeks running
+       * produced one card saying "1 week", and the repetition that makes a case serious was thrown
+       * away. The open case now collects every week it is flagged for, its severity rises with the
+       * run, and the commissioner is alerted again only when it gets MORE serious.
+       */
+      const open = await prisma.integrityFlag.findFirst({
+        where: { leagueId, flagType: "tanking", status: "open", affectedRosterIds: { has: roster.id } },
+        select: { id: true, severity: true, evidenceJson: true },
+      })
+      const prior = (open?.evidenceJson && typeof open.evidenceJson === "object" ? open.evidenceJson : {}) as Partial<TankingEvidence>
+      const priorWeeks = Array.isArray(prior.weeksFlagged)
+        ? prior.weeksFlagged.filter((w): w is number => typeof w === "number")
+        : typeof prior.weekNumber === "number"
+          ? [prior.weekNumber]
+          : []
+      const weeksFlagged = [...new Set([...priorWeeks, weekNumber])].sort((a, b) => a - b)
+      const consecutiveWeeks = consecutiveRun(weeksFlagged, weekNumber)
+      const priorStarts = Array.isArray(prior.illegalOrSuspiciousStarters)
+        ? prior.illegalOrSuspiciousStarters
+            .filter((x) => (x.week ?? prior.weekNumber) !== weekNumber)
+            .map((x) => ({ ...x, week: x.week ?? prior.weekNumber }))
+        : []
+
+      // A low-score run is repetition by definition, so it counts toward the run like flagged weeks do.
+      const runWeeks = Math.max(consecutiveWeeks, integrityCase ? integrity!.run.length : 0)
+      const computed = adjustForPickOwnership(tankingSeverity({ suspiciousStarters: thisWeekPlayers, consecutiveWeeks: runWeeks, eliminated }), ownsOwnFirst)
+      const severity = open ? maxSeverity(open.severity, computed) : computed
+      const integrityLine = integrityCase
+        ? `Lineup Integrity under ${percent(integrity!.below)}% of the best possible projection ${integrity!.run.length} weeks in a row.`
+        : null
+      const summary =
+        suspicious.length > 0
+          ? [tankingSummary({ idleOnly, suspiciousStarters: thisWeekPlayers, consecutiveWeeks }), integrityLine].filter(Boolean).join(" ")
+          : `Started lineups well below the best available. ${integrityLine}`
       const evidence: TankingEvidence = {
         rosterId: roster.id,
         teamName: roster.teamName?.trim() || roster.ownerName,
         currentRecord: { wins: roster.wins, losses: roster.losses },
         weekNumber,
-        illegalOrSuspiciousStarters: suspicious,
-        consecutiveWeeksWithSuspiciousLineup: suspicious.length > 0 ? 1 : 0,
-        winsBelowExpected: 0,
-        pointsLeftOnBench: pointsLeft,
+        // This week's starts first: the card leads with the newest evidence.
+        illegalOrSuspiciousStarters: [...suspicious, ...priorStarts],
+        // A low-score run IS the suspicious weeks: "1" on a three-week pattern would undersell the case.
+        consecutiveWeeksWithSuspiciousLineup: runWeeks,
+        weeksFlagged,
+        // A week already in the case is never counted twice (a re-run of the same week).
+        pointsLeftOnBench:
+          (typeof prior.pointsLeftOnBench === "number" ? prior.pointsLeftOnBench : 0) + (priorWeeks.includes(weekNumber) ? 0 : pointsLeft),
         eliminatedFromPlayoffs: eliminated,
         weeksUntilPlayoffs,
-        redFlags: [],
+        redFlags: lineupIntegrity?.pickNote ? [lineupIntegrity.pickNote] : [],
+        detector: "rules",
+        ...(lineupIntegrity ? { lineupIntegrity } : prior.lineupIntegrity ? { lineupIntegrity: prior.lineupIntegrity } : {}),
+        // A reply the manager already sent must survive the next week's scan.
+        ...(prior.managerReply ? { managerReply: prior.managerReply } : {}),
       }
 
-      const ai = await runClaudeTankingPrompt({ leagueId, weekNumber, evidence })
-      const verdict = ai?.verdict ?? "suspicious"
-      const confidence = ai?.confidence ?? 0.5
-      const severity = ai?.severity ?? "medium"
-      if (ai?.redFlags?.length) evidence.redFlags = ai.redFlags
-
-      if (verdict === "suspicious" || verdict === "likely_tanking") {
-        const idleOnly = suspicious.every((x) => x.startedPlayerStatus.startsWith("NO GAME"))
-        const summary =
-          ai?.summary ??
-          (idleOnly
-            ? "Started players whose teams had no game, while a bench player who could fill the spot did play."
-            : "Lineup card shows starters in worse health or projection than bench alternatives.")
-        /*
-         * ⚠ ONE OPEN TANKING CASE PER MANAGER. The collusion engine already
-         * refuses to re-flag a trade that has an open flag; this path had no such
-         * check, so every weekly scan stacked another identical card onto the
-         * commissioner's queue for a manager they had not gotten to yet. Same
-         * intent as the collusion dedupe: a flag is a case to resolve, not a log
-         * line.
-         */
-        const alreadyOpen = await prisma.integrityFlag.findFirst({
-          where: { leagueId, flagType: "tanking", status: "open", affectedRosterIds: { has: roster.id } },
-          select: { id: true },
-        })
-        if (alreadyOpen) continue
-        const row = await prisma.integrityFlag.create({
+      if (open) {
+        const escalated = severityRank(severity) > severityRank(open.severity)
+        await prisma.integrityFlag.update({
+          where: { id: open.id },
           data: {
-            leagueId,
-            flagType: "tanking",
             severity,
-            status: "open",
-            affectedRosterIds: [roster.id],
-            affectedTeamNames: [evidence.teamName],
             summary,
             evidenceJson: evidence as unknown as Prisma.InputJsonValue,
-            aiConfidence: confidence,
+            // Clearing the sent-stamp is what lets the notifier alert again; only when it got worse.
+            ...(escalated ? { notifiedAt: null } : {}),
           },
         })
-        await notifyCommissionerOfFlag(row.id)
-        // Anti-tanking penalties: the manager is warned privately (lib/integrity/tankingPenaltyService.ts).
-        await import("./tankingPenaltyService")
-          .then(({ onTankingFlagOpened }) => onTankingFlagOpened(row.id))
-          .catch((err) => console.error("[tanking] manager warning failed", err))
-        flags.push({ severity, confidence, summary, evidence })
+        if (escalated) await notifyCommissionerOfFlag(open.id)
+        flags.push({ severity, confidence: 0, summary, evidence })
+        continue
       }
+
+      const row = await prisma.integrityFlag.create({
+        data: {
+          leagueId,
+          flagType: "tanking",
+          severity,
+          status: "open",
+          affectedRosterIds: [roster.id],
+          affectedTeamNames: [evidence.teamName],
+          summary,
+          evidenceJson: evidence as unknown as Prisma.InputJsonValue,
+          // Rules carry no model confidence; the card reads `detector` and hides this.
+          aiConfidence: 0,
+        },
+      })
+      await notifyCommissionerOfFlag(row.id)
+      // Anti-tanking penalties: the manager is warned privately (lib/integrity/tankingPenaltyService.ts).
+      await import("./tankingPenaltyService")
+        .then(({ onTankingFlagOpened }) => onTankingFlagOpened(row.id))
+        .catch((err) => console.error("[tanking] manager warning failed", err))
+      flags.push({ severity, confidence: 0, summary, evidence })
     }
   }
 

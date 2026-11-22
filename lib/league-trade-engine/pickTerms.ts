@@ -31,8 +31,8 @@ export const PICK_TERMS_RULE_KEY = 'pick_terms_rule'
 /** League.settings: pick id → its settled terms and, once its draft exists, the outcome. */
 export const PICK_TERMS_KEY = 'pick_terms'
 
-export type PickProtection = { kind: 'protected'; top: number; ifProtected: 'stays' | 'rolls_over' }
-export type PickCondition = {
+type PickProtection = { kind: 'protected'; top: number; ifProtected: 'stays' | 'rolls_over' }
+type PickCondition = {
   kind: 'conditional'
   /** Roster.id of the team whose season decides it. */
   teamRosterId: string
@@ -134,7 +134,7 @@ export function parsePickTerms(
   return { ok: true, value: terms }
 }
 
-export type PickTermsResolution =
+type PickTermsResolution =
   | { outcome: 'conveyed' }
   | { outcome: 'protected'; rollsOver: boolean }
   | { outcome: 'became_round'; round: number }

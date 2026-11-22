@@ -4,6 +4,7 @@ import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
  * (every team has one manager; no duplicate slots).
  */
 
+import { DYNASTY_TEAM_COUNTS } from '@/lib/league/teamCountLimits'
 import { TOURNAMENT_TEAMS_PER_LEAGUE } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 
 const MAX_TEAMS_BY_SPORT: Record<string, number> = {
@@ -17,6 +18,8 @@ const MAX_TEAMS_BY_SPORT: Record<string, number> = {
 }
 
 const NFL_TEAM_COUNT_OPTIONS = [16, 20, 24] as const
+/** Dynasty offers every size from 4 to the native maximum, the same for every sport. */
+export const NFL_DYNASTY_TEAM_COUNTS: readonly number[] = DYNASTY_TEAM_COUNTS
 
 /**
  * The cast sizes a NEW Survivor league is offered (owner's call, 2026-10-20): 12, 15, 16, 18, 20,

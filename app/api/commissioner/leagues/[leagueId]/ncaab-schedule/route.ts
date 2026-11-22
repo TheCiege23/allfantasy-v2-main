@@ -1,6 +1,7 @@
 /**
  * [NEW] GET/PUT: Commissioner NCAAB schedule config.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -16,7 +17,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, leagueVariant: true, leagueType: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'view')
+  if (refused) return refused
   if (league.sport !== 'NCAAB') return NextResponse.json({ error: 'NCAAB leagues only' }, { status: 400 })
   const config = await getScheduleConfigForLeague(leagueId)
   let previewPlan = null
@@ -30,7 +32,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
   if (league.sport !== 'NCAAB') return NextResponse.json({ error: 'NCAAB leagues only' }, { status: 400 })
   const body = await req.json().catch(() => ({}))
   const patch: Record<string, unknown> = {}

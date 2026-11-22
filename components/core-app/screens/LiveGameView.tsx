@@ -458,10 +458,6 @@ function FootballBoxTable({ group, mine }: { group: BoxGroup; mine: ReadonlySet<
 
 /* ── helpers ───────────────────────────────────────────────────────────────── */
 
-function teamColor(team: GameDetailTeam, fallback: string): string {
-  return team.color && /^[0-9a-f]{6}$/i.test(team.color) ? `#${team.color}` : fallback
-}
-
 /**
  * Both teams' colours, never the same one twice.
  *

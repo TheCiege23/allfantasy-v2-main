@@ -263,7 +263,7 @@ export function DynastyProjectionPanel({
             {aiLoading ? 'Analyzing…' : "Chimmy's dynasty advice"}
           </button>
           <Link
-            href={`/trade-finder?leagueId=${encodeURIComponent(leagueId)}&context=dynasty&dynastyTeamId=${encodeURIComponent(selected?.teamId ?? '')}`}
+            href={`/trade-evaluator?leagueId=${encodeURIComponent(leagueId)}`}
             aria-label="Open trade analyzer with dynasty context"
             className="rounded border border-violet-400/30 bg-violet-500/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-violet-500/20"
           >

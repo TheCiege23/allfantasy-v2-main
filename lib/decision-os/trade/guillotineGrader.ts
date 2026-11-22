@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import type { TradeGradeView } from './tradeGrade'
-import { loadGuillotineContext, type GuillotineContextResult } from './guillotineContext'
+import { loadGuillotineContext, type GuillotineContextResult, type GuillotineLeague } from './guillotineContext'
 import { gradeGuillotineDeal, isGuillotineTradeLeague } from './guillotineValue'
 
 /**
@@ -15,20 +15,18 @@ import { gradeGuillotineDeal, isGuillotineTradeLeague } from './guillotineValue'
  *
  * Not `survivor_guillotine`: that format allows no trades.
  */
-export type GuillotineGrader = {
+type GuillotineGrader = {
   grade(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView>
 }
 
-export type GuillotineGraderDeps = { loadContext: typeof loadGuillotineContext }
-
-export { isGuillotineTradeLeague }
+type GuillotineGraderDeps = { loadContext: typeof loadGuillotineContext }
 
 export function createGuillotineGrader(
   args: {
     sport: string | null | undefined
     leagueType: string | null | undefined
     leagueVariant?: string | null
-    league: { id: string; settings: unknown; leagueSize: number | null }
+    league: GuillotineLeague
   },
   deps: GuillotineGraderDeps = { loadContext: loadGuillotineContext },
 ): GuillotineGrader | null {

@@ -11,7 +11,7 @@ import { playerSeasonValue, type SeasonValueSource } from './keeperValueEngine'
 import { evaluateKeeperRosterNeeds } from './keeperRosterNeedsEngine'
 import type { KeeperPlayerFact, KeeperWarRoomContext } from './types'
 
-export interface KeeperWaiverAdd {
+interface KeeperWaiverAdd {
   playerId: string
   playerName: string
   position: string
@@ -21,7 +21,7 @@ export interface KeeperWaiverAdd {
   reason: string
 }
 
-export interface KeeperWaiverDrop {
+interface KeeperWaiverDrop {
   playerId: string
   playerName: string
   position: string

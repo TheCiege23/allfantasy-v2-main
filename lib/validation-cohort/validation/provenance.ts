@@ -7,8 +7,8 @@
  */
 import { createHash } from 'node:crypto'
 
-export type RecommendationScope = 'league' | 'manager'
-export type RecommendationAvailability = 'available' | 'partial' | 'unavailable'
+type RecommendationScope = 'league' | 'manager'
+type RecommendationAvailability = 'available' | 'partial' | 'unavailable'
 
 export type RecommendationRecord = {
   recommendationType: string

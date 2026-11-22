@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ marker: vi.fn(), upsert: vi.fn(), identities: vi.fn(), update: vi.fn(), provider: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsDataCache: { findUnique: mocks.marker, upsert: mocks.upsert }, playerIdentityMap: { findMany: mocks.identities }, $executeRaw: mocks.update } }))
 vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({ getFantraxPlayerIds: mocks.provider }))
-import { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities } from '@/lib/player-identity/ingestProFantraxIdentities'
+import eplDirectory from '../contracts/fantrax/fixtures/epl-player-ids.json'
+import { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities, ingestSoccerFantraxIdentities } from '@/lib/player-identity/ingestProFantraxIdentities'
 import { ingestMlbFantraxIdentities } from '@/lib/player-identity/ingestMlbFantraxIdentities'
 
 const identity = (sport: string) => ({ id: 'one', canonicalName: sport === 'NBA' ? 'Jayson Tatum' : 'Connor McDavid', currentTeam: sport === 'NBA' ? 'BOS' : 'EDM', position: sport === 'NBA' ? 'F' : 'C', fantraxId: null, rollingInsightsId: 'ri-one' })
@@ -37,6 +38,22 @@ describe.each([
     expect(mocks.update).not.toHaveBeenCalled()
     expect(mocks.upsert).not.toHaveBeenCalled()
   })
+})
+
+it('matches the public EPL directory through the verified Rolling Insights club and role', async () => {
+  vi.clearAllMocks()
+  mocks.marker.mockResolvedValue(null)
+  mocks.identities.mockResolvedValue([
+    { id: 'wood', canonicalName: 'Chris Wood', currentTeam: '25', position: 'Forward', fantraxId: null, rollingInsightsId: 'ri-wood' },
+    { id: 'wrong-club', canonicalName: 'Chris Wood', currentTeam: '12', position: 'Forward', fantraxId: null, rollingInsightsId: 'ri-wrong-club' },
+    { id: 'wrong-role', canonicalName: 'Chris Wood', currentTeam: '25', position: 'Goalkeeper', fantraxId: null, rollingInsightsId: 'ri-wrong-role' },
+  ])
+  mocks.provider.mockResolvedValue({ ok: true, data: { '02m5b': eplDirectory['02m5b'] } })
+  mocks.update.mockResolvedValue(1)
+
+  expect(await ingestSoccerFantraxIdentities()).toMatchObject({ provided: 1, proposed: 1, updated: 1 })
+  expect(mocks.provider).toHaveBeenCalledWith('EPL')
+  expect(JSON.parse(mocks.update.mock.calls[0]![1])).toEqual([{ id: 'wood', fantraxId: '02m5b', rollingInsightsId: 'ri-wood' }])
 })
 
 it('keeps the MLB cadence marker it always had', async () => {

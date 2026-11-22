@@ -53,30 +53,30 @@ export function GuillotineSurvivalHistory({
   const [showAllWeeks, setShowAllWeeks] = useState(false)
   const weeks = history?.weeks.filter((w) => w.chopLine != null) ?? []
   const teams = history?.teams ?? []
-  if (weeks.length === 0) return <p className="text-sm text-white/50" data-testid="guillotine-history-empty">No chops yet. Each week’s chop and every team’s path show here once the first chop is in.</p>
+  if (weeks.length === 0) return <p className="gl gl-muted text-sm" data-testid="guillotine-history-empty">No chops yet. Each week’s chop and every team’s path show here once the first chop is in.</p>
   const shown = showAllWeeks ? weeks : weeks.slice(0, 4)
 
   return (
-    <div className="space-y-5" data-testid="guillotine-survival-history">
+    <div className="gl space-y-5" data-testid="guillotine-survival-history">
       <ul className="space-y-2" aria-label="Chops, latest first">
         {shown.map((w) => (
-          <li key={w.week} className="rounded-lg border border-white/5 bg-black/20 px-3 py-2.5 text-sm" data-testid={`guillotine-history-week-${w.week}`}>
+          <li key={w.week} className="gl-well rounded-lg border px-3 py-2.5 text-sm" data-testid={`guillotine-history-week-${w.week}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="font-semibold text-white/90">
+              <span className="gl-text font-semibold">
                 Week {w.week}
-                {w.chopLine != null ? <span className="ml-2 font-normal text-white/55">chop line {fmt(w.chopLine)}</span> : null}
+                {w.chopLine != null ? <span className="gl-muted ml-2 font-normal">chop line {fmt(w.chopLine)}</span> : null}
               </span>
               {onReplay ? (
-                <button type="button" onClick={() => onReplay(w.week)} className="text-xs text-cyan-400 hover:underline">
+                <button type="button" onClick={() => onReplay(w.week)} className="gl-accent-text text-xs hover:underline">
                   Replay
                 </button>
               ) : null}
             </div>
-            <p className="mt-1 text-[13px] text-rose-200/90">
+            <p className="gl-bad mt-1 text-[13px]">
               Chopped: {w.chopped.map((c) => `${c.name} (${fmt(c.points)})`).join(', ')}
             </p>
-            <p className="mt-0.5 text-[12.5px] text-white/60">
-              {w.closestEscape ? <>Closest escape: <span className="text-amber-200">{w.closestEscape.name}</span> by {fmt(w.closestEscape.margin)}</> : null}
+            <p className="gl-text2 mt-0.5 text-[12.5px]">
+              {w.closestEscape ? <>Closest escape: <span className="gl-warn font-semibold">{w.closestEscape.name}</span> by {fmt(w.closestEscape.margin)}</> : null}
               {w.closestEscape && w.topScorer ? ' · ' : null}
               {w.topScorer ? <>Top score: {w.topScorer.name} ({fmt(w.topScorer.points)})</> : null}
             </p>
@@ -84,18 +84,18 @@ export function GuillotineSurvivalHistory({
         ))}
       </ul>
       {weeks.length > 4 ? (
-        <button type="button" onClick={() => setShowAllWeeks((v) => !v)} className="text-xs text-cyan-400 hover:underline" data-testid="guillotine-history-all-weeks">
+        <button type="button" onClick={() => setShowAllWeeks((v) => !v)} className="gl-accent-text text-xs hover:underline" data-testid="guillotine-history-all-weeks">
           {showAllWeeks ? 'Show the latest weeks' : `Show all ${weeks.length} weeks`}
         </button>
       ) : null}
 
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]" data-testid="guillotine-history-teams">
-          <caption className="mb-2 text-left text-[11px] uppercase tracking-wide text-white/50">
+          <caption className="gl-muted mb-2 text-left text-[11px] uppercase tracking-wide">
             Every team’s path · green safe · amber within {fmt(closeCallMargin)} of the line · red chopped
           </caption>
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-white/50">
+            <tr className="gl-muted text-left text-[11px] uppercase tracking-wide">
               <th scope="col" className="py-1 pr-2 font-semibold">Team</th>
               <th scope="col" className="py-1 pr-2 font-semibold">Status</th>
               <th scope="col" className="py-1 pr-2 text-right font-semibold">Close calls</th>
@@ -107,9 +107,9 @@ export function GuillotineSurvivalHistory({
             {teams.map((t) => {
               const me = !!myRosterId && t.rosterId === myRosterId
               return (
-                <tr key={t.rosterId} className={`border-t border-white/5 ${me ? 'bg-white/[0.04]' : ''}`} data-testid={`guillotine-history-team-${t.rosterId}`} data-status={t.status}>
-                  <td className="py-1.5 pr-2 text-white/90">{me ? `You · ${t.name}` : t.name}</td>
-                  <td className={`py-1.5 pr-2 ${t.status === 'chopped' ? 'text-rose-300' : 'text-emerald-300'}`}>
+                <tr key={t.rosterId} className={`gl-line border-t ${me ? 'gl-me' : ''}`} data-testid={`guillotine-history-team-${t.rosterId}`} data-status={t.status}>
+                  <td className="gl-text py-1.5 pr-2">{me ? `You · ${t.name}` : t.name}</td>
+                  <td className={`py-1.5 pr-2 ${t.status === 'chopped' ? 'gl-bad' : 'gl-good'}`}>
                     {t.status === 'chopped' ? `Chopped wk ${t.choppedWeek}` : `Alive · ${t.weeksSurvived} ${t.weeksSurvived === 1 ? 'chop' : 'chops'} survived`}
                   </td>
                   <td className="py-1.5 pr-2 text-right tabular-nums">{t.closeCalls}</td>

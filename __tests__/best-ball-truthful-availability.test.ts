@@ -14,15 +14,10 @@ vi.mock('@/lib/prisma', () => ({
     sportsPlayer: { findMany: (...args: unknown[]) => findManySportsPlayer(...args) },
   },
 }))
+// The selector values players through the scorer (computeRosterScoreForWeek). No league rules here, so a
+// row with no stat map counts its own fantasyPoints — the numbers this suite was written around.
+vi.mock('@/lib/multi-sport/MultiSportScoringResolver', () => ({ resolveScoringRulesForLeague: vi.fn(async () => []) }))
 
-vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({
-  getRosterTemplateForLeague: vi.fn(async () => ({
-    slots: [
-      { slotName: 'QB', starterCount: 1, allowedPositions: ['QB'] },
-      { slotName: 'RB', starterCount: 1, allowedPositions: ['RB'] },
-    ],
-  })),
-}))
 
 import { selectBestBallLineupForRoster } from '@/lib/scoring/best-ball-engine'
 
@@ -33,6 +28,8 @@ const BASE_INPUT = {
   weekOrRound: 3,
   rosterPlayerIds: ['1001', '1002'],
   platform: 'sleeper',
+  // The league's own roster: one QB seat and one RB seat (what this suite's old template mock stated).
+  leagueSettings: { roster: { config: { sections: [{ key: 'primary', slots: { QB: 1, RB: 1, BN: 4 } }] } } },
 }
 
 const PLAYERS = [

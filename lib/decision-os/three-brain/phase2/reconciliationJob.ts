@@ -16,15 +16,12 @@
  */
 import 'server-only'
 import { prisma as defaultPrisma } from '@/lib/prisma'
-import { runAutomationJob } from '@/lib/automation/engine'
 import { TokenReservationService } from '@/lib/tokens/TokenReservationService'
 import { noopObserver, type IntelligenceObserver } from './observability'
 
 type PrismaLike = typeof defaultPrisma
 
-export const RESERVATION_RECONCILE_JOB_TYPE = 'decision_os.reservation_reconcile'
-
-export type ReconcileSummary = {
+type ReconcileSummary = {
   processed: number
   finalized: number
   released: number
@@ -104,24 +101,3 @@ export async function reconcileReservations(opts?: {
   return summary
 }
 
-/** Durable wrapper — runs the sweep as one attempt-bounded, audited AutomationJob per scheduler tick. */
-export async function runReconciliationJob(opts: {
-  tickId: string
-  db?: PrismaLike
-  now?: Date
-  limit?: number
-  hardAbandonMs?: number
-  observer?: IntelligenceObserver
-}): Promise<ReconcileSummary & { jobId: string }> {
-  const db = opts.db ?? defaultPrisma
-  const res = await runAutomationJob(
-    { idempotencyKey: `reconcile:${opts.tickId}`, jobType: RESERVATION_RECONCILE_JOB_TYPE, metadata: {} },
-    async () => {
-      const summary = await reconcileReservations(opts)
-      return { status: 'completed', metadata: summary }
-    },
-    { prisma: db, maxAttempts: 3 },
-  )
-  const summary = (res.metadata ?? {}) as ReconcileSummary
-  return { ...summary, jobId: res.jobId }
-}

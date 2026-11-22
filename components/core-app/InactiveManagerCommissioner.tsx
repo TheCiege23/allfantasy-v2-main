@@ -81,7 +81,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     }
   }
 
-  /** Chimmy autopilot (AF Commissioner): `style: null` takes it off and leaves lineup management running. */
+  /** Chimmy autopilot (AF Pro / AF Supreme): `style: null` takes it off and leaves lineup management running. */
   const setAutopilot = async (team: Team, style: AutopilotStyle | null) => {
     setBusy(team.rosterId)
     setMessage('')
@@ -157,7 +157,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   if (!native) return null
   const name = (team: Team) => (team.emptySeat && !team.teamName ? m.emptySeat : team.teamName || team.managerName || m.team)
   const chimmyTeams = (teams ?? []).filter((team) => team.managed?.autopilot)
-  // Without the AF Commissioner plan Chimmy runs one team free; the plan raises it to the league limit.
+  // Without AF Pro or AF Supreme Chimmy runs one team free; the plan raises it to the league limit.
   const teamLimit = entitled ? chimmyLimit : chimmyFreeTeams
   const atLimit = chimmyTeams.length >= teamLimit
   // Empty seats first: they are the teams nobody else will run.
@@ -204,7 +204,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
             })}
           </ul>
           {entitled ? null : (
-            <a href="/commissioner-upgrade?highlight=chimmy_autopilot" data-testid="chimmy-free-upsell">{m.chimmyFreeUpsell(chimmyLimit)}</a>
+            <a href="/pro?highlight=chimmy_autopilot" data-testid="chimmy-free-upsell">{m.chimmyFreeUpsell(chimmyLimit)}</a>
           )}
           {chimmyReports.length > 0 ? (
             <div data-testid="chimmy-reports">
@@ -291,7 +291,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
                   </select>
                 </label>
               ) : (
-                <a href="/commissioner-upgrade?highlight=chimmy_autopilot">
+                <a href="/pro?highlight=chimmy_autopilot">
                   {m.autopilotUpsell}
                 </a>
               )}

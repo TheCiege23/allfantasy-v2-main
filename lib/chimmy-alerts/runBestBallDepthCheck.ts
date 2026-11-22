@@ -40,9 +40,9 @@ import {
  * hours, and a time budget that stops starting new users.
  */
 
-export const BEST_BALL_DEPTH_ALERT_TYPE = 'best_ball_depth'
+const BEST_BALL_DEPTH_ALERT_TYPE = 'best_ball_depth'
 
-export type BestBallDepthUserOutcome =
+type BestBallDepthUserOutcome =
   | 'sent'
   | 'would_send'
   | 'clean'
@@ -79,7 +79,7 @@ const DEFAULT_BUDGET_MS = 90_000
 const BODY_MAX = 280
 
 /** `chimmy-bestball-depth:<season>-w<week>` — the dispatcher appends `:<userId>`. */
-export function bestBallDepthDedupeKey(season: string | number, week: number): string {
+function bestBallDepthDedupeKey(season: string | number, week: number): string {
   return `chimmy-bestball-depth:${season}-w${week}`
 }
 
@@ -95,7 +95,7 @@ function roomLine(a: Dash34DepthAlert): string {
   return `${a.position}: ${a.healthy} healthy of ${a.rostered}${parts.length ? ` (${parts.join(', ')})` : ''}`
 }
 
-export type BestBallDepthMessage = { title: string; body: string; actionHref: string; leagueId: string | null }
+type BestBallDepthMessage = { title: string; body: string; actionHref: string; leagueId: string | null }
 
 export function renderBestBallDepth(alerts: readonly Dash34DepthAlert[]): BestBallDepthMessage | null {
   const red = alerts.filter((a) => a.tone === 'bad')

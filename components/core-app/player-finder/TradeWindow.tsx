@@ -127,4 +127,3 @@ export function TradeWindow({
   )
 }
 
-export default TradeWindow

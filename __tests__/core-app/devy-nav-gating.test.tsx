@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -48,8 +48,13 @@ import { leagueDevyNav, looksLikeDevyFormat } from '@/lib/core-app/devy'
 
 const LEAGUES = [{ id: 'l1', name: 'Dynasty Warriors', platform: 'sleeper', mark: 'DW' }]
 
+/*
+ * Every Devy link the shell offers, rail and More sheet together: inside a league the hub (an "All
+ * leagues" entry) is in the More sheet rather than the rail (2026-11-15, LEAGUE_RAIL_OMITTED_SECTIONS).
+ */
 function navLabels(props: Record<string, unknown>): string[] {
-  const { container } = render(
+  cleanup()
+  const { getByRole } = render(
     <AfCoreShell
       active="home"
       leagues={LEAGUES as never}
@@ -60,7 +65,8 @@ function navLabels(props: Record<string, unknown>): string[] {
       <div>screen</div>
     </AfCoreShell>,
   )
-  return Array.from(container.querySelectorAll('a[href^="/core/devy"]')).map((a) => a.getAttribute('href') ?? '')
+  fireEvent.click(getByRole('button', { name: 'More' }))
+  return [...new Set(Array.from(document.querySelectorAll('a[href^="/core/devy"]')).map((a) => a.getAttribute('href') ?? ''))]
 }
 
 beforeEach(() => {

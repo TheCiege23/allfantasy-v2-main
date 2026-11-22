@@ -87,11 +87,10 @@ describe('the token-spend chart', () => {
     expect(cells.slice(-2)).toEqual(['12', '5'])
   })
 
-  it('says so plainly when nothing was spent, and draws no bars', () => {
+  // 2026-11-14 guide pass: an empty "no tokens spent" box answered a question nobody asked.
+  it('is absent when nothing was spent', () => {
     render(<PricingV4 plans={[]} packs={[]} savingsHeadline={null} signedIn account={ACCOUNT(weeklyTokenSpend([], NOW))} />)
-    const chart = screen.getByTestId('pricing-spend')
-    expect(within(chart).getByText('No tokens spent in the last 8 weeks.')).toBeTruthy()
-    expect(within(chart).queryAllByTestId('pricing-spend-bar')).toHaveLength(0)
+    expect(screen.queryByTestId('pricing-spend')).toBeNull()
   })
 
   it('is absent when the ledger could not be read', () => {

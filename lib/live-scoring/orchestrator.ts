@@ -36,12 +36,12 @@ export type LiveBroadcastEvent =
   | { eventType: 'league_changed'; meta: { changedPlayers: number; changedMatchups: number } }
 
 /** Topology needed to map changed players → affected rosters/matchups. */
-export type LiveTickTopology = {
+type LiveTickTopology = {
   rosters: RescoreRosterInput[]
   matchups: RescoreMatchupInput[]
 }
 
-export type LiveTickDeps = {
+type LiveTickDeps = {
   /** Fetch raw stat lines for the given active games' players. Active games only. */
   fetchActiveStats: (gameIds: readonly string[]) => Promise<Map<string, Record<string, number>>>
   /** Last-persisted stat snapshot for the diff (idempotency / correction detection). */
@@ -76,7 +76,7 @@ export type LiveTickResult = {
  * per affected matchup, one `standings_changed` only when a final matchup moved,
  * and a single `league_changed` umbrella. Nothing for unaffected entities.
  */
-export function buildLiveBroadcastEvents(
+function buildLiveBroadcastEvents(
   plan: RescorePlan,
   changedPlayerIds: readonly string[],
   rosters: readonly RescoreRosterInput[],

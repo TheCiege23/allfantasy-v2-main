@@ -117,7 +117,7 @@ export type SlateGameForHighlight = {
   startTime: string | null
 }
 
-export type HighlightCandidate = {
+type HighlightCandidate = {
   homeTeam: string
   awayTeam: string
   startTime: Date | string | null

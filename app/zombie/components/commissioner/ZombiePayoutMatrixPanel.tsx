@@ -2,15 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { SettingsSection, SettingsRow, Input } from '@/app/league/[leagueId]/tabs/settings/components'
-import { getDefaultPayoutRatesForTierLabel, describePayoutTierContext } from '@/lib/zombie/payout-tiers'
+import { getDefaultPayoutRatesForTierLabel } from '@/lib/zombie/payout-tiers'
 
 type PaidConfig = {
   buyInAmount?: number
-  totalPot?: number
-  weeklyPayoutPool?: number
-  weeklyPayoutRate?: number
-  seasonPayoutRate?: number
-  survivorBonusRate?: number
   commissionerFeeRate?: number
   ultimateSurvivorEnabled?: boolean
   potIsLocked?: boolean
@@ -18,7 +13,6 @@ type PaidConfig = {
 
 export function ZombiePayoutMatrixPanel({
   leagueId,
-  sport,
   tierLabel,
   canEdit,
   isPaid,
@@ -72,14 +66,10 @@ export function ZombiePayoutMatrixPanel({
     }
   }
 
+  // Only the fee: it is the one rate the payouts read (lib/zombie/seasonOperations.ts).
   const applyTierDefaults = () => {
     const rates = getDefaultPayoutRatesForTierLabel(tierLabel ?? undefined)
-    void save({
-      weeklyPayoutRate: rates.weeklyPayoutRate,
-      seasonPayoutRate: rates.seasonPayoutRate,
-      survivorBonusRate: rates.survivorBonusRate,
-      commissionerFeeRate: rates.commissionerFeeRate,
-    })
+    void save({ commissionerFeeRate: rates.commissionerFeeRate })
   }
 
   if (!isPaid) return null
@@ -95,9 +85,8 @@ export function ZombiePayoutMatrixPanel({
   const r = cfg
 
   return (
-    <SettingsSection id="zm-payout-matrix" title="Weekly & season payout split">
+    <SettingsSection id="zm-payout-matrix" title="Commissioner fee & payouts">
       <p role="status" aria-live="polite" className="mb-2 text-[11px] text-amber-200">{saving ? 'Saving…' : message}</p>
-      <p className="mb-3 text-[11px] leading-relaxed text-white/45">{describePayoutTierContext(sport)}</p>
       <div className="mb-3 flex flex-wrap gap-2">
         <button
           type="button"
@@ -106,7 +95,7 @@ export function ZombiePayoutMatrixPanel({
           onClick={() => applyTierDefaults()}
           data-testid="zombie-payout-tier-defaults"
         >
-          Apply {tierLabel ? `${tierLabel} ` : ''}tier defaults
+          Use the {tierLabel ? `${tierLabel} ` : ''}tier fee
         </button>
       </div>
       <SettingsRow
@@ -124,81 +113,21 @@ export function ZombiePayoutMatrixPanel({
           />
         }
       />
-      <SettingsRow
-        label="Weekly pool rate"
-        description="Fraction of post-fee pot allocated across weekly winners."
-        control={
-          <Input
-            type="number"
-            step="0.01"
-            disabled={d}
-            className="w-28"
-            value={r.weeklyPayoutRate ?? 0}
-            onChange={(e) => setCfg({ ...r, weeklyPayoutRate: Number(e.target.value) || 0 })}
-            onBlur={(e) => void save({ weeklyPayoutRate: Number(e.target.value) || 0 })}
-          />
-        }
-      />
-      <SettingsRow
-        label="Season / finale rate"
-        description="Endgame pot (sole survivor stack) before ultimate bonus slice."
-        control={
-          <Input
-            type="number"
-            step="0.01"
-            disabled={d}
-            className="w-28"
-            value={r.seasonPayoutRate ?? 0}
-            onChange={(e) => setCfg({ ...r, seasonPayoutRate: Number(e.target.value) || 0 })}
-            onBlur={(e) => void save({ seasonPayoutRate: Number(e.target.value) || 0 })}
-          />
-        }
-      />
-      <SettingsRow
-        label="Survivor bonus rate"
-        description="Horde / streak bonuses — should align with ultimate survivor toggle."
-        control={
-          <Input
-            type="number"
-            step="0.01"
-            disabled={d}
-            className="w-28"
-            value={r.survivorBonusRate ?? 0}
-            onChange={(e) => setCfg({ ...r, survivorBonusRate: Number(e.target.value) || 0 })}
-            onBlur={(e) => void save({ survivorBonusRate: Number(e.target.value) || 0 })}
-          />
-        }
-      />
-      <SettingsRow
-        label="Tracked total pot ($)"
-        description="Optional ledger total — does not move money automatically."
-        control={
-          <Input
-            type="number"
-            step="1"
-            disabled={d}
-            className="w-32"
-            value={r.totalPot ?? 0}
-            onChange={(e) => setCfg({ ...r, totalPot: Number(e.target.value) || 0 })}
-            onBlur={(e) => void save({ totalPot: Number(e.target.value) || 0 })}
-          />
-        }
-      />
-      <SettingsRow
-        label="Weekly payout pool ($)"
-        description="Snapshot for weekly distribution display."
-        control={
-          <Input
-            type="number"
-            step="1"
-            disabled={d}
-            className="w-32"
-            value={r.weeklyPayoutPool ?? 0}
-            onChange={(e) => setCfg({ ...r, weeklyPayoutPool: Number(e.target.value) || 0 })}
-            onBlur={(e) => void save({ weeklyPayoutPool: Number(e.target.value) || 0 })}
-          />
-        }
-      />
+      {/*
+        🛑 FIVE INPUTS HERE MOVED NO MONEY. "Weekly pool rate", "Season / finale rate", "Survivor bonus rate",
+        "Tracked total pot" and "Weekly payout pool" saved to ZombiePaidConfig and nothing read them: weekly winnings
+        are the 2025 settlement transfers (lib/zombie/beta2025Winnings.ts) and the season pot is what is left after
+        the fee and weekly winnings (lib/zombie/seasonAccountingPlan.ts). A commissioner who changed them changed
+        nothing. They are gone; this says how the money really moves. (2026-11-15, the honest-settings audit.)
+      */}
+      <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-[11px] leading-relaxed text-white/60" data-testid="zombie-payout-how-it-works">
+        <p className="font-semibold text-white/80">How the money moves</p>
+        <ul className="mt-1 list-disc space-y-1 pl-4">
+          <li>Each week, winnings move between teams by result: infections, maulings, bashings and weekly loot.</li>
+          <li>The commissioner fee above comes off the collected pot.</li>
+          <li>At season&apos;s end, what&apos;s left after the fee and weekly winnings is split among the Survivors.</li>
+        </ul>
+      </div>
     </SettingsSection>
   )
 }

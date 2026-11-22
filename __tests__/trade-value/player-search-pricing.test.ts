@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next-auth', () => ({ getServerSession: mocks.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/trade-value-console/league-loader', () => ({ loadLeagueForTrade: mocks.league }))
-vi.mock('@/lib/trade-value-console/leagueTradePricing', () => ({ resolveLeagueTradeChart: mocks.chart }))
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: mocks.chart }))
 vi.mock('@/lib/fantasycalc-db', () => ({ getFantasyCalcValuesDbFirst: mocks.market }))
 vi.mock('@/lib/data/players', () => ({ searchPlayers: mocks.search }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: () => ({ success: true }), getClientIp: () => 'test' }))
@@ -20,7 +20,7 @@ const request = (query: string) => new NextRequest(`http://localhost/api/trade-v
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.session.mockResolvedValue({ user: { id: 'viewer' } })
-  mocks.league.mockResolvedValue({ id: 'l1', leagueSize: 16 })
+  mocks.league.mockResolvedValue({ id: 'l1', leagueSize: 16, sport: 'NFL', platform: 'sleeper' })
   mocks.chart.mockResolvedValue({ fcPlayers: [], nflCtx: { leagueValueBySleeperId: new Map() } })
   mocks.search.mockResolvedValue([])
   mocks.market.mockResolvedValue([])
@@ -28,12 +28,10 @@ beforeEach(() => {
 
 describe('search prices use the analyzer basis', () => {
   it('uses the selected league chart and carries verified player identity', async () => {
-    mocks.chart.mockResolvedValue({ fcPlayers: [{
-      player: { name: 'Test Receiver', position: 'WR', sleeperId: 'p1' }, value: 9876,
-    }], nflCtx: {} })
+    mocks.chart.mockResolvedValue({ sport: 'NFL', rows: [{ playerName: 'Test Receiver', position: 'WR', rosterPlayerId: 'p1', tradeValue: 9876 }] })
     const response = await GET(request('q=Test&sport=NFL&leagueId=l1'))
     expect(mocks.league).toHaveBeenCalledWith({ leagueId: 'l1', userId: 'viewer' })
-    expect(mocks.chart).toHaveBeenCalledWith(expect.objectContaining({ overrides: { leagueSize: 16 } }))
+    expect(mocks.chart).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'l1', searchName: 'Test' }))
     expect(mocks.market).not.toHaveBeenCalled()
     expect(await response.json()).toEqual([expect.objectContaining({
       value: 9876, playerId: 'p1', providerIdentity: { provider: 'sleeper', id: 'p1', position: 'WR' },
@@ -41,11 +39,9 @@ describe('search prices use the analyzer basis', () => {
   })
 
   it('finds defenders on the league board without assigning them an offensive chart price', async () => {
-    mocks.chart.mockResolvedValue({ fcPlayers: [], nflCtx: { leagueValueBySleeperId: new Map([
-      ['d1', { name: 'Test Defender', position: 'CB', value: 354, basis: 'idp-vorp' }],
-    ]) } })
+    mocks.chart.mockResolvedValue({ sport: 'NFL', rows: [{ playerName: 'Test Defender', position: 'CB', tradeValue: 354, rosterPlayerId: 'd1' }] })
     const response = await GET(request('q=Defender&sport=NFL&leagueId=l1'))
-    expect(await response.json()).toEqual([expect.objectContaining({ value: 354, source: 'idp-vorp', playerId: 'd1' })])
+    expect(await response.json()).toEqual([expect.objectContaining({ value: 354, source: 'allfantasy', playerId: 'd1' })])
   })
 
   it('refuses league prices without authentication or membership instead of falling back to another chart', async () => {

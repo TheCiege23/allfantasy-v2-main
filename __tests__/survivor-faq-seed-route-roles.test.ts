@@ -29,6 +29,8 @@ vi.mock('@/lib/prisma', () => {
   }
   return { prisma, default: prisma }
 })
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromRealRole())
 
 import { POST } from '@/server/api-route-modules/league-survivor/seed-faq/route'
 

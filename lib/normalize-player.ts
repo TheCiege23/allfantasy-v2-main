@@ -1,8 +1,8 @@
 import { sleeperHeadshotUrl, getTeamLogoUrl, normalizeTeamAbbr, type SportKey } from './player-media-urls'
 
-export type AnyPlayerLike = Record<string, unknown>
+type AnyPlayerLike = Record<string, unknown>
 
-export interface NormalizedPlayer {
+interface NormalizedPlayer {
   id: string
   name: string
   position?: string
@@ -62,6 +62,3 @@ export function normalizePlayer(p: AnyPlayerLike, sport: SportKey = 'nfl'): Norm
   }
 }
 
-export function normalizePlayers(list: AnyPlayerLike[], sport: SportKey = 'nfl'): NormalizedPlayer[] {
-  return (list || []).map(p => normalizePlayer(p, sport))
-}

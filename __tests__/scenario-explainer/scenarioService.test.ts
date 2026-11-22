@@ -22,7 +22,9 @@ vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({
   getGuillotineConfig: vi.fn(async () => ({ teamsPerChop: 1, eliminationStartWeek: 1, eliminationEndWeek: null })),
 }))
 vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({
-  resolveGuillotineCurrentWeek: vi.fn(async () => 4),
+  resolveGuillotineLiveWeek: vi.fn(async () => 4),
+  // The settled week is one behind; the explainer must not read it.
+  resolveGuillotineCurrentWeek: vi.fn(async () => { throw new Error('the explainer reads the live week') }),
   findViewerRosterId: vi.fn(async () => 'r4'),
 }))
 vi.mock('@/lib/guillotine/rosterDisplayNames', () => ({

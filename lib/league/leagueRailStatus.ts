@@ -13,7 +13,7 @@ import type { RailMatchupSummary } from '@/components/core-app/AfCoreShell'
  * league row's own phase. Nothing here calls a provider or the database.
  */
 
-export type LeagueRingTone = 'good' | 'bad' | 'needs'
+type LeagueRingTone = 'good' | 'bad' | 'needs'
 
 export type LeagueRailStatus = {
   /** Null = no ring colour to show (an unplayed week, an even score, a quiet offseason). */
@@ -26,7 +26,7 @@ export type LeagueRailStatus = {
   group: 'needs' | 'live' | 'other'
 }
 
-export type LeagueRailPhase = 'Setup' | 'Draft' | 'Regular season' | 'Playoffs' | 'Offseason' | string
+type LeagueRailPhase = 'Setup' | 'Draft' | 'Regular season' | 'Playoffs' | 'Offseason' | string
 
 function ordinal(n: number): string {
   const mod100 = n % 100

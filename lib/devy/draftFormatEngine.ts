@@ -1,108 +1,12 @@
 import { prisma } from '@/lib/prisma'
-import { DEFAULT_SPORT, type SupportedSport } from '@/lib/sport-scope'
 
-export type DraftPoolConfig = {
-  poolId: string
-  label: string
-  description: string
-  /** What player universes feed this pool (logical labels). */
-  includes: string[]
-  sport: string
-}
-
-export type FutureDraftConfig = {
-  format: string
-  rookieDraftIncludes: string[]
-  devyDraftIncludes: string[]
-  combinedIncludes: string[]
-  notes: string[]
-}
-
-export type DraftPool = {
+type DraftPool = {
   draftType: 'rookie' | 'devy' | 'combined'
   season: number
   leagueId: string
   rookieCandidates: { playerId: string; label: string; sport: string }[]
   devyCandidates: { playerId: string; label: string; sport: string }[]
   ownedDevyPlayerIds: string[]
-}
-
-/** Startup draft pool layout — format is locked at league creation. */
-export function getStartupDraftPoolConfig(format: string, sport: string): DraftPoolConfig[] {
-  const s = (sport || DEFAULT_SPORT) as SupportedSport
-  if (format === 'combined') {
-    return [
-      {
-        poolId: 'combined_all',
-        label: 'Combined startup',
-        description: 'NFL veterans, NFL rookies, and devy prospects in one draft order.',
-        includes: ['nfl_veteran', 'nfl_rookie', 'devy'],
-        sport: s,
-      },
-    ]
-  }
-  if (format === 'split_vets_first') {
-    return [
-      {
-        poolId: 'vets_rookies',
-        label: 'NFL veterans + current rookies',
-        description: 'Established NFL talent and rookie class first.',
-        includes: ['nfl_veteran', 'nfl_rookie'],
-        sport: s,
-      },
-      {
-        poolId: 'devy_only',
-        label: 'Devy draft',
-        description: 'College / developmental players after the NFL pool completes.',
-        includes: ['devy'],
-        sport: s,
-      },
-    ]
-  }
-  if (format === 'split_devy_first') {
-    return [
-      {
-        poolId: 'vets_only',
-        label: 'NFL veterans',
-        description: 'Veterans only — youth held for the second draft.',
-        includes: ['nfl_veteran'],
-        sport: s,
-      },
-      {
-        poolId: 'rookies_devy',
-        label: 'Rookies + devy',
-        description: 'NFL rookie class and devy prospects together.',
-        includes: ['nfl_rookie', 'devy'],
-        sport: s,
-      },
-    ]
-  }
-  return getStartupDraftPoolConfig('combined', s)
-}
-
-export function getFutureDraftPoolConfig(format: string): FutureDraftConfig {
-  if (format === 'combined') {
-    return {
-      format: 'combined',
-      rookieDraftIncludes: ['nfl_rookie'],
-      devyDraftIncludes: ['devy'],
-      combinedIncludes: ['nfl_rookie', 'devy'],
-      notes: [
-        'Owned devy rights are excluded from the pool.',
-        'When a devy player enters the NFL, remove from the draftable pool for that season.',
-      ],
-    }
-  }
-  return {
-    format: 'separate',
-    rookieDraftIncludes: ['nfl_rookie'],
-    devyDraftIncludes: ['devy'],
-    combinedIncludes: [],
-    notes: [
-      'Rookie draft: NFL draft class only.',
-      'Devy draft: college pipeline only; sequential after rookie draft by default.',
-    ],
-  }
 }
 
 /**
@@ -163,16 +67,3 @@ export async function buildAnnualDraftPool(
   }
 }
 
-/** When a combined pick would select a player the team already holds as devy — no-op / advance (commissioner policy hooks). */
-export async function processDevyDepletedPick(
-  leagueId: string,
-  rosterId: string,
-  pickId: string,
-  season: number,
-): Promise<void> {
-  void leagueId
-  void rosterId
-  void pickId
-  void season
-  // Draft room integration: announce skip / compensatory pick — implemented when unified draft consumer wires this helper.
-}

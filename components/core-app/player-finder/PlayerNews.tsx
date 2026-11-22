@@ -96,4 +96,3 @@ export function PlayerNews({ state, nowIso }: { state: SectionState<PlayerCardNe
   )
 }
 
-export default PlayerNews

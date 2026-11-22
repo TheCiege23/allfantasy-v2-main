@@ -26,7 +26,7 @@ export function parseModelJson(raw: ProviderChatResult): unknown {
   }
 }
 
-export type SpecialistValidation = {
+type SpecialistValidation = {
   evaluation: SpecialistEvaluation
   droppedUnknownEvidence: number
   droppedUnsupported: number
@@ -80,7 +80,7 @@ export type SynthesisDraftValidated = {
   evidenceIds: string[]
 }
 
-export type SynthesisValidation =
+type SynthesisValidation =
   | { ok: true; draft: SynthesisDraftValidated; droppedUnknownEvidence: number }
   | { ok: false; note: string }
 

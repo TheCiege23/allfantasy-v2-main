@@ -1,4 +1,4 @@
-.af-core.af-bb-standings { display: flex; flex-direction: column; gap: 16px; padding: 20px; min-width: 0; width: 100%; }
+.af-core.af-bb-standings { display: flex; flex-direction: column; gap: 16px; padding: 20px; min-width: 0; width: 100%; container: af-bb-standings / inline-size; }
 .af-bb-standings > * { flex-shrink: 0; min-width: 0; }
 .af-bb-standings :is(button, nav a) { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--line2); border-radius: 8px; padding: 8px 12px; font-size: 13px; background: var(--surface2); color: var(--text); }
 .af-bb-standings button:disabled { opacity: .6; cursor: wait; }
@@ -9,7 +9,23 @@
 .af-bb-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
 .af-bb-tools label { display: flex; flex-direction: column; gap: 6px; color: var(--text2); font-size: 13px; }
 .af-bb-tools :is(input, select) { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line2); border-radius: 8px; background: var(--surface2); color: var(--text); }
-.af-bb-standings .af-bb-table { min-width: 880px; }
+/* Short headers (see COLUMNS) and no 880px floor: the table fits the card it sits in. Headers never wrap mid-word. */
+.af-bb-standings .af-bb-table { min-width: 0; }
+.af-bb-standings .af-bb-table thead th { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.af-bb-about { font-size: 13px; color: var(--muted); }
+.af-bb-about summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--text2); }
+.af-bb-about p + p { margin-top: 6px; }
+/* Compact cards: hidden until the card is narrow (container query at the end of this file). */
+.af-bb-cards { display: none; gap: 8px; }
+.af-bb-cards > li { border: 1px solid var(--line2); border-radius: 12px; padding: 10px 12px; background: var(--surface); }
+.af-bb-cards > li[data-viewer] { background: var(--surface2); }
+.af-bb-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-bb-card-place { flex: none; min-width: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text2); }
+.af-bb-card-team { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.af-bb-card-head .af-bb-status { flex: none; }
+.af-bb-card-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
+.af-bb-card-stats dt { font-size: 11px; color: var(--muted); }
+.af-bb-card-stats dd { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .af-bb-standings .af-bb-table th { text-align: left; }
 .af-bb-standings .af-bb-table thead th:first-child { width: 64px; }
 .af-bb-standings .af-bb-table thead th:nth-child(3) { width: 160px; }
@@ -29,3 +45,17 @@
 .af-bb-history dt { color: var(--muted); font-size: 12px; }
 .af-bb-history dd { overflow-wrap: anywhere; font-size: 13px; }
 @media (max-width: 600px) { .af-core.af-bb-standings { padding: 16px; } .af-bb-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Narrow card: compact cards instead of the table; search on its own row, the two selects side by side. */
+@container af-bb-standings (max-width: 679px) {
+  .af-bb-standings .af-standings-scroll { display: none; }
+  .af-bb-standings .af-bb-cards { display: grid; }
+  .af-bb-standings .af-bb-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-bb-standings .af-bb-tools > label:first-child { grid-column: 1 / -1; }
+  /* The four counts in one compact row (they took a 2x2 grid of large tiles, ~200px above the first team). */
+  .af-bb-standings .af-bb-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .af-bb-standings .af-bb-metrics > div { padding: 8px; }
+  .af-bb-standings .af-bb-metrics dt { font-size: 11px; }
+  .af-bb-standings .af-bb-metrics dd { font-size: 18px; }
+  /* Weekly results: HOH, Veto and Evicted side by side instead of stacked. */
+  .af-bb-standings .af-bb-history dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

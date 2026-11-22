@@ -18,17 +18,12 @@
  *   → TradeCandidate[]
  */
 
-import {
-  LeagueDecisionContext,
-  TeamDecisionProfile,
-  PartnerFitScore,
-  Position,
-} from '@/lib/league-decision-context'
+import { LeagueDecisionContext, TeamDecisionProfile, Position } from '@/lib/league-decision-context'
 
 export type TradeObjective = 'WIN_NOW' | 'REBUILD' | 'BALANCED'
 export type FinderMode = 'FAST' | 'DEEP'
 
-export type TradeArchetype =
+type TradeArchetype =
   | 'POSITIONAL_SWAP'
   | 'CONSOLIDATION'
   | 'PICK_FOR_PLAYER'
@@ -49,11 +44,6 @@ export interface PricedAsset {
   injuryFlag?: boolean
 }
 
-export interface TradeSide {
-  assets: PricedAsset[]
-  totalValue: number
-}
-
 export interface TradeCandidate {
   tradeId: string
   teamA: { teamId: string; gives: PricedAsset[]; receives: PricedAsset[] }
@@ -71,7 +61,7 @@ export interface TradeCandidate {
   }
 }
 
-export interface CandidateGeneratorInput {
+interface CandidateGeneratorInput {
   userTeamId: string
   leagueDecisionContext: LeagueDecisionContext
   pricedAssets: Record<string, PricedAsset[]>
@@ -79,9 +69,9 @@ export interface CandidateGeneratorInput {
   mode: FinderMode
 }
 
-export type OpportunityType = 'NEED_FIT' | 'CONSOLIDATION' | 'VOLATILITY_SWAP' | 'PICK_ARBITRAGE' | 'MONITOR'
+type OpportunityType = 'NEED_FIT' | 'CONSOLIDATION' | 'VOLATILITY_SWAP' | 'PICK_ARBITRAGE' | 'MONITOR'
 
-export interface TradeOpportunity {
+interface TradeOpportunity {
   type: OpportunityType
   title: string
   description: string
@@ -93,7 +83,7 @@ export interface TradeOpportunity {
   actionable: boolean
 }
 
-export interface CandidateGeneratorOutput {
+interface CandidateGeneratorOutput {
   candidates: TradeCandidate[]
   opportunities: TradeOpportunity[]
   partnersEvaluated: number
@@ -101,7 +91,6 @@ export interface CandidateGeneratorOutput {
   prunedTo: number
 }
 
-const SKILL_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE']
 const SCORE_THRESHOLD = 55
 const FAIRNESS_WINDOW = 0.25
 
@@ -712,7 +701,7 @@ function generateFallbackOpportunities(
 
   // 2. CONSOLIDATION OFFERS — find elite players user could consolidate toward
   const eliteTargets: TradeOpportunity['relevantPlayers'] = []
-  for (const [partnerId, partner] of allPartners) {
+  for (const [partnerId] of allPartners) {
     const partnerAssets = pricedAssets[partnerId] || []
     const elites = partnerAssets
       .filter(a => !a.isPick && tierValue(a.tier) >= 4 && a.value >= 5000)

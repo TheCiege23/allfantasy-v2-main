@@ -10,6 +10,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
 import {
   getEffectiveLeagueRosterTemplate,
@@ -112,6 +114,20 @@ function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTempla
   )}`
 }
 
+async function startupDraftPhaseSuffix(leagueId: string): Promise<string> {
+  try {
+    const session = await prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { draftModeLabel: true },
+    })
+    const label = String(session?.draftModeLabel ?? '').toLowerCase()
+    return label === STARTUP_PRO_DRAFT_LABEL || label === STARTUP_COLLEGE_DRAFT_LABEL ? `:phase-${label}` : ''
+  } catch {
+    return ''
+  }
+}
+
 export async function resolveDraftPoolCacheContext(
   leagueId: string,
   options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
@@ -122,7 +138,9 @@ export async function resolveDraftPoolCacheContext(
 }> {
   const effectiveLeagueTemplate =
     options?.effectiveLeagueTemplate ?? (await getEffectiveLeagueRosterTemplate(leagueId))
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate)
+  // A two-draft Devy / C2C startup offers a different pool in each draft, and this cache is per
+  // league: the college draft must not be served the pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + (await startupDraftPhaseSuffix(leagueId))
   return {
     effectiveLeagueTemplate,
     rosterFp,

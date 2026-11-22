@@ -28,48 +28,6 @@ interface TradeAnalyticsRequest {
   league?: { qb_format?: string }
 }
 
-function adaptTradeForDualMode(
-  trade: TradeAnalyticsRequest['trades'][0],
-  sleeperUsername: string,
-  sleeperUserId?: string
-): {
-  date: string;
-  sideAPlayers: string[];
-  sideBPlayers: string[];
-  sideAPicks: { year: number; round: number; tier?: 'early' | 'mid' | 'late' }[];
-  sideBPicks: { year: number; round: number; tier?: 'early' | 'mid' | 'late' }[];
-} | null {
-  const userParty = trade.parties?.find(p => isUserParty(p, sleeperUsername, sleeperUserId))
-  const otherParty = trade.parties?.find(p => !isUserParty(p, sleeperUsername, sleeperUserId))
-  
-  if (!userParty || !otherParty) return null
-  
-  const tradeDate = trade.timestamp
-    ? new Date(trade.timestamp).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10)
-  
-  const parsePick = (pick: { round: number; season: string; slot?: string }) => {
-    const year = parseInt(pick.season) || new Date().getFullYear()
-    const tier = pick.slot === 'early' || pick.slot === 'mid' || pick.slot === 'late' 
-      ? pick.slot as 'early' | 'mid' | 'late' 
-      : undefined
-    return { year, round: pick.round, tier }
-  }
-  
-  const userReceived = userParty.playersReceived?.map(p => p.name) || []
-  const userReceivedPicks = userParty.picksReceived?.map(parsePick) || []
-  const otherReceived = otherParty.playersReceived?.map(p => p.name) || []
-  const otherReceivedPicks = otherParty.picksReceived?.map(parsePick) || []
-  
-  return {
-    date: tradeDate,
-    sideAPlayers: userReceived,
-    sideBPlayers: otherReceived,
-    sideAPicks: userReceivedPicks,
-    sideBPicks: otherReceivedPicks,
-  }
-}
-
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool: "LegacyTradeAnalytics" })(async (req: NextRequest) => {
   try {
     const body: TradeAnalyticsRequest = await req.json()
@@ -357,7 +315,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
 
       const shapeCounts: Record<string, number> = {}
       for (const s of ps.tradeShapes) shapeCounts[s] = (shapeCounts[s] || 0) + 1
-      const topShapes = Object.entries(shapeCounts).sort(([,a],[,b]) => b - a)
 
       const suggestedDeals: string[] = []
       if (consolidationPct >= 0.5) {
@@ -433,7 +390,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
     const traderLabel = getTraderLabel(overallGrade)
 
     const managerTradeCount: Record<string, number> = {}
-    const managerWaiverCount: Record<string, number> = {}
     const pairTradeCount: Record<string, { team1: string; team2: string; count: number }> = {}
     
     trades.forEach(trade => {
@@ -705,7 +661,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
         const hindsight = t._analytics?.withHindsight
         const marketShift = (hindsight?.deltaValue ?? 0) - (atTime?.deltaValue ?? 0)
         const atTimeAbs = Math.abs(atTime?.deltaValue ?? t.value)
-        const hindsightAbs = Math.abs(hindsight?.deltaValue ?? t.value)
         const controversyScore = Math.abs(marketShift) > 200
           ? Math.round(Math.abs(marketShift) * (Math.abs(atTime?.percentDiff ?? 0) < 15 ? 1.3 : 1))
           : Math.round(Math.abs(atTime?.percentDiff ?? 0) < 10 ? atTimeAbs * 0.8 : 0)

@@ -34,7 +34,9 @@ describe('PlayerSharesBoard', () => {
   it('ranks your most-held players with the share, the starts and the injury, each opening his card', () => {
     render(<PlayerSharesBoard state={{ available: true, data: SHARES }} />)
     const board = screen.getByRole('region', { name: 'Your shares' })
-    expect(within(board).getByText(/612 players across 49 rosters · 1 on a platform/)).toBeInTheDocument()
+    // 2026-11-14: the count alone on the sub-line; the caveat moved to the foot, said once.
+    expect(within(board).getByText(/^612 players across 49 rosters$/)).toBeInTheDocument()
+    expect(within(board).getByTestId('pf-shares-not-counted').textContent).toBe("Not counted: 1 league on a platform we can't read yet.")
     const items = within(board).getAllByRole('listitem')
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('Malik Nabers')

@@ -4,18 +4,19 @@
  * Fills Gaps 2+3: Elimination → Elite Eight → Championship pipeline.
  */
 
+import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettingsRow'
 import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { compareByTiebreakers } from './advancement-rules'
-import { LATER_ROUND_NAMES, TOURNAMENT_LEAGUE_VARIANT } from './constants'
+import { LATER_ROUND_NAMES, TOURNAMENT_LEAGUE_DRAFT_READY, TOURNAMENT_LEAGUE_VARIANT } from './constants'
 import { markEliminated, markRoundCompleted, archiveRound } from './TournamentEliminationEngine'
 import { scheduleRedraftForRound, applyFaabResetForRound, applyBenchSpotsForRound } from './TournamentRedraftService'
 import { logTournamentAudit } from './TournamentAuditService'
 import { getRoundWindow } from './tournament-sport-cutoffs'
 import type { TournamentSettings } from './types'
 
-export interface CondenseRoundResult {
+interface CondenseRoundResult {
   leagueIds: string[]
   advanced: number
   eliminated: number
@@ -33,12 +34,6 @@ function resolveNextPhase(totalAdvancing: number): 'elimination' | 'elite_eight'
   if (totalAdvancing <= 8) return 'championship'
   if (totalAdvancing <= 16) return 'elite_eight'
   return 'elimination'
-}
-
-function resolveNextLeagueSize(totalAdvancing: number, leagueCount: number): number {
-  if (leagueCount <= 0) return totalAdvancing
-  const base = Math.floor(totalAdvancing / leagueCount)
-  return Math.max(base, 4)
 }
 
 /**
@@ -197,6 +192,7 @@ export async function condenseRound(
           bracketLabel: 'Championship',
         },
         syncStatus: 'manual',
+        ...TOURNAMENT_LEAGUE_DRAFT_READY,
       },
     })
     leagueIds.push(league.id)
@@ -206,6 +202,9 @@ export async function condenseRound(
     } catch (e) {
       console.warn('[tournament] Championship bootstrap non-fatal', e)
     }
+    await ensureLeagueSettingsRow(league.id).catch((error) =>
+      console.warn('[tournament] Draft settings row non-fatal', league.id, error),
+    )
 
     // Use first conference as parent (arbitrary for final)
     const firstConfId = tournament.conferences[0]?.id
@@ -271,6 +270,7 @@ export async function condenseRound(
               bracketLabel: label,
             },
             syncStatus: 'manual',
+            ...TOURNAMENT_LEAGUE_DRAFT_READY,
           },
         })
         leagueIds.push(league.id)
@@ -280,6 +280,9 @@ export async function condenseRound(
         } catch (e) {
           console.warn('[tournament] Condense bootstrap non-fatal', e)
         }
+        await ensureLeagueSettingsRow(league.id).catch((error) =>
+          console.warn('[tournament] Draft settings row non-fatal', league.id, error),
+        )
 
         await prisma.legacyTournamentLeague.create({
           data: {
@@ -416,7 +419,7 @@ export async function condenseRound(
  * Record bracket progression nodes for visualization after each advancement round.
  * Stores a snapshot of who advanced from which leagues into which new leagues.
  */
-export async function recordBracketProgression(
+async function recordBracketProgression(
   tournamentId: string,
   roundIndex: number,
   payload: Record<string, unknown>

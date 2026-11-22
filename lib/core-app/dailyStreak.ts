@@ -13,8 +13,8 @@
  * Pure and client-safe: no prisma, no clock. The store (dailyStreakStore.ts) reads and writes.
  */
 
-export const STREAK_TIME_ZONE = 'America/New_York'
-export const STREAK_MILESTONES = [3, 7, 14, 30, 60, 100, 365] as const
+const STREAK_TIME_ZONE = 'America/New_York'
+const STREAK_MILESTONES = [3, 7, 14, 30, 60, 100, 365] as const
 /** Days kept on the record — enough for the week strip and a lapse check, nothing more. */
 const KEEP_DAYS = 60
 
@@ -26,7 +26,7 @@ export type StreakRecord = {
   best: number
 }
 
-export type StreakDay = {
+type StreakDay = {
   day: string
   /** Weekday index, 0 = Sunday — the view names it in the reader's language. */
   weekday: number

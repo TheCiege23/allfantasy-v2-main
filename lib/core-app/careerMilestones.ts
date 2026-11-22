@@ -16,7 +16,7 @@ import type { LeagueCareerData } from './leagueCareer'
  * frame, the phone overview and inside one league without three loaders.
  */
 
-export type StakeTone = 'title' | 'streak' | 'first'
+type StakeTone = 'title' | 'streak' | 'first'
 
 /** One live league and what winning it would mean for the career. */
 export type LegacyStake = {
@@ -34,7 +34,7 @@ export type LegacyStake = {
   ask: string
 }
 
-export type MilestoneKind = 'award' | 'wins' | 'titles' | 'level' | 'league-wins' | 'league-seasons'
+type MilestoneKind = 'award' | 'wins' | 'titles' | 'level' | 'league-wins' | 'league-seasons'
 
 /** A milestone that is close, measured from finished seasons (or games already played, in one league). */
 export type Milestone = {

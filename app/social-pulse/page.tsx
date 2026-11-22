@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
 import { SOCIAL_PULSE_SIGNAL_VALUES, type SocialPulseResponse, type SocialPulseSignal } from '@/lib/social-pulse-schema'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type SocialPulseSport = 'NFL' | 'NBA'
 type SocialPulseFormat = 'dynasty' | 'redraft'
@@ -591,7 +592,7 @@ export default function SocialPulsePage() {
         const normalized = normalizeSocialPulseResult(payload)
         const payloadRecord = isRecord(payload) ? payload : null
         const rateLimitRecord = isRecord(payloadRecord?.rate_limit) ? payloadRecord.rate_limit : null
-        const payloadErrorMessage = extractErrorMessage(payload)
+        const payloadErrorMessage = readPlanRefusal(response.status, payload)?.message ?? extractErrorMessage(payload)
         const retryValue = rateLimitRecord?.retryAfterSec
         const topLevelRetry = payloadRecord?.retryAfterSec
         const parsedRetry =
@@ -752,7 +753,7 @@ export default function SocialPulsePage() {
         <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6">
           <section className="rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_45%),#0a0d1a] p-6 sm:p-8">
             <div className="max-w-3xl">
-              <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Powered by Grok AI</div>
+              <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Powered by Grok Chimmy</div>
               <h2 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">
                 Understand player narratives before the market shifts.
               </h2>
@@ -977,7 +978,7 @@ export default function SocialPulsePage() {
                     <div className="mt-3 inline-flex items-center text-sm text-white/55">
                       <LoadingDots />
                     </div>
-                    <p className="mt-4 text-sm leading-6 text-white/50">Using Grok AI with live X search and web search.</p>
+                    <p className="mt-4 text-sm leading-6 text-white/50">Using Grok Chimmy with live X search and web search.</p>
                   </div>
                 </div>
               ) : !result ? (
@@ -1032,7 +1033,7 @@ export default function SocialPulsePage() {
                       <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
                         Grok
                       </span>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/35">AI Narrative Summary</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/35">Chimmy Narrative Summary</span>
                     </div>
                     <p className="mt-4 text-base leading-7 text-white/80">{result.summary}</p>
                   </div>

@@ -8,7 +8,7 @@ import { compareByTiebreakers } from './advancement-rules'
 import { logTournamentAudit } from './TournamentAuditService'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 
-export interface ChampionResult {
+interface ChampionResult {
   championUserId: string
   championTeamName: string | null
   tournamentName: string

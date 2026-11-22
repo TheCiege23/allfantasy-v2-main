@@ -4,7 +4,7 @@ import { GraduationCap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CoachProviderInsights } from '@/lib/fantasy-coach/types';
 
-export interface WeeklyAdvicePanelProps {
+interface WeeklyAdvicePanelProps {
   weeklyAdvice: string | null;
   strategyInsight: string | null;
   rosterMathSummary: string | null;

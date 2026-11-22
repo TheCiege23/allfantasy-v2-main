@@ -3,7 +3,7 @@
 import React from 'react'
 import type { ContingencyPlan, RosterBuildAnalysis, StackOpportunity } from '@/lib/war-room/draft-intelligence-engine'
 
-export type WarRoomContingencyCardProps = {
+type WarRoomContingencyCardProps = {
   plans?: ContingencyPlan[]
   stacks?: StackOpportunity[]
   rosterBuild?: RosterBuildAnalysis

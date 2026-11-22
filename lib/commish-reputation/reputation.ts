@@ -25,7 +25,7 @@ export const RATING_QUESTIONS = [
   { id: 'enjoyment', label: 'Overall, how much did you enjoy this league?' },
 ] as const
 
-export type QuestionId = (typeof RATING_QUESTIONS)[number]['id']
+type QuestionId = (typeof RATING_QUESTIONS)[number]['id']
 
 export const RATINGS_KEY = 'commissioner_ratings'
 export const PUBLIC_KEY = 'commissioner_reputation_public'
@@ -60,7 +60,7 @@ export function isPublic(settings: unknown): boolean {
   return Boolean(settings && typeof settings === 'object' && (settings as Record<string, unknown>)[PUBLIC_KEY] === true)
 }
 
-export type ValidationError = 'ratings_required' | `invalid_${QuestionId}`
+type ValidationError = 'ratings_required' | `invalid_${QuestionId}`
 
 /** Every question must be a whole 1–5. */
 export function validateRatings(raw: unknown): { ok: true; ratings: Record<QuestionId, number> } | { ok: false; error: ValidationError } {

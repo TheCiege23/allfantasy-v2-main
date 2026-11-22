@@ -68,10 +68,10 @@ export function getChimmyChatHrefWithPrompt(
 export function getUnifiedChimmyEntries(context?: AIProductContext): ChimmyEntry[] {
   const chatHref = getChimmyChatHref(context);
   return [
-    { href: chatHref, label: 'AI Chat' },
+    { href: chatHref, label: 'Chimmy Chat' },
     { href: CHIMMY_CHAT_ROUTE, label: 'Chimmy Chat Route' },
     { href: CHIMMY_LANDING, label: 'Meet Chimmy' },
-    { href: LEGACY_CHAT, label: 'Legacy AI Chat' },
+    { href: LEGACY_CHAT, label: 'Legacy Chimmy Chat' },
   ];
 }
 

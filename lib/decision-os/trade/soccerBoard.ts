@@ -41,7 +41,7 @@ export function clubMatchCounts(rows: ReadonlyArray<{ team: string | null; gameI
   return new Map([...matches].map(([team, set]) => [team, set.size]))
 }
 
-export type SoccerBoardLine = {
+type SoccerBoardLine = {
   playerId: string
   name: string | null
   position: string | null

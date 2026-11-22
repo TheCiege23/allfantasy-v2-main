@@ -2,15 +2,15 @@
  * Resolves draft order rules (snake vs linear) for pick order and UI labels.
  * Used by draft room and mock draft to compute pick slot and display rules.
  */
-export type DraftOrderRule = 'snake' | 'linear'
+type DraftOrderRule = 'snake' | 'linear'
 
-export interface DraftOrderRuleDescription {
+interface DraftOrderRuleDescription {
   rule: DraftOrderRule
   label: string
   description: string
 }
 
-export interface DraftOrderBehavior {
+interface DraftOrderBehavior {
   rule: DraftOrderRule
   thirdRoundReversal: boolean
   label: string
@@ -33,16 +33,9 @@ const RULES: Record<DraftOrderRule, DraftOrderRuleDescription> = {
 /**
  * Get draft order rule and description for UI/timer logic.
  */
-export function getDraftOrderRule(snakeOrLinear: string | undefined | null): DraftOrderRuleDescription {
+function getDraftOrderRule(snakeOrLinear: string | undefined | null): DraftOrderRuleDescription {
   const key = (snakeOrLinear ?? 'snake').toString().toLowerCase()
   return RULES[key === 'linear' ? 'linear' : 'snake'] ?? RULES.snake
-}
-
-/**
- * Whether the draft uses snake order (reversing each round).
- */
-export function isSnakeDraft(snakeOrLinear: string | undefined | null): boolean {
-  return (snakeOrLinear ?? 'snake').toString().toLowerCase() !== 'linear'
 }
 
 /**

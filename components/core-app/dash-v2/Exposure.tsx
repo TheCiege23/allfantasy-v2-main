@@ -200,4 +200,3 @@ export function Exposure({ data }: { data: Dash34Data | null }) {
   )
 }
 
-export default Exposure

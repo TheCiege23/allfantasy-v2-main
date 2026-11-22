@@ -444,7 +444,7 @@ test.describe('@commissioner ai commissioner click audit', () => {
 
     await page.goto(`/e2e/commissioner?leagueId=${leagueId}`)
     await expect(page.getByRole('heading', { name: /e2e commissioner harness/i })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /ai commissioner/i })).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('heading', { name: /chimmy commissioner/i })).toBeVisible({ timeout: 20_000 })
 
     await page.getByTestId('ai-commissioner-sport').selectOption('NBA')
     await page.getByTestId('ai-commissioner-season').fill('2026')

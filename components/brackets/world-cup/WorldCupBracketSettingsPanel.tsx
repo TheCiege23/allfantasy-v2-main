@@ -88,7 +88,7 @@ function AfCommissionerGateCard() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-black text-white">AF Commissioner required</p>
           <p className="mt-1 text-xs leading-relaxed text-white/60">
-            Custom scoring, custom lock rules, invite gates, advanced alerts, and commissioner AI reports are paid
+            Custom scoring, custom lock rules, invite gates, advanced alerts, and commissioner Chimmy reports are paid
             commissioner controls.
           </p>
           <Link
@@ -687,7 +687,7 @@ export default function WorldCupBracketSettingsPanel({
       <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <h3 className="text-[11px] font-bold uppercase tracking-wide text-white/45">Alerts & reminders</h3>
         <p className="mt-2 text-[11px] text-white/45">
-          Advanced pool notifications require AF Commissioner. AI-powered summaries also require AF Pro.
+          Advanced pool notifications require AF Commissioner. Chimmy-powered summaries also require AF Pro.
         </p>
         <div className="mt-3 space-y-2">
           <Toggle label="Enable system events" checked={enableSystemEvents} disabled={!hasAfCommissioner} onChange={setEnableSystemEvents} />
@@ -704,13 +704,13 @@ export default function WorldCupBracketSettingsPanel({
         ) : !hasAfPro ? (
           <div className="mt-4">
             <AfProGateCard
-              title="AI summaries"
-              body="Post AI-written recap and hype lines to your pool feed when enabled."
+              title="Chimmy summaries"
+              body="Post Chimmy-written recap and hype lines to your pool feed when enabled."
             />
           </div>
         ) : (
           <div className="mt-4">
-            <Toggle label="AI summaries (AF Pro)" checked={enableAiSummaries} onChange={setEnableAiSummaries} />
+            <Toggle label="Chimmy summaries (AF Pro)" checked={enableAiSummaries} onChange={setEnableAiSummaries} />
           </div>
         )}
       </section>
@@ -718,7 +718,7 @@ export default function WorldCupBracketSettingsPanel({
       <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <h3 className="text-[11px] font-bold uppercase tracking-wide text-white/45">Bracket Brain</h3>
         <p className="mt-2 text-[11px] text-white/45">
-          Lets commissioners generate Bracket Brain chat posts from the Commissioner tab. Requires AF Commissioner and AF Pro to run AI output.
+          Lets commissioners generate Bracket Brain chat posts from the Commissioner tab. Requires AF Commissioner and AF Pro to run Chimmy output.
         </p>
         {!hasAfCommissioner ? (
           <div className="mt-3">
@@ -728,7 +728,7 @@ export default function WorldCupBracketSettingsPanel({
           <div className="mt-3">
             <AfProGateCard
               title="Bracket Brain controls"
-              body="Enable pool-level Bracket Brain features and tune AI surfaces — upgrade to AF Pro."
+              body="Enable pool-level Bracket Brain features and tune Chimmy surfaces — upgrade to AF Pro."
             />
           </div>
         ) : (
