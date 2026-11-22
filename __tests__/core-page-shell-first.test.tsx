@@ -563,3 +563,30 @@ vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/chimmy/planAllowance')>()),
   readChimmyAnswerAllowance: (shell.planAllowance = gatedValue(null)),
 }))
+
+/*
+ * 🛑 THE RAIL'S SCORES NO LONGER HOLD THE SHELL (2026-11-22, owner's OK). Measured on the owner's 91-league
+ * account: the rail's matchup read was 12.5s of a 13.0s shell. The read still starts with the shell; the
+ * shell no longer waits for it, and its scores stream into the rail through RailScoresSlot.
+ */
+describe('/core paints its shell before the rail scores land', () => {
+  it('resolves while the rail read is still pending, and streams the scores in their own boundary', { timeout: 180_000 }, async () => {
+    h.gated = false
+    let releaseRail!: (value: null) => void
+    // The mock is created by the page's module factory, so load the page first.
+    const AfCorePage = await loadPage()
+    shell.railMatchups.mockImplementationOnce(() => new Promise<null>((resolve) => { releaseRail = resolve }))
+    try {
+      const tree = await Promise.race([
+        AfCorePage(pageArgs([], {})),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('the shell waited for the rail scores')), 60_000)),
+      ])
+      // Positive control: the read the shell did not wait for was started.
+      expect(shell.railMatchups).toHaveBeenCalledTimes(1)
+      const slot = findElement(tree, (el) => typeof el.type === 'function' && el.type.name === 'RailScoresSlot')
+      expect(slot).not.toBeNull()
+    } finally {
+      releaseRail?.(null)
+    }
+  })
+})
