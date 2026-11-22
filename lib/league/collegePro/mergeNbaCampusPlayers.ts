@@ -7,16 +7,16 @@ type NbaCampusPlayer = DisplayPlayerRecord & { alternateIds?: string[] }
 type BoardIdentity = Pick<LeaguePlayerMetric, 'playerId' | 'playerName' | 'position' | 'team' | 'rosterPlayerId' | 'availabilityId'>
 
 function nameAndClub(name: string, team: string | null | undefined): string | null {
-  const label = canonicalName(name)
   const club = proTeamCode('NBA', team)
-  return label && club ? label + '|' + club : null
+  return name && club ? name + '|' + club : null
 }
 
-/** Show each AF player once, while keeping searchable profiles without a verified projection. */
+/** Decorate each AF board row with its display profile and known watchlist aliases. */
 export function mergeNbaCampusPlayers(
   board: readonly BoardIdentity[],
   profiles: readonly DisplayPlayerRecord[],
 ): NbaCampusPlayer[] {
+  if (!board.length) return []
   const byAlias = new Map<string, NbaCampusPlayer | null>()
   const byNameAndClub = new Map<string, NbaCampusPlayer | null>()
   const byName = new Map<string, NbaCampusPlayer | null>()
@@ -37,9 +37,9 @@ export function mergeNbaCampusPlayers(
     for (const alias of aliases) {
       if (alias) byAlias.set(alias, byAlias.has(alias) ? null : player)
     }
-    const key = nameAndClub(row.playerName, row.team)
-    if (key) byNameAndClub.set(key, byNameAndClub.has(key) ? null : player)
     const name = canonicalName(row.playerName)
+    const key = nameAndClub(name, row.team)
+    if (key) byNameAndClub.set(key, byNameAndClub.has(key) ? null : player)
     if (name) byName.set(name, byName.has(name) ? null : player)
     return player
   })
@@ -51,10 +51,9 @@ export function mergeNbaCampusPlayers(
     const name = canonicalName(profile.name)
     const syntheticPrefix = 'NBA:' + name.replaceAll(' ', '-') + ':'
     const synthetic = name !== '' && profile.id.startsWith(syntheticPrefix)
-    const key = nameAndClub(profile.name, profile.team)
+    const key = nameAndClub(name, profile.team)
     const match = byAlias.get(profile.id) ?? (key ? byNameAndClub.get(key) : null) ?? (synthetic ? byName.get(name) : null)
-    if (!match) players.push(profile)
-    else if (profile.id !== match.id) match.alternateIds?.push(profile.id)
+    if (match && profile.id !== match.id) match.alternateIds?.push(profile.id)
   }
   return players
 }

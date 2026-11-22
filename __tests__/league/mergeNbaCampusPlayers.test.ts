@@ -15,7 +15,6 @@ describe('Fantrax NBA player board identities', () => {
 
     expect(rows).toEqual([
       expect.objectContaining({ id: '2577', team: 'SAS', nba_id: '1641705', alternateIds: ids.slice(1) }),
-      unknown,
     ])
   })
 
@@ -28,10 +27,13 @@ describe('Fantrax NBA player board identities', () => {
     ])
   })
 
-  it('leaves distinct or ambiguous same-name profiles alone', () => {
+  it('leaves unrelated and ambiguous profiles out of the AF rows and watchlist aliases', () => {
     const profile = { id: 'retired', name: 'Victor Wembanyama', position: 'F', team: 'SEA' }
-    expect(mergeNbaCampusPlayers([victor], [profile])).toContain(profile)
+    expect(mergeNbaCampusPlayers([victor], [profile])).toEqual([expect.objectContaining({ id: '2577', alternateIds: [] })])
     const ambiguous = { ...profile, team: 'SA' }
-    expect(mergeNbaCampusPlayers([victor, { ...victor, playerId: 'ri-2', availabilityId: '9999', rosterPlayerId: 'other' }], [ambiguous])).toContain(ambiguous)
+    expect(mergeNbaCampusPlayers([victor, { ...victor, playerId: 'ri-2', availabilityId: '9999', rosterPlayerId: 'other' }], [ambiguous])).toEqual([
+      expect.objectContaining({ id: '2577', alternateIds: [] }),
+      expect.objectContaining({ id: '9999', alternateIds: [] }),
+    ])
   })
 })

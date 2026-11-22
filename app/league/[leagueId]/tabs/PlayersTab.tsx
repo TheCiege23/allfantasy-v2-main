@@ -132,7 +132,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const [selectedWeek, setWeekNum] = useState<number | null>(null)
   const [selectedSeason, setSeasonSel] = useState(seasonYear)
   const [campusBoard, setCampusBoard] = useState<LeaguePlayerMetrics | null>(null)
-  const [campusLoading, setCampusLoading] = useState(false)
+  const [campusLoading, setCampusLoading] = useState(campusPoolEnabled)
   const activeCampusBoard = campusBoard?.leagueId === league.id && (selectedWeek == null || campusBoard.week === selectedWeek)
     ? campusBoard : null
   const weekNum = selectedWeek ?? (campusPoolEnabled ? activeCampusBoard?.week ?? league.currentWeek : null) ?? 1
@@ -361,11 +361,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
     }
     // Redraft, not NFL/NBA: never fall back to the NFL map (see `leaguePool`).
     if (leaguePool) return []
-    if (campusPoolEnabled && !freeAgents && activeCampusBoard) {
-      return mergeNbaCampusPlayers(activeCampusBoard.rows, Object.values(players))
+    if (campusPoolEnabled && projection && !freeAgents) {
+      return mergeNbaCampusPlayers(activeCampusBoard?.rows ?? [], Object.values(players))
     }
     return Object.values(players)
-  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players, campusPoolEnabled, activeCampusBoard])
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players, campusPoolEnabled, projection, activeCampusBoard])
 
   const weeklyProjectionFor = useCallback((player: PlayerPoolRow) => campusPoolEnabled
     ? campusMetricsById.get(player.afProjectionPlayerId ?? player.id)?.weekly ?? null
@@ -885,7 +885,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             )}
           </div>
           {!busy && filtered.length === 0 ? (
-            <p className="rdp-empty py-8 text-center text-sm text-white/40">No players match filters.</p>
+            <p className="rdp-empty py-8 text-center text-sm text-white/40">
+              {campusPoolEnabled && projection && !freeAgents && !activeCampusBoard
+                ? 'Weekly AF projections are unavailable right now.'
+                : 'No players match filters.'}
+            </p>
           ) : null}
         </div>
       </div>
