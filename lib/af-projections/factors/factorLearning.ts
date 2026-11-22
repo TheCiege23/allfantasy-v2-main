@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { describeFactorTable, learnFactors, type LearnedFactorTable } from './factorLearner'
 import { buildFactorObservations, opponentRatios, usageOf, type GameLine } from './factorObservations'
 import { contextKey, loadNflGameContext, type GameContextLevels } from './gameContext'
+import { loadInjurySnapshots, snapshotLevelFor } from './injurySnapshots'
 import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
 
 /**
@@ -78,10 +79,13 @@ export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sp
     // The game's own context — Vegas, weather, coaching — as stored before kickoff (`gameContext.ts`).
     const weeks = [...new Map(out.filter((l) => l.season != null && l.week != null).map((l) => [`${l.season}:${l.week}`, { season: l.season!, week: l.week! }])).values()]
     const ctx = await loadNflGameContext(db as never, weeks).catch(() => new Map<string, GameContextLevels>())
+    // The player's own designation as it stood before HIS kickoff — the frozen weekly snapshot, never today's status.
+    const injuries = 'sportsDataCache' in db ? await loadInjurySnapshots(db as never, weeks).catch(() => new Map()) : new Map()
     for (const l of out) {
       const code = projectionTeamKey('NFL', l.team)
       const c = code && l.season != null && l.week != null ? ctx.get(contextKey(l.season, l.week, code)) : undefined
-      if (c) l.context = c
+      const injury = l.season != null && l.week != null ? snapshotLevelFor(injuries.get(`${l.season}:${l.week}`), l.playerId, code) : undefined
+      if (c || injury) l.context = { ...(c ?? {}), ...(injury ? { injury } : {}) }
     }
   }
   return out

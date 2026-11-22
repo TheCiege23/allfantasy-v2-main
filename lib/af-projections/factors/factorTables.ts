@@ -63,6 +63,8 @@ export function factorReason(l: LearnedFactorLevel): string {
     'weather:bad': 'wind 15+ mph or rain or snow likely',
     'weather:dome': 'played indoors',
     'coaching:new_coach': 'first season under a new head coach',
+    'injury:questionable': 'listed Questionable before kickoff',
+    'injury:doubtful': 'listed Doubtful before kickoff',
   }
   return `${what[`${l.factor}:${l.level}`] ?? `${l.factor} ${l.level}`} ${signed} (measured on ${l.games.toLocaleString('en-US')} games)`
 }

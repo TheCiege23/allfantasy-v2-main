@@ -18,7 +18,7 @@
  * PURE: no database, no clock beyond what is passed.
  */
 
-export type FactorName = 'rest' | 'form' | 'usage' | 'opponent' | 'team_change' | 'returning' | 'vegas' | 'weather' | 'coaching'
+export type FactorName = 'rest' | 'form' | 'usage' | 'opponent' | 'team_change' | 'returning' | 'vegas' | 'weather' | 'coaching' | 'injury'
 
 /** Each factor's levels; the first is its baseline (ordinary) level, which is never applied. */
 export const FACTOR_LEVELS: Readonly<Record<FactorName, readonly string[]>> = {
@@ -32,6 +32,8 @@ export const FACTOR_LEVELS: Readonly<Record<FactorName, readonly string[]>> = {
   vegas: ['average', 'high', 'low'],
   weather: ['normal', 'bad', 'dome'],
   coaching: ['same_coach', 'new_coach'],
+  // The player's own designation before kickoff (`injurySnapshots.ts`) — NFL. Out players have no game to learn from.
+  injury: ['clear', 'questionable', 'doubtful'],
 }
 
 export type FactorLevels = Partial<Record<FactorName, string>>

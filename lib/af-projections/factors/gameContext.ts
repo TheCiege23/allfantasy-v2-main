@@ -20,7 +20,8 @@ import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule
  * A level is set only from stored data; a missing read is no level, never a default. Every read is contained.
  */
 
-export type GameContextLevels = Partial<Record<'vegas' | 'weather' | 'coaching', string>>
+/** `injury` is per PLAYER, not per team — set from the pre-kickoff snapshot (`injurySnapshots.ts`). */
+export type GameContextLevels = Partial<Record<'vegas' | 'weather' | 'coaching' | 'injury', string>>
 
 export const VEGAS_GAP = 3
 export const WINDY_MPH = 15
