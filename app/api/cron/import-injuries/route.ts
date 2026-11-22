@@ -104,26 +104,23 @@ function resolveSports(param: string | null): Sport[] {
 }
 
 /**
- * 🛑 NFL ONLY — BUT NOT BECAUSE THE KEY LACKS COLLEGE. CORRECTED 2026-11-22.
+ * 🛑 NFL ONLY, BECAUSE API-SPORTS PUBLISHES NO COLLEGE INJURIES. MEASURED 2026-11-22.
  *
  * This note used to say "the subscription does not cover college — confirmed by the account
- * holder, 2026-09-08". Production data contradicts that: the same key wrote 5,508 NCAAF 2026
- * `SportsGame` rows (source `api_sports`, 3,563 with scores, last write 2026-11-22), and college
- * standings sync through it too. So the key DOES reach college for games and scores. Whether it
- * returns college INJURIES is still unmeasured; no college `/injuries` call has been made.
+ * holder, 2026-09-08". That was wrong about the key: on the Ultra plan it wrote 5,508 NCAAF 2026
+ * `SportsGame` rows (source `api_sports`, 3,563 with scores). The answer for injuries is still no,
+ * for a different reason: `/injuries?team=<id>` for Ohio State, Alabama, Michigan, Texas and LSU
+ * each returned HTTP 200, `errors: []`, zero results, while an NFL control on the same key
+ * returned 17. A plan refusal arrives as a populated `errors.plan`, so this is no data, not no
+ * entitlement. Fixtures and the bounded FBS list it was tested against are in
+ * contracts/api-sports/README.md. NCAAF injuries need a different provider.
  *
- * What keeps NCAAF out is COST. `/injuries` answers only per team, and API-Sports carries every
- * college division: 726 distinct NCAAF teams appear in its 2026 games. One sweep would be ~726
- * calls, more than double the 300/hour guard in `lib/workers/rate-limit-manager.ts`, and this
- * route runs every 30 minutes. A college source here would need its own bounded team list (FBS,
- * or rostered schools only) before it is worth listing.
+ * The original warning is why the proof had to come first: a gap is SILENT in this fanout. Every
+ * team call that throws is swallowed by a bare `catch { continue }`, an empty team is just empty,
+ * the sync returns 0, and the route reports a clean run. A 137-team FBS sweep would have spent
+ * ~137 calls a run writing nothing, looking exactly like a week where nobody is hurt.
  *
- * And the original warning still holds for whenever that is tried: a plan gap is SILENT in the
- * fanout. Every team call throws, each is swallowed by a bare `catch { continue }`, the sync
- * returns 0, and the route reports a clean run. NCAAF would look like a sport where nobody is
- * hurt, forever. Prove one college team returns rows before widening this.
- *
- * Listing only what is proven turns that into ordinary "no coverage": the source is absent,
+ * Listing only what returns data turns that into ordinary "no coverage": the source is absent,
  * `providerCoverage` says so, and nothing pretends to have looked.
  *
  * ⚠ SO NCAAF INJURIES REMAIN ESPN-ONLY, AND ESPN IS THIN — 3 rows for the whole of FBS when
