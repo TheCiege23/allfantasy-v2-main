@@ -67,6 +67,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeMarketEvidence } from './TradeMarketEvidence'
 import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradePackageCost } from './TradePackageCost'
 import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
@@ -2640,6 +2641,8 @@ export function TradeCenter(props: {
               <span>{copy(serverGrade.letterBasis === 'your_team' ? 'Their grade, on the market' : 'Their grade')} {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span>
             </div>
           ) : null}
+          {/* Why the values moved, measured from completed trades — verbatim from the grade, as Chimmy cites it. */}
+          <TradeMarketEvidence grade={serverGrade} copy={copy} />
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
