@@ -95,6 +95,18 @@ function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagu
               <li key={p.teamIds.join('|')}>
                 {p.names[0]} and {p.names[1]}: {p.count} trades, {expectedLabel(p.expected)} expected from the league&rsquo;s volume
                 {p.outside > 0 ? ` · ${p.outside} outside the fair range` : ''}.
+                {p.elsewhere ? (
+                  <span data-testid="trade-audit-pair-elsewhere">
+                    {' '}
+                    Middle value gap between them: {p.gapTogether}%.{' '}
+                    {p.names.map((name, i) => {
+                      const e = p.elsewhere[i]!
+                      return e.gap == null
+                        ? `${name} has ${e.trades} ${e.trades === 1 ? 'trade' : 'trades'} with other teams, too few to compare.`
+                        : `${name}'s ${e.trades} trades with other teams: ${e.gap}%.`
+                    }).join(' ')}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>
