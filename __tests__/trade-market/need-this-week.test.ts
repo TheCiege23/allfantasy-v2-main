@@ -156,3 +156,37 @@ describe('short this week', () => {
     expect(market.premiums).toHaveLength(12)
   })
 })
+
+describe('other sports: the board value of each traded player, at capture', () => {
+  const trade = { source_transaction_id: 'tx', type: 'trade' as const, status: 'complete', created_at: hoursAgo(5), completed_at: hoursAgo(5), roster_ids: ['1', '2'], adds: { b1: '1', b2: '2' }, drops: { b1: '2', b2: '1' }, week: 6 }
+  const normalized = (sport: string) => ({
+    source: { source_provider: 'sleeper', source_league_id: 'sl-1' },
+    league: { name: 'L', sport, season: 2026, isDynasty: false },
+    rosters: [
+      { source_team_id: '1', source_manager_id: 'a', player_ids: ['b2'], starter_ids: [] },
+      { source_team_id: '2', source_manager_id: 'b', player_ids: ['b1'], starter_ids: [] },
+    ],
+    transactions: [trade],
+    player_map: { b1: { name: 'Big Center', position: 'C', team: 'AAA' }, b2: { name: 'Quick Guard', position: 'PG', team: 'BBB' } },
+  }) as never
+
+  it('an NBA trade saves each player\'s board price; one the board cannot price is null, never 0', async () => {
+    const db = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    const board = vi.fn(async () => ({ sport: 'NBA', unit: 'fantasy points', priceOf: (id: string, name: string | null) => (name === 'Big Center' ? 412.7 : null) }))
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: db as never, now: NOW, env: {}, board })
+    const saved = (db.leagueTrade.updateMany.mock.calls[0] as unknown as [{ data: { contextSnapshot: { boardValues?: unknown } } }])[0].data.contextSnapshot
+    expect(saved.boardValues).toEqual({ sport: 'NBA', unit: 'fantasy points', byPlayer: { b1: 412.7, b2: null } })
+    expect(board).toHaveBeenCalledWith('sl-1')
+  })
+
+  it('NFL never reads a board; a failed board read saves the snapshot exactly as before', async () => {
+    const nflBoard = vi.fn(async () => null)
+    const db = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NFL'), trades: [trade as never] }, { db: db as never, now: NOW, env: {}, board: nflBoard, injuries: async () => null })
+    expect(nflBoard).not.toHaveBeenCalled()
+    const failing = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: failing as never, now: NOW, env: {}, board: async () => { throw new Error('down') } })
+    const plain = (failing.leagueTrade.updateMany.mock.calls[0] as unknown as [{ data: { contextSnapshot: Record<string, unknown> } }])[0].data.contextSnapshot
+    expect(plain.boardValues).toBeUndefined()
+  })
+})

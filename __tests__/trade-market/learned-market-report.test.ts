@@ -54,8 +54,8 @@ describe('the learned market report', () => {
     expect(posture!.books[0]!.rows[0]!.gradeSays).toMatch(/teams at \.600 or better paid \+8% for players 27 or older/)
     expect(posture!.books[0]!.rows[1]!.gradeSays).toBeNull()
     expect(need!.books[0]!.rows[0]!.gradeSays).toMatch(/teams short at TE paid \+11%.*140 completed trades/)
-    // "Short this week" is measured and published but no grade applies it yet: the page must not say it does.
-    expect(need!.books[0]!.rows[1]).toMatchObject({ published: true, gradeSays: null })
+    // "Short this week" applies where the hole is a ruled-out starter (2026-11-22), and the page says so.
+    expect(need!.books[0]!.rows[1]!.gradeSays).toMatch(/teams short at TE this week \(a starter ruled out\) paid \+14%.*60 completed trades/)
   })
 
   it('a stale table is flagged, and its published rows print nothing — as the grades ignore them', () => {

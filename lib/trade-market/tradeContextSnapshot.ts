@@ -75,6 +75,14 @@ export type TradeContextSnapshot = {
   /** True when every roster player's `injuryStatus` was read at capture (`withInjuryStatus`). */
   injuriesRead?: boolean
   /**
+   * NBA / MLB / NHL / NCAAB / soccer: what the league's value board priced each traded player at, AT CAPTURE
+   * (`withBoardValues`, 2026-11-22). Those sports have no dated market chart, so this is the only record of what the
+   * players were worth on the trade's day — the thing trade learning measures against. In the league's own unit
+   * (fantasy points or category score over replacement, for the games left); a ratio of two sides is unit-free.
+   * A player the board could not price is `null`, never 0.
+   */
+  boardValues?: { sport: string; unit: string; byPlayer: Record<string, number | null> }
+  /**
    * `live_sync`: captured from the sync that saw the trade — rosters exact.
    * `backfill_rebuilt`: rebuilt later from stored weekly rows (`tradeContextBackfill.ts`) — rosters as of the week
    * before, so moves made between that week and the trade are not in them. `rosterBasis` says which week.
@@ -234,6 +242,26 @@ export function buildTradeContextSnapshot(
     scoring,
     sides,
   }
+}
+
+/**
+ * The snapshot with the board value of every traded player, read at capture — see `boardValues`. PURE: the caller
+ * prices. `priceOf` returns null for a player the board cannot price.
+ */
+export function withBoardValues(
+  snapshot: TradeContextSnapshot,
+  trade: { adds?: Record<string, unknown> | null; drops?: Record<string, unknown> | null },
+  board: { sport: string; unit: string },
+  priceOf: (playerId: string) => number | null,
+): TradeContextSnapshot {
+  const ids = [...new Set([...Object.keys(trade.adds ?? {}), ...Object.keys(trade.drops ?? {})])]
+  if (ids.length === 0) return snapshot
+  const byPlayer: Record<string, number | null> = {}
+  for (const id of ids) {
+    const v = priceOf(id)
+    byPlayer[id] = v != null && Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : null
+  }
+  return { ...snapshot, boardValues: { sport: board.sport, unit: board.unit, byPlayer } }
 }
 
 /**

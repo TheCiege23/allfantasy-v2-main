@@ -1207,6 +1207,10 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-timeline-why { display: grid; gap: 3px; margin: 8px 0 0; padding: 7px 9px; border-radius: var(--af-radius-inner, 12px); background: var(--surface); list-style: none; }
 .af-tc-timeline-why li { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .af-tc-timeline-why li:first-child { color: var(--text2); font-weight: 600; }
+/* Why the values moved, measured from completed trades (TradeMarketEvidence). Text tokens only — never a series color. */
+.af-tc-market-evidence { margin: 8px 0 0; padding: 7px 9px; border-radius: var(--af-radius-inner, 12px); background: var(--surface); }
+.af-tc-market-evidence ul { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; }
+.af-tc-market-evidence li { color: var(--muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
 
 .af-tc-timeline-grades {
   display: flex;

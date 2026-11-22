@@ -141,8 +141,8 @@ export function summarizeLearnedMarket(raw: RawDocs, env: NodeJS.ProcessEnv, now
     tradesUsed: typeof rest.observations === 'number' ? rest.observations : null,
     warnings: [],
     rows: rows.map((p) => {
-      // The grades use only "short" today; the other levels are measured and shown, never applied.
-      const used = p.need === 'short' ? learnedNeedPremium(tables, book, p.position, 'short') : null
+      // The grades apply "short" and, where the hole is a ruled-out starter, "short this week"; "deep" is shown only.
+      const used = p.need === 'short' || p.need === 'short_this_week' ? learnedNeedPremium(tables, book, p.position, p.need) : null
       return {
         label: `${p.position} · ${p.need === 'short' ? 'short (an open slot)' : p.need === 'short_this_week' ? 'short this week (injury or bye)' : 'deep'}`,
         pct: p.premiumPct,
@@ -152,7 +152,7 @@ export function summarizeLearnedMarket(raw: RawDocs, env: NodeJS.ProcessEnv, now
         published: p.published,
         note: p.note,
         gradeSays: used
-          ? `teams short at ${p.position} paid ${used.pct > 0 ? '+' : ''}${used.pct}% over normal-depth teams across ${used.trades} completed trades`
+          ? `teams short at ${p.position}${p.need === 'short_this_week' ? ' this week (a starter ruled out)' : ''} paid ${used.pct > 0 ? '+' : ''}${used.pct}% over normal-depth teams across ${used.trades} completed trades`
           : null,
       }
     }),
