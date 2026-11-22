@@ -19,7 +19,6 @@ import { LeagueTypeHero } from '@/components/league/LeagueTypeHero'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
 import { LeaguePlayerNewsTab } from '@/components/league/LeaguePlayerNewsTab'
 import { redraftSkinSport, resolveLeagueSkin } from '@/lib/league/leagueTypeSkin'
-import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
@@ -141,6 +140,8 @@ import { buildLeagueTabGroups, groupForLeagueTab } from '@/components/decide/lea
 import { LegacyHome } from '@/components/decide/LegacyHome'
 import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
+import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
+import { collegeProFormatOf } from '@/lib/league/collegePro/format'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
 import { AICoachingTab } from './tabs/AICoachingTab'
@@ -537,6 +538,13 @@ export function LeagueShell({
   )
 
   const nativeWorkspace = isNativePlatform(league.platform)
+  /*
+   * Every league opens in the one workspace (NativeLeagueWorkspace) since 2026-11-22: native and imported leagues
+   * looked like two different products. `nativeWorkspace` still means HOSTED ON AF and still gates the native-only
+   * screens and settings; `workspaceShell` is about chrome only. An imported league embedded in the dashboard iframe
+   * keeps the older shell, so /core's embed is unchanged.
+   */
+  const workspaceShell = nativeWorkspace || !embedMode
   // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
   // our chop engine. Most imports carry only `leagueType: 'guillotine'`, which the native gate below never read.
   const guillyTab = guillyTabKind(league, nativeWorkspace)
@@ -850,11 +858,13 @@ export function LeagueShell({
     if (shouldUseMatchupPrimary) return
     if (league.guillotineMode) return
     if (!zombieLeague || zombieLandingApplied.current) return
+    // An imported league has no outbreak board (lib/zombie/importedZombieNote.ts): open on its usual tab.
+    if (!nativeWorkspace) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has('zombie')) return
     setActiveTab('zombie')
     zombieLandingApplied.current = true
-  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague])
+  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague, nativeWorkspace])
 
   /** Big Brother leagues default to the Big Brother hub. */
   useEffect(() => {
@@ -1703,6 +1713,18 @@ export function LeagueShell({
         ) : null}
         <NativeLeagueWorkspace
           native={nativeWorkspace}
+          sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null}
+          importActions={
+            !isAfHostedPlatform(league.platform) ? (
+              <ImportedLeagueQuickActions
+                compact
+                leagueId={league.id}
+                leagueName={selectedLeague.name ?? 'League'}
+                platform={league.platform}
+                canRemove={isOwner}
+              />
+            ) : null
+          }
           league={selectedLeague}
           leagues={leagueList}
           tabs={tabDefs}
@@ -1776,31 +1798,7 @@ export function LeagueShell({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-            {!embedMode && !nativeWorkspace ? (
-              // ONE line in place of three stacked bars: the back links, where the league is hosted,
-              // the imported-league actions and the host button share a row; the read-only note sits
-              // under it.
-              <LeagueWorkspaceNavigation
-                variant="strip"
-                leagueId={league.id}
-                leagueName={selectedLeague.name ?? 'League'}
-                platform={league.platform}
-                sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId}
-                season={league.season}
-                trailing={
-                  !isAfHostedPlatform(league.platform) ? (
-                    <ImportedLeagueQuickActions
-                      compact
-                      leagueId={league.id}
-                      leagueName={selectedLeague.name ?? 'League'}
-                      platform={league.platform}
-                      canRemove={isOwner}
-                    />
-                  ) : null
-                }
-              />
-            ) : null}
-            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${nativeWorkspace ? 'hidden' : ''}`}>
+            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${workspaceShell ? 'hidden' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -1823,7 +1821,7 @@ export function LeagueShell({
                 </button>
               </div>
             </div>
-            {!nativeWorkspace && showSpecialtyHero && specialtyHeroVariant ? (
+            {!workspaceShell && showSpecialtyHero && specialtyHeroVariant ? (
               <SpecialtyLeagueHomeHero
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
@@ -1845,7 +1843,7 @@ export function LeagueShell({
               />
             ) : null}
             <ActiveTeamSwitcher leagueId={league.id} />
-            {!nativeWorkspace && showDevyHero ? (
+            {!workspaceShell && showDevyHero ? (
               <DevyLeagueHomeHero
                 leagueName={selectedLeague.name ?? 'League'}
                 sport={String(selectedLeague.sport)}
@@ -1859,7 +1857,7 @@ export function LeagueShell({
                 }
               />
             ) : null}
-            {!nativeWorkspace && <LeagueHeader
+            {!workspaceShell && <LeagueHeader
               league={selectedLeague}
               leagueId={league.id}
               tabs={tabDefs}
@@ -1932,7 +1930,7 @@ export function LeagueShell({
             */}
             {/* The block only this league type has, on the first tab. Survivor, Big Brother,
                 tournament and devy leagues already open with their own hero above the header. */}
-            {!nativeWorkspace && !showSpecialtyHero && !showDevyHero && activeTab === tabDefs[0]?.id ? (
+            {!workspaceShell && !showSpecialtyHero && !showDevyHero && activeTab === tabDefs[0]?.id ? (
               <LeagueTypeHero
                 skin={leagueSkin}
                 sportLabel={String(league.sport ?? 'NFL').toUpperCase()}
@@ -1963,7 +1961,7 @@ export function LeagueShell({
             ) : null}
 
             {/* Live scores strip */}
-            {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
+            {!workspaceShell && <LeagueLiveStrip sport={String(league.sport)} />}
 
             {/* League story card - shown on league tab */}
             {activeTab === 'league' && (
@@ -2791,8 +2789,8 @@ function LeagueTabRouter({
       return <KeeperSelectionTab leagueId={leagueId} />
     case 'team':
     case 'roster':
-    case 'squad':
-      return (
+    case 'squad': {
+      const standardRoster = (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Draft-aware live roster (Sleeper leagues): current roster incl.
               in-progress draft picks; renders nothing for other platforms. */}
@@ -2829,6 +2827,20 @@ function LeagueTabRouter({
           />
         </div>
       )
+      /*
+        A college + pro league (C2C / Devy) shows both lineups on one page. Every other league,
+        and any failure to read the two halves, keeps the standard roster view above.
+      */
+      // Sleeper is the pro half; Fantrax is the college half, which builds the same page from its pro league.
+      if ((selectedLeague.platform !== 'sleeper' && selectedLeague.platform !== 'fantrax') || !collegeProFormatOf(selectedLeague)) {
+        return standardRoster
+      }
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <CollegeProRoster leagueId={leagueId} onPlayerClick={onPlayerClick} fallback={standardRoster} />
+        </div>
+      )
+    }
     case 'league':
       return (
         <LeagueTab

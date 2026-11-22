@@ -2050,6 +2050,8 @@ model LeagueTrade {
   performanceData   Json?
   platform          String             @default("sleeper")
   playerAgeData     Json?
+  /// The situation around the trade when the live sync first saw it: league settings, both rosters just before, records, FAAB (`lib/trade-market/tradeContextSnapshot.ts`). Null for trades seen only by a backfill.
+  contextSnapshot   Json?
   sport             String             @default("nfl")
   history           LeagueTradeHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
 
@@ -2525,6 +2527,27 @@ model TradeBlockEntry {
   @@index([sleeperLeagueId, isActive, updatedAt(sort: Desc)], map: "idx_trade_block_league_active")
   @@index([sleeperLeagueId, rosterId], map: "idx_trade_block_roster")
   @@map("trade_block_entries")
+}
+
+/// One stretch in which the commissioner's manager table called a NATIVE league's manager inactive
+/// (lib/commissioner-hub/inactiveFlagLedger.ts, 2026-11-20), graded two weeks later: did the manager do
+/// something of their own again (`came_back`) or not (`stayed_away`). A stretch is keyed by the last action
+/// it was idle FROM, so a manager who returns and goes quiet again opens a new row, and re-showing the same
+/// flag writes nothing. Counts only leave the server (the advice record); rows name a roster, never a person.
+model CommissionerInactiveFlag {
+  id           String    @id @default(cuid())
+  leagueId     String
+  rosterId     String
+  /// The manager's own last action when the flag was raised — the stretch's key.
+  lastActionAt DateTime  @db.Timestamptz(6)
+  flaggedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  /// `came_back` | `stayed_away`; null until two weeks have passed.
+  outcome      String?   @db.VarChar(16)
+  gradedAt     DateTime? @db.Timestamptz(6)
+
+  @@unique([leagueId, rosterId, lastActionAt])
+  @@index([outcome, flaggedAt])
+  @@map("commissioner_inactive_flags")
 }
 
 /// A manager's "I want this player" mark: the AF crest on the league page's Propose grid and trade

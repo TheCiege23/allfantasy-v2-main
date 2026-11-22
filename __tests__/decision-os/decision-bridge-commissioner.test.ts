@@ -119,7 +119,8 @@ describe('R2.3 — the commissioner health bridge', () => {
       'at_risk · health 62 · alerts: Two teams inactive 3 weeks · suggested: Message inactive managers',
     ])
     // The snapshot is reused, not recomputed — buildProductionCommissionerHealthDecisionDeps wraps it.
-    expect(buildDeps).toHaveBeenCalledWith(snapshot)
+    // …with the inactive flag's graded record (the learning loop, 2026-11-20) — null here: no outcome snapshot in tests.
+    expect(buildDeps).toHaveBeenCalledWith(snapshot, { inactiveFlags: null })
   })
 
   it('picks the snapshot for THIS league, not merely the first returned', async () => {

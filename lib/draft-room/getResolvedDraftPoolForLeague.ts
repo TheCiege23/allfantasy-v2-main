@@ -1,10 +1,13 @@
+import { currentSGNflPool, enforceCurrentSGNflEntries } from '@/lib/survivor-guillotine/currentNflPool'
 import { ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
 import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
 import { nflDraftSeasonLine } from './nflDraftSeasonLine'
 import { byeWeekForTeam, loadDraftPoolByeWeekMap } from './draftPoolByeWeeks'
+import { collegeByeWeekFor, loadCollegeByeIndex, type CollegeByeIndex } from './collegeByeWeeks'
 import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
+import { attachTeamDefenseStats, loadNflTeamDefenseSeason, type TeamDefenseByTeam } from './nflTeamDefenseSeason'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
  * Use from API route, DraftWorker, autopick fallback, and tests.
@@ -1693,7 +1696,8 @@ async function buildResolvedDraftPoolForLeague(
     }
   }
 
-  let rawListFiltered = rawList
+  const sgCurrentNfl = sport === 'NFL' && league?.leagueVariant === 'survivor_guillotine' ? await currentSGNflPool(rawList) : null
+  let rawListFiltered = sgCurrentNfl ?? rawList
   // Type cast is widened to include `playerId` so keeper entries that carry an
   // external player-id (but no name) are also excluded from the pool.
   const keeperSelections = draftSession?.keeperSelections as Array<{ playerName?: string; playerId?: string | null }> | null
@@ -1832,6 +1836,15 @@ async function buildResolvedDraftPoolForLeague(
     sport === 'NFL'
       ? await loadDraftPoolByeWeekMap(sport, Number.isInteger(league?.season) ? Number(league?.season) : null)
       : {}
+  /*
+   * College byes (collegeByeWeeks.ts): NCAAF pools, and the college players in an NFL devy / C2C
+   * pool — whose school used to go through the NFL lookup, which matches by city ("Miami" -> MIA).
+   */
+  const leagueSeason = Number.isInteger(league?.season) ? Number(league?.season) : null
+  const collegeByes: CollegeByeIndex | null =
+    sport === 'NCAAF' || (sport === 'NFL' && (isDevyDynasty || isC2C || mergeCollegePool))
+      ? await loadCollegeByeIndex(leagueSeason).catch(() => null)
+      : null
   /** The one season every NFL stat column shows (see pickPoolStatSeason). */
   const nflPoolStatSeason: string | null =
     sport === 'NFL'
@@ -2651,7 +2664,13 @@ async function buildResolvedDraftPoolForLeague(
       byeWeek:
         (row as RawRow).byeWeek ??
         (row as RawRow).bye ??
-        (sport === 'NFL' ? byeWeekForTeam(nflByeWeeks, team) : null),
+        (sport === 'NCAAF' || (row as RawRow).isDevy === true || (row as RawRow).poolType === 'college'
+          ? collegeByes
+            ? collegeByeWeekFor(collegeByes, (row as RawRow).school ?? team)
+            : null
+          : sport === 'NFL'
+            ? byeWeekForTeam(nflByeWeeks, team)
+            : null),
       graduatedToNFL: row.graduatedToNFL ?? (promoted ? true : undefined),
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
@@ -2896,8 +2915,19 @@ async function buildResolvedDraftPoolForLeague(
       sport,
       entries,
     })
-  entries = entriesWithProjectionFallbacks
+  entries = sgCurrentNfl ? enforceCurrentSGNflEntries(entriesWithProjectionFallbacks, sgCurrentNfl) : entriesWithProjectionFallbacks
   perfProjectionFallbacks()
+
+  // NFL team defenses: SACK / INT / TD / PA/G from stored defender rows and scores
+  // (nflTeamDefenseSeason.ts), for the same season every other NFL column shows. A failed read
+  // leaves the DEF columns as dashes rather than failing the pool.
+  if (sport === 'NFL' && nflPoolStatSeason) {
+    const defenseByTeam = await loadNflTeamDefenseSeason(nflPoolStatSeason, nflStatScorer).catch((error) => {
+      console.warn('[draft-pool] team defense stats unavailable', { leagueId, error: String(error) })
+      return new Map() as TeamDefenseByTeam
+    })
+    entries = attachTeamDefenseStats(entries, defenseByTeam)
+  }
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.
   // This avoids visually jumbled boards when merged sources contribute mixed/null ADP values.

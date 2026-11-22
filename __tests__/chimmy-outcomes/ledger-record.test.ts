@@ -165,7 +165,8 @@ describe('ledgerRecordFor — a rate needs a sample', () => {
       }),
       null,
     )!
-    expect(v.trades).toEqual([{ letter: 'A', n: 20, netPerWeek: 4.1 }])
+    // aheadPct: 14 ahead of 14 + 6 decided deals (ties are neither).
+    expect(v.trades).toEqual([{ letter: 'A', n: 20, netPerWeek: 4.1, aheadPct: 70 }])
     expect(v.bench?.you).toBeNull()
   })
 

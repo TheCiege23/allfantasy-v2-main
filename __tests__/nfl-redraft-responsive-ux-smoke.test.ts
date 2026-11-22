@@ -20,7 +20,7 @@
  *        Top bar:         draft-topbar-clock,
  *                         draft-topbar-start-draft (commish-only path)
  *        Board:           draft-board, draft-board-grid,
- *                         draft-board-round-{n}, draft-board-jump-current,
+ *                         draft-board-round-{n}, draft-board-toggle-view-mode,
  *                         draft-board-prev-round, draft-board-next-round,
  *                         draft-board-round-selector
  *        Player pool:     draft-player-panel,
@@ -151,7 +151,9 @@ describe('DraftBoard exposes round / grid / navigation testids', () => {
     expect(src).toMatch(/data-testid="draft-board-prev-round"/)
     expect(src).toMatch(/data-testid="draft-board-next-round"/)
     expect(src).toMatch(/data-testid="draft-board-round-selector"/)
-    expect(src).toMatch(/data-testid="draft-board-jump-current"/)
+    // "Current" merged into the Focus round toggle (2026-11-19): focusing lands on the round being picked.
+    expect(src).not.toMatch(/data-testid="draft-board-jump-current"/)
+    expect(src).toMatch(/data-testid="draft-board-toggle-view-mode"/)
   })
 
   it('per-round sections carry round-{n} testids', () => {

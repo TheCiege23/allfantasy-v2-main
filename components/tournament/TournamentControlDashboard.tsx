@@ -494,12 +494,20 @@ export function TournamentControlDashboard({
               setCondensing(true)
               setCondenseResult(null)
               try {
-                const res = await fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/advance`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ advancementPerLeague: count }),
-                })
-                const json = await res.json()
+                const send = (confirmEarly: boolean) =>
+                  fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/advance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ advancementPerLeague: count, ...(confirmEarly ? { confirmEarly: true } : {}) }),
+                  })
+                let res = await send(false)
+                let json = await res.json()
+                // The round still has weeks to play: the server says so, and the commissioner decides.
+                if (res.status === 409 && json?.canConfirm === true) {
+                  if (!confirm(`${json.error}\n\nCut the round now anyway?`)) return
+                  res = await send(true)
+                  json = await res.json()
+                }
                 if (res.ok) {
                   setCondenseResult(`Round ${json.newRoundIndex} created (${json.phase}). ${json.advanced} advanced, ${json.eliminated} eliminated. ${json.leagueIds?.length ?? 0} new league(s).`)
                   load()

@@ -29,6 +29,15 @@
  */
 
 import type { TrackRecordLine } from './trackRecord'
+import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
+import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import type { DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
+import {
+  readTradeLetterCalibration,
+  tradeLetterCalibrationFrom,
+  type TradeLetterCalibration,
+  type TradeLetterLedger,
+} from '@/lib/decision-os/trade/letterCalibration'
 
 /** Within this many points, a start/sit call is "same" — the Receipts card's AutoCoach band. */
 export const LEDGER_SAME_BAND = 1
@@ -116,6 +125,15 @@ export type BenchRow = {
   withdrawn: boolean
   recPts: number | null
   altPts: number | null
+  /**
+   * What the call knew, for the bench check's own calibration (`decision-os/lineup/benchCalibration.ts`): the sport,
+   * both projections when it was made, and when. Absent on a row read before 2026-11-21 — such a row grades the tally
+   * as always and is simply not folded into an edge band.
+   */
+  sport?: string | null
+  recProjected?: number | null
+  altProjected?: number | null
+  givenAt?: Date | string | null
 }
 
 export type AddRow = {
@@ -142,6 +160,40 @@ export type LedgerSnapshot = {
   pickups: PickupTally
   /** Redraft evaluations only: a dynasty deal is priced for years, not weeks. */
   trades: { byLetter: Partial<Record<TradeLetter, TradeTally>>; pending: number; unscored: number; read: number; gradable: number }
+  /**
+   * The same tally over only the trades a commissioner was shown in a trade review (surface
+   * `commissioner-review`), one per deal. Absent on a snapshot written before 2026-11-20.
+   */
+  commissionerTrades?: LedgerSnapshot['trades']
+  /**
+   * The waiver engine's #1 claims per confidence band — how often each band's claims became startable —
+   * the waiver engine's own calibration (`lib/decision-os/waiver/calibration.ts`). Absent on a snapshot
+   * written before 2026-11-20, and on a rebuild with no scored claim to grade.
+   */
+  waiverEngine?: WaiverEngineLedger
+  /**
+   * NFL bench calls by their projected edge (2–4, 4–8, 8+ points) — the bench check's own calibration
+   * (`lib/decision-os/lineup/benchCalibration.ts`). Absent on a snapshot written before 2026-11-21, and when no
+   * graded NFL call carried both projections.
+   */
+  benchEdges?: BenchEdgeLedger
+  /**
+   * Each directional letter's graded redraft deals — held up or not, decayed by age — the trade grade's own
+   * confidence (`lib/decision-os/trade/letterCalibration.ts`). Absent on a snapshot written before 2026-11-21.
+   */
+  tradeLetters?: TradeLetterLedger
+  /** The same over only the trades a commissioner was shown in a trade review. */
+  commissionerTradeLetters?: TradeLetterLedger
+  /**
+   * Draft OS's served pick tips by round band, held up or not against the board they were given on — the draft pick's
+   * own confidence (`lib/decision-os/draft/tipCalibration.ts`). Absent before 2026-11-21 and with none graded.
+   */
+  draftTips?: DraftTipLedger
+  /**
+   * The picks the clock made (Draft like me, queue, best available), by strategy then round band, held up or not
+   * against the board they were made on (2026-11-22). Never mixed into `draftTips`.
+   */
+  autopicks?: Record<string, DraftTipLedger>
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -155,9 +207,16 @@ export function foldLedger(input: {
   bench: readonly BenchRow[]
   adds: readonly AddRow[]
   trades: LedgerSnapshot['trades']
+  commissionerTrades?: LedgerSnapshot['trades']
+  waiverEngine?: WaiverEngineLedger
+  tradeLetters?: TradeLetterLedger
+  commissionerTradeLetters?: TradeLetterLedger
+  draftTips?: DraftTipLedger
+  autopicks?: Record<string, DraftTipLedger>
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
+  const edgeCalls: GradedBenchCall[] = []
   const pickups: PickupTally = { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 }
   const users = new Map<string, { b?: [number, number, number]; p?: [number, number]; calls: number }>()
   const userOf = (id: string) => {
@@ -182,6 +241,15 @@ export function foldLedger(input: {
     const call = gradeStartSit(r.recPts, r.altPts)
     bench[call]++
     bench.gain += r.recPts - r.altPts
+    // The bench check's calibration: NFL calls that carried both projections, by their projected edge.
+    if (String(r.sport ?? '').trim().toUpperCase() === 'NFL' && typeof r.recProjected === 'number' && typeof r.altProjected === 'number') {
+      const given = r.givenAt == null ? NaN : new Date(r.givenAt).getTime()
+      edgeCalls.push({
+        edge: r.recProjected - r.altProjected,
+        call,
+        ageDays: Number.isFinite(given) ? Math.max(0, (now.getTime() - given) / 86_400_000) : 0,
+      })
+    }
     if (r.userId) {
       const u = userOf(r.userId)
       const b = (u.b ??= [0, 0, 0])
@@ -221,12 +289,22 @@ export function foldLedger(input: {
   }
 
   const kept = [...users].sort((a, b) => b[1].calls - a[1].calls).slice(0, MAX_LEDGER_USERS)
+  const benchEdges = edgeCalls.length > 0 ? foldBenchEdgeBands(edgeCalls) : null
   return {
     season: input.season,
     throughWeek: completedThrough(cal, now),
     bench,
     pickups,
     trades: input.trades,
+    ...(input.commissionerTrades ? { commissionerTrades: input.commissionerTrades } : {}),
+    ...(input.waiverEngine && Object.keys(input.waiverEngine).length > 0 ? { waiverEngine: input.waiverEngine } : {}),
+    ...(benchEdges && Object.keys(benchEdges).length > 0 ? { benchEdges } : {}),
+    ...(input.tradeLetters && Object.keys(input.tradeLetters).length > 0 ? { tradeLetters: input.tradeLetters } : {}),
+    ...(input.commissionerTradeLetters && Object.keys(input.commissionerTradeLetters).length > 0
+      ? { commissionerTradeLetters: input.commissionerTradeLetters }
+      : {}),
+    ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
+    ...(input.autopicks && Object.keys(input.autopicks).length > 0 ? { autopicks: input.autopicks } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
@@ -241,8 +319,21 @@ export type LedgerRecordView = {
   bench: { you: TrackRecordLine | null; everyone: (TrackRecordLine & { gainPerCall: number | null }) | null } | null
   /** The waiver panel's #1 pickup: how many averaged 10+ PPR over their window. */
   pickups: { you: PickupLine | null; everyone: (PickupLine & { vsDrop: number; beatDrop: number }) | null } | null
-  /** Letters with enough graded redraft deals, A first. Empty → null. */
-  trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number }> | null
+  /**
+   * Letters with enough graded redraft deals, A first. Empty → null. `aheadPct` is the share of the letter's
+   * deals (ties left out) whose graded side out-scored what it gave; null on a snapshot written before
+   * 2026-11-19, which stored no split.
+   */
+  trades: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
+  /** The same, over only trades a commissioner was shown in a trade review. Absent or null when none qualify. */
+  commissionerTrades?: Array<{ letter: TradeLetter; n: number; netPerWeek: number; aheadPct?: number | null }> | null
+  /**
+   * How sure each letter is, from its graded deals: the held-up rate shrunk toward a coin flip
+   * (`letterCalibration.ts`). Absent until a letter has enough decided deals; never moves the letter.
+   */
+  tradeConfidence?: TradeLetterCalibration | null
+  /** The same over only the trades a commissioner reviewed. */
+  commissionerTradeConfidence?: TradeLetterCalibration | null
 }
 
 const nat = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
@@ -289,14 +380,29 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
       ? { you: pickYou, everyone: pickEveryone ? { ...pickEveryone, vsDrop: nat(p.vsDrop), beatDrop: Math.min(nat(p.beatDrop), nat(p.vsDrop)) } : null }
       : null
 
-  const letters = TRADE_LETTERS.flatMap((letter) => {
-    const t = ledger.trades?.byLetter?.[letter]
-    if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.netPerWeek !== 'number' || !Number.isFinite(t.netPerWeek)) return []
-    return [{ letter, n: nat(t.n), netPerWeek: round1(t.netPerWeek) }]
-  })
+  const lettersOf = (tally: LedgerSnapshot['trades'] | undefined) =>
+    TRADE_LETTERS.flatMap((letter) => {
+      const t = tally?.byLetter?.[letter]
+      if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.netPerWeek !== 'number' || !Number.isFinite(t.netPerWeek)) return []
+      const ahead = nat(t.ahead)
+      const decided = ahead + nat(t.behind)
+      return [{ letter, n: nat(t.n), netPerWeek: round1(t.netPerWeek), aheadPct: decided > 0 ? Math.round((100 * ahead) / decided) : null }]
+    })
+  const letters = lettersOf(ledger.trades)
+  const commissionerLetters = lettersOf(ledger.commissionerTrades)
+  const tradeConfidence = tradeLetterCalibrationFrom(ledger.tradeLetters)
+  const commissionerTradeConfidence = tradeLetterCalibrationFrom(ledger.commissionerTradeLetters)
 
   if (!bench && !pickups && letters.length === 0) return null
-  return { season: nat(ledger.season), bench, pickups, trades: letters.length ? letters : null }
+  return {
+    season: nat(ledger.season),
+    bench,
+    pickups,
+    trades: letters.length ? letters : null,
+    ...(commissionerLetters.length ? { commissionerTrades: commissionerLetters } : {}),
+    ...(tradeConfidence ? { tradeConfidence } : {}),
+    ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
+  }
 }
 
 /** Only a well-formed view survives a trip to the client; anything else renders nothing. */
@@ -319,15 +425,32 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
   const pickups = v.pickups as LedgerRecordView['pickups']
   if (bench != null && (typeof bench !== 'object' || !okLine(bench.you) || !okLine(bench.everyone))) return null
   if (pickups != null && (typeof pickups !== 'object' || !okPick(pickups.you) || !okPick(pickups.everyone))) return null
-  const trades = v.trades
-  if (trades != null) {
-    if (!Array.isArray(trades)) return null
-    for (const t of trades) {
-      if (!t || typeof t !== 'object') return null
+  const okLetters = (list: unknown) => {
+    if (list == null) return true
+    if (!Array.isArray(list)) return false
+    for (const t of list) {
+      if (!t || typeof t !== 'object') return false
       const x = t as Record<string, unknown>
-      if (!TRADE_LETTERS.includes(x.letter as TradeLetter) || typeof x.n !== 'number' || typeof x.netPerWeek !== 'number') return null
+      if (!TRADE_LETTERS.includes(x.letter as TradeLetter) || typeof x.n !== 'number' || typeof x.netPerWeek !== 'number') return false
+      if (x.aheadPct != null && !(typeof x.aheadPct === 'number' && x.aheadPct >= 0 && x.aheadPct <= 100)) return false
     }
+    return true
   }
+  const trades = v.trades
+  if (!okLetters(trades)) return null
+  // A malformed commissioner list drops only itself: the rest of the record is still good.
+  const commissionerTrades = okLetters(v.commissionerTrades) ? (v.commissionerTrades as LedgerRecordView['commissionerTrades']) ?? null : null
   if (bench == null && pickups == null && trades == null) return null
-  return { season: typeof v.season === 'number' ? v.season : 0, bench: bench ?? null, pickups: pickups ?? null, trades: (trades as LedgerRecordView['trades']) ?? null }
+  // A malformed confidence drops only itself, as the commissioner list does.
+  const tradeConfidence = readTradeLetterCalibration(v.tradeConfidence)
+  const commissionerTradeConfidence = readTradeLetterCalibration(v.commissionerTradeConfidence)
+  return {
+    season: typeof v.season === 'number' ? v.season : 0,
+    bench: bench ?? null,
+    pickups: pickups ?? null,
+    trades: (trades as LedgerRecordView['trades']) ?? null,
+    ...(commissionerTrades?.length ? { commissionerTrades } : {}),
+    ...(tradeConfidence ? { tradeConfidence } : {}),
+    ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
+  }
 }

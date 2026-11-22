@@ -57,7 +57,14 @@ describe('redraft waiver default is FAAB in every default source', () => {
 
   it('does not touch other formats', () => {
     expect(getWaiverDefaults('NBA', 'dynasty').waiver_type).toBe('rolling')
-    expect(getWaiverDefaults('NHL', 'keeper').waiver_type).toBe('reverse_standings')
+    expect(getWaiverDefaults('NHL', 'dynasty').waiver_type).toBe('reverse_standings')
+  })
+
+  // Owner's decision, 2026-11-20: keeper is redraft with keepers and takes its bidding default.
+  it('keeper takes the redraft default in every sport', () => {
+    for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
+      expect(getWaiverDefaults(sport, 'keeper')).toMatchObject({ waiver_type: 'faab', FAAB_budget_default: 100, claim_priority_behavior: 'faab_highest' })
+    }
   })
 })
 

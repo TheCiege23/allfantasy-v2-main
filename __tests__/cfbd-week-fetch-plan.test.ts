@@ -7,7 +7,7 @@
  * changes again.
  */
 import { describe, expect, it } from 'vitest'
-import { appearancesOfWeek, decideWeekFetch, gamesPlayedFrom, readWeekAppearances, weekAppearancesKey } from '@/lib/stats/cfbdWeekFetchPlan'
+import { appearancesOfWeek, decideWeekFetch, gamesPlayedFrom, verifiedSeasonAppearances, readWeekAppearances, weekAppearancesKey } from '@/lib/stats/cfbdWeekFetchPlan'
 
 const game = (id: number, athleteIds: Array<number | string>) => ({
   id,
@@ -59,5 +59,19 @@ describe('games played from kept and fetched weeks', () => {
   })
   it('one key per season and week', () => {
     expect(weekAppearancesKey(2026, 10)).toBe('cfbd:games-players:appearances:2026:10')
+  })
+})
+
+describe('verified school participation', () => {
+  const weeks = new Map([[10, { '21': ['first'] }], [12, { '21': ['first', 'later'] }]])
+  const receipt = { playerId: '21', gamesPlayed: 5, throughWeek: 11, sourceUrl: 'https://example.edu/football/stats/2026' }
+
+  it('adds newly observed games beyond the school reporting period once', () => {
+    expect(verifiedSeasonAppearances(weeks, [receipt], 12).get('21')).toBe(6)
+  })
+
+  it('keeps the observed count for an unverified or future receipt', () => {
+    expect(verifiedSeasonAppearances(weeks, [{ ...receipt, sourceUrl: '' }], 12).get('21')).toBe(2)
+    expect(verifiedSeasonAppearances(weeks, [receipt], 10).get('21')).toBe(2)
   })
 })

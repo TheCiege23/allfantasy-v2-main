@@ -6,6 +6,8 @@ import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePick
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { roundOneHypeLine } from '@/lib/draft-room/roundOneHypeLine'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { teamAccentColor } from '@/lib/draft-room/teamAccentColor'
+import './round-one-card.css'
 
 type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
@@ -93,6 +95,10 @@ export function DraftRoundOneAnnouncementOverlay({
   if (!current || current.pick.round !== 1) return null
 
   const { pick, headshotUrl, teamLogoUrl } = current
+  /* Phase 6 (2026-11-19): the card is animated in round-one-card.css — slide in, team-colour sweep,
+     headshot scale-in then a slow breathe, letter-by-letter name, pick-number stamp. Reduced motion
+     shows it all at once. */
+  const teamColor = teamAccentColor(pick.team, sportLabel)
   const mgr = pick.displayName ?? tl('draftRoom.roundOne.draftBoard')
   const subtitle = `${sportLabel ? `${sportLabel} · ` : ''}${tInterpolate('draftRoom.roundOne.subtitle', { slot: pick.slot, overall: pick.overall })}`
   const hypeLine = roundOneHypeLine({ sport: sportLabel, position: pick.position, formatType }, tl)
@@ -122,9 +128,12 @@ export function DraftRoundOneAnnouncementOverlay({
       onClick={toast ? undefined : onDismissFront}
     >
       <div
-        className={`pointer-events-auto relative overflow-hidden rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.07] backdrop-blur-md ${
+        className={`af-r1-card pointer-events-auto relative overflow-hidden rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.07] backdrop-blur-md ${
           toast ? 'w-[min(96vw,520px)]' : 'w-[min(96vw,680px)]'
         }`}
+        style={{ ['--af-r1-team' as string]: teamColor }}
+        data-team-color={teamColor}
+        data-testid="draft-round-one-card"
         onClick={(event) => event.stopPropagation()}
       >
         <div
@@ -136,6 +145,8 @@ export function DraftRoundOneAnnouncementOverlay({
                 : 'bg-[linear-gradient(135deg,rgba(13,24,41,0.94),rgba(7,15,28,0.96))]'
           }`}
         />
+        <div className="af-r1-sweep" aria-hidden data-testid="draft-round-one-sweep" />
+        <div className="af-r1-shine" aria-hidden />
         <div
           className={`pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl ${
             rs ? 'bg-cyan-400/25' : dyn ? 'bg-[rgba(212,162,76,0.22)]' : 'bg-violet-500/20'
@@ -143,10 +154,11 @@ export function DraftRoundOneAnnouncementOverlay({
         />
         <div className={`relative flex gap-4 ${toast ? 'flex-row items-start p-3' : 'flex-col p-4 sm:flex-row sm:items-start'}`}>
           <div
-            className={`relative shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-inner ${
+            className={`af-r1-headshot-frame relative shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-inner ${
               toast ? 'h-[72px] w-[72px]' : 'h-[96px] w-[96px] sm:h-[110px] sm:w-[110px]'
             }`}
           >
+            <div className="af-r1-headshot h-full w-full">
             {headshotUrl ? (
               <FallbackImg
                 src={headshotUrl}
@@ -163,6 +175,7 @@ export function DraftRoundOneAnnouncementOverlay({
                 {pick.playerName.slice(0, 1)}
               </div>
             )}
+            </div>
             {teamLogoUrl ? (
               <div className="absolute bottom-1 right-1 h-8 w-8 overflow-hidden rounded-md border border-white/20 bg-black/60 p-0.5 shadow-lg">
                 <FallbackImg src={teamLogoUrl} alt="" className="h-full w-full object-contain" fallback={null} />
@@ -200,12 +213,31 @@ export function DraftRoundOneAnnouncementOverlay({
                 </button>
               </div>
             </div>
-            <p className="mt-1 truncate text-xl font-bold tracking-tight text-white">{pick.playerName}</p>
-            <p className="mt-0.5 text-[13px] font-medium text-white/55">
+            <div className="mt-1 flex items-center gap-2">
+              <p className="min-w-0 truncate text-xl font-bold tracking-tight text-white" data-testid="draft-round-one-player">
+                <span className="sr-only">{pick.playerName}</span>
+                <span aria-hidden>
+                  {Array.from(pick.playerName).map((ch, i) => (
+                    <span key={i} className="af-r1-letter" style={{ ['--i' as string]: i }}>
+                      {ch}
+                    </span>
+                  ))}
+                </span>
+              </p>
+              {pick.pickLabel ? (
+                <span
+                  className="af-r1-stamp shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[13px] font-extrabold tabular-nums text-white"
+                  data-testid="draft-round-one-stamp"
+                >
+                  {pick.pickLabel}
+                </span>
+              ) : null}
+            </div>
+            <p className="af-r1-rise mt-0.5 text-[13px] font-medium text-white/55">
               {pick.position}
               {pick.team ? ` · ${pick.team}` : ''}
             </p>
-            <div className={`mt-2 flex flex-wrap gap-1.5 ${toast ? 'max-sm:hidden' : ''}`}>
+            <div className={`af-r1-rise mt-2 flex flex-wrap gap-1.5 ${toast ? 'max-sm:hidden' : ''}`}>
               {chips.slice(0, 4).map((chip) => (
                 <span
                   key={chip}
@@ -215,7 +247,7 @@ export function DraftRoundOneAnnouncementOverlay({
                 </span>
               ))}
             </div>
-            <p className="mt-2 text-[12px] leading-snug text-white/70">
+            <p className="af-r1-rise mt-2 text-[12px] leading-snug text-white/70">
               <span className="font-semibold text-cyan-100/95">{mgr}</span>
               <span className="text-white/40"> · </span>
               <span className="text-white/55">{subtitle}</span>

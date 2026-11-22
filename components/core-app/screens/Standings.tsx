@@ -27,7 +27,8 @@ import type { LineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import type { DraftOrderPreview } from '@/lib/core-app/standingsDraftOrder'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
-import { messagesFor } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsScreenMessages } from '@/lib/core-app/messages/standingsScreen'
 import { standingsGuideMessages } from '@/lib/core-app/messages/standingsGuide'
@@ -36,6 +37,22 @@ import '@/components/core-app/home/af-home-guide.css'
 import '@/components/core-app/standings/af-standings-guide.css'
 import { DynastyStandingsHistory } from '@/components/core-app/screens/DynastyStandingsHistory'
 import type { DynastyStandingsHistory as DynastyHistory } from '@/lib/core-app/dynastyStandingsHistory'
+
+/* The "More detail" fold's note — what is inside, in a few words (2026-11-20). */
+const standingsMoreDetailMessages = defineMessages({
+  en: {
+    yourSeason: 'Your season so far',
+    recordBook: 'Franchise record book',
+    pastSeasons: 'Past seasons',
+    howToRead: 'How projected records are worked out',
+  },
+  es: {
+    yourSeason: 'Tu temporada hasta ahora',
+    recordBook: 'Libro de récords de la franquicia',
+    pastSeasons: 'Temporadas pasadas',
+    howToRead: 'Cómo se calculan los récords proyectados',
+  },
+})
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -465,6 +482,7 @@ export function Standings({
    * in a playoff spot, with Season Outlook's odds — the answer people open the page for.
    */
   const g = useMessages(standingsGuideMessages)
+  const md = useMessages(standingsMoreDetailMessages)
   const myOdds = me && odds?.you && odds.you.rosterId === me.rosterId ? odds.you.playoffPct : null
   const head = standingsHeadline({
     me,
@@ -596,23 +614,32 @@ export function Standings({
       {draftOrder ? <DraftOrderSection order={draftOrder} /> : null}
 
       {/*
-        Folded (2026-11-14): thirty franchises of history under this season's table pushed everything
-        below it out of reach. It is one tap away; offseason (the branch above) it stays open.
-      */}
-      {dynasty ? (
-        <details className="af-stg-deeper" data-testid="standings-record-book">
-          <summary>{g.recordBook(Math.max(1, dynasty.recordSeasons.length))}</summary>
-          <DynastyStandingsHistory history={dynasty} />
-        </details>
-      ) : null}
+        ── More detail (2026-11-20) ─────────────────────────────────────
+        ONE shared fold (MoreDetail.tsx) at the bottom of the page, replacing the two "dig deeper" folds
+        and taking the two things that sat loose under them: past seasons and the note about projected
+        records. The page answers "where do I stand"; everything in here is the detail behind it.
 
-      {/*
-        Folded (2026-11-13 guide): this week's projected lineups (Week and Matchup carry those) and your
-        own season numbers. The page answers "where do I stand"; these are the detail behind it.
+        Inside, in order:
+        - Your season so far (2026-11-13 guide): this week's projected lineups (Week and Matchup carry
+          those) and your own season numbers. Wrapper keeps `standings-your-season`.
+        - The franchise record book (2026-11-14): thirty franchises of history under this season's table
+          pushed everything below it out of reach. Wrapper keeps `standings-record-book`. Offseason (the
+          empty-board branch above) it is still drawn in the open, not in here.
+        - Past seasons, then the projected-records note.
+        Closed by default, as both old folds were. Nothing removed, only moved.
       */}
+      {lineups || me || dynasty || history.length > 0 || (board.hasHeadToHead && !elimination) ? (
+      <MoreDetail
+        className="af-stg-deeper"
+        testId="standings-more"
+        note={[
+          lineups || me ? md.yourSeason : null,
+          dynasty ? md.recordBook : null,
+          history.length > 0 ? md.pastSeasons : null,
+        ].filter(Boolean).join(' · ') || md.howToRead}
+      >
       {lineups || me ? (
-      <details className="af-stg-deeper" data-testid="standings-your-season">
-        <summary>{g.deeperSeason}</summary>
+      <div className="af-stg-deeper-part" data-testid="standings-your-season">
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />
       ) : null}
@@ -695,8 +722,17 @@ export function Standings({
           </div>
         </>
       ) : null}
-      </details>
+      </div>
       ) : null}
+
+      {dynasty ? (
+        <div className="af-stg-deeper-part" data-testid="standings-record-book">
+          <h2 className="af-label af-st-seclabel">{g.recordBook(Math.max(1, dynasty.recordSeasons.length))}</h2>
+          <DynastyStandingsHistory history={dynasty} />
+        </div>
+      ) : null}
+
+      <SeasonHistory rows={history} />
 
       {/* About projected records and playoff odds: a points-only or elimination league has neither. */}
       {board.hasHeadToHead && !elimination ? (
@@ -705,7 +741,8 @@ export function Standings({
           <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
         </p>
       ) : null}
-      <SeasonHistory rows={history} />
+      </MoreDetail>
+      ) : null}
     </div>
   )
 }

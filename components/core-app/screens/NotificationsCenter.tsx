@@ -15,6 +15,7 @@ import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
 import { FinalScoreLogos } from '@/components/notifications/FinalScoreLogos'
 import { InstallButton } from '@/components/pwa/PWAActions'
 import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import '@/components/core-app/af-notifications.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -415,42 +416,6 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
       </header>
       {readError ? <p role="alert">{copy(readError)}</p> : null}
 
-      <details className="af-nt-settings">
-        <summary>{copy('Alert settings')}</summary>
-        <Link href="/settings?tab=notifications">{copy('Manage delivery preferences')}</Link>
-      {/* Web push and web install only — hidden inside the iOS app, wrapper included, so no empty box. */}
-      <div className="af-nt-push" data-hide-in-ios-app>
-        <EnableWebPushCard />
-        {/*
-          ⚠ INSTALLING IS A PREREQUISITE FOR ALERTS ON IPHONE, NOT A SEPARATE FEATURE.
-          Safari only permits notifications for a site added to the Home Screen, which
-          `EnableWebPushCard` already says in words — this turns that instruction into a
-          button. Hidden once installed: an installed user has no reason to see it.
-        */}
-        <div className="af-nt-push-install">
-          <InstallButton hideWhenInstalled />
-        </div>
-      </div>
-      {/* The app's own alerts card; renders nothing outside the iOS app. */}
-      <IosAppPushCard className="af-nt-push" />
-      {/*
-        The suppression rule, stated to the user. It is the design principle of
-        the whole surface, so it is copy rather than a footnote.
-      */}
-      {data.push.suppressedReason ? (
-        <footer className="af-nt-foot">
-          <p className="af-nt-foot-t">{copy('Why your phone stayed quiet')}</p>
-          <p className="af-nt-foot-b">{copy(data.push.suppressedReason)}</p>
-          <p className="af-nt-foot-b">
-            {copy('At this many leagues the job is holding things back, not sending them. Anything without a deadline waits here instead of ringing.')}
-          </p>
-          <Link href="/settings?tab=notifications" className="af-nt-foot-link">
-            {copy('Change what gets through')}
-          </Link>
-        </footer>
-      ) : null}
-
-      </details>
       <div className="af-nt-filters" role="group" aria-label={copy('Filter notifications')}>
         <button type="button" className="af-nt-filter" aria-pressed={!unreadOnly} onClick={() => setUnreadOnly(false)}>{copy('All')}</button>
         <button type="button" className="af-nt-filter" aria-pressed={unreadOnly} onClick={() => setUnreadOnly(true)}>{m.unreadFilter}</button>
@@ -516,7 +481,46 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
         ) : null}
       </section>
 
-
+      {/*
+        2026-11-20 — "More detail" (owner: the core site is confusing). The page is what needs you today
+        and the feed. "Alert settings" — the delivery link, the push and install cards and why the phone
+        stayed quiet — was its own fold above the filters; it is now the page's one fold, at the bottom,
+        with its class kept and its old summary as the note. Contents unchanged.
+      */}
+      <MoreDetail className="af-nt-settings" note={copy('Alert settings')} testId="notifications-more">
+        <Link href="/settings?tab=notifications">{copy('Manage delivery preferences')}</Link>
+        {/* Web push and web install only — hidden inside the iOS app, wrapper included, so no empty box. */}
+        <div className="af-nt-push" data-hide-in-ios-app>
+          <EnableWebPushCard />
+          {/*
+            ⚠ INSTALLING IS A PREREQUISITE FOR ALERTS ON IPHONE, NOT A SEPARATE FEATURE.
+            Safari only permits notifications for a site added to the Home Screen, which
+            `EnableWebPushCard` already says in words — this turns that instruction into a
+            button. Hidden once installed: an installed user has no reason to see it.
+          */}
+          <div className="af-nt-push-install">
+            <InstallButton hideWhenInstalled />
+          </div>
+        </div>
+        {/* The app's own alerts card; renders nothing outside the iOS app. */}
+        <IosAppPushCard className="af-nt-push" />
+        {/*
+          The suppression rule, stated to the user. It is the design principle of
+          the whole surface, so it is copy rather than a footnote.
+        */}
+        {data.push.suppressedReason ? (
+          <footer className="af-nt-foot">
+            <p className="af-nt-foot-t">{copy('Why your phone stayed quiet')}</p>
+            <p className="af-nt-foot-b">{copy(data.push.suppressedReason)}</p>
+            <p className="af-nt-foot-b">
+              {copy('At this many leagues the job is holding things back, not sending them. Anything without a deadline waits here instead of ringing.')}
+            </p>
+            <Link href="/settings?tab=notifications" className="af-nt-foot-link">
+              {copy('Change what gets through')}
+            </Link>
+          </footer>
+        ) : null}
+      </MoreDetail>
     </div>
   )
 }

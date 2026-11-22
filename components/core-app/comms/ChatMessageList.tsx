@@ -349,6 +349,24 @@ export function ChatMessageList({
     setUnseen((n) => n + Math.max(1, added))
   }, [messages, viewerId, scrollToEnd])
 
+  /*
+   * A list mounted inside a hidden tab (the draft room's Chat tab, 2026-11-19) has no height, so
+   * the first scroll-to-end above does nothing and the tab later opens on the OLDEST messages.
+   * When the list goes from no height to some, land on the newest — if the reader was there.
+   */
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let lastHeight = el.clientHeight
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight
+      if (lastHeight === 0 && h > 0 && wasNearBottom.current) scrollToEnd(false)
+      lastHeight = h
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [scrollToEnd])
+
   const onScroll = useCallback(() => {
     const near = isNearBottom(scrollRef.current)
     wasNearBottom.current = near

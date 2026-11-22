@@ -21,6 +21,9 @@ const spanish: Record<string, string> = {
   Matchup: 'Enfrentamiento',
   Match: 'Partido',
   Team: 'Equipo',
+  // The /core league tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, 2026-11-19).
+  Trade: 'Intercambios',
+  'Sections of this tab': 'Secciones de esta pestaña',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
   // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.
@@ -483,6 +486,9 @@ const spanish: Record<string, string> = {
   "Win": 'Victoria',
   "Loss": 'Derrota',
   "Tie": 'Empate',
+  "Ahead": 'Por delante',
+  "AllFantasy estimate": 'Estimación de AllFantasy',
+  "Behind": 'Por detrás',
   "Opponent not identified": 'Rival no identificado',
   'Your week, every matchup': 'Tu semana, todos los enfrentamientos',
   'No matchups are on file for this week.': 'No hay enfrentamientos registrados para esta semana.',

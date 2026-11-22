@@ -33,6 +33,9 @@ describe('tradeLedgerRow', () => {
       givePlayerIds: ['P_GIVE'],
       nonPlayerAssets: false,
       isTrade: true,
+      // The evidence the grade rested on, and no differing market letter (a league-value headline) — 2026-11-22.
+      evidence: [],
+      marketLetter: null,
     })
   })
 

@@ -155,8 +155,9 @@ function pushPickAtTradeTime(out: GradeInputs, season: string | number | null, r
 }
 
 /*
- * The only evidence a trade-date grade may stand on: that day's FantasyCalc rows (players, below-chart
- * floor at 0, pick rows) and the league's own FAAB formula, which has no date. Anything else on a line
+ * Historical captures contain that day's FantasyCalc rows (players, below-chart
+ * floor at 0, pick rows) and the league's own FAAB formula, which has no date. The live league chart
+ * can also supply an AF player quote when its recorded snapshot is fresh at grading. Anything else on a line
  * — a defender's league board, a devy option, a sports-db row, the historical file, a curve — is a
  * second source, and one is enough to send the whole trade back to its first-graded original.
  */
@@ -228,7 +229,7 @@ export async function gradeAtTradeTime(
       const view = await gradeDeal(grader, { give: inputs.give, get: inputs.get, viewerSide: false })
       if (!view.graded || view.lines.length !== assets.length) return null
       for (const line of view.lines) {
-        if (!line.valueSource || !TRADE_DATE_SOURCES.has(line.valueSource)) return null
+        if (!line.valueSource || (line.valueSource !== 'af_completed_trades' && !TRADE_DATE_SOURCES.has(line.valueSource))) return null
         if (line.valueSource === 'faab_formula') continue
         // The chart's own sync time must itself sit within the tolerance of the trade.
         const synced = line.valueAsOf ? Date.parse(line.valueAsOf) : NaN

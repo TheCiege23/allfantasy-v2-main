@@ -28,6 +28,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { outlookText, seasonOutlookSentence } from '@/lib/core-app/outlookSpanish'
 import { seasonOutlookLeagueMessages } from '@/lib/core-app/messages/seasonOutlookLeague'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import '@/components/core-app/af-season-outlook-league.css'
 import '@/components/core-app/af-outlook.css'
 import '@/components/core-app/af-core-redraft-standings.css'
@@ -400,8 +401,13 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
       </div>
 
       {/* The assumptions, folded: the basis of every number above, for whoever wants to check it. */}
-      <details className="af-sol-basis-fold" data-testid="olk-how-worked-out">
-        <summary>{m.howWorkedOut}</summary>
+      {/*
+        2026-11-20: the shared "More detail" fold (MoreDetail.tsx) — the same word and look on every /core
+        page; "How these odds are worked out" is now its `note`. Kept here, under the panel it explains,
+        rather than below the other-leagues list: that list is actions elsewhere, not detail about this
+        page. Closed by default, as before. Contents unchanged.
+      */}
+      <MoreDetail className="af-sol-basis-fold" testId="olk-how-worked-out" note={m.howWorkedOut}>
         <p className="af-sol-basis">{say(basis)}</p>
         <AssumptionsPanel
           a={league.assumptions}
@@ -412,7 +418,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             notes: focus?.notes,
           }}
         />
-      </details>
+      </MoreDetail>
 
       {elsewhere.length > 0 ? (
         <section className="af-sol-attention">

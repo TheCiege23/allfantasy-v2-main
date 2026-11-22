@@ -49,6 +49,7 @@ import {
 } from '@/lib/core-app/leagueOverviewGuide'
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
 import '@/components/core-app/af-league-overview-guide.css'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 
 /**
  * "Your season at a glance": record and rank, points for, FAAB left, trade deadline (the redesign's KPI
@@ -1040,8 +1041,11 @@ export function LeagueHome({
         rivalry radar and the prediction leaderboard — plus Draft HQ once the draft is done, and the
         league's every-game board in an elimination league, which has no head-to-head games.
       */}
-      <details className="af-lho-more" data-testid="league-overview-more">
-        <summary>{g.more}</summary>
+      {/*
+        2026-11-20: now the shared "More detail" fold (MoreDetail.tsx) — the same word and look on every
+        /core page. The old "More about this league" line survives as its `note`. Contents unchanged.
+      */}
+      <MoreDetail className="af-lho-more" testId="league-overview-more" note={g.more}>
         <div className="af-lho-more-body">
       {/*
         ── What this import could not bring across ───────────────────
@@ -1331,7 +1335,7 @@ export function LeagueHome({
       <LeagueSection id="insights">{isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}</LeagueSection>
 
         </div>
-      </details>
+      </MoreDetail>
 
       {/*
         ── All leagues ──────────────────────────────────────────────────

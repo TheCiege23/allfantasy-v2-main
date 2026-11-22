@@ -1,17 +1,18 @@
 import type { UserLeague } from '@/app/dashboard/types'
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { readEliminatedTeamsByLeague } from '@/lib/guillotine/eliminatedTeams'
 import { monitorLeagueHealth, type OverallStatus } from '@/lib/league-health/league-health-engine'
 import { disputeHealthSignals, readDisputes } from '@/lib/disputes/disputeStore'
 import { shouldRunCommissionerHealthShadow, shouldRunCommissionerHealthLive, runCommissionerHealthShadow } from '@/lib/decision-os/commissioner-health/shadow'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { toCommissionerHealthCard, type CommissionerHealthCard } from '@/lib/decision-os/commissioner-health/healthCardAdapter'
 import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
-import { attachSavedAnalysis, leaguesWithSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { loadOwnerLastActions, type OwnerActionRoster } from '@/lib/commissioner-hub/ownerLastAction'
 // From the module rather than the behavioral barrel: the barrel re-exports the whole
 // subsystem and this file needs exactly one provider from it.
 import { realDataProvider } from '@/lib/decision-os/behavioral/api/real-data-provider'
@@ -84,6 +85,11 @@ export type CommissionerLeagueHealthSnapshot = {
   generatedAt: string
   source: CommissionerHealthDataSource
   dataConfidence: CommissionerHealthDataConfidence
+  /**
+   * A league AllFantasy runs. Its "inactive" reads the manager's own last action — the clock the inactive flag is
+   * graded on — so only here does the flag's graded record describe this league's flag (2026-11-20).
+   */
+  nativeLeague?: boolean
   healthScore: number
   /**
    * Passed through verbatim from `monitorLeagueHealth` — this file computes none of it.
@@ -187,6 +193,9 @@ type CountMap = Map<string, number>
 type RosterHealthRow = {
   id?: string | null
   platformUserId?: string | null
+  /** The manager running the team when it is not `platformUserId` (multi-team managers). */
+  managerUserId?: string | null
+  redraftRosterId?: string | null
   playerData?: unknown
   updatedAt?: Date | string | null
   settings?: unknown
@@ -226,6 +235,11 @@ export type CommissionerHealthBuildInput = {
   now?: Date
   source?: CommissionerHealthDataSource
   nflDataCoverage?: CanonicalNflDataCoverage | null
+  /**
+   * `Roster.id` of the teams a chopped league has eliminated (lib/guillotine/eliminatedTeams.ts).
+   * They are out of the league, so they count as neither inactive nor a missed lineup.
+   */
+  eliminatedRosterIds?: ReadonlySet<string>
   counts?: Partial<{
     tradeActivity: number
     pendingTrades: number
@@ -376,7 +390,7 @@ function isRosterInactive(roster: RosterHealthRow, now: Date): boolean {
   const settings = asRecord(roster.settings)
   if (settings.isOrphan === true || settings.orphan === true || settings.inactive === true) return true
   // An orphan has no manager to be active: imported orphans carry an 'orphan-' key, not ''.
-  if (!roster.platformUserId || isOrphanPlatformUserId(roster.platformUserId)) return true
+  if (!roster.platformUserId || isSeatPlaceholderUserId(roster.platformUserId)) return true
   if (!roster.updatedAt) return false
   const updatedAt = new Date(roster.updatedAt).getTime()
   if (!Number.isFinite(updatedAt)) return false
@@ -596,13 +610,21 @@ export function buildCommissionerHealthSnapshot(
   const league = input.league
   const rosters = Array.isArray(league.rosters) ? league.rosters : []
   const teamCount = resolveTeamCount(league, rosters)
+  /*
+   * 🛑 A CHOPPED TEAM IS OUT OF THE LEAGUE, NOT INACTIVE (2026-11-20). Its roster is released and its
+   * manager can do nothing, so it read as an inactive team AND a missed lineup, and a chopped league
+   * halfway through its season scored as half-abandoned. The league's live teams are the ones judged.
+   */
+  const eliminated = input.eliminatedRosterIds
+  const liveRosters = eliminated?.size ? rosters.filter((roster) => !(roster.id && eliminated.has(roster.id))) : rosters
+  const liveTeamCount = Math.max(0, teamCount - (rosters.length - liveRosters.length))
   const requiredStarters = readRequiredStarterCount(league)
-  const missedLineups = countMissedLineups(rosters, requiredStarters)
-  const inactiveTeams = rosters.filter((roster) => isRosterInactive(roster, now)).length
+  const missedLineups = countMissedLineups(liveRosters, requiredStarters)
+  const inactiveTeams = liveRosters.filter((roster) => isRosterInactive(roster, now)).length
   const injuredStarters = countInjuredStarters(rosters)
   const projectionSignals = countProjectionSignals(rosters)
-  const activeManagers = Math.max(0, teamCount - inactiveTeams)
-  const lineupSubmissionRate = clampPct(teamCount > 0 ? (teamCount - missedLineups) / teamCount : 1)
+  const activeManagers = Math.max(0, liveTeamCount - inactiveTeams)
+  const lineupSubmissionRate = clampPct(liveTeamCount > 0 ? (liveTeamCount - missedLineups) / liveTeamCount : 1)
   const projectionCoveragePct = projectionSignals.starters > 0
     ? Math.round((projectionSignals.withProjection / projectionSignals.starters) * 100)
     : 0
@@ -623,7 +645,7 @@ export function buildCommissionerHealthSnapshot(
     sport: String(league.sport ?? 'NFL'),
     leagueType,
     leagueId: league.id,
-    numTeams: teamCount,
+    numTeams: liveTeamCount,
     currentWeek,
     totalWeeks: 17,
     activeManagers,
@@ -728,6 +750,7 @@ export function buildCommissionerHealthSnapshot(
     generatedAt: now.toISOString(),
     source,
     dataConfidence,
+    nativeLeague,
     healthScore: health.leagueHealthScore,
     engagementScore: health.engagementScore,
     /*
@@ -1028,6 +1051,42 @@ export async function loadCommissionerHealthCounts(
   return out
 }
 
+/** Every roster of a NATIVE league, in the shape `loadOwnerLastActions` reads. */
+export function nativeActionRosters(leagues: readonly LeagueHealthRow[]): OwnerActionRoster[] {
+  return leagues
+    .filter((l) => isNativePlatform(l.platform))
+    .flatMap((l) =>
+      (Array.isArray(l.rosters) ? l.rosters : []).map((r) => ({
+        id: String(r.id ?? ''),
+        leagueId: l.id,
+        platformUserId: r.platformUserId ?? null,
+        managerUserId: r.managerUserId ?? null,
+        redraftRosterId: r.redraftRosterId ?? null,
+      })),
+    )
+    .filter((r) => r.id)
+}
+
+/**
+ * 🛑 NATIVE LEAGUES COUNT INACTIVE FROM THE MANAGER'S OWN LAST ACTION, NOT `Roster.updatedAt` (2026-11-20).
+ * Every system write moves `updatedAt` (autopilot included), so an absent manager kept counting as active.
+ * The per-manager table (`managerHealth.ts`) reads the same clock — `INACTIVE_AFTER_MS` says the two must
+ * never disagree. PURE: `updatedAt` is replaced on a copy of each native roster; null means "no action on
+ * record", which `isRosterInactive` treats as not inactive. Imported leagues, and a failed read (`ownAction`
+ * null), pass through unchanged.
+ */
+export function withOwnerActionClock(
+  leagues: readonly LeagueHealthRow[],
+  ownAction: ReadonlyMap<string, Date | null> | null,
+): LeagueHealthRow[] {
+  if (!ownAction) return [...leagues]
+  return leagues.map((league) => {
+    if (!isNativePlatform(league.platform)) return league
+    const rosters = (Array.isArray(league.rosters) ? league.rosters : []).map((r) => ({ ...r, updatedAt: ownAction.get(String(r.id ?? '')) ?? null }))
+    return { ...league, rosters }
+  })
+}
+
 export async function getCommissionerHubHealthForUser(
   userId: string,
   leagues: UserLeague[],
@@ -1090,6 +1149,8 @@ export async function getCommissionerHubHealthForUser(
             select: {
               id: true,
               platformUserId: true,
+              managerUserId: true,
+              redraftRosterId: true,
               playerData: true,
               updatedAt: true,
               settings: true,
@@ -1106,8 +1167,10 @@ export async function getCommissionerHubHealthForUser(
         : Promise.resolve(null),
     ])
 
+    const leagueRows: LeagueHealthRow[] = Array.isArray(dbLeagues) ? dbLeagues : []
+    const ownAction = await loadOwnerLastActions(nativeActionRosters(leagueRows)).catch(() => null)
     const dbById = new Map<string, LeagueHealthRow>(
-      (Array.isArray(dbLeagues) ? dbLeagues : []).map((league: LeagueHealthRow) => [league.id, league]),
+      withOwnerActionClock(leagueRows, ownAction).map((league) => [league.id, league]),
     )
     const nflCoverageByLeague = new Map<string, CanonicalNflDataCoverage | null>()
     await Promise.all(
@@ -1124,11 +1187,13 @@ export async function getCommissionerHubHealthForUser(
     // Gated and bounded — see loadParticipationByLeague. Empty map when the gate is off, so
     // this costs nothing and every snapshot keeps `participation: null`.
     // Independent reads, so neither waits on the other. Both degrade to empty rather than throw.
-    const [participationByLeague, dynastyByLeague] = await Promise.all([
+    const [participationByLeague, dynastyByLeague, eliminatedByLeague] = await Promise.all([
       loadParticipationByLeague(leagueIds),
       options.dynastySignals
         ? loadDynastySignalsByLeague(leagueIds, userId).catch(() => new Map<string, DynastyHealthSignals>())
         : Promise.resolve(new Map<string, DynastyHealthSignals>()),
+      // Chopped leagues' eliminated teams; never throws, and a league with none is absent.
+      readEliminatedTeamsByLeague(leagueIds),
     ])
 
     const snapshots = leagueIds.map((leagueId) => {
@@ -1140,6 +1205,7 @@ export async function getCommissionerHubHealthForUser(
         now,
         source: 'database',
         nflDataCoverage: nflCoverageByLeague.get(leagueId) ?? null,
+        eliminatedRosterIds: eliminatedByLeague.get(leagueId)?.rosterIds,
         counts: countsByLeague.get(leagueId) ?? EMPTY_HEALTH_COUNTS,
       })
     }).map((snap) => {
@@ -1162,39 +1228,15 @@ export async function getCommissionerHubHealthForUser(
     let enrichedCount = 0
 
     if (isLive) {
-      // ONE query for the whole fan-out, not one per league. The map below is an UNBOUNDED
-      // Promise.all across every league the user has; calling attachSavedAnalysis inside it
-      // unconditionally would issue N concurrent counts, and this repo has already taken a
-      // production Postgres OOM (53200) from an unbounded per-league fan-out. Resolving the cheap
-      // gate once means the expensive read runs only for leagues that can actually produce
-      // something -- none of them while AI spend is disabled. Fails closed to an empty set.
-      const liveLeagueIds: string[] = []
-      for (const snap of snapshots) {
-        if (snap && snap.source === 'database') liveLeagueIds.push(snap.leagueId)
-      }
-      const analysisLeagueIds = await leaguesWithSavedAnalysis(prisma, userId, liveLeagueIds)
-
+      // The saved three-brain analysis was retired 2026-11-19 (re-score build item 9): nothing produced one, so
+      // the batched count that gated it here found nothing on every hub load.
       await Promise.all(
         snapshots.map(async (snapshot, i) => {
           if (!snapshot || snapshot.source !== 'database') return
           try {
             const shadow = await runCommissionerHealthShadow({ userId, snapshot })
             if (shadow.ran && shadow.result) {
-              // Attach a saved three-brain analysis when one exists. `knownHasRun` skips the
-              // per-league count the batch above already answered. Authority for
-              // commissioner.league.health is explanation_only, so this can change the
-              // explanation string and nothing else.
-              let decision = shadow.result.decision
-              if (analysisLeagueIds.has(snapshot.leagueId)) {
-                const attached = await attachSavedAnalysis({
-                  decision,
-                  leagueId: snapshot.leagueId,
-                  userId,
-                  tool: 'manager_intelligence',
-                  knownHasRun: true,
-                })
-                decision = attached.decision
-              }
+              const decision = shadow.result.decision
               snapshots[i] = {
                 ...snapshot,
                 decisionOsShadow: {
@@ -1233,20 +1275,12 @@ export async function getCommissionerHubHealthForUser(
           try {
             const shadow = await runCommissionerHealthShadow({ userId, snapshot: target })
             if (shadow.ran && shadow.result) {
-              // ONE league here, not a fan-out, so the plain call is right -- its own indexed
-              // count is the cheap gate and there is nothing to batch.
-              const attached = await attachSavedAnalysis({
-                decision: shadow.result.decision,
-                leagueId: target.leagueId,
-                userId,
-                tool: 'manager_intelligence',
-              })
               snapshots[shadowTargetIndex] = {
                 ...target,
                 decisionOsShadow: {
                   decisionId: shadow.result.decision.decision_id,
                   parityPassed: shadow.result.parity?.passed ?? null,
-                  card: toCommissionerHealthCard(attached.decision),
+                  card: toCommissionerHealthCard(shadow.result.decision),
                 },
               }
             }

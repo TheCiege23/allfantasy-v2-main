@@ -16,6 +16,7 @@ import { gradeMoment, gradeMomentOf, type GradeMomentInput } from '@/lib/decisio
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { mapWithConcurrency } from '@/lib/concurrency/mapWithConcurrency'
 
 /**
  * Trades that landed in your leagues recently.
@@ -657,16 +658,15 @@ async function loadRecentTrades(
     const liveRows: { cacheKey: string; data: unknown }[] = []
     const ids = [...byPlatformId.keys()]
     await timing.read('reconcile', async () => {
-      for (let i = 0; i < ids.length; i += 4) {
-        const chunk = ids.slice(i, i + 4)
-        const settled = await Promise.all(chunk.map(async (id) => ({
-          id,
-          result: await getReconciledTradeGrades(id).catch(() => null),
-        })))
-        for (const item of settled) {
-          if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
-          if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
-        }
+      // A pool of four, not lockstep batches (see `grading` below): measured 2.7–3.9s on league trade reads.
+      // Results are taken in league order, as the batches gave them.
+      const settled = await mapWithConcurrency(ids, 4, async (id) => ({
+        id,
+        result: await getReconciledTradeGrades(id).catch(() => null),
+      }))
+      for (const item of settled) {
+        if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
+        if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
       }
     })
     if (liveRows.length > 0) {
@@ -864,9 +864,14 @@ async function loadRecentTrades(
   }
   // Grade only visible trades without changing display order or provider scan limits.
   await timing.read('grading', async () => {
+    /*
+     * ⚠ A POOL OF FOUR, NOT LOCKSTEP BATCHES OF FOUR (2026-11-22). Measured on the owner's 91-league home: grading
+     * was 4.1s of a 7.2s trades card. Each trade's grader is per league and per process, so after a deploy a batch
+     * waited for its slowest league's grader build before the next four could start. Same bound, same trades, same
+     * grades; a trade now starts the moment any running one finishes.
+     */
     const gradeConcurrency = 4
-    for (let start = 0; start < visible.length; start += gradeConcurrency) {
-      await Promise.all(visible.slice(start, start + gradeConcurrency).map(async (t) => {
+    await mapWithConcurrency(visible, gradeConcurrency, async (t) => {
         const src = graded.get(`${t.platformLeagueId}:${t.id}`)
         if (!src) {
           /*
@@ -954,8 +959,7 @@ async function loadRecentTrades(
             if (hasRealizedGrade) side.gradeParts = { kind: 'realized', net: realized!.cumulativeNet }
           }
         }
-      }))
-    }
+    })
   })
 
   return visible

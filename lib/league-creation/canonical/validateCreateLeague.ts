@@ -7,6 +7,7 @@ import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
 import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
@@ -368,6 +369,24 @@ export function validateCreatePayload(
           message: `Draft type "${data.draftType}" is not allowed for ${formatId} / ${sport}`,
         },
       ],
+    }
+  }
+
+  /*
+   * A pro-sport Redraft or Dynasty league must fit the sport's players (lib/league-creation/
+   * playerSupply.ts): the form offers 250 teams in every sport and a 250-team NFL draft runs dry.
+   * Checked before the size list, so the answer is the reason and not a list of 73 numbers.
+   * College leagues are not checked. A league carried over from an import keeps the size it has.
+   */
+  if ((formatId === 'redraft' || formatId === 'dynasty') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
+    const supply = checkNewLeaguePlayerSupply({ sport, leagueType: idpRequested ? 'idp' : formatId, teamCount: data.teamCount })
+    if (!supply.ok && supply.message) {
+      return {
+        ok: false,
+        status: 400,
+        error: supply.message,
+        errors: [{ path: 'teamCount', message: supply.message, code: 'PLAYER_SUPPLY_EXHAUSTED' }],
+      }
     }
   }
 

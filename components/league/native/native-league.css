@@ -394,6 +394,12 @@
 .nl-subtabs button[aria-current=page]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
 .nl-subtabs .nl-nav-count{margin-left:0}
 @media (max-width:767px){.nl-subtabs button{min-height:44px}}
+
+/* Imported leagues in the same workspace (2026-11-22): where the league lives, under its name. */
+.nl-synced-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.nl-synced-bar .nl-synced-open{color:var(--gold)!important;border-color:color-mix(in srgb,var(--gold) 35%,transparent)}
+.nl-heading-name .nl-synced-note{flex-basis:100%;margin:0;font-size:12px;line-height:1.45;color:var(--text2)}
+@media (max-width:767px){.nl-synced-bar .nl-button{min-height:44px}}
 /* Phone, dynasty: the banner is an art-backed CARD (rule above), so it needs a card's padding. The generic phone rules
    (.nl-league-heading{padding:10px 0 0}, .nl-workspace .nl-league-heading{padding-top:0}) are written for the
    transparent redraft heading and put this card's title 0px from its top edge. __tests__/dynasty/dynastyBannerPhone.test.ts */

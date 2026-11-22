@@ -1,4 +1,5 @@
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
+import { listAutoDraftRosterIds } from './instantAutopick'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
@@ -63,6 +64,14 @@ function adpAtPickFromMetadata(meta: unknown): number | null {
   if (!meta || typeof meta !== 'object') return null
   const v = (meta as { adpAtPick?: unknown }).adpAtPick
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+}
+
+/** `pickMetadata.autopick.reason`: why the clock picked this player, when it did. */
+function autoPickReasonFromMetadata(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null
+  const auto = (meta as { autopick?: unknown }).autopick
+  const reason = auto && typeof auto === 'object' ? (auto as { reason?: unknown }).reason : null
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null
 }
 
 /**
@@ -424,6 +433,12 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
     alphabeticalSort = ls.alphabeticalSort
   }
 
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const settings = league.settings as { draft_rounds?: unknown; survivorGuillotine?: { rosterExpansionState?: unknown } } | null
+    const configuredRounds = Number(settings?.draft_rounds)
+    if (settings?.survivorGuillotine?.rosterExpansionState && Number.isInteger(configuredRounds) && configuredRounds >= 1 && configuredRounds <= 50) rounds = configuredRounds
+  }
+
   const slotOrder = await buildSlotOrderForLeague(leagueId)
 
   session = await (prisma as any).draftSession.create({
@@ -570,6 +585,9 @@ export async function buildSessionSnapshot(
     amount: (p as any).amount ?? undefined,
     ...(adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) != null
       ? { adpAtPick: adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
+      : {}),
+    ...(autoPickReasonFromMetadata((p as { pickMetadata?: unknown }).pickMetadata)
+      ? { autoPickReason: autoPickReasonFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
       : {}),
     createdAt: p.createdAt.toISOString(),
     }
@@ -729,6 +747,10 @@ export async function buildSessionSnapshot(
     viewerAutopick: viewerUserId
       ? await getViewerAutopickPreference(session.id, viewerUserId)
       : null,
+    autoDraftRosterIds:
+      session.status === 'completed'
+        ? []
+        : await listAutoDraftRosterIds({ leagueId, draftSessionId: session.id }).catch(() => []),
     currentUserRosterId: viewerUserId
       ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId).catch(() => null)) ?? undefined
       : undefined,

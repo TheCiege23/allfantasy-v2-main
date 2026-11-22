@@ -136,7 +136,16 @@ describe('validateCreatePayload and the imported team count', () => {
   })
 
   it('takes every dynasty size from 4 to 250 natively, and nothing past it', () => {
-    for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams)).ok).toBe(true)
+    // College: the whole native range. The owner's own college leagues run 140 and 180 teams.
+    const college = { sport: 'NCAAF', scoringPreset: 'ncaaf_half_ppr' }
+    for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams, 'dynasty', college)).ok, `NCAAF ${teams}`).toBe(true)
+    // NFL: up to what the NFL's players can fill (lib/league-creation/playerSupply.ts), with the reason past it.
+    for (const teams of [4, 9, 34, 36, 88]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(true)
+    const tooBig = validateCreatePayload(body(160))
+    expect(tooBig.ok).toBe(false)
+    if (!tooBig.ok) expect(tooBig.errors?.[0]).toMatchObject({ path: 'teamCount', code: 'PLAYER_SUPPLY_EXHAUSTED' })
+    // An imported league keeps the size it has.
+    expect(validateCreatePayload(body(160), { importedTeamCount: 160 }).ok).toBe(true)
     expect(validateCreatePayload(body(3)).ok).toBe(false)
     expect(validateCreatePayload(body(251)).ok).toBe(false)
     expect(validateCreatePayload(body(251), { importedTeamCount: 251 }).ok).toBe(false)

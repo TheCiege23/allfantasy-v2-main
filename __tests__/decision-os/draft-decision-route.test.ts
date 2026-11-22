@@ -74,7 +74,8 @@ describe('GET /api/leagues/[leagueId]/draft/decision', () => {
       fourAnswers: { what_to_do: 'Draft Atlas Runner.' },
       ruleVerdicts: [expect.objectContaining({ verdict: 'legal' })],
     })
-    expect(h.context).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'me' })
+    // The decision plans for the viewer's own next turn when they are off the clock (planForOwnPick.ts).
+    expect(h.context).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'me', planForOwnTurn: true })
     expect(h.fit).toHaveBeenCalledWith({
       leagueId: 'lg1',
       rosterId: 'me',

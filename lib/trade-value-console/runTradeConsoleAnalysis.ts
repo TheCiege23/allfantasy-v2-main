@@ -303,7 +303,7 @@ export async function runTradeConsoleAnalysis(
     faabState,
     dataGaps,
     fcPlayers,
-    pickSlots: chart.pickSlots ?? null, combinedPickQuote,
+    pickSlots: chart.pickSlots ?? null, combinedPickQuote, platform: leagueRow?.platform ?? null,
   })
   mark('assets_give')
   let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(getSplit?.rest ?? get, {
@@ -313,7 +313,7 @@ export async function runTradeConsoleAnalysis(
     faabState,
     dataGaps,
     fcPlayers,
-    pickSlots: chart.pickSlots ?? null, combinedPickQuote,
+    pickSlots: chart.pickSlots ?? null, combinedPickQuote, platform: leagueRow?.platform ?? null,
   })
   let giveInputs: TradeAssetInput[] = [...give]
   let getInputs: TradeAssetInput[] = [...get]
@@ -453,6 +453,7 @@ export async function runTradeConsoleAnalysis(
     getLines,
     givePriced: gP,
     getPriced: tP,
+    teams: chart.leagueSize ?? null,
   }).catch(() => null)
   mark('trade_market')
 
@@ -486,6 +487,7 @@ export async function runTradeConsoleAnalysis(
     tradeMarket: marketOverlay?.tradeMarket ?? null,
     lineup: marketOverlay?.lineup ?? null,
     lineupNote: marketOverlay?.lineupNote ?? null,
+    learnedPicks: marketOverlay?.learnedPicks ?? null,
     mark,
   })
   const leagueGrade = graded.leagueGrade
@@ -921,7 +923,7 @@ export async function runTradeConsoleAnalysis(
       if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, faabState: chart.faabState ?? null,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false,
-        pickSlots: chart.pickSlots ?? null, combinedPickQuote }
+        pickSlots: chart.pickSlots ?? null, combinedPickQuote, platform: leagueRow?.platform ?? null }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
       const [gd, td] = assetPolicy

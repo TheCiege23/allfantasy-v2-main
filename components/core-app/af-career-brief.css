@@ -570,3 +570,27 @@
     white-space: normal;
   }
 }
+
+/* ── the overview's visible pair: the shelf and AF rank (2026-11-20) ─────────
+ * The rest of the three-column body moved into "More detail" (Career.tsx), so the
+ * body left on screen holds two cards. Three classes so these beat both the
+ * viewport rules in af-career.css and the two-class container rules above,
+ * including the centre-column promotion (`nth-child(2)` → full width, first),
+ * which would otherwise put AF rank above the shelf. */
+.af-c13 .af-c13-body.af-c13-body--main {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+@container afcareer (max-width: 1180px) {
+  .af-c13 .af-c13-body.af-c13-body--main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .af-c13 .af-c13-body.af-c13-body--main > .af-c13-col:nth-child(2) {
+    grid-column: auto;
+    order: 0;
+  }
+}
+@container afcareer (max-width: 700px) {
+  .af-c13 .af-c13-body.af-c13-body--main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -117,6 +117,8 @@ export function allowanceFor(gapMs, probe = {}) {
  * stayed invisible.
  */
 export const PROBES = {
+  // The aggregate heartbeat fails if either the NFL or NBA ingestion fails.
+  '/api/cron/survivor-guillotine-ingest': { heartbeat: 'cron-survivor-guillotine-provider' },
   // The operational overlay is outside cron-schedule.json. Probe its unique job heartbeat,
   // then audit every connected NFL league's certified active-lane success below.
   '/api/cron/fantasy-os-active-sync': { heartbeat: 'cron-fantasy-os-active-sync' },
@@ -210,6 +212,12 @@ export const PROBES = {
    * and needs its own identity rather than a differently-scoped table probe.
    */
   '/api/cron/import-player-game-stats?multiSport=1&days=2': { heartbeat: 'cron-import-player-game-stats-multisport' },
+  /*
+   * The game-day refresh: re-imports the NFL week that has a game in play, every 15 minutes. A
+   * heartbeat because it writes the same player_game_stats.updatedAt as the daily NFL mode above, and
+   * because outside a game window a correct fire writes nothing at all.
+   */
+  '/api/cron/import-player-game-stats?gameDay=1': { heartbeat: 'cron-import-player-game-stats-game-day' },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   /* ⚠ KEY MATCHES THE FULL PATH INCLUDING QUERY, so adding `&limit=500` to the cron orphaned
@@ -583,6 +591,7 @@ export const PROBES = {
    * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
    * keeps the strong claim in season and self-suppresses out of it.
    */
+  '/api/cron/college-weekly-projections': { heartbeat: 'cron-college-weekly-projections' },
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 
   /*

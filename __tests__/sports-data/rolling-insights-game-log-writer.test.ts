@@ -12,12 +12,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * "Tue, 07 Apr 2026 00:50:00 GMT", which is Monday 04-06 in the US.
  */
 
-const h = vi.hoisted(() => ({ upsert: vi.fn(), identities: vi.fn(), riFetchRows: vi.fn(), existing: vi.fn(), lock: vi.fn() }))
+const h = vi.hoisted(() => ({ upsert: vi.fn(), identities: vi.fn(), riFetchRows: vi.fn(), existing: vi.fn(), lock: vi.fn(), count: vi.fn() }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: async (run: (tx: unknown) => Promise<unknown>) => run({
-      $executeRaw: h.lock, playerGameStat: { findMany: h.existing, upsert: h.upsert },
+      $executeRaw: h.lock, playerGameStat: { findMany: h.existing, upsert: h.upsert, count: h.count },
     }),
     playerIdentityMap: { findMany: h.identities },
     playerGameStat: { upsert: h.upsert },
@@ -37,10 +37,26 @@ beforeEach(() => {
   const ids = [...Object.keys(games[0].player_box.home_team), ...Object.keys(games[0].player_box.away_team)]
   h.identities.mockResolvedValue(ids.map((id) => ({ id: `pim-${id}`, rollingInsightsId: id })))
   h.upsert.mockResolvedValue({})
+  h.count.mockResolvedValue(0)
   h.riFetchRows.mockResolvedValue({ rows: games, notModified: false, unsupported: false, error: null })
 })
 
 describe('ingestRollingInsightsGameLogs — the game_date it writes', () => {
+  it('retains a verified official NBA box when the regular refresh runs', async () => {
+    const raw = JSON.parse(readFileSync(path.join(process.cwd(), 'contracts', 'rolling-insights', 'fixtures', 'live.NBA.json'), 'utf8')).data.NBA as unknown[]
+    const game = raw.find(row => { const box = normalizeRiGameBox(row); return box?.seasonType === 'regular' && box.lines.length > 0 })!
+    expect(game).toBeDefined()
+    const box = normalizeRiGameBox(game)!
+    const ids = new Map(box.lines.map((line, i) => [line.providerPlayerId, `p-${i}`]))
+    const result = { games: 0, lines: 0, written: 0, unresolved: 0, unrecognizedSeasonTypes: [] as string[], errors: [] as string[] }
+    h.count.mockResolvedValue(1)
+    await writeRiGameRows({ sport: 'NBA', rows: [game], identityByRiId: ids, now: new Date(), result, persistSchedule: true })
+    expect(h.lock).toHaveBeenCalledOnce()
+    expect(h.count).toHaveBeenCalledOnce()
+    expect(h.upsert).not.toHaveBeenCalled()
+    expect(result.written).toBe(0)
+    expect(result.errors).toEqual([])
+  })
   it('preserves an NHL row that arrived before the backfill acquired its game lock', async () => {
     const raw = JSON.parse(readFileSync(path.join(process.cwd(), 'contracts', 'rolling-insights',
       'fixtures', 'live.NHL.json'), 'utf8')).data.NHL as unknown[]

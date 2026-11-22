@@ -228,6 +228,11 @@ export async function calculateScoreFromSportConfig(
  * Moved out of `calculateScoreFromSportConfig` unchanged (2026-10-09): the weekly matchup engine and the
  * trade grade must score a stat line the same way, so they share this rather than a copy.
  */
+export function calculateScoreForLeague(league: Parameters<typeof resolveLeagueScoringRules>[0], rawStats: Record<string, number>, position?: string | null): number {
+  const scorer = buildLeagueStatScorer(league)
+  return scorer ? scorer(rawStats, position) : calculateFantasyPoints(rawStats, [] as unknown as SportConfig['statCategories'], undefined)
+}
+
 export function buildLeagueStatScorer(league: Parameters<typeof resolveLeagueScoringRules>[0]): LeagueStatScorer | null {
   const rules = resolveLeagueScoringRules(league)
   if (!rules) return null

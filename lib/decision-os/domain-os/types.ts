@@ -56,15 +56,20 @@ export type OsDomain =
   | 'lineup' | 'waiver' | 'trade' | 'draft'
   | 'league' | 'value' | 'projection' | 'import'
   /**
-   * ⚠ The third non-decision domain, and the one whose PRODUCER already existed in full.
-   * `lib/psychological-profiles/` is 16 modules across all seven sports with its own evidence
-   * floor, and had zero references anywhere in `lib/decision-os/` — a complete subsystem outside
-   * the hub meant to reason over it. Psychology OS is the seam, not a reimplementation.
-   *
-   * League level: a profile is per (league, manager), and the roll-ups across leagues and sports
-   * are VIEWER-SCOPED, so they are derived at read and never stored here.
+   * Manager Psychology OS, FACTS ONLY (2026-11-20): a league's manager records — trades, waiver claims and FAAB,
+   * drafts — as the viewer sees them, held five minutes per viewer (`lib/decision-os/manager-records-os`).
+   * ⚠ The label-and-score seam this name once described (`lib/psychological-profiles/`) was retired on 2026-11-17;
+   * nothing here stores a label, a score or a prediction. USER level: the view leaves the viewer out and reads the
+   * viewer's own FAAB through their roster, so it is never shared between viewers.
    */
   | 'psychology'
+  /**
+   * The commissioner's league-health snapshot (2026-11-20 re-score push) — the input to `commissioner.league.health`,
+   * the one Decision OS domain that had no maintained facts and read its world live on every call. USER level, not
+   * league: with dynasty signals on, the snapshot marks which team is the VIEWER's, so one co-commissioner's
+   * snapshot is not another's. See `lib/decision-os/commissioner-os/index.ts`.
+   */
+  | 'commissioner'
 
 export interface OsFactEnvelope<T> {
   facts: T

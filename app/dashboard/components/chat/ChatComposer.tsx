@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart3, ImagePlus, Mic, Send, Smile, Video } from 'lucide-react'
+import { BarChart3, ImagePlus, Mic, Plus, Send, Smile, Video } from 'lucide-react'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -101,6 +101,8 @@ type ChatComposerProps = {
     poll?: string
     photo?: string
     video?: string
+    /** The "+" that shows the rest of the tools in `compactTools` mode. */
+    more?: string
   }
   /**
    * Where the GIF / emoji / poll pickers open. `inline` (the default) opens them straight above
@@ -110,6 +112,11 @@ type ChatComposerProps = {
    * instead, so it is never cut off by the panel it was opened from.
    */
   pickerPlacement?: 'inline' | 'auto'
+  /**
+   * One short tool row (draft room, 2026-11-19): GIF, emoji and photo stay; poll, voice note and
+   * video sit behind "+". The full row wrapped to two lines in the draft dock.
+   */
+  compactTools?: boolean
   /**
    * League chat only: offers "Predict a matchup" in the poll picker. The picker asks the server
    * which matchups are open and hides the tab when there are none (or the league is imported).
@@ -193,6 +200,7 @@ export function ChatComposer({
   mentionMembers,
   testIds,
   pickerPlacement = 'inline',
+  compactTools = false,
   predictions,
 }: ChatComposerProps) {
   const [text, setText] = useState('')
@@ -201,6 +209,7 @@ export function ChatComposer({
   const appliedPrefillKey = useRef<string | null>(null)
   const appliedReviewedDraft = useRef<string | null>(null)
   const [activePicker, setActivePicker] = useState<Picker>(null)
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false)
   const pickerAnchorRef = useRef<HTMLDivElement | null>(null)
   const floatingRef = useRef<HTMLDivElement | null>(null)
   /** `auto` placement only: null until measured, then 'inline' or where to float. */
@@ -916,6 +925,8 @@ export function ChatComposer({
                 >
                   <Smile size={17} strokeWidth={2} aria-hidden />
                 </button>
+                {!compactTools || moreToolsOpen ? (
+                  <>
                 <button
                   type="button"
                   className={toolBtn(activePicker === 'poll')}
@@ -933,6 +944,8 @@ export function ChatComposer({
                 >
                   <Mic size={17} strokeWidth={2} aria-hidden />
                 </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className={toolBtn(false)}
@@ -951,6 +964,7 @@ export function ChatComposer({
                   className="hidden"
                   onChange={onImageChange}
                 />
+                {!compactTools || moreToolsOpen ? (
                 <button
                   type="button"
                   className={toolBtn(false)}
@@ -960,6 +974,19 @@ export function ChatComposer({
                 >
                   <Video size={17} strokeWidth={2} aria-hidden />
                 </button>
+                ) : null}
+                {compactTools ? (
+                  <button
+                    type="button"
+                    className={toolBtn(moreToolsOpen)}
+                    onClick={() => setMoreToolsOpen((v) => !v)}
+                    aria-label={moreToolsOpen ? 'Fewer tools' : 'More: poll, voice note, video'}
+                    aria-expanded={moreToolsOpen}
+                    data-testid={testIds?.more}
+                  >
+                    <Plus size={17} strokeWidth={2} aria-hidden className={moreToolsOpen ? 'rotate-45 transition-transform' : 'transition-transform'} />
+                  </button>
+                ) : null}
                 <input
                   ref={videoInputRef}
                   type="file"

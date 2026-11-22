@@ -112,7 +112,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 /** A player's dynasty value: seasons over replacement, this one first, each later one aged and discounted. */
 export function playerDynastyValue(args: {
   sport: DynastyGradedSport
-  player: Pick<BoardPlayer, 'position' | 'perGame'>
+  player: Pick<BoardPlayer, 'position' | 'perGame' | 'tradeMarket'>
   age?: number
   collegeSeasons?: number
   replacementPerGame: number
@@ -125,7 +125,7 @@ export function playerDynastyValue(args: {
     const perGame = age != null && now > 0 ? (player.perGame * ageMultiplierAtAge(sport, player.position, age + y)) / now : player.perGame
     total += Math.max(0, perGame - replacementPerGame) * FULL_SEASON_GAMES[sport] * FUTURE_DISCOUNT ** y
   }
-  return total
+  return total * (1 + (player.tradeMarket?.percent ?? 0) / 100)
 }
 
 /**

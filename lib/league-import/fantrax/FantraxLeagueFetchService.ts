@@ -12,6 +12,7 @@ import {
   readStoredFantraxDerived,
   readStoredFantraxDraft,
   readStoredFantraxFuturePicks,
+  readStoredFantraxTeamLogos,
   rekeyFantraxFuturePicks,
 } from './fantraxSnapshotHistory'
 import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
@@ -682,6 +683,9 @@ export async function fetchFantraxLeagueForImport(
     else rosterByTeam.set(label, [player])
   }
   const userTeamId = resolveTeamId(userTeam, teamMap)
+  const storedLogos = readStoredFantraxTeamLogos(leagueRecord.transactions)
+  const logoByFantraxTeamId = new Map(storedLogos.map((l) => [l.teamId, l.logoUrl]))
+  const logoByTeamLabel = new Map(storedLogos.flatMap((l) => (l.teamName && normalizeTeamLabel(l.teamName) ? [[normalizeTeamLabel(l.teamName), l.logoUrl] as const] : [])))
   const standingsByNormalizedTeam = new Map<string, LegacyStanding>()
   for (const standing of standings) {
     const label = asString(standing.team)
@@ -711,7 +715,8 @@ export async function fetchFantraxLeagueForImport(
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
       managerName: isUserTeam ? username : teamName,
       teamName,
-      logoUrl: null,
+      /* Synced by the browser connector from the logged-in site; the public API has none (GAPS F-14, F-20). */
+      logoUrl: logoByFantraxTeamId.get(asString(standing?.fantraxTeamId)) ?? logoByTeamLabel.get(normalizeTeamLabel(teamName)) ?? null,
       wins: asNumber(standing?.wins, 0) ?? 0,
       losses: asNumber(standing?.losses, 0) ?? 0,
       ties: asNumber(standing?.ties, 0) ?? 0,

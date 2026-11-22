@@ -3,10 +3,17 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { evaluateStoredTrade } from '@/lib/decision-os/trade/evaluateStoredTrade'
+import { oneWorldPerBatch } from '@/lib/decision-os/trade/sharedWorld'
+import { resolveCanonicalWorld } from '@/lib/decision-os/world'
+import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import type { LoadedTrade, LoadedTradeAsset, TradeRef } from '@/lib/decision-os/trade/tradeRecord'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
+import { marketEvidenceOf } from '@/lib/chimmy/marketEvidence'
+import { letterRecordApplies } from '@/lib/chimmy-outcomes/engineRecord'
+import { tradeLetterConfidence, type TradeLetterCalibration } from '@/lib/decision-os/trade/letterCalibration'
+import { loadTradeLetterCalibration } from '@/lib/decision-os/trade/letterCalibrationStore'
 import {
   MULTI_TEAM_GRADE_WITHHELD,
   describeTradeTeamMoves,
@@ -46,7 +53,15 @@ import {
  * under a header that said "(3)" — so Chimmy told them they had three trades waiting. Now up to `MAX_LISTED` are read,
  * the most urgent `MAX_GRADED` are graded, the rest are named, and the count is the real one.
  */
-const MAX_GRADED = 3
+const MIN_GRADED = 3
+/**
+ * Up to this many are graded when time allows (owner's call, 2026-11-20: "grade more than 3"). The block is built
+ * inside the packet's first-wave deadline (2,400 ms), and a block that misses it reaches Chimmy as nothing at all, so
+ * an offer past the first `MIN_GRADED` is started only while the build is inside `EXTRA_GRADING_BUDGET_MS`. The graded
+ * offers are always the soonest-expiring prefix, and the header states how many there are.
+ */
+const MAX_GRADED = 6
+export const EXTRA_GRADING_BUDGET_MS = 1200
 /** Offers read per answer; past this the block says there may be more, rather than implying the inbox is complete. */
 export const MAX_LISTED = 10
 
@@ -108,8 +123,17 @@ export type PendingTradeDeps = {
   /** Native and provider offers awaiting this user's answer. */
   findStoredOffers: (leagueId: string, userId: string, limit: number) => Promise<StoredPendingOffer[]>
   evaluate: typeof evaluateStoredTrade
+  /** The league's canonical world, loaded ONCE per build and handed to every evaluation as its own copy. */
+  resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
+  /** The clock the extra-grading budget is measured on. */
+  now: () => number
   /** Told the letters the one trade engine gave, so the chat route can hold the answer to them. */
   onGrade?: (grade: ChimmyTradeGrade) => void
+  /**
+   * How sure each letter is, from AllFantasy's graded redraft deals (`letterCalibration.ts`). Read once per build;
+   * a null or a failed read means the grades are given exactly as before.
+   */
+  letterCalibration: () => Promise<TradeLetterCalibration | null>
 }
 
 const PENDING_SELECT = {
@@ -198,6 +222,9 @@ const defaultDeps: PendingTradeDeps = {
   },
   findStoredOffers: (leagueId, userId, limit) => findStoredPendingOffers(leagueId, userId, limit),
   evaluate: evaluateStoredTrade,
+  resolveWorld: (leagueId) => resolveCanonicalWorld(leagueId),
+  now: () => Date.now(),
+  letterCalibration: () => loadTradeLetterCalibration(),
 }
 
 /**
@@ -348,7 +375,13 @@ const signed = (n: number, digits = 1) => `${n >= 0 ? '+' : ''}${n.toFixed(digit
 type EvaluatedTrade = Extract<Awaited<ReturnType<typeof evaluateStoredTrade>>, { ok: true }>
 
 /** The one grade, the values and this week's lineup effect for one evaluated offer — the same lines for every source. */
-function gradeLines(r: EvaluatedTrade, from: string, assetsText: string, d: PendingTradeDeps): string[] {
+function gradeLines(
+  r: EvaluatedTrade,
+  from: string,
+  assetsText: string,
+  d: PendingTradeDeps,
+  calibration: TradeLetterCalibration | null,
+): string[] {
   const lines: string[] = []
   const g = r.receipt.grade
   const partner = r.receipt.partnerGrade
@@ -357,6 +390,23 @@ function gradeLines(r: EvaluatedTrade, from: string, assetsText: string, d: Pend
       `  Grade (the one AllFantasy grade, the same the Trade Center and the offer card give it): you ${g.letter} — ${g.label}; ${from} ${partner.graded ? partner.letter : 'not graded'}. ` +
         `League value: you send ${g.giveValue.toLocaleString()}, you receive ${g.getValue.toLocaleString()}.`
     )
+    // Why values moved, measured from completed trades — verbatim from the grade, for Chimmy to cite (`marketEvidence.ts`).
+    const evidence = marketEvidenceOf(g)
+    if (evidence.length) {
+      lines.push(
+        '  Why values moved, measured from completed trades on AllFantasy (cite one or two when you explain this grade; keep every number and trade count exactly as written):',
+        ...evidence.map((e) => `    • ${e}`),
+      )
+    }
+    // How sure the record makes that letter — only where the ledger grades this kind of deal (NFL redraft).
+    const sure = letterRecordApplies({ sport: r.trade.sport, leagueType: g.leagueType?.type }) ? tradeLetterConfidence(g.letter, calibration) : null
+    if (sure) {
+      lines.push(
+        `  How sure that ${sure.letter} is: ${sure.level} — about ${sure.heldPct}% of AllFantasy's ${sure.letter} grades on redraft deals held up (${sure.decided} decided, recent ones weighted more). ` +
+          (sure.level === 'low' ? 'Say the deal is closer than the letter suggests. ' : '') +
+          'State it beside the grade; it never changes the letter.',
+      )
+    }
     d.onGrade?.({
       letters: [g.letter, ...(partner.graded ? [partner.letter] : [])],
       summary: `AllFantasy grades the offer from ${from} (${assetsText}): ${g.letter} for you${partner.graded ? `, ${partner.letter} for ${from}` : ''}.`,
@@ -392,6 +442,7 @@ export async function buildPendingTradeDecisionContext(
 ): Promise<string | null> {
   if (!leagueId || !userId) return null
   const d: PendingTradeDeps = { ...defaultDeps, ...deps }
+  const startedAt = d.now()
 
   let proposals: PendingProposal[]
   try {
@@ -410,6 +461,16 @@ export async function buildPendingTradeDecisionContext(
   if (proposals.length === 0 && stored.length === 0) return null
 
   /*
+   * One league world for every offer graded below (2026-11-20). Each evaluation re-resolved it — four queries an
+   * offer, three offers in a row, inside the packet's first-wave deadline. Same league, same request: the grades are
+   * unchanged, each evaluation gets its own copy, and a miss is retried rather than shared (`sharedWorld.ts`).
+   */
+  const evaluateDeps = { resolveWorld: oneWorldPerBatch(d.resolveWorld) }
+  // The letter record, read once for the build and only once an offer is actually graded. A failure is "no record".
+  let calibrationRead: Promise<TradeLetterCalibration | null> | null = null
+  const calibration = () => (calibrationRead ??= d.letterCalibration().catch(() => null))
+
+  /*
    * One list across the three sources, the soonest to expire first: those are the ones the user has to answer before
    * they can come back for the rest. An offer with no expiry goes last. The sort is stable, so within a tie each
    * source keeps its own newest-first order.
@@ -423,14 +484,18 @@ export async function buildPendingTradeDecisionContext(
   const total = items.length
   const atCap = total >= MAX_LISTED
 
-  const lines: string[] = [
-    total > MAX_GRADED
-      ? `PENDING INCOMING TRADES (${atCap ? `at least ${total}` : total}) — awaiting this user's answer. The ${MAX_GRADED} expiring soonest are graded below; the others are listed without a grade. Use ONLY these numbers and letters.`
-      : `PENDING INCOMING TRADES (${total}) — awaiting this user's answer. Use ONLY these numbers and letters.`,
-  ]
+  const lines: string[] = []
+  /*
+   * How far down the soonest-expiring list grading reaches. The first MIN_GRADED always; then one more at a time while
+   * the build is inside its budget — once it is past, every later offer is named without a grade, so the graded set
+   * stays a prefix and the header below can state it exactly.
+   */
+  let gradedUpTo = 0
 
   for (const [i, it] of items.entries()) {
-    const graded = i < MAX_GRADED
+    const graded =
+      gradedUpTo === i && (i < MIN_GRADED || (i < MAX_GRADED && d.now() - startedAt < EXTRA_GRADING_BUDGET_MS))
+    if (graded) gradedUpTo = i + 1
     if (it.kind === 'proposal') {
       const p = it.p
       const from = p.proposerRoster?.teamName ?? p.proposerRoster?.ownerName ?? 'another manager'
@@ -448,12 +513,12 @@ export async function buildPendingTradeDecisionContext(
         continue
       }
       try {
-        const r = await d.evaluate({ leagueId, ref: { kind: 'redraft', proposalId: p.id }, userId, surface: 'chimmy-pending' })
+        const r = await d.evaluate({ leagueId, ref: { kind: 'redraft', proposalId: p.id }, userId, surface: 'chimmy-pending' }, evaluateDeps)
         if (!r.ok) {
           lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
           continue
         }
-        lines.push(...gradeLines(r, from, describeAssets(p), d))
+        lines.push(...gradeLines(r, from, describeAssets(p), d, await calibration()))
         lines.push(...counterHint(r, p.id))
       } catch {
         // Never let the evaluator take down the whole grounding block.
@@ -472,7 +537,7 @@ export async function buildPendingTradeDecisionContext(
       continue
     }
     try {
-      const r = await d.evaluate({ leagueId, ref: o.ref, userId, surface: 'chimmy-pending' })
+      const r = await d.evaluate({ leagueId, ref: o.ref, userId, surface: 'chimmy-pending' }, evaluateDeps)
       if (!r.ok) {
         lines.push(`- ${source} from ${o.from}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
         lines.push(`  Grade: NOT AVAILABLE — ${r.refusal.reason} Do not grade it yourself.`)
@@ -480,13 +545,18 @@ export async function buildPendingTradeDecisionContext(
       }
       const assetsText = describeLoadedTrade(r.trade, r.perspectiveTeamId)
       lines.push(`- ${source} ${pendingOfferId(o.ref)} from ${o.from}: ${assetsText}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
-      lines.push(...gradeLines(r, o.from, assetsText, d))
+      lines.push(...gradeLines(r, o.from, assetsText, d, await calibration()))
       lines.push(...counterHint(r, pendingOfferId(o.ref)))
     } catch {
       lines.push(`- ${source} from ${o.from}.${expires}`)
       lines.push('  Grade: evaluation failed. Do not substitute your own grade.')
     }
   }
+  lines.unshift(
+    total > gradedUpTo
+      ? `PENDING INCOMING TRADES (${atCap ? `at least ${total}` : total}) — awaiting this user's answer. The ${gradedUpTo} expiring soonest are graded below; the others are listed without a grade. Use ONLY these numbers and letters.`
+      : `PENDING INCOMING TRADES (${total}) — awaiting this user's answer. Use ONLY these numbers and letters.`,
+  )
   if (atCap) {
     lines.push(`  …there may be more than ${MAX_LISTED} offers waiting; the trade inbox lists them all. Do not say this is every offer.`)
   }

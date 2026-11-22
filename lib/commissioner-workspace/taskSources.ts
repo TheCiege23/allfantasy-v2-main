@@ -371,7 +371,9 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
    * advance and useless, so running it would spend the query to throw the result away.
    */
   const moved = stale || neverImported ? [] : await readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS)
-  const managers = withSilentManagers(moved, roster.ownedTeamNames)
+  // A chopped team is out of the league, not inactive; `ownedTeamNames` already leaves it out.
+  const eliminated = new Set(roster.eliminatedTeamNames ?? [])
+  const managers = withSilentManagers(moved.filter((m) => !eliminated.has(m.managerName)), roster.ownedTeamNames)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
 
   /*

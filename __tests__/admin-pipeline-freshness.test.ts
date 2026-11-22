@@ -10,7 +10,7 @@ const latest = vi.hoisted(() => ({
   leagueSyncState: vi.fn(),
   weeklyMatchup: vi.fn(),
   roster: vi.fn(),
-  managerPsychProfile: vi.fn(),
+  // managerPsychProfile left PIPELINE_SPECS 2026-11-19 with the profile engine (re-score build item 10).
   decisionOsImportedActivity: vi.fn(),
   aiAdpSnapshot: vi.fn(),
   depthChart: vi.fn(),

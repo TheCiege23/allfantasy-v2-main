@@ -19,6 +19,7 @@
  */
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { buildTradeRecord, type EdgeFact, type EdgeTrade, type TradeEdge } from './tradeEdge'
+import { buildTradeSituationFacts, type SavedTradeContext, type SituationTrade, type TradePriceAtTheTime } from './tradeSituationFacts'
 import { buildWaiverEdge, type EdgeWaiverClaim, type WaiverEdgeFact } from './waiverEdge'
 import { draftHistoryFacts, type EdgeDraftPick } from './draftEdge'
 
@@ -62,7 +63,15 @@ export type ManagerRecordInput = {
   }
   /** The viewer's person id, for "N of them with you". */
   viewerOwnerId: string | null
-  trades: SectionState<{ trades: EdgeTrade[]; seasonsScanned: string[]; historyGaps: string[]; asOf: string; stale: boolean }>
+  trades: SectionState<{
+    trades: EdgeTrade[]
+    seasonsScanned: string[]
+    historyGaps: string[]
+    asOf: string
+    stale: boolean
+    /** Each trade's saved context and the players' ages, when read (`./tradeSituationFacts.ts`). Absent: no such lines. */
+    situation?: { contexts: ReadonlyMap<string, SavedTradeContext>; ages: ReadonlyMap<string, number | null>; prices?: ReadonlyMap<string, TradePriceAtTheTime>; now: Date }
+  }>
   waivers: SectionState<{
     season: number
     usesFaab: boolean
@@ -73,6 +82,25 @@ export type ManagerRecordInput = {
     stale: boolean
   }>
   drafts: SectionState<{ picks: EdgeDraftPick[]; unattributedSeasons: number[] }>
+}
+
+/** The situation lines after the record's own — only when the record has a pattern to read and the context was read. */
+function withSituation(
+  record: TradeEdge,
+  data: Extract<ManagerRecordInput['trades'], { available: true }>['data'],
+  who: { name: string; ownerId: string },
+): TradeEdge {
+  if (!record.coverage.sufficient || !data.situation) return record
+  const lines = buildTradeSituationFacts({
+    name: who.name,
+    managerOwnerId: who.ownerId,
+    trades: data.trades as unknown as SituationTrade[],
+    contexts: data.situation.contexts,
+    ages: data.situation.ages,
+    prices: data.situation.prices,
+    now: data.situation.now,
+  })
+  return lines.length ? { ...record, facts: [...record.facts, ...lines] } : record
 }
 
 const UNMATCHED = "We can't match this team to one person across seasons, so there is no history to read for them."
@@ -86,17 +114,21 @@ export function buildManagerRecord(input: ManagerRecordInput): ManagerRecord {
       ? { available: false, reason: UNMATCHED }
       : {
           available: true,
-          data: buildTradeRecord({
-            trades: input.trades.data.trades,
-            managerOwnerId: ownerId,
-            managerName: name,
-            teamExternalId,
-            viewerOwnerId: input.viewerOwnerId,
-            seasonsScanned: input.trades.data.seasonsScanned,
-            historyGaps: input.trades.data.historyGaps,
-            asOf: input.trades.data.asOf,
-            stale: input.trades.data.stale,
-          }),
+          data: withSituation(
+            buildTradeRecord({
+              trades: input.trades.data.trades,
+              managerOwnerId: ownerId,
+              managerName: name,
+              teamExternalId,
+              viewerOwnerId: input.viewerOwnerId,
+              seasonsScanned: input.trades.data.seasonsScanned,
+              historyGaps: input.trades.data.historyGaps,
+              asOf: input.trades.data.asOf,
+              stale: input.trades.data.stale,
+            }),
+            input.trades.data,
+            { name, ownerId },
+          ),
         }
 
   let waivers: SectionState<ManagerRecordWaivers>

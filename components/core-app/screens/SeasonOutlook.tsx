@@ -9,6 +9,7 @@ import { band, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import { StatStrip } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-season-outlook.css'
@@ -304,7 +305,15 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
       )}
 
       {/* Withheld leagues, listed. A league that silently vanished reads as a league you are not in. */}
+      {/*
+        "More detail" (2026-11-20, owner: "the core site is confusing"). The page's job is the odds and
+        the games that swing your season; the leagues we could not read are a coverage note, so the list
+        moved, unchanged, into the ONE shared fold at the foot (components/core-app/MoreDetail.tsx). The
+        fold's closed row still names them, so they never silently vanish. ⚠ THE BASIS LINE DID NOT
+        MOVE: the header says it is printed under the forecast, always — it stays in place.
+      */}
       {footerRows.length > 0 ? (
+        <MoreDetail note={m.moreNote} testId="season-outlook-more">
         <section className="af-so-withheld">
           <h2 className="af-so-withheld-t">
             {m.withheld(footerRows.length)}
@@ -318,6 +327,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
             ))}
           </ul>
         </section>
+        </MoreDetail>
       ) : null}
     </div>
   )

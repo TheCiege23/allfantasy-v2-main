@@ -58,7 +58,6 @@ import {
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { leagueVariantFor } from '@/lib/core-app/valueBook'
 import { tradeFormatCoverage } from '@/lib/trade-value-console/formatCoverage'
-import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { buildChimmySportDataDigest } from '@/lib/chimmy/chimmy-sport-data-digest'
@@ -206,6 +205,8 @@ import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
 import { chimmyTrackRecordFor, renderTrackRecordPromptLine } from '@/lib/chimmy-outcomes/trackRecord'
+import { ledgerRecordFor } from '@/lib/chimmy-outcomes/ledgerRecord'
+import { renderEngineRecordPromptLine } from '@/lib/chimmy-outcomes/engineRecord'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import {
@@ -226,7 +227,7 @@ import {
   buildOrchestrationMeta,
   buildOrchestrationPromptSection,
   buildMemorySummaryLine,
-  classifyChimmyIntent,
+  classifyChimmyTurn,
   parseOrchestrationResponseSections,
 } from '@/lib/chimmy-orchestration'
 import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
@@ -1552,17 +1553,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    */
   const verifiedTeamId = await resolveCallerTeamId({ leagueId: leagueSnapshot?.id, userId, teamId })
 
-  // How the managers in this league have actually behaved. Entitlement is checked
-  // inside, so an unentitled user grounds exactly as before; and the block names
-  // the managers it has NOT observed, because a model handed a partial roster of
-  // personalities will invent the rest in the same confident voice.
-  const psychologyGroundingLines =
-    leagueSnapshot && userId
-      ? await buildPsychologyGroundingLines({
-          leagueId: leagueSnapshot.id,
-          userId,
-        }).catch(() => [] as string[])
-      : []
+  /*
+   * (The psychology-profile grounding call that stood here was removed 2026-11-20: `buildPsychologyGroundingLines`
+   * has returned [] since the Competitive Edge privacy pass, and its comment still claimed it grounded manager
+   * behaviour. Manager facts reach Chimmy through the `managerRecords` slice and the `get_manager_record` tool.)
+   */
 
   let normalizedLeagueContext: NormalizedLeagueContext | null = null
   if (leagueId && userId) {
@@ -2186,15 +2181,24 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * ⚠ THE INTENT ROUTER GAP — R2/R3.1/R3.3/R4b.5's opt-in slices were built, tested, wired into
    * the packet, and never requested here. `want` below was hardcoded to four always-on flags;
    * nothing decided, per question, whether a lineup/commissioner-health/psychology-consistency/
-   * roster-value read was worth its cost. This is the fix: a SECOND, early call to the intent
-   * classifier already used later in this route (line ~1789, with full conversation history) —
-   * using only `message`, which is available this early, rather than reordering existing working
-   * code to share one call. `classifyChimmyIntent` is pure and synchronous (regex matching, no
-   * I/O), so calling it twice costs microseconds, not a second network hop. The intent -> want
-   * mapping itself lives in `lib/decision-os/grounding/intentToWant.ts` — see its own header for
-   * why only four of the seven opt-in slices are mapped.
+   * roster-value read was worth its cost. This is the fix: the turn is classified once, here, and the
+   * intent -> want mapping lives in `lib/decision-os/grounding/intentToWant.ts` — see its own header
+   * for which opt-in slices are mapped. (This was first a SECOND classification, of `message` alone,
+   * beside the one with history further down; the two disagreed on follow-ups — see below.)
    */
-  const earlyWant = deriveWantFromIntent(classifyChimmyIntent(message).intent)
+  /*
+   * ⚠ ONE CLASSIFICATION FOR THE WHOLE TURN (2026-11-20). This used to classify `message` alone here and again further
+   * down with the last two user turns joined in, so on a follow-up the packet and the prompt disagreed about what was
+   * asked. `classifyChimmyTurn` decides once — the current question first, the previous turns only when it names
+   * nothing — and the packet, the intent label and the specialist agent all read this one result.
+   */
+  const recentUserSnippet = conversation
+    .filter((t) => t.role === 'user')
+    .slice(-2)
+    .map((t) => t.content)
+    .join('\n')
+  const chimmyOrchestrationClassification = classifyChimmyTurn(message, recentUserSnippet)
+  const earlyWant = deriveWantFromIntent(chimmyOrchestrationClassification.intent)
   /*
    * 🛑 THE THIRD BYPASS FAMILY, AND THE ONLY ONE GATED BEHIND A FLAG.
    *
@@ -2245,6 +2249,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   const waiverClaimsSeen: { claims: Parameters<typeof recordChatWaiverAdvice>[0]['claims'] | null } = {
     claims: null,
   }
+  /*
+   * Every trade letter the engine gives while the packet grades the asker's pending offers (`pendingTrades`,
+   * 2026-11-20). The SAME array the tool loop's context collects into, so an answer quoting a letter from the packet
+   * passes the letter check (`lib/chimmy/tradeGradeCheck.ts`) exactly as one quoting the trade tool does.
+   */
+  const packetTradeGrades: ChimmyTradeGrade[] = []
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueSnapshot && userId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
@@ -2288,6 +2298,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
             idpKicker: true,
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
+            // Inside the draft room the loop is already handed this board (`draftRoomBoard` below): never twice.
+            draftBoard: earlyWant.draftBoard && insightType !== 'draft',
           },
           /*
            * The waiver engine's claims, HELD — not recorded here. A side channel: never in the
@@ -2304,6 +2316,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            */
           onWaiverClaims: (claims) => {
             waiverClaimsSeen.claims = claims
+          },
+          onTradeGrade: (grade) => {
+            packetTradeGrades.push(grade)
           },
         })
           .then((packet) => {
@@ -2324,7 +2339,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                 `[chimmy] Decision OS grounding finished late: ${packet.meta.durationMs}ms (engine ${packet.meta.engineMs ?? '?'}ms). Slowest: ${slowest || 'none timed'}.`,
               )
             }
-            const text = serializeDecisionOsGroundingForPrompt(packet)
+            // The slices this turn's intent asked for lead the packet (`ANSWERING_SLICES_BY_INTENT`).
+            const text = serializeDecisionOsGroundingForPrompt(packet, Date.now(), {
+              intent: chimmyOrchestrationClassification.intent,
+              intentLabel: chimmyOrchestrationClassification.label,
+            })
             // ⚠ Never overwrite a verdict the ceiling has already reached. The race abandons this
             // promise but does not stop it, so this callback still runs AFTER a timeout — and
             // reporting 'ok' for a packet nobody used is worse than reporting nothing at all.
@@ -2475,12 +2494,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     portfolioPlayerGroundingResult.status === 'fulfilled' ? portfolioPlayerGroundingResult.value : null
   const myRosterInjuries = myRosterInjuriesResult.status === 'fulfilled' ? myRosterInjuriesResult.value : null
 
-  const recentUserSnippet = conversation
-    .filter((t) => t.role === 'user')
-    .slice(-2)
-    .map((t) => t.content)
-    .join('\n')
-  const chimmyOrchestrationClassification = classifyChimmyIntent(message, recentUserSnippet)
+  // `chimmyOrchestrationClassification` is the turn's one classification, made before the packet (see `earlyWant`).
   let coachingProfileForOrchestration: Record<string, unknown> | null = null
   if (userId) {
     /*
@@ -2649,9 +2663,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         season: effectiveSeasonResult,
       }),
       connectedFranchiseGrounding,
-      ...(psychologyGroundingLines.length > 0
-        ? [psychologyGroundingLines.join(NEWLINE)]
-        : []),
     ]
       .filter(Boolean)
       .join(NEWLINE) || undefined,
@@ -3243,7 +3254,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: packetTradeGrades, faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
     /*
      * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
      * handed to the loop, instead of costing the model a tool round trip first — which is several
@@ -3288,6 +3299,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       styleLine: [
         personalizationDirectives,
         renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
+        /*
+         * AllFantasy's own graded calls — the bench check, the waiver panel's #1 pickup, the trade letters
+         * (re-score build item 7): so a trade grade or a pickup can be given with how that kind of call has
+         * actually held up, and "do your grades work?" is answered from the ledger, not invented. Same
+         * memoised read as the line above.
+         */
+        renderEngineRecordPromptLine(ledgerRecordFor((await readAdviceLearningSnapshot())?.ledger, userId ?? null)),
         savedStrategyPrompt,
         /* Fun mode reaches the path that answers first too, not only the fallback prompt. */
         isFunModeTone(tone) ? `RESPONSE STYLE — FUN MODE:\n${FUN_MODE_DIRECTIVE}` : null,
@@ -3313,6 +3331,57 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       depth: chimmyDepth,
     }
     let loop = await runChimmyToolLoop(loopArgs).catch(() => null)
+    /*
+     * A SECOND MODEL READS A DECISION ANSWER BEFORE THE USER DOES (hub multi-model, 2026-11-21, owner's choice). On a
+     * trade, waiver, start/sit or draft turn, a small fast model compares the answer with the facts Chimmy read — what
+     * the tools returned plus the packet — and a contradiction sends it back to Chimmy once. Before the letter check
+     * below on purpose: that deterministic check then holds the FINAL answer, revised or not. Fails open; never on chat.
+     * See `lib/chimmy/decisionAnswerCheck.ts`.
+     */
+    if (loop?.text) {
+      try {
+        const { checkDecisionAnswer, DECISION_CHECK_ENV } = await import('@/lib/chimmy/decisionAnswerCheck')
+        const { callDecisionCheckModel } = await import('@/lib/chimmy/decisionAnswerCheckModel')
+        const revision: { result: Awaited<ReturnType<typeof runChimmyToolLoop>> } = { result: null }
+        const checked = await checkDecisionAnswer(
+          {
+            intent: chimmyOrchestrationClassification.intent,
+            question: message,
+            answer: loop.text,
+            facts: [loop.evidence, loopArgs.groundingLine].filter(Boolean).join('\n\n'),
+            env: process.env[DECISION_CHECK_ENV],
+          },
+          {
+            check: callDecisionCheckModel,
+            revise: async (correction) => {
+              revision.result = await runChimmyToolLoop({ ...loopArgs, question: `${message}\n\n${correction}` }).catch(() => null)
+              return revision.result?.text ?? null
+            },
+            now: () => Date.now(),
+          },
+        )
+        if (checked.outcome === 'revised' && revision.result) {
+          loop = { ...revision.result, text: checked.text, toolsUsed: [...loop.toolsUsed, ...revision.result.toolsUsed],
+            evidence: [loop.evidence, revision.result.evidence].filter(Boolean).join('\n\n') }
+        }
+        if (checked.outcome !== 'off' && checked.outcome !== 'skipped') {
+          persistChimmyAIAnalyticsEvent({
+            event_name: 'decision_check',
+            user_id: userId ?? 'anonymous',
+            league_id: toolContext.leagueId ?? null,
+            surface: 'chimmy_chat',
+            mode: selectedAssistantMode,
+            // Checked only on a decision turn, so the intent is one of the four decision topics.
+            topic: chimmyOrchestrationClassification.intent as 'trade' | 'waiver' | 'start_sit' | 'draft',
+            action: checked.outcome,
+            timestamp: new Date().toISOString(),
+            metadata: { ms: checked.ms, contradictions: checked.contradictions.length },
+          }).catch(() => {})
+        }
+      } catch (err) {
+        console.warn('[chimmy] decision answer check failed', err instanceof Error ? err.message : err)
+      }
+    }
     /*
      * 🛑 A TRADE LETTER IN THE ANSWER MUST BE ONE THE ENGINE GAVE (design step 7, 2026-09-27). Nothing
      * checked the tool loop's answer, and it answers most messages. The trade tools record every letter

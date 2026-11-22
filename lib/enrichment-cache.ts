@@ -139,6 +139,9 @@ export const PURGEABLE_KEY_PREFIXES: readonly string[] = [
   'world-cup-chat:gifs:',
   // lib/sports-os/durableTier.ts read(): null past expiry. Rows are kept 24h, past every stale window.
   'sos:sum:',
+  // lib/af-projections/leagueRosterWeek.ts rail boards, through the same durableTier read(): null past expiry.
+  // Rows are kept 24h; the reader serves a board at most 33 minutes old, so nothing reads an expired row.
+  'rail-board:v1:',
   // lib/core-app/careerProfile.ts readStored(): null past expiry.
   'core-career:profile:v',
   // lib/core-app/portfolioInsightsSummary.ts: reads at most 36 days back; rows live 400 days.

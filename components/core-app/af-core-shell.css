@@ -2355,6 +2355,48 @@ html[data-mode='light'] .af-core {
   }
 }
 
+/*
+ * The visible "this is loading" over the skeleton (app/core/loading.tsx). Fixed to the middle of
+ * the VIEWPORT, not the content column, so on a phone it is where the eye lands — the iOS app
+ * opens straight onto this. Pointer events pass through; it never blocks the page arriving.
+ */
+.af-core .af-sk-status {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  pointer-events: none;
+}
+.af-core .af-sk-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--af-sk-fill);
+  border-top-color: #0b8dcb;
+  animation: af-sk-spin 0.9s linear infinite;
+}
+@keyframes af-sk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.af-core .af-sk-status-text {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text, #eef0fa);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-sk-spinner {
+    animation: none;
+  }
+}
+
 /* ── 44px touch floor for the rail's support button ──────────────────────
  *
  * `.af-nav-support` renders 117x36 on a phone — 8px short of the 44px floor the
@@ -4977,4 +5019,47 @@ button.af-rail-sport:focus-visible {
 }
 @media (max-width: 720px) {
   .af-core .af-topbar-inbox { display: none; }
+}
+
+/* Sub-tabs of the open league tab (LEAGUE_TABS, lib/core-app/leagueDestinations.ts): one row of pill links above the
+   screen, scrolling sideways on a phone rather than wrapping. Same tokens as the native league page's .nl-subtabs.
+   Top level on purpose, not inside any @media. */
+.af-subtabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.af-subtabs::-webkit-scrollbar {
+  display: none;
+}
+.af-subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.af-subtab:hover {
+  background: var(--chip);
+}
+.af-subtab[aria-current='page'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+@media (max-width: 719px) {
+  .af-subtab {
+    min-height: 44px;
+  }
 }

@@ -6,6 +6,7 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
@@ -639,9 +640,13 @@ export function MyLeaguesV4({
         ⚠ THE WITHHELD LIST STAYS PART OF THE SCREEN, NOT A DEV NOTE: it says
         plainly which things are not wired, so a reader can tell "we have nothing
         to show" from "nothing is happening". It is reference, so it folds.
+
+        2026-11-20 — "More detail" (owner: the core site is confusing). This was already the page's one
+        foot fold; it is now the shared <MoreDetail>, so it reads "More detail" like every /core page,
+        with its old summary as the note and its class and test id kept. Contents unchanged. The
+        filters fold and Hidden leagues stay where they are: they are part of using the list.
       */}
-      <details className="af-mlg-foot" data-testid="my-leagues-foot">
-        <summary>{g.footSummary(counts.history)}</summary>
+      <MoreDetail className="af-mlg-foot" testId="my-leagues-foot" note={g.footSummary(counts.history)}>
         <div className="af-mlg-foot-body">
           <p className="af-ml-foot-p">{counts.history > 0 ? g.footHistory : g.footNoHistory}</p>
           <div className="af-ml-foot-actions">
@@ -667,7 +672,7 @@ export function MyLeaguesV4({
             </section>
           ) : null}
         </div>
-      </details>
+      </MoreDetail>
     </div>
   )
 }

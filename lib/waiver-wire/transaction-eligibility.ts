@@ -53,6 +53,8 @@ export type WaiverClaimEligibilityInput = {
    * A first-come add in an offseason the commissioner opened to free agency
    * (lib/waiver-wire/season-phase-policy.ts): a `completed` season does not lock it.
    */
+  /** True only for the immediate-add service, not a submitted waiver claim. */
+  freeAgent?: boolean
   offseasonFreeAgency?: boolean
   /** Told what the gate let through but wants said — an imported roster's IR findings. Never a refusal. */
   onNotice?: (message: string) => void
@@ -153,6 +155,7 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
     throw new Error('This league season is complete; roster moves are locked.')
   }
 
+  if (league.leagueVariant === 'survivor_guillotine' && input.freeAgent) throw new Error('Survivor Guilly acquisitions use blind FAAB waivers; immediate free-agent adds are disabled.')
   await assertCurrentNbaWaiverPlayer(league, addId)
 
   const engineConfig = parseWaiverEngineConfig(settingsRow?.waiverEngineConfig ?? null)

@@ -83,12 +83,16 @@ describe('buildPendingTradeDecisionContext', () => {
 
   it('evaluates each proposal through the one engine, as the asker, on its own surface', async () => {
     await buildPendingTradeDecisionContext('lg1', 'user-1')
-    expect(mocks.evaluate).toHaveBeenCalledWith({
-      leagueId: 'lg1',
-      ref: { kind: 'redraft', proposalId: 'prop-1' },
-      userId: 'user-1',
-      surface: 'chimmy-pending',
-    })
+    expect(mocks.evaluate).toHaveBeenCalledWith(
+      {
+        leagueId: 'lg1',
+        ref: { kind: 'redraft', proposalId: 'prop-1' },
+        userId: 'user-1',
+        surface: 'chimmy-pending',
+      },
+      // One league world per build, shared across the offers (`sharedWorld.ts`).
+      { resolveWorld: expect.any(Function) },
+    )
   })
 
   it('relays the one grade, both letters, the values, this week’s lineup and the receipt', async () => {
@@ -98,6 +102,19 @@ describe('buildPendingTradeDecisionContext', () => {
     expect(out).toContain('League value: you send 4,000, you receive 4,600.')
     expect(out).toContain("week 4 projections under this league's rules: 112.0 before, 115.5 after (+3.5). One week, not the season.")
     expect(out).toContain('Evaluation receipt: rcpt_pending.')
+  })
+
+  it('cites the market evidence behind the grade, verbatim — and says nothing when there is none', async () => {
+    const posture = 'teams at .600 or better paid +8% for players 27 or older over middle-of-the-table teams across 210 completed trades'
+    mocks.evaluate.mockResolvedValue(evaluated({
+      grade: { graded: true, letter: 'B', label: 'Slightly favors you', giveValue: 4000, getValue: 4600, moves: [{ side: 'get', name: 'Incoming Guy', base: 4300, leagueValue: 4600, reasons: ['PPR scoring', posture] }] },
+    }))
+    const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
+    expect(out).toContain('Why values moved, measured from completed trades on AllFantasy')
+    expect(out).toContain(`    • Incoming Guy: ${posture}`)
+    expect(out).not.toContain('PPR scoring')
+    mocks.evaluate.mockResolvedValue(evaluated())
+    expect(await buildPendingTradeDecisionContext('lg1', 'user-1')).not.toContain('Why values moved')
   })
 
   it('tells the chat route the letters the one engine gave, for its answer check', async () => {

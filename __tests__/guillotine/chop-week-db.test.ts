@@ -29,6 +29,8 @@ if (enabled) {
 
 const edges = vi.hoisted(() => ({
   lastKickoff: new Map<number, string>(),
+  /** The week the sport is on, as the season-week service would say it (the manual run asks it). */
+  fantasyWeek: 2,
   dispatched: [] as Array<{ type: string; userIds: string[]; title: string; dedupePrefix?: string }>,
 }))
 
@@ -40,6 +42,11 @@ vi.mock('@/lib/redraft/weekFinalizer', async (orig) => ({
     finalized: true,
     slate: { lastStartTime: edges.lastKickoff.get(week) ?? null },
   })),
+}))
+vi.mock('@/lib/season-week', async (orig) => ({
+  ...(await orig<typeof import('@/lib/season-week')>()),
+  // The sport's calendar is an edge: it reads the game slate. Only the manual run asks it here.
+  resolveSeasonWeekForRedraftSeason: vi.fn(async () => ({ ok: true, phase: 'regular', fantasyWeek: edges.fantasyWeek, sportWeekComplete: false })),
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
   dispatchNotification: vi.fn(async (p: { type: string; userIds: string[]; title: string; dedupePrefix?: string }) => {
@@ -308,6 +315,28 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
     expect(await sync(lg, 2, afterWeek(1))).toMatchObject({ outcome: 'chopped', week: 1, choppedRedraftRosterIds: [lg.byName('Daggers').redraftId] })
     const [chop] = (await state(lg)).eliminations
     expect(chop).toMatchObject({ eliminatedTeamName: 'Daggers', wasTiebreaker: true })
+  })
+
+  describe('the commissioner’s manual run (lib/specialty-automation/handlers/guillotineHandler.ts)', () => {
+    it('🛑 chops a week that is ready, through the same driver the score sync uses', async () => {
+      // It used to call the engine with no period end time, which reads as "before the stat correction
+      // cutoff": every manual run answered "no chop", and no period score was ever written for it.
+      const lg = await league()
+      edges.fantasyWeek = 2
+      const out = await runGuillotineHandler({ leagueId: lg.leagueId, week: 1, season: SEASON, trigger: 'onManualRun' } as never)
+      const after = await state(lg)
+      expect(after.choppedByWeek).toEqual({ Blades: 1 })
+      expect(after.emptied).toEqual(['Blades'])
+      expect(after.eliminations).toHaveLength(1)
+      expect(out.summary).toBe('Guilly: 1 chop(s) in week 1.')
+      expect(out.actions).toHaveLength(1)
+      expect(await prisma.guillotinePeriodScore.count({ where: { leagueId: lg.leagueId, weekOrPeriod: 1 } })).toBe(lg.rosters.length)
+
+      // Pressed again: the week is done, nothing more is chopped, and the next week is still being played.
+      const again = await runGuillotineHandler({ leagueId: lg.leagueId, week: 1, season: SEASON, trigger: 'onManualRun' } as never)
+      expect(again.summary).toContain('Week 2 is still being played')
+      expect((await state(lg)).eliminations).toHaveLength(1)
+    })
   })
 
   describe('an imported league is never chopped here (lib/guillotine/importedLeagueGuard.ts)', () => {

@@ -1,16 +1,19 @@
 import 'server-only'
 
-import type { UserLeague } from '@/app/dashboard/types'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
-import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { runCommissionerHealthDecision } from '../commissioner-health'
 import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
 import { runWaiverClaimDecision } from '../waiver'
 import type { WaiverClaimRecommendation } from '../waiver/decision'
-import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
+import { worldInputFromFacts } from '../waiver/loader'
+import { createWaiverOsLoaders } from '../waiver-os'
 import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
+import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
+import { createCommissionerOsLoaders } from '../commissioner-os'
+// The inactive flag's graded record — the one loader the hub's flag also reads, so the two never disagree.
+import { loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice } from './packet'
@@ -160,12 +163,13 @@ export async function loadCommissionerHealthDecisionSlice(
     const access = await assertLeagueCommissioner(leagueId, userId, 'view')
     if (!access?.ok) return notEntitled()
 
-    // Safe to assert: the line above verified it. The loader filters on this flag.
-    const minimal = [{ id: leagueId, isCommissioner: true } as unknown as UserLeague]
-    // `dynastySignals`: a dynasty league's pick balance and taxi findings ride in `alerts`, so the
-    // decision below — and the line Chimmy reads — carries them. A no-op for every other league.
-    const snapshots = await getCommissionerHubHealthForUser(userId, minimal, { dynastySignals: true })
-    const snapshot = snapshots.find((s) => s?.leagueId === leagueId) ?? null
+    /*
+     * Through Commissioner OS (2026-11-20): the same snapshot the hub builds — `getCommissionerHubHealthForUser`
+     * with dynasty signals, so a dynasty league's pick balance and taxi findings ride in `alerts` — held for five
+     * minutes per (commissioner, league) instead of rebuilt on every question. Access was proved just above, on
+     * this request; a stored snapshot never stands in for that check.
+     */
+    const snapshot = await createCommissionerOsLoaders().loadHealthSnapshot({ userId, leagueId })
 
     if (!snapshot) {
       return {
@@ -211,7 +215,8 @@ export async function loadCommissionerHealthDecisionSlice(
 
     const result = await runCommissionerHealthDecision(
       { snapshot, userId },
-      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot) },
+      // The inactive flag's graded record (the learning loop, 2026-11-20); the rules use it only in a native league.
+      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot, { inactiveFlags: await loadInactiveFlagRecord() }) },
       // No `shadow` — see the header.
     )
 
@@ -256,6 +261,16 @@ export interface WaiverDecisionBridgeArgs extends DecisionBridgeArgs {
   onClaims?: (claims: readonly WaiverClaimRecommendation[], confidencePct: number | null) => void
 }
 
+/*
+ * 🛑 THE WAIVER FACTS GO THROUGH WAIVER OS NOW (2026-11-20 re-score, Kernel ⚠ → ✅). This bridge — every Chimmy waiver
+ * question and the weekly engine run (`weeklyEngineCalls.ts`) — called `loadWaiverWorldFacts` directly, so the
+ * domain's registered feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`. It reads the
+ * user-level resource entry: FAAB, priority and settings for this manager, held five minutes (`waiverResourceSource`
+ * — short because FAAB moves on every processed claim), derived by the same `loadWaiverWorldFacts` on a miss, and a
+ * store problem falls through to that derivation. A null result is still "no roster resolved", never cached.
+ */
+const waiverOs = createWaiverOsLoaders()
+
 export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
   const userId = args.userId ?? null
   const leagueId = args.leagueId ?? null
@@ -276,7 +291,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
   }
 
   try {
-    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    const facts = await waiverOs.loadWorldFacts(userId, leagueId)
     if (!facts) {
       /*
        * ⚠ THE HONEST DEGRADE, AND IT IS THE LIKELY PATH FOR SOME PROVIDERS.
@@ -299,7 +314,11 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       }
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
+    const [pool, calibration] = await Promise.all([
+      loadWaiverPool(leagueId, facts.sport, facts.rosterId),
+      // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
+      loadWaiverCalibrationForLeague(leagueId),
+    ])
     if (pool.availablePlayers.length === 0) {
       /*
        * Distinct from "no roster": the league resolved and the wire is empty after subtraction.
@@ -356,7 +375,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
         poolIncomplete: pool.poolIncomplete,
         pricing: pool.pricing,
       },
-      { decision: buildLiveWaiverDecisionDeps(facts) },
+      { decision: buildLiveWaiverDecisionDeps(facts, calibration.calibration) },
     )
 
     if (args.onClaims) {

@@ -8,7 +8,7 @@ import { getToken } from "next-auth/jwt"
 
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
-import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
+import { hasFullBlockStates, isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { CARD_PAID_LOCK_MESSAGE, CARD_PAID_LOCK_REDIRECT } from "@/lib/geo/cardLockCopy"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
@@ -27,6 +27,7 @@ import {
   isIosAppPurchaseApi,
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
+import { APP_START_PATH, shouldSendIosLaunchToAppStart } from "@/lib/platform/iosAppLaunch"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
 import {
   CSP_ENFORCED_POLICY,
@@ -85,7 +86,12 @@ async function iosAppSignedOutLanding(request: NextRequest, pathname: string): P
   const token = await getToken({ req: request, secret })
   const id = typeof token?.id === "string" ? token.id.trim() : ""
   // A session that was signed out (but whose cookie the device kept) counts as signed out.
-  if (id && !(await isSessionRevoked(token))) return null
+  if (id && !(await isSessionRevoked(token))) {
+    // Signed in: the app's launch load of /core paints a loading screen first, then builds /core
+    // behind it (lib/platform/iosAppLaunch.ts — the 2026-11-20 "empty blue screen" report).
+    if (!shouldSendIosLaunchToAppStart({ pathname, search: request.nextUrl.search, headers: request.headers })) return null
+    return NextResponse.redirect(new URL(APP_START_PATH, request.url), 307)
+  }
   const landing = new URL("/", request.url)
   landing.search = ""
   return NextResponse.redirect(landing, 307)
@@ -615,7 +621,11 @@ async function accountGeoLockOf(request: NextRequest): Promise<AccountLock> {
   const token = await getToken({ req: request, secret: authSecret })
   const lock = token?.geoLock
   if (lock !== "full_block" && lock !== "card_paid_block") return null
-  return isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null) ? null : lock
+  if (isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null)) return null
+  // A token minted before Washington moved to paid-block (Nov 2026) may still carry
+  // `full_block`. While no state is full-block it means the card lock — and must be mapped
+  // HERE, because a fully refused request never reaches the jwt callback that would refresh it.
+  return lock === "full_block" && !hasFullBlockStates() ? "card_paid_block" : lock
 }
 
 const ACCOUNT_LOCKED_MESSAGE =

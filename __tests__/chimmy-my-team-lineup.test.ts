@@ -88,8 +88,20 @@ describe('whole lineup: Chimmy says what My Team says', () => {
     expect(out).toContain('do not build a lineup of your own')
   })
 
-  it('steps aside by design outside the NFL, and as a failure when My Team cannot load', async () => {
-    expect(await run(myTeam([slot('QB', qb)], [], { league: { id: 'L', name: 'x', platform: 'sleeper', sport: 'NBA', format: null, sourceLink: null } } as never))).toEqual({ fallback: 'not_nfl' })
+  it('another sport is answered from My Team whenever My Team has a best lineup — the screen and chat agree', async () => {
+    // 2026-11-20: this was NFL-only, so an NCAAF/NBA points league got one lineup on the screen and another in chat.
+    const ncaaf = { league: { id: 'L', name: 'Campus League', platform: 'fantrax', sport: 'NCAAF', format: 'redraft', sourceLink: null } }
+    const data = myTeam([slot('QB', qb), slot('WR', wr1)], [wr2], ncaaf as never)
+    expect(data.lineupOptimizer).not.toBeNull()
+    const out = (await run(data)) as string
+    expect(typeof out).toBe('string')
+    expect(out).toContain('THE SAME ANSWER THE MY TEAM SCREEN SHOWS')
+    expect(out).toContain('start Benchy Burner')
+  })
+
+  it('steps aside by design when another sport has no My Team best lineup (a category league), and as a failure when My Team cannot load', async () => {
+    const nba = { league: { id: 'L', name: 'x', platform: 'sleeper', sport: 'NBA', format: null, sourceLink: null }, lineupOptimizer: null }
+    expect(await run(myTeam([slot('QB', qb)], [], nba as never))).toEqual({ fallback: 'not_nfl' })
     expect(await run(null)).toEqual({ fallback: 'no_my_team' })
     expect(await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u' }, { load: async () => { throw new Error('down') } })).toEqual({ fallback: 'no_my_team' })
   })
@@ -112,7 +124,45 @@ describe('start A or B: derived from My Team’s best lineup, so it cannot contr
     expect(await ss(data, ['Wade Hands', 'Ronnie Backup'])).toContain('NEITHER STARTS')
   })
 
+  it('another sport with a My Team best lineup is answered from it too', async () => {
+    const nhl = { league: { id: 'L', name: 'Ice League', platform: 'sleeper', sport: 'NHL', format: 'redraft', sourceLink: null } }
+    const out = (await ss(myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [wr2, rbBench], nhl as never), ['Wade Hands', 'Benchy Burner'])) as string
+    expect(typeof out).toBe('string')
+    expect(out).toContain("FROM MY TEAM'S BEST LINEUP")
+  })
+
   it('a name not on this roster goes to the scenario tool, which names the problem', async () => {
     expect(await ss(data, ['Somebody Else', 'Benchy Burner'])).toEqual({ fallback: 'not_nfl' })
+  })
+})
+
+describe('the answer is decided at the moment it is given, not when the shared load ran (2026-11-20)', () => {
+  /*
+   * The load is shared for up to 60 s and its verdict was computed with the load's clock, while the "locked" flags use
+   * the answer's clock. In the minute a game kicks off the block could say "start X" and label X locked.
+   */
+  const kickoff = new Date(NOW.getTime() + 30_000)
+  const burner = player('3', 'Benchy Burner', 'WR', 15, { kickoff })
+
+  it('🛑 a bench player whose game started after the load is not recommended', async () => {
+    const data = myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [burner, rbBench])
+    // Control: at load time he was the swap.
+    expect(data.lineupOptimizer).toMatchObject({ state: 'improve', changes: [{ inName: 'Benchy Burner' }] })
+    const answeredAt = new Date(NOW.getTime() + 60_000)
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: answeredAt }, { load: async () => data })) as string
+    expect(out).not.toContain('start Benchy Burner')
+    expect(out).toContain('Benchy Burner (WR) 15 pts [game started — locked]')
+  })
+
+  it('answered inside the same moment as the load, the verdict is unchanged', async () => {
+    const data = myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [burner, rbBench])
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => data })) as string
+    expect(out).toContain('- WR: start Benchy Burner (15 pts) instead of Wade Hands (9 pts).')
+  })
+
+  it('no answer at load time stays no answer', async () => {
+    const data = myTeam([slot('QB', qb), slot('WR', wr1), slot('RB', rb)], [burner, rbBench], { lineupOptimizer: null } as never)
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => data }))
+    expect(out).not.toEqual(expect.stringContaining('Verdict:'))
   })
 })

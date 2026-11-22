@@ -45,6 +45,11 @@ vi.mock('@/lib/waivers/recentFormProjection', () => ({
   }),
 }))
 
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async (at: { week: number }) => at.week === 5
+    ? new Map((h.ready ? h.nextLines : []).map((r) => [r.playerId, { ...r, componentStats: r.stats, position: 'TE', team: 'KC', name: r.playerId }]))
+    : (await import('@/lib/core-app/playerProjections')).lookupProjections(['mine', 'fa1']),
+}))
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
 
 const prisma = (scoring: Record<string, number> = { rec: 1 }) =>
@@ -89,7 +94,7 @@ describe('loadWaiverBoard on next week’s board', () => {
     expect(b.week).toBe(5)
     expect(b.currentLineupPoints).toBe(9)
     expect(b.candidates).toEqual([])
-    expect(b.notes.join(' ')).toContain("Sleeper's week 5 projections")
+    expect(b.notes.join(' ')).toContain("AllFantasy’s week 5 projections")
   })
 
   it('never prices a player with no next-week line off recent form — that player is usually on bye', async () => {
@@ -105,8 +110,8 @@ describe('loadWaiverBoard on next week’s board', () => {
     expect(b.candidates.find((c) => c.sleeperId === 'fa1')?.gain).toBe(7)
   })
 
-  it('keeps an IDP league on the week being played', async () => {
+  it('prices an IDP league from AF lines for the claim week', async () => {
     const b = await loadWaiverBoard({ prisma: prisma({ rec: 1, idp_tkl: 1 }), leagueId: 'L1', userId: 'u', claimWeek: { season: '2026', week: 5 } })
-    expect(b.week).toBe(4)
+    expect(b.week).toBe(5)
   })
 })

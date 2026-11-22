@@ -182,7 +182,9 @@ export async function finalizeRosterAssignments(
     // finalization must not clobber user-configured lineups.
     const builtBy = typeof data.lineup_draft_session_id === 'string' ? data.lineup_draft_session_id : null
     const lineupFromAnotherDraft = builtBy ? builtBy !== session.id : hasEarlierDraft
-    if (rosterTemplate && (!hasExistingLineup(data) || lineupFromAnotherDraft)) {
+    // An empty lineup from this draft may be intentional (for example, after a chop).
+    // Only an uninitialized lineup or a different draft may materialize the board again.
+    if (rosterTemplate && ((!hasExistingLineup(data) && builtBy !== session.id) || lineupFromAnotherDraft)) {
       const sections = buildLineupSectionsFromPicks(
         proPlayers.map((p) => ({
           playerId: p.playerId ?? null,

@@ -1,14 +1,14 @@
 /**
- * Write the completed trades in a Fantrax "Transaction History → Trade" export into an imported Fantrax NFL league's
+ * Write the completed trades in a Fantrax "Transaction History → Trade" export into an imported Fantrax league's
  * `LeagueTrade` rows, where the Trade Center lists and grades them.
  *
  * Reads Postgres only (the league, its teams, the player registry) and writes through `persistTradesForSeason`, the
  * same upsert every provider's trades use — keyed on the trade's content-derived id, so uploading the same export
  * again rewrites the same rows and never duplicates one.
  *
- * NFL only: the player rule is the NFL Fantrax linker's. Other sports are refused rather than matched by a rule
- * that was not written for them.
+ * Player identities and trade seasons are resolved within the league's sport.
  */
+import { isSupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
 import { parseFantraxTradeHistoryCsv, type FantraxCsvSkip } from './fantraxTradeHistoryCsv'
@@ -51,9 +51,8 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
   if (String(league.platform ?? '').toLowerCase() !== 'fantrax' || !league.platformLeagueId) {
     return { ok: false, status: 409, error: 'This is not an imported Fantrax league.' }
   }
-  if (String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') {
-    return { ok: false, status: 409, error: 'Trade history upload is available for Fantrax NFL leagues only.' }
-  }
+  const sport = league.sport
+  if (!isSupportedSport(sport)) return { ok: false, status: 409, error: 'Unsupported league sport.' }
 
   const parsed = parseFantraxTradeHistoryCsv(args.csvText)
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error }
@@ -61,12 +60,13 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
   const [teams, identities] = await Promise.all([
     prisma.leagueTeam.findMany({ where: { leagueId: args.leagueId }, select: { externalId: true, teamName: true, platformUserId: true } }),
     prisma.playerIdentityMap.findMany({
-      where: { sport: 'NFL', fantraxId: { not: null } },
+      where: { sport, fantraxId: { not: null } },
       select: { fantraxId: true, canonicalName: true, currentTeam: true, position: true },
     }),
   ])
   const plan = planFantraxTradeHistoryImport({
     trades: parsed.trades,
+    sport,
     teams,
     identities: identities.flatMap((row) => (row.fantraxId ? [{ ...row, fantraxId: row.fantraxId }] : [])),
   })
@@ -81,7 +81,7 @@ export async function importFantraxTradeHistory(args: { leagueId: string; csvTex
       trades.map((t) => t.fact),
       plan.rosterIdToOwner,
       'fantrax',
-      'nfl',
+      sport.toLowerCase(),
     )
   }
 

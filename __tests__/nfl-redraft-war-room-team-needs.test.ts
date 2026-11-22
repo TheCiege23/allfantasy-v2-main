@@ -158,10 +158,11 @@ describe('DraftRoomPageClient still flows byeWeek into draftedPicks', () => {
     )
   })
 
-  it('still mounts the WarRoomPopup with DraftTeamPanel as its content', () => {
-    expect(src).toMatch(
-      /<WarRoomPopup[\s\S]+?<DraftTeamPanel \{\.\.\.draftTeamPanelProps\}/,
-    )
+  // Phase 5 (2026-11-19): the floating War Room popup is gone; DraftTeamPanel stays for the
+  // phone roster of devy / C2C / IDP leagues.
+  it('no longer mounts the WarRoomPopup, and still renders DraftTeamPanel with its props', () => {
+    expect(src).not.toMatch(/<WarRoomPopup\b/)
+    expect(src).toMatch(/<DraftTeamPanel \{\.\.\.draftTeamPanelProps\}/)
   })
 })
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
 /**
@@ -193,5 +194,18 @@ describe('keys that look like aliases and must not be', () => {
   it('does not report another vendor’s point total as an unscored stat', () => {
     const r = computeLeagueProjectedPoints({ rec: 5, DK_fantasy_points: 20, DK_fantasy_points_per_game: 2 }, { rec: 1 })
     expect(r!.coverage.unusedProjectedStats).toEqual([])
+  })
+})
+
+describe('CFBD individual defender projections', () => {
+  const rates = { 'defensive.SACKS': 0.5, 'defensive.TFL': 1.2, 'defensive.TD': 0.1 }
+  it('honors either league vocabulary and keeps team defense and offensive players separate', () => {
+    const imported = { sack: 1, idp_sack: 3, idp_tkl_loss: 2, idp_def_td: 6 }
+    const native = { idp_sack: 3, idp_tfl: 2, idp_td: 6 }
+    expect(scoreNcaafProjection(rates, imported, 'DL')?.points).toBe(4.5)
+    expect(scoreNcaafProjection(rates, native, 'DL')?.points).toBe(4.5)
+    expect(scoreNcaafProjection(rates, imported, 'QB')).toBeNull()
+    expect(scoreNcaafProjection(rates, { sack: 1 }, 'DL')).toBeNull()
+    expect(scoreNcaafProjection({ 'defensive.SACKS': 0 }, native, 'DB')?.points).toBe(0)
   })
 })

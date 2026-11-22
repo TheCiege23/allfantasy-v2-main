@@ -47,6 +47,8 @@ describe('leagueDraftHeadline', () => {
     expect(importedDraftHeadline({ status: 'complete', season: 2025 }, 168)).toEqual({ kind: 'done', picks: 168, season: 2025 })
     expect(importedDraftHeadline({ status: 'pre_draft', season: 2026 }, 0)).toEqual({ kind: 'before' })
     expect(importedDraftHeadline({ status: 'post_draft_v2', season: 2026 }, 0)).toEqual({ kind: 'other', status: 'post_draft_v2' })
+    // No status was stored with the picks: report what is on file, not the word "unknown".
+    expect(importedDraftHeadline({ status: 'unknown', season: 2026 }, 1224)).toEqual({ kind: 'recorded', picks: 1224, season: 2026 })
   })
 })
 

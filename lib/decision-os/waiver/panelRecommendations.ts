@@ -1,4 +1,5 @@
 import type { WaiverClaimRecommendation } from './decision'
+import { calibrateWaiverScore, waiverBandFor, type WaiverCalibration } from './calibration'
 
 /**
  * The shape the AI waiver panel (components/waivers/AIWaiverRecommendationsPanel.tsx) renders — the
@@ -31,9 +32,13 @@ const RISK_BY_LABEL: Record<WaiverClaimRecommendation['recommendation'], WaiverP
   Monitor: 'high',
 }
 
-/** The same bands `decideWaiverClaim` uses for its own confidence sentence (≥80 high, ≥50 medium). */
-function confidenceBand(score: number): WaiverPanelRecommendation['confidence'] {
-  return score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low'
+/**
+ * The same bands `decideWaiverClaim` uses for its own confidence sentence (≥80 high, ≥50 medium), after the
+ * engine's graded record has corrected the score (±10 at most; `calibration.ts`). The record is by band, so
+ * every row is corrected by its own band's — and the ORDER is untouched: rows stay in the engine's priority.
+ */
+function confidenceBand(score: number, calibration: WaiverCalibration | null | undefined): WaiverPanelRecommendation['confidence'] {
+  return waiverBandFor(calibrateWaiverScore(score, calibration)?.score ?? score)
 }
 
 /**
@@ -44,7 +49,7 @@ function confidenceBand(score: number): WaiverPanelRecommendation['confidence'] 
  */
 export function claimsToPanelRecommendations(
   claims: readonly WaiverClaimRecommendation[],
-  opts: { leagueId: string; includeFaab: boolean; limit: number },
+  opts: { leagueId: string; includeFaab: boolean; limit: number; calibration?: WaiverCalibration | null },
 ): WaiverPanelRecommendation[] {
   return [...claims]
     .sort((a, b) => a.priorityRank - b.priorityRank)
@@ -56,7 +61,7 @@ export function claimsToPanelRecommendations(
       dropPlayerName: c.dropPlayerName,
       priority: i + 1,
       suggestedFaabBid: opts.includeFaab ? c.faabBid : null,
-      confidence: confidenceBand(c.compositeScore),
+      confidence: confidenceBand(c.compositeScore, opts.calibration),
       risk: RISK_BY_LABEL[c.recommendation] ?? 'medium',
       reasoning: c.reason,
       deeperAnalysisPath: `/chimmy/chat?topic=waiver-analysis&leagueId=${encodeURIComponent(opts.leagueId)}`,

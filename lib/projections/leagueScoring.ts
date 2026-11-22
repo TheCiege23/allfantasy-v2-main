@@ -598,7 +598,127 @@ export function extractScoringSettings(
    * exists always wins.
    */
   if (hasScoringRules(stored)) return stored
-  return fantraxStoredRules(s) ?? stored
+  return fantraxStoredRules(s) ?? hostedNflPanelRules(s) ?? stored
+}
+
+/**
+ * The scoring panel's key for a stat, in the vocabulary this file scores (`rec`, `pass_yd`, ...).
+ * Only stats a projection can carry; kicking and team-defense buckets have no projection to price.
+ * The IDP keys need no entry: the projection already carries them under the panel's own names
+ * (`COMPONENT_RULE_KEYS` in lib/af-projections/idpScoring.ts).
+ */
+const HOSTED_NFL_PANEL_TO_RULE: Readonly<Record<string, string>> = {
+  passing_yards: 'pass_yd',
+  passing_td: 'pass_td',
+  interception_thrown: 'pass_int',
+  passing_2pt: 'pass_2pt',
+  passing_attempt: 'pass_att',
+  completion: 'pass_cmp',
+  rushing_yards: 'rush_yd',
+  rushing_td: 'rush_td',
+  rushing_2pt: 'rush_2pt',
+  rush_attempt: 'rush_att',
+  reception: 'rec',
+  receiving_yards: 'rec_yd',
+  receiving_td: 'rec_td',
+  receiving_2pt: 'rec_2pt',
+  fumble: 'fum',
+  fumble_lost: 'fum_lost',
+  // Kicking. Priced from a kicker's own makes by distance (lib/af-projections/nflSpecialistRates.ts).
+  fg_0_19: 'fgm_0_19',
+  fg_20_29: 'fgm_20_29',
+  fg_30_39: 'fgm_30_39',
+  fg_40_49: 'fgm_40_49',
+  fg_50_plus: 'fgm_50p',
+  pat_made: 'xpm',
+  pat_missed: 'xpmiss',
+}
+
+/**
+ * The scoring panel's team-defense keys, in the vocabulary a team defense's rate is carried in.
+ *
+ * 🛑 KEPT OUT OF THE MAP ABOVE ON PURPOSE. `sack`, `int` and `fum_rec` are also what an individual
+ * defender's stats alias to (`STAT_ALIASES`), so putting a team-defense weight under them in the
+ * league's general rules would pay a linebacker the team defense's points on top of his own. These
+ * rules are applied to a team-defense line only (`scoreTeamDefenseRate`).
+ */
+const HOSTED_NFL_PANEL_TO_DEFENSE_RULE: Readonly<Record<string, string>> = {
+  dst_sack: 'sack',
+  dst_interception: 'int',
+  dst_fumble_recovery: 'fum_rec',
+  dst_safety: 'safe',
+  dst_blocked_kick: 'blk_kick',
+  dst_kick_return_td: 'def_st_td',
+  dst_pa_0: 'pts_allow_0',
+  dst_pa_1_6: 'pts_allow_1_6',
+  dst_pa_7_13: 'pts_allow_7_13',
+  dst_pa_14_20: 'pts_allow_14_20',
+  dst_pa_21_27: 'pts_allow_21_27',
+  dst_pa_28_34: 'pts_allow_28_34',
+  dst_pa_35_plus: 'pts_allow_35p',
+}
+
+/**
+ * A team defense's projected points from its per-game rate, in this league's scoring, or null when
+ * the league's rules cannot price it.
+ *
+ * A league AllFantasy hosts is scored from the scoring panel's store, so that store decides when it
+ * holds team-defense rules; otherwise the league's stored rulebook is used as it is (an imported
+ * league's is already in this vocabulary).
+ */
+export function scoreTeamDefenseRate(perGame: Record<string, number>, leagueSettings: unknown): number | null {
+  if (!leagueSettings || typeof leagueSettings !== 'object') return null
+  const s = leagueSettings as Record<string, unknown>
+  const config = s.nfl_scoring_config
+  const panel = config && typeof config === 'object' && !Array.isArray(config) ? (config as Record<string, unknown>).rules : null
+  let rules: Record<string, unknown> | null = null
+  if (panel && typeof panel === 'object' && !Array.isArray(panel)) {
+    const out: Record<string, number> = {}
+    for (const [key, rule] of Object.entries(HOSTED_NFL_PANEL_TO_DEFENSE_RULE)) {
+      const weight = readNumber((panel as Record<string, unknown>)[key])
+      if (weight != null) out[rule] = weight
+    }
+    if (hasScoringRules(out)) rules = out
+  }
+  rules ??= storedScoringSettings(s)
+  // The raw points allowed is not a scoring stat here: the buckets carry it, as how often each happens.
+  const { pts_allow: _raw, ...line } = perGame
+  const scored = computeLeagueProjectedPoints(line, rules)
+  return scored && Number.isFinite(scored.points) ? scored.points : null
+}
+
+/**
+ * A league AllFantasy hosts keeps its NFL rules in `settings.nfl_scoring_config.rules`, the store
+ * the commissioner's scoring panel saves and live scoring reads (lib/redraft/leagueScoringRules.ts).
+ *
+ * 🛑 SOME HOSTED LEAGUES HAVE THEIR RULES ONLY THERE (production, 2026-11-22: five NFL leagues, a
+ * zombie league among them, with `scoringSettings: { rules: [], preset: 'fb_half_ppr', ... }`).
+ * This file read `scoringSettings` alone, found no rule, and every projection in the league came
+ * back empty: a dash beside every player on Team, Matchup and Players, while the same league
+ * scored its games correctly. Read only when nothing else gives a rule, so a stored rulebook wins.
+ */
+function hostedNflPanelRules(s: Record<string, unknown>): Record<string, unknown> | null {
+  const config = s.nfl_scoring_config
+  const rules = config && typeof config === 'object' && !Array.isArray(config) ? (config as Record<string, unknown>).rules : null
+  return projectionRulesFromNflPanelRules(rules)
+}
+
+/**
+ * The scoring panel's rules (`passing_yards`, `reception`, ...) in the vocabulary projections are
+ * scored in (`pass_yd`, `rec`, ...), or null when they carry no rule a projection can use. Also what
+ * league creation writes into `scoringSettings.rules`, so a new league stores a rulebook where every
+ * reader looks (lib/league-creation/LeagueBootstrapOrchestrator.ts).
+ */
+export function projectionRulesFromNflPanelRules(rules: unknown): Record<string, number> | null {
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null
+  const out: Record<string, number> = {}
+  for (const [key, raw] of Object.entries(rules as Record<string, unknown>)) {
+    const weight = readNumber(raw)
+    if (weight == null) continue
+    const rule = HOSTED_NFL_PANEL_TO_RULE[key] ?? (key.startsWith('idp_') ? key : null)
+    if (rule) out[rule] = weight
+  }
+  return hasScoringRules(out) ? out : null
 }
 
 /**

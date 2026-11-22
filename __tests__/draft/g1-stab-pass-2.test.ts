@@ -87,8 +87,9 @@ describe('G.1 #1 — duplicate Sort row removed from PlayerPanel', () => {
     expect(src).toMatch(/Use Chimmy ADP/)
   })
 
-  it('keeps "My roster" / "Pool" view toggle', () => {
-    expect(src).toMatch(/showRosterView \? 'Pool' : 'My roster'/)
+  it('has no "My roster" button: the My team tab is the one roster view (2026-11-19)', () => {
+    expect(src).not.toMatch(/showRosterView \? 'Pool' : 'My roster'/)
+    expect(src).not.toMatch(/data-testid="draft-toggle-roster-view"/)
   })
 
   it('keeps "Chimmy ADP data not ready" warning', () => {

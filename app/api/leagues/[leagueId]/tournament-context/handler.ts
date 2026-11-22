@@ -8,6 +8,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getTournamentConfigForLeague } from '@/lib/tournament-mode/TournamentConfigService'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { prisma } from '@/lib/prisma'
+import { shellTournamentHeroContext } from '@/lib/tournament/shellHeroContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +28,18 @@ export async function GET(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const config = await getTournamentConfigForLeague(leagueId)
-  if (!config) return NextResponse.json({ tournament: null })
+  if (!config) {
+    // A league in the newer tournament shell system (lib/tournament/shellHeroContext.ts).
+    const shellLeague = await prisma.tournamentLeague.findUnique({
+      where: { leagueId },
+      select: {
+        tournament: { select: { id: true, name: true } },
+        conference: { select: { name: true, theme: true, bannerUrl: true, colorHex: true } },
+        round: { select: { roundNumber: true, roundLabel: true, roundType: true } },
+      },
+    }).catch(() => null)
+    return NextResponse.json({ tournament: shellTournamentHeroContext(shellLeague) })
+  }
 
   const settings = config.settings as Record<string, unknown>
   const hubSettings = config.hubSettings as Record<string, unknown> | undefined

@@ -28,6 +28,41 @@ set -euo pipefail
 
 BASE_URL="https://www.fantrax.com/fxea/general"
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
+if [[ "${1:-}" == "--player-ids" ]]; then
+  # A college player directory (`getPlayerIds?sport=NCAAB|CFB`): public player data only.
+  # Writes ONE row per team code, so the fixture records the whole school-code vocabulary the
+  # identity matchers must resolve (`ncaabFantraxIdentityPlan.ts`, `ncaafFantraxIdentityPlan.ts`),
+  # plus the per-position counts. Set AF_PROBE_RAW_OUT=<path> to also keep the full response
+  # locally for analysis — never commit that file.
+  SPORT="${2:?usage: probe.sh --player-ids <NCAAB|CFB>}"
+  if ! [[ "$SPORT" =~ ^(NCAAB|CFB)$ ]]; then echo "ERROR: --player-ids takes NCAAB or CFB, got '${SPORT}'." >&2; exit 1; fi
+  body="$(mktemp)"
+  trap 'rm -f "$body"' EXIT
+  curl --fail --silent --show-error --max-time 120 \
+    --output "$body" -H 'Accept: application/json' "$BASE_URL/getPlayerIds?sport=$SPORT"
+  if [[ -n "${AF_PROBE_RAW_OUT:-}" ]]; then cp "$body" "$AF_PROBE_RAW_OUT"; fi
+  out="$FIXTURE_DIR/$(echo "$SPORT" | tr 'A-Z' 'a-z')-player-ids.json"
+  node - "$body" "$out" "$SPORT" <<'NODE'
+const fs = require('node:fs')
+const [, , input, output, sport] = process.argv
+const response = JSON.parse(fs.readFileSync(input, 'utf8'))
+if (!response || Array.isArray(response) || response.error) throw new Error(`Expected a public ${sport} player directory`)
+const byTeam = {}, positions = {}
+let rows = 0
+for (const [id, row] of Object.entries(response)) {
+  if (row?.fantraxId !== id || typeof row.name !== 'string') continue
+  rows++
+  const team = typeof row.team === 'string' ? row.team : '(none)'
+  positions[row.position ?? '(none)'] = (positions[row.position ?? '(none)'] ?? 0) + 1
+  if (!byTeam[team]) byTeam[team] = { fantraxId: id, name: row.name, team: row.team ?? null, position: row.position ?? null }
+}
+if (!rows) throw new Error(`${sport} directory does not have the expected player fields`)
+const sorted = Object.fromEntries(Object.entries(byTeam).sort(([a], [b]) => a.localeCompare(b)))
+fs.writeFileSync(output, JSON.stringify({ sport, rows, teamCount: Object.keys(sorted).length, positions, sampleByTeam: sorted }, null, 2) + '\n')
+console.log(JSON.stringify({ sport, rows, teams: Object.keys(sorted).length, positions }))
+NODE
+  exit 0
+fi
 if [[ "${1:-}" == "--epl-player-ids" ]]; then
   # This public directory contains player data only. Retain one sample per
   # position and team so the fixture documents the ID and club vocabularies.

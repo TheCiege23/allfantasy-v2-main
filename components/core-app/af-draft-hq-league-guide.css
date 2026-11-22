@@ -33,7 +33,8 @@
   color: var(--muted);
 }
 
-/* A fold: the live board before it starts, the full board after, the prep tools, last season's board. */
+/* A fold: the live board before it starts, the full board after. (The prep tools and last season's board
+   moved into the shared "More detail" fold, MoreDetail.tsx, on 2026-11-20.) */
 .af-core .af-dhl-fold {
   border: 1px solid var(--line);
   border-radius: 14px;

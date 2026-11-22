@@ -8,7 +8,7 @@ import {
   selectIngestableIdentities,
 } from '@/lib/league-import/providerPlayerIdentities'
 import type { EspnImportPayload, EspnImportTeam } from '@/lib/league-import/adapters/espn/types'
-import { persistProviderTransactionFacts } from '@/lib/league-import/persistProviderTransactionFacts'
+import { persistProviderTransactionFacts, type ProviderTransactionFactInput } from '@/lib/league-import/persistProviderTransactionFacts'
 import { persistSeasonStandingFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
@@ -189,6 +189,33 @@ function buildEspnTransactionEntries(transaction: EspnImportPayload['transaction
   return entries
 }
 
+/**
+ * The season's transactions as idempotent provider facts (`persistProviderTransactionFacts`) — the one row builder,
+ * shared by the historical backfill and the daily current-season waiver refresh (`providerWaiverRefresh.ts`), so a
+ * refreshed claim is the same row, under the same deterministic id, as the backfill's.
+ */
+export function espnTransactionFactRows(leagueId: string, payload: EspnImportPayload): ProviderTransactionFactInput[] {
+  const season = getSeasonFromPayload(payload)
+  const sport = payload.league.sport
+  return payload.transactions.flatMap((transaction) =>
+    buildEspnTransactionEntries(transaction).map((entry, entryIndex) => ({
+      provider: 'espn',
+      upstreamTransactionId: transaction.transactionId,
+      entryIndex,
+      leagueId,
+      sport,
+      type: entry.type,
+      playerId: entry.playerId ?? null,
+      managerId: entry.rosterId ?? null,
+      rosterId: entry.rosterId ?? null,
+      payload: entry.payload,
+      season,
+      weekOrPeriod: null,
+      occurredAt: entry.createdAt,
+    })),
+  )
+}
+
 async function persistEspnSeasonWarehouseFacts(args: {
   leagueId: string
   payload: EspnImportPayload
@@ -249,23 +276,8 @@ async function persistEspnSeasonWarehouseFacts(args: {
     )
   )
 
-  const transactionRows = args.payload.transactions.flatMap((transaction) =>
-    buildEspnTransactionEntries(transaction).map((entry, entryIndex) => ({
-      provider: 'espn',
-      upstreamTransactionId: transaction.transactionId,
-      entryIndex,
-      leagueId: args.leagueId,
-      sport: args.payload.league.sport,
-      type: entry.type,
-      playerId: entry.playerId ?? null,
-      managerId: entry.rosterId ?? null,
-      rosterId: entry.rosterId ?? null,
-      payload: entry.payload,
-      season,
-      weekOrPeriod: null,
-      occurredAt: entry.createdAt,
-    }))
-  )
+  const transactionRows = espnTransactionFactRows(args.leagueId, args.payload)
+
 
   const draftCreates = args.payload.draftPicks.map((pick) =>
     prisma.draftFact.create({
