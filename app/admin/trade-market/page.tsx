@@ -122,19 +122,16 @@ function SectionView({ section: s }: { section: ReportSection }) {
             {b.warnings.map((w) => (
               <p key={w} className="mt-1 rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-100">{w}</p>
             ))}
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="text-xs uppercase text-white/50">
-                  <tr>
-                    <th className="py-1 pr-3 font-semibold">What</th>
-                    <th className="py-1 pr-3 font-semibold">Move</th>
-                    <th className="py-1 pr-3 font-semibold">Evidence</th>
-                    <th className="py-1 pr-3 font-semibold">Status</th>
-                    <th className="py-1 font-semibold">What a grade says</th>
-                  </tr>
-                </thead>
-                <tbody>{b.rows.map((r) => <RowView key={r.label} row={r} />)}</tbody>
-              </table>
+            {/* Stacked on a phone, columns from sm up — a wide table hid "what a grade says" off-screen (seen 2026-11-22). */}
+            <div className="mt-2 text-sm">
+              <div className={`hidden text-xs uppercase text-white/50 sm:grid ${ROW_GRID}`}>
+                <span className="py-1 font-semibold">What</span>
+                <span className="py-1 font-semibold">Move</span>
+                <span className="py-1 font-semibold">Evidence</span>
+                <span className="py-1 font-semibold">Status</span>
+                <span className="py-1 font-semibold">What a grade says</span>
+              </div>
+              {b.rows.map((r) => <RowView key={r.label} row={r} />)}
             </div>
           </div>
         ))
@@ -143,24 +140,29 @@ function SectionView({ section: s }: { section: ReportSection }) {
   )
 }
 
+const ROW_GRID = "sm:grid-cols-[1.3fr_0.5fr_0.8fr_1.3fr_1.7fr] sm:gap-3"
+
 function RowView({ row: r }: { row: ReportRow }) {
   const move = r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`
   return (
-    <tr className="border-t border-white/5 align-top" data-published={r.published ? "yes" : "no"}>
-      <td className="py-1.5 pr-3">
-        {r.label}
+    <div className={`grid gap-1 border-t border-white/5 py-2 ${ROW_GRID}`} data-published={r.published ? "yes" : "no"}>
+      <div>
+        <span className="font-medium">{r.label}</span>
+        <span className="ml-2 tabular-nums sm:hidden">{move}</span>
         <div className="text-xs text-white/45">{r.detail}</div>
-      </td>
-      <td className="py-1.5 pr-3 tabular-nums">{move}</td>
-      <td className="py-1.5 pr-3 text-xs text-white/70">
-        {r.trades.toLocaleString("en-US")} trades
-        <div className="text-white/45">effective {r.effectiveSample}</div>
-      </td>
-      <td className="py-1.5 pr-3 text-xs">
+      </div>
+      <div className="hidden tabular-nums sm:block">{move}</div>
+      <div className="text-xs text-white/70">
+        {r.trades.toLocaleString("en-US")} trades <span className="text-white/45">· effective {r.effectiveSample}</span>
+      </div>
+      <div className="text-xs">
         {r.published ? <span className="text-emerald-200">Published</span> : <span className="text-white/55">Not yet</span>}
-        <div className="text-white/45">{r.note}</div>
-      </td>
-      <td className="py-1.5 text-xs text-white/75">{r.gradeSays ?? <span className="text-white/40">Nothing — the grade uses its usual value.</span>}</td>
-    </tr>
+        <span className="text-white/45"> · {r.note}</span>
+      </div>
+      <div className="text-xs text-white/75">
+        <span className="text-white/45 sm:hidden">A grade says: </span>
+        {r.gradeSays ?? <span className="text-white/40">Nothing — the grade uses its usual value.</span>}
+      </div>
+    </div>
   )
 }

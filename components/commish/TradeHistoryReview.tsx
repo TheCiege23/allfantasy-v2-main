@@ -96,15 +96,19 @@ function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagu
                 {p.names[0]} and {p.names[1]}: {p.count} trades, {expectedLabel(p.expected)} expected from the league&rsquo;s volume
                 {p.outside > 0 ? ` · ${p.outside} outside the fair range` : ''}.
                 {p.elsewhere ? (
-                  <span data-testid="trade-audit-pair-elsewhere">
-                    {' '}
-                    Middle value gap between them: {p.gapTogether}%.{' '}
+                  /* One fact per line: as a run-on sentence the comparison was unreadable on a phone (seen 2026-11-22). */
+                  <span data-testid="trade-audit-pair-elsewhere" style={{ display: 'block', marginTop: 4 }}>
+                    <span style={{ display: 'block' }}>Middle value gap between them: {p.gapTogether}%.</span>
                     {p.names.map((name, i) => {
                       const e = p.elsewhere[i]!
-                      return e.gap == null
-                        ? `${name} has ${e.trades} ${e.trades === 1 ? 'trade' : 'trades'} with other teams, too few to compare.`
-                        : `${name}'s ${e.trades} trades with other teams: ${e.gap}%.`
-                    }).join(' ')}
+                      return (
+                        <span key={name} style={{ display: 'block' }}>
+                          {e.gap == null
+                            ? `${name} has ${e.trades} ${e.trades === 1 ? 'trade' : 'trades'} with other teams, too few to compare.`
+                            : `${name}'s ${e.trades} trades with other teams: ${e.gap}%.`}
+                        </span>
+                      )
+                    })}
                   </span>
                 ) : null}
               </li>
