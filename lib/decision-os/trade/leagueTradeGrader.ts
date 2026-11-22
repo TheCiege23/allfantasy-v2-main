@@ -45,6 +45,28 @@ import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
 import { projectedPicksNote } from '@/lib/trade-value/pickSlotProjection'
 import { isPirateLeague } from '@/lib/trade-intel/pirateSteal'
+import { loadTradeMarketOverlay } from '@/lib/trade-value-console/tradeMarketOverlay'
+import { lineupProfileFromSettings } from '@/lib/league/lineupProfile'
+
+/**
+ * 🛑 THE LEARNED MARKET IN EVERY GRADE (owner's call, 2026-11-22 — trade learning, step 4).
+ *
+ * What managers actually paid in completed trades (`lib/trade-market/formatMarkets.ts`: one market per
+ * dynasty/redraft × 1QB/superflex book) and how leagues with this lineup pay for a position
+ * (`computeLineupFactors`) were applied ONLY by the trade console. Every other surface — pending offers, the
+ * Trade Center, Chimmy, notifications, the trade finder — graded on the bare chart, so the same deal could
+ * read one letter in the console and another on the offer card.
+ *
+ * Now every grade from `createLeagueTradeGrader` carries the same overlay, read from the same rows, as a
+ * visible per-line adjustment beside the chart value (never a silent rewrite). A line moves only when the
+ * chart priced it and the market measured that player in this book; anything else grades exactly as before.
+ * ⚠ NEVER ON A DATED GRADE: a completed trade priced on its own day (`atMarket`) or a `marketless` grader must
+ * not read today's market. `TRADE_MARKET_IN_GRADES=off` turns it off for every surface but the console.
+ */
+export const TRADE_MARKET_IN_GRADES_ENV = 'TRADE_MARKET_IN_GRADES'
+export function tradeMarketInGradesOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env[TRADE_MARKET_IN_GRADES_ENV] ?? '').trim().toLowerCase() !== 'off'
+}
 
 /**
  * The ONE trade grade, computed. Every surface that shows a letter for a deal that has not happened
@@ -177,11 +199,12 @@ export async function gradePricedSides(args: {
   /** Sentences the basis must carry about how some lines were priced (e.g. devy prospects). */
   basisNotes?: readonly string[]
   /**
-   * The AllFantasy trade market's move per line, index-aligned with the lines. Only the trade console
-   * passes it today; every other grader omits it and grades exactly as before.
+   * The AllFantasy trade market's move per line, index-aligned with the lines. The trade console and
+   * `createLeagueTradeGrader` (every other surface, on today's chart) pass it; a caller that omits it grades
+   * on the bare chart.
    */
   tradeMarket?: LeagueGradeInput['tradeMarket']
-  /** The measured lineup move per line, and the sentence for an unusual lineup that got none. Console only, like `tradeMarket`. */
+  /** The measured lineup move per line, and the sentence for an unusual lineup that got none. Passed alongside `tradeMarket`. */
   lineup?: LeagueGradeInput['lineup']
   lineupNote?: string | null
   mark?: (name: string) => void
@@ -473,10 +496,13 @@ export async function createLeagueTradeGrader(args: {
     status: leagueRow.status ?? null,
   })
 
+  // The league's own starting lineup, read by the one parser the market measurement uses.
+  const lineupProfile = lineupProfileFromSettings(leagueRow.settings)
   // An arrow, not a function declaration: a hoisted declaration loses the `leagueRow` null narrowing.
   const gradeOnce = async (
     chart: LeagueTradeChart,
     floorWindow: () => FloorWindow,
+    useMarket: boolean,
     {
       give,
       get,
@@ -540,12 +566,29 @@ export async function createLeagueTradeGrader(args: {
         assets.priceDevy({ inputs: give, lines: g.lines, priced: g.priced }),
         assets.priceDevy({ inputs: get, lines: t.lines, priced: t.priced }),
       ])
+      const givePriced = applyChartTePremium(chart, gd.priced)
+      const getPriced = applyChartTePremium(chart, td.priced)
+      const marketOverlay = useMarket && tradeMarketInGradesOn()
+        ? await loadTradeMarketOverlay(prisma, {
+            effectiveSport: sport,
+            chartIsDynasty: chart.chartIsDynasty,
+            isSuperFlex: chart.isSuperFlex,
+            lineup: lineupProfile,
+            giveLines: gd.lines,
+            getLines: td.lines,
+            givePriced,
+            getPriced,
+          }).catch(() => null)
+        : null
       const { grade } = await gradePricedSides({
         chart,
         giveLines: gd.lines,
         getLines: td.lines,
-        givePriced: applyChartTePremium(chart, gd.priced),
-        getPriced: applyChartTePremium(chart, td.priced),
+        givePriced,
+        getPriced,
+        tradeMarket: marketOverlay?.tradeMarket ?? null,
+        lineup: marketOverlay?.lineup ?? null,
+        lineupNote: marketOverlay?.lineupNote ?? null,
         basisNotes: [...(gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : []), ...(floorNote ? [floorNote] : []), ...(pickNote ? [pickNote] : [])],
         need: needRoster
           ? { leagueId: args.leagueId, userId: args.userId ?? '', sport, starters: leagueRow.starters, playerData: needRoster.playerData }
@@ -579,7 +622,9 @@ export async function createLeagueTradeGrader(args: {
       const campus = await campusDraft?.(deal.give, deal.get, dated, chart)
       if (campus) return withType(campus)
       // A dated grade is never priced for roster need: the roster it would read is today's.
-      const view = await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal)
+      // Today's learned market only on today's chart: never on a dated grade, never on a marketless grader.
+      const useMarket = !dated && !args.marketless
+      const view = await gradeOnce(chart, floorWindow, useMarket, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal)
       return withType(footballFormat ? await footballFormat(view, chart, [...deal.give, ...deal.get], dated) : view)
     },
     ...(book
