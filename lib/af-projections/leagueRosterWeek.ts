@@ -145,7 +145,7 @@ export function __setBoardTimingThresholdForTests(ms: number): void {
 }
 
 /** Portfolio views can span dozens of leagues. Bound board reads and share availability for each sport-week. */
-export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[]) {
+export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[], options: { fresh?: boolean } = {}) {
   const result = new Map<string, Map<string, RosterWeekPlayer>>()
   const cohorts = new Map<string, { sport: string; season: number; week: number; players: Map<string, RosterWeekPlayer[]> }>()
   /*
@@ -164,7 +164,12 @@ export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[]) {
       const rosterIds = [...new Set(ids.filter(id => id && id !== '0' && !id.startsWith('name:')))]
       if (!rosterIds.length) return
       const boardStartedAt = Date.now()
-      const found = await leagueWeekBoard(leagueId, week, rosterIds).catch(() => null)
+      // Rechecks compare a freshly computed board to the other readers after verified stats may have changed (#4093):
+      // they build past every cache, and the timing line counts them as built.
+      const found = await (options.fresh
+        ? buildBoard(leagueId, week, rosterIds).then((board) => ({ board, source: 'built' as const }))
+        : leagueWeekBoard(leagueId, week, rosterIds)
+      ).catch(() => null)
       const board = found?.board ?? null
       timedBoards.push({ leagueId, ms: Date.now() - boardStartedAt, source: found?.source ?? 'failed' })
       if (board?.unit !== 'fantasy points' || board.week !== week || board.season !== season) return

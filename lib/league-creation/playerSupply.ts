@@ -27,7 +27,8 @@
  * 250. The owner's own pro leagues run 34 and 36 teams and pass.
  *
  * PRO SPORTS ONLY (NFL, NBA, NHL, MLB). College pools are many times larger (the owner's college
- * leagues run 140 and 180 teams), so college leagues are not checked.
+ * leagues run 140 and 180 teams), so college leagues are not checked, except a college C2C league's
+ * PRO side (see `C2C_PRO_SPORT_OF_COLLEGE` below).
  *
  * Pure: no DB, no clock. Safe in the wizard and in the server validator, so the two cannot disagree.
  */
@@ -63,21 +64,41 @@ export type PlayerSupplyCheck = {
 
 const UNVERIFIED: PlayerSupplyCheck = { verified: false, ok: true, rosterSpots: 0, needed: 0, pool: 0, maxTeams: 0, message: null }
 
+/**
+ * A college-sport C2C league drafts PROS too: its `C2C_*` seats hold NFL (NCAAF) or NBA (NCAAB)
+ * players. Owner's decision, 2026-11-22: "cap college c2c at what the pro side can fill". So its
+ * size is checked against the pro sport's players, counting only those seats.
+ */
+const C2C_PRO_SPORT_OF_COLLEGE: Readonly<Record<string, string>> = { NCAAF: 'NFL', NCAAB: 'NBA' }
+/** A C2C template's college-side seats in a pro league, pro-side seats in a college one. */
+const C2C_SEAT = /^C2C_/i
+/** Reserve seats a draft does not fill, on either side of a C2C roster. */
+const C2C_NOT_DRAFTED = /^C2C_(IR|IL|NA|TAXI)$/i
+/** C2C rosters are dynasty rosters: rookies and prospects count, as in Dynasty. */
+const DYNASTY_LIKE_TYPES = new Set(['dynasty', 'c2c'])
+
 export function checkNewLeaguePlayerSupply(input: { sport: string; leagueType: string; teamCount: number }): PlayerSupplyCheck {
-  const sport = String(input.sport ?? '').trim().toUpperCase()
+  const leagueSport = String(input.sport ?? '').trim().toUpperCase()
+  const leagueType = String(input.leagueType ?? '').trim().toLowerCase()
+  const isC2C = leagueType === 'c2c'
+  // A college C2C league is checked against its PRO side; any other college league is not checked.
+  const sport = isC2C ? C2C_PRO_SPORT_OF_COLLEGE[leagueSport] ?? leagueSport : leagueSport
+  const proSideOfCollege = isC2C && sport !== leagueSport
   const supply = PRO_PLAYER_SUPPLY[sport]
   if (!supply || !(input.teamCount > 0)) return UNVERIFIED
-  const slots = newLeagueRosterSlots(sport, input.leagueType)
+  const slots = newLeagueRosterSlots(leagueSport, input.leagueType)
   if (!slots) return UNVERIFIED
   let rosterSpots = 0
   let hasIdp = false
   for (const [slot, count] of Object.entries(slots)) {
     const seats = Number(count)
-    if (!(seats > 0) || NOT_DRAFTED_SLOT.test(slot)) continue
+    if (!(seats > 0) || NOT_DRAFTED_SLOT.test(slot) || C2C_NOT_DRAFTED.test(slot)) continue
+    // C2C: count the pro seats only (the `C2C_*` ones in a college league, the others in a pro one).
+    if (isC2C && C2C_SEAT.test(slot) !== proSideOfCollege) continue
     rosterSpots += seats
     if (sport === 'NFL' && IDP_SLOT.test(slot)) hasIdp = true
   }
-  const pool = (supply.base + (hasIdp ? supply.idp ?? 0 : 0)) * (String(input.leagueType).toLowerCase() === 'dynasty' ? DYNASTY_SUPPLY_FACTOR : 1)
+  const pool = (supply.base + (hasIdp ? supply.idp ?? 0 : 0)) * (DYNASTY_LIKE_TYPES.has(leagueType) ? DYNASTY_SUPPLY_FACTOR : 1)
   if (rosterSpots === 0 || pool === 0) return UNVERIFIED
   const needed = input.teamCount * rosterSpots
   const maxTeams = Math.floor(pool / rosterSpots)

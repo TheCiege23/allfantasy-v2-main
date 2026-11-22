@@ -1,4 +1,4 @@
-import { DYNASTY_TEAM_COUNTS, REDRAFT_TEAM_COUNTS } from '@/lib/league/teamCountLimits'
+import { DYNASTY_TEAM_COUNTS, REDRAFT_TEAM_COUNTS, capToRealLeague } from '@/lib/league/teamCountLimits'
 import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
@@ -38,9 +38,12 @@ const DYNASTY_CREATE_TEAM_COUNTS = [...DYNASTY_TEAM_COUNTS]
 /** Even sizes from 8 (as before) up to the NFL's 32 teams, for formats that draft NFL players beside college ones. */
 const NFL_PRO_BOUND_EVEN_TEAM_COUNTS = Array.from({ length: 13 }, (_, i) => 8 + i * 2)
 
+/** 1,700 draftable NCAAF devy prospects (rounded down from 1,772) over 10 DEVY seats a team. */
+const NCAAF_DEVY_MAX_TEAMS = 170
+
 const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
-export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
+const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
   version: 1,
   defaultTimezone: 'America/New_York',
   supportedModes: ['quick', 'advanced'],
@@ -364,14 +367,17 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: [8, 10, 12, 14, 16],
     },
     /*
-     * Owner's decision, 2026-11-22: an NFL-based Devy or C2C league goes up to 32 teams (the size of
-     * the real league: past it the pro player supply runs out), and a college-sport C2C league goes
-     * up to the native limit, like Dynasty. The owner's own college leagues run 140 and 180 teams.
-     * College Devy stays at 8 to 16: its prospect pool does not cover a bigger league yet.
+     * Owner's decisions, 2026-11-22: an NFL-based Devy or C2C league goes up to 32 teams (the size of
+     * the real league), and a college-sport Devy or C2C league goes up to the college maximum. The
+     * owner's own college leagues run 140 and 180 teams.
+     *
+     * College Devy is bounded by its prospects, not by 250: its DEVY seats are filled from the devy
+     * pool (production, 2026-11-22: 1,772 draftable NCAAF prospects; the NCAAF Devy template holds
+     * 10 DEVY seats per team). `NCAAF_DEVY_MAX_TEAMS` sizes it so the devy rounds cannot run dry.
      */
     devy: {
       NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
-      NCAAF: [8, 10, 12, 14, 16],
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS.filter((n) => n <= NCAAF_DEVY_MAX_TEAMS),
     },
     c2c: {
       NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
@@ -415,4 +421,21 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: [12, 14, 16, 18],
     },
   },
+}
+
+/**
+ * The catalog the form and the server read: every team-count list capped at the real league's size
+ * for pro sports (`capToRealLeague`, lib/league/teamCountLimits.ts). Applied once, here, so the
+ * wizard's pills, `getTeamCountOptions` and the create handler's catalog check cannot disagree.
+ */
+export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
+  ...LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED,
+  teamCountOptionsByConceptSport: Object.fromEntries(
+    Object.entries(LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED.teamCountOptionsByConceptSport).map(([concept, bySport]) => [
+      concept,
+      Object.fromEntries(
+        Object.entries(bySport).map(([sport, counts]) => [sport, capToRealLeague(sport, concept, counts ?? [])]),
+      ),
+    ]),
+  ),
 }

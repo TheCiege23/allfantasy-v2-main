@@ -187,18 +187,25 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
               : { me: 205.36, opponent: null, missing: 'Match each pro team to its college team to compare combined scores.' },
         teamMap: scoring === 'combined' && commish ? { sleeperTeams: SLEEPER_TEAMS, fantraxTeams: FANTRAX_TEAMS, saved, suggested: SUGGESTED } : null,
         drafts: [
-          { role: 'pro', platform: 'sleeper', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },
-          { role: 'pro', platform: 'sleeper', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
+          { role: 'pro', platform: nba ? 'fantrax' : 'sleeper', season: 2027, phase: 'upcoming', status: 'Not started', detail: '4 rounds · linear', startsAt: null },
+          { role: 'pro', platform: nba ? 'fantrax' : 'sleeper', season: 2026, phase: 'done', status: 'Done', detail: '4 rounds · linear', startsAt: null },
           { role: 'college', platform: 'fantrax', season: 2026, phase: 'done', status: 'Done', detail: '156 of 192 picks made', startsAt: null },
         ],
-        pipeline: showPipeline ? {
+        pipeline: !showPipeline ? null : nba ? {
+          // ?sport=nba: the NBA draft linked by ESPN id, with one pick the store could not check.
+          year: 2026,
+          movingUp: [{ playerId: 'nc1', name: 'Pearson Carmichael', position: 'F', nflTeam: 'Utah Jazz', round: 1, pick: 14 }],
+          rookiePool: { drafted: 45, heldInCollege: 38, unheld: 7 },
+          unlinked: 1,
+        } : {
           year: 2026,
           movingUp: [
             { playerId: 'c-x1', name: 'Travis Hunter', position: 'WR', nflTeam: 'JAX', round: 1, pick: 2 },
             { playerId: 'c-x2', name: 'Tetairoa McMillan', position: 'WR', nflTeam: 'CAR', round: 1, pick: 8 },
           ],
           rookiePool: { drafted: 257, heldInCollege: 41, unheld: 216 },
-        } : null,
+          unlinked: 0,
+        },
         fetchedAt: new Date().toISOString(),
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -212,7 +219,7 @@ export function CollegeProRosterHarnessClient() {
   const lead = params.get('lead') === 'college' ? 'college' : 'pro'
   const format = params.get('format') === 'devy' ? 'devy' : 'c2c'
   const scoring = params.get('scoring') === 'combined' ? 'combined' : 'separate'
-  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0' && params.get('sport') !== 'nba', params.get('mapped') === '1', params.get('sport') === 'nba', params.get('link') === '1')
+  installFetch(lead, format, scoring, params.get('commish') === '1', params.get('pipeline') !== '0', params.get('mapped') === '1', params.get('sport') === 'nba', params.get('link') === '1')
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">

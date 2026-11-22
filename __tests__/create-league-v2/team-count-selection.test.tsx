@@ -22,12 +22,12 @@ describe('simple creation team choices agree with the server', () => {
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '4')
     if (concept === 'dynasty') {
-      // NFL Dynasty takes every size, odd ones included, up to what the NFL's players can fill
-      // (lib/league-creation/playerSupply.ts): 88 teams. College leagues keep the full range to 250.
-      evens.push(5, 9, 34, 36, 88)
-      expect(count).toHaveAttribute('max', '88')
+      // NFL Dynasty takes every size, odd ones included, up to the NFL's 32 teams (owner's rule,
+      // 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS). College leagues keep the full range to 250.
+      evens.push(5, 9, 31, 32)
+      expect(count).toHaveAttribute('max', '32')
       expect(count).toHaveAttribute('step', '1')
-      expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 88')
+      expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 32')
     } else {
       expect(count).toHaveAttribute('max', String(evens.at(-1)))
       expect(count).toHaveAttribute('step', '2')
@@ -101,10 +101,10 @@ describe('Zombie universe controls', () => {
     expect(screen.getByTestId('g30-zombie-league-count')).toHaveValue('1')
   })
 
-  it('a pro-sport league is offered only the sizes its players can fill', () => {
+  it('a pro-sport league is offered no more teams than the real league has', () => {
     const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
-    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '73')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 73')
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
   })
 })

@@ -54,6 +54,13 @@ describe('rail week boards kept across deploys', () => {
     expect(metrics).not.toHaveBeenCalled()
   })
 
+  it('reads a fresh projection for a recheck even when a previous board is cached', async () => {
+    stored(12.5, 60_000)
+    expect((await loadLeagueRosterWeeks(request)).get('L1')?.get('s1')?.points).toBe(12.5)
+    expect((await loadLeagueRosterWeeks(request, { fresh: true })).get('L1')?.get('s1')?.points).toBe(20)
+    expect(metrics).toHaveBeenCalledOnce()
+  })
+
   it('serves a board past three minutes old at once, and rebuilds it behind the view', async () => {
     stored(12.5, ROSTER_WEEK_BOARD_TTL_MS + 60_000)
     const result = await loadLeagueRosterWeeks(request)
@@ -124,6 +131,12 @@ describe('the boards timing line says where each board came from (2026-11-22)', 
     const line = await sourcesOf(() => loadLeagueRosterWeeks(request))
     expect(line).toMatchObject({ stale: 1, built: 0 })
     await vi.waitFor(() => expect(tier.write).toHaveBeenCalled())
+  })
+
+  it('a fresh recheck (#4093) builds past every cache and is "built"', async () => {
+    stored(12.5, 60_000)
+    const line = await sourcesOf(() => loadLeagueRosterWeeks(request, { fresh: true }))
+    expect(line).toMatchObject({ built: 1, stored: 0 })
   })
 
   it('no board anywhere is "built", and the next call in this process is "memory"', async () => {
