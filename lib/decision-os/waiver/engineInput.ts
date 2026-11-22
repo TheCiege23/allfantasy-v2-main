@@ -30,6 +30,7 @@ export function waiverEngineInputFrom(facts: WaiverWorldFacts, pool: WaiverPool)
     /* Precomputed in `loadWaiverPool`, so the season's bye slate is a server read. */
     ...(pool.teamNeeds ? { teamNeeds: pool.teamNeeds } : {}),
     ...(pool.currentWeek != null ? { currentWeek: pool.currentWeek } : {}),
+    ...(pool.tradeNeedEvidence ? { tradeNeedEvidence: pool.tradeNeedEvidence } : {}),
     availablePlayers: pool.availablePlayers,
   }
 }

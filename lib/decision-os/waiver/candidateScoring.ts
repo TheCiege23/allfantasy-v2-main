@@ -87,6 +87,11 @@ export type WaiverScoringContext = {
   faabRemaining?: number | null
   analyticsMap?: Map<string, PlayerAnalytics>
   trendingMap?: Map<string, CrowdTrendData>
+  /**
+   * What the trade market says a hole at each position costs, by position (`tradeNeedEvidence`, 2026-11-22). Added to
+   * the "fills a need" line as evidence. 🛑 It never moves a score, a rank or a bid — only the sentence.
+   */
+  tradeNeedEvidence?: Readonly<Record<string, string>>
 }
 
 export type ScoredWaiverTarget = {
@@ -466,11 +471,16 @@ function computeDrivers(
       ? CATEGORICAL_NEED_DRIVER
       : 20,
     direction: matchingSlot ? 'positive' : ctx.needs.includes(candidate.position) ? 'positive' : 'neutral',
-    detail: matchingSlot
-      ? `Upgrades your ${matchingSlot.slot} (+${matchingSlot.gapPpg} PPG gap)`
-      : ctx.needs.includes(candidate.position)
-      ? `Fills ${candidate.position} need`
-      : `${candidate.position} is adequate`,
+    detail:
+      (matchingSlot
+        ? `Upgrades your ${matchingSlot.slot} (+${matchingSlot.gapPpg} PPG gap)`
+        : ctx.needs.includes(candidate.position)
+        ? `Fills ${candidate.position} need`
+        : `${candidate.position} is adequate`) +
+      // The trade market's price for the same hole, where one was measured — only when this pickup fills a need.
+      ((matchingSlot || ctx.needs.includes(candidate.position)) && ctx.tradeNeedEvidence?.[candidate.position.toUpperCase()]
+        ? `. ${ctx.tradeNeedEvidence[candidate.position.toUpperCase()]} — a pickup fills it without paying that`
+        : ''),
   })
 
   const byeCluster = ctx.teamNeeds.byeWeekClusters.find(

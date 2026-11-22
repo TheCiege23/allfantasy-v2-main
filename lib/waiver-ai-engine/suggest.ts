@@ -41,6 +41,7 @@ function buildScoringContext(input: WaiverAIEngineInput): WaiverScoringContext {
       dropCandidates: [],
     },
     currentWeek: input.currentWeek ?? 1,
+    ...(input.tradeNeedEvidence ? { tradeNeedEvidence: input.tradeNeedEvidence } : {}),
   }
 }
 

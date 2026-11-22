@@ -221,3 +221,26 @@ describe('need and posture, on your team', () => {
     expect(learnedNeedPremium(tables(), BOOK, 'te', 'short')).toEqual({ pct: 11, trades: 140 })
   })
 })
+
+/* The trade market as evidence for a waiver pickup (2026-11-22): a sentence, never a multiplier. */
+describe('trade need evidence, outside a trade', () => {
+  it('one sentence per position with a published, positive premium for being short there', async () => {
+    const { tradeNeedEvidence } = await import('@/lib/trade-market/learnedInGrades')
+    expect(tradeNeedEvidence(tables(), BOOK)).toEqual({ TE: 'In trades, teams short at TE paid +11% over normal-depth teams across 140 completed trades' })
+    expect(tradeNeedEvidence(tables(), 'REDRAFT:ONE_QB')).toEqual({})
+  })
+
+  it('the waiver "fills a need" line carries it — and the pickup\'s score does not move', async () => {
+    const { scoreWaiverCandidates } = await import('@/lib/decision-os/waiver/candidateScoring')
+    const candidate = { playerId: 'te9', playerName: 'Free Tight End', position: 'TE', team: 'KC', byeWeek: null, age: 25, value: 1500, assetValue: { impactValue: 600, marketValue: 1500, vorpValue: 300, volatility: 0.2 }, source: 't' }
+    const ctx = { goal: 'balanced' as const, needs: ['TE'], surplus: [], isSF: true, isTEP: false, numTeams: 12, isDynasty: true, rosterPlayers: [], teamNeeds: { weakestSlots: [], biggestNeed: null, byeWeekClusters: [], positionalDepth: [], dropCandidates: [] }, currentWeek: 9 }
+    const plain = scoreWaiverCandidates([candidate as never], ctx as never, { maxResults: 1 })[0]!
+    const cited = scoreWaiverCandidates([candidate as never], { ...ctx, tradeNeedEvidence: { TE: 'In trades, teams short at TE paid +11% over normal-depth teams across 140 completed trades' } } as never, { maxResults: 1 })[0]!
+    expect(cited.compositeScore).toBe(plain.compositeScore)
+    expect(JSON.stringify(cited)).toContain('teams short at TE paid +11%')
+    expect(JSON.stringify(plain)).not.toContain('In trades')
+    // A pickup at a position that is not a need does not cite it.
+    const wr = scoreWaiverCandidates([{ ...candidate, position: 'WR' } as never], { ...ctx, tradeNeedEvidence: { WR: 'x across 9 completed trades' } } as never, { maxResults: 1 })[0]!
+    expect(JSON.stringify(wr)).not.toContain('x across 9')
+  })
+})

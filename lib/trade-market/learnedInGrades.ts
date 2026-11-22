@@ -122,6 +122,20 @@ export function learnedNeedPremium(tables: LearnedTables, book: string, position
   return row?.published && row.premiumPct != null && row.premiumPct > 0 ? { pct: row.premiumPct, trades: row.trades } : null
 }
 
+/**
+ * What the TRADE market says a hole at each position is worth, as one sentence per position — for advice outside a
+ * trade (a waiver pickup that fills the hole, 2026-11-22). Published, positive premiums only; EVIDENCE, never a
+ * multiplier: nothing here moves a waiver score or a bid. PURE.
+ */
+export function tradeNeedEvidence(tables: LearnedTables, book: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of tables.need.get(book) ?? []) {
+    if (row.need !== 'short' || !row.published || row.premiumPct == null || !(row.premiumPct > 0)) continue
+    out[row.position] = `In trades, teams short at ${row.position} paid ${pct(row.premiumPct)} over normal-depth teams across ${row.trades} completed trades`
+  }
+  return out
+}
+
 /** What teams with this record pay for this kind of asset over middle teams, as an adjustment — published only. PURE. */
 export function learnedPostureAdjustment(
   tables: LearnedTables,
