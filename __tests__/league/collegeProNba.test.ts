@@ -163,6 +163,20 @@ describe('the combined page for an NBA league on Fantrax', () => {
     expect(r.applies && r.headToHead?.missing).toMatch(/Match each pro team/)
   })
 
+  it('a Fantrax NBA league with no stored periods scores the NBA calendar week', async () => {
+    const { dailySportWeekForInstant } = await import('@/lib/season-week/dailySportSeasonStarts')
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    // Road To Glory NBA stores only current_week, no fantrax_scoring_periods (production, 2026-11-22).
+    h.leagues.nba!.settings = { current_week: 5 }
+    const at = new Date('2026-11-21T18:00:00Z')
+    const r = await loadCollegeProRoster('nba', 'u1', at)
+    expect(r.applies).toBe(true)
+    if (!r.applies) return
+    const week = dailySportWeekForInstant('NBA', 2026, at)
+    expect(week).not.toBeNull()
+    expect(r.sides.find((s) => s.role === 'pro')?.score).toMatchObject({ week, total: 10 })
+  })
+
   it('opened from the college league, it is the same page with college first', async () => {
     h.paired.set('cbb', { viewingRole: 'college', sides: [college, pro] })
     h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
