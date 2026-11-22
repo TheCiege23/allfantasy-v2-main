@@ -124,6 +124,12 @@ describe('finishGuillotineSeason', () => {
       where: { id: 'L1', lifecycleState: { in: ['setup', 'pre_draft', 'drafting', 'post_draft', 'in_season', 'playoffs'] } },
       data: { lifecycleState: 'completed' },
     })
+    // A league that plays on AllFantasy gets the matching status in the same transaction; the native-only
+    // rule is in the where, so an imported league's status is never written.
+    expect(db.tx.league.updateMany).toHaveBeenCalledWith({
+      where: { id: 'L1', lifecycleState: 'completed', platform: { in: ['allfantasy', 'af', 'manual', 'native'], mode: 'insensitive' } },
+      data: { status: 'complete' },
+    })
     expect(db.tx.league.updateMany.mock.invocationCallOrder[0]).toBeLessThan(m.offseason.mock.invocationCallOrder[0]!)
   })
 

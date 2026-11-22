@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { prisma } from '@/lib/prisma'
 import { buildMatchupCenterPayload } from '@/server/services/matchupCenterService'
 import { runLeagueMatchupAiEngine } from '@/lib/ai-matchup-engine/runLeagueMatchupAiEngine'
@@ -38,6 +39,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Plan gate before any rate-limit spend or AI call: `pro_matchup_analysis` (lib/monetization/entitlements.ts).
+  const gate = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'pro_matchup_analysis' })
+  if (!gate.ok) return gate.response
 
   const { leagueId } = await params
   let season: number | undefined

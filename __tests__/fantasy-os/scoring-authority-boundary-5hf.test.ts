@@ -20,7 +20,6 @@ const SCORING_FILES = [
   'lib/redraft/scoringEngine.ts',
   'lib/redraft/playerWeeklyScoreService.ts',
   'lib/redraft/standingsEngine.ts',
-  'lib/scoring-engine/ScoringCalculator.ts',
   'lib/nfl-scoring/scoringKeyBridge.ts',
   'lib/redraft/uiScoringStoreBridge.ts',
 ]

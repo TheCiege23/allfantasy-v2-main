@@ -182,7 +182,9 @@ export async function finalizeRosterAssignments(
     // finalization must not clobber user-configured lineups.
     const builtBy = typeof data.lineup_draft_session_id === 'string' ? data.lineup_draft_session_id : null
     const lineupFromAnotherDraft = builtBy ? builtBy !== session.id : hasEarlierDraft
-    if (rosterTemplate && (!hasExistingLineup(data) || lineupFromAnotherDraft)) {
+    // An empty lineup from this draft may be intentional (for example, after a chop).
+    // Only an uninitialized lineup or a different draft may materialize the board again.
+    if (rosterTemplate && ((!hasExistingLineup(data) && builtBy !== session.id) || lineupFromAnotherDraft)) {
       const sections = buildLineupSectionsFromPicks(
         proPlayers.map((p) => ({
           playerId: p.playerId ?? null,
@@ -211,7 +213,8 @@ export async function finalizeRosterAssignments(
 }
 
 /** Drafts that add to rosters a league already has, rather than building them. */
-const FOLLOW_UP_DRAFT_LABELS = new Set(['rookie', 'supplemental', 'dispersal'])
+// `college`: a Devy / C2C league's second startup draft (lib/draft-defaults/startupCollegeDraft.ts).
+const FOLLOW_UP_DRAFT_LABELS = new Set(['rookie', 'supplemental', 'dispersal', 'college'])
 
 function isNbaCollegePick(player: AssignedPlayer): boolean {
   return /^espn:ncaab:\d+$/.test(String(player.playerId ?? '')) && (player.assetType === 'c2c_college' || player.assetType === 'devy_pick')
@@ -248,6 +251,33 @@ function playerKey(p: { playerId?: string | null; playerName?: string | null; po
 }
 
 /**
+ * 🛑 `draftPicks` KEPT EVERY PLAYER A TEAM HAD EVER DRAFTED (2026-11-15). A rookie or supplemental draft appended to
+ * last season's list, so players since dropped or traded stayed in it — and `draftPicks` is the roster fallback, so a
+ * team with no saved lineup had those players rebuilt onto its roster. Before a follow-up draft's picks are added,
+ * the list keeps only players still on the roster (its player list or lineup). A pick with no player id cannot be
+ * checked and is kept; a roster with no player list or lineup to check against is left as it was.
+ */
+export function stillRosteredDraftPicks(playerData: Record<string, unknown>, picks: AssignedPlayer[]): AssignedPlayer[] {
+  const current = new Set<string>()
+  if (Array.isArray(playerData.players)) for (const id of playerData.players as unknown[]) if (id != null) current.add(String(id))
+  const raw = playerData.lineup_sections
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const entries of Object.values(raw as Record<string, unknown>)) {
+      if (!Array.isArray(entries)) continue
+      for (const entry of entries) {
+        const id = entry && typeof entry === 'object' ? (entry as { id?: unknown }).id : null
+        if (id != null) current.add(String(id))
+      }
+    }
+  }
+  if (current.size === 0) return picks
+  return picks.filter((p) => {
+    const id = String(p.playerId ?? '').trim()
+    return !id || current.has(id)
+  })
+}
+
+/**
  * A follow-up draft's picks join the roster: appended to `draftPicks` (the roster fallback) and
  * to the bench of an existing lineup. Idempotent — a player already there is not added twice, so
  * finalizing the same draft again changes nothing.
@@ -257,7 +287,10 @@ export function addFollowUpDraftPlayers(
   players: AssignedPlayer[],
   rosterTemplate: Parameters<typeof buildLineupSectionsFromPicks>[1] | null,
 ): Record<string, unknown> {
-  const previousPicks = Array.isArray(playerData.draftPicks) ? (playerData.draftPicks as AssignedPlayer[]) : []
+  const previousPicks = stillRosteredDraftPicks(
+    playerData,
+    Array.isArray(playerData.draftPicks) ? (playerData.draftPicks as AssignedPlayer[]) : [],
+  )
   const known = new Set(previousPicks.map(playerKey))
   const added = players.filter((p) => !known.has(playerKey(p)))
   const draftPicks = [...previousPicks, ...added]

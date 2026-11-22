@@ -15,7 +15,7 @@ import { prisma } from '@/lib/prisma'
  * Returns a result object rather than throwing: these are new call sites, and a value the caller
  * must destructure is harder to misuse than a throw a caller can forget to catch.
  */
-export type LegacyLeagueAccess =
+type LegacyLeagueAccess =
   | { ok: true; legacyUserId: string; legacyLeagueId: string }
   | { ok: false; status: 401 | 403 }
 

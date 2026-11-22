@@ -2,22 +2,7 @@
 // LAYER B: TRADE ENGINE (Rule-Based)
 // ============================================
 
-import {
-  Asset,
-  LeagueIntelligence,
-  ManagerProfile,
-  ContenderTier,
-  TradeCandidate,
-  TradeEngineOutput,
-  HardRuleResult,
-  Constraints,
-  DEFAULT_CONSTRAINTS,
-  AcceptanceLabel,
-  AcceptDriver,
-  DriverDirection,
-  DriverStrength,
-  ManagerTendencyData
-} from './types'
+import { Asset, LeagueIntelligence, ManagerProfile, ContenderTier, TradeCandidate, TradeEngineOutput, HardRuleResult, Constraints, DEFAULT_CONSTRAINTS, AcceptDriver, DriverDirection, DriverStrength, ManagerTendencyData } from './types'
 import { computeAcceptProbability, type AcceptProbabilityInput, type ManagerTendencyProfile } from './manager-tendency-engine'
 
 // ============================================
@@ -225,11 +210,6 @@ function checkParityGuardrail(
 // - Starter likelihood proxy replaces lineup impact
 // - Neutral 0.5 behavior score when no manager context
 // ============================================
-
-const LINEUP_WEIGHT = 0.40
-const VORP_WEIGHT = 0.25
-const MARKET_WEIGHT = 0.20
-const BEHAVIOR_WEIGHT = 0.15
 
 function ratioToFairness(ratio: number): number {
   if (ratio >= 0.95 && ratio <= 1.05) return 1.0
@@ -555,17 +535,6 @@ function computeLineupDelta(
   }
 }
 
-function sumWithStatelessFallback(
-  assets: Asset[],
-  primaryField: 'impactValue' | 'vorpValue',
-  estimator: (a: Asset) => number
-): number {
-  return assets.reduce((sum, a) => {
-    const primary = a[primaryField]
-    return sum + (primary != null && primary > 0 ? primary : estimator(a))
-  }, 0)
-}
-
 function weightedAvgVol(assets: Asset[]): number {
   if (assets.length === 0) return 0
   let totalWeight = 0
@@ -734,8 +703,6 @@ function computeFairnessScore(
   const receiveVorp = sumField(receive, 'vorpValue')
   const hasVorpData = giveVorp > 0 || receiveVorp > 0
 
-  const giveMarket = sumField(give, 'marketValue') * consolPenalty
-  const receiveMarket = sumField(receive, 'marketValue')
   const giveMarketRaw = sumField(give, 'marketValue')
   const receiveMarketRaw = sumField(receive, 'marketValue')
   const marketDeltaPct = giveMarketRaw > 0
@@ -1841,29 +1808,6 @@ export function computeTradeDrivers(
 // ============================================
 // ACCEPTANCE LABELING
 // ============================================
-
-function computeAcceptanceLabel(
-  fairnessScore: number,
-  toManagerAggression: 'low' | 'medium' | 'high',
-  fillsTheirNeed: boolean
-): { label: AcceptanceLabel; rate: string; emoji: string; pill: string } {
-  let threshold = 0.6
-
-  if (toManagerAggression === 'high') threshold -= 0.1
-  if (toManagerAggression === 'low') threshold += 0.1
-  if (fillsTheirNeed) threshold -= 0.05
-
-  if (fairnessScore >= threshold + 0.2) {
-    return { label: 'Strong', rate: '70-85%', emoji: '🟢', pill: 'High Accept' }
-  }
-  if (fairnessScore >= threshold + 0.1) {
-    return { label: 'Aggressive', rate: '50-70%', emoji: '🟡', pill: 'Moderate' }
-  }
-  if (fairnessScore >= threshold) {
-    return { label: 'Speculative', rate: '30-50%', emoji: '🟠', pill: 'Low Accept' }
-  }
-  return { label: 'Long Shot', rate: '<30%', emoji: '🔴', pill: 'Unlikely' }
-}
 
 // ============================================
 // RISK FLAGS

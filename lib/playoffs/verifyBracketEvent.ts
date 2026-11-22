@@ -1,10 +1,10 @@
 import type { SingleGameSport } from "./singleGameSchedule"
 
-export type VerifiedBracketFinal = {
+type VerifiedBracketFinal = {
   eventId: string; homeScore: number; awayScore: number
   homeTeam: string; awayTeam: string; startsAt: string
 }
-export type EventCheck = { ok: true; final: VerifiedBracketFinal } | { ok: false; reason: string }
+type EventCheck = { ok: true; final: VerifiedBracketFinal } | { ok: false; reason: string }
 
 function object(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {}

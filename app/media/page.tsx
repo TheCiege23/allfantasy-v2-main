@@ -86,9 +86,9 @@ export default function MediaPage() {
           className="mb-6 inline-flex items-center gap-2 text-sm text-white/60 hover:text-white/90"
         >
           <ChevronLeft className="h-4 w-4" />
-          Back to AI Hub
+          Back to Chimmy Hub
         </Link>
-        <h1 className="mb-2 text-2xl font-bold text-white">AI Media</h1>
+        <h1 className="mb-2 text-2xl font-bold text-white">Chimmy Media</h1>
         <p className="mb-6 text-sm text-white/60">
           Generate → Preview → Approve → Publish. Podcast & video (HeyGen), blog (OpenAI), social (Grok).
         </p>

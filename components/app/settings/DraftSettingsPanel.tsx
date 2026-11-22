@@ -27,6 +27,8 @@ type SessionVariantPayload = {
   devyConfig?: { enabled: boolean; devyRounds: number[] } | null
   c2cConfig?: { enabled: boolean; collegeRounds: number[] } | null
   auctionBudgetPerTeam?: number | null
+  /** Devy / C2C startup: two drafts or one merged draft; null when there is nothing to choose. */
+  startupDraftMode?: 'separate' | 'merged' | null
 }
 
 type DraftOrderMode = 'randomize' | 'manual' | 'weighted_lottery'
@@ -151,6 +153,7 @@ function normalizeSessionVariant(input: SessionVariantPayload | null | undefined
       collegeRounds,
     },
     auctionBudgetPerTeam: Number(input?.auctionBudgetPerTeam ?? 200),
+    startupDraftMode: input?.startupDraftMode === 'merged' || input?.startupDraftMode === 'separate' ? input.startupDraftMode : null,
   }
 }
 
@@ -757,7 +760,7 @@ export default function DraftSettingsPanel({ leagueId }: { leagueId: string }) {
               />
             </label>
             <label className="flex items-center justify-between gap-4 text-xs text-white/90">
-              <span>AI ADP enabled</span>
+              <span>Chimmy ADP enabled</span>
               <input
                 type="checkbox"
                 checked={ui.aiAdpEnabled}
@@ -768,7 +771,7 @@ export default function DraftSettingsPanel({ leagueId }: { leagueId: string }) {
               />
             </label>
             <label className="flex items-center justify-between gap-4 text-xs text-white/90">
-              <span>AI queue reorder enabled</span>
+              <span>Chimmy queue reorder enabled</span>
               <input
                 type="checkbox"
                 checked={ui.aiQueueReorderEnabled}
@@ -794,7 +797,7 @@ export default function DraftSettingsPanel({ leagueId }: { leagueId: string }) {
               />
             </label>
             <label className="flex items-center justify-between gap-4 text-xs text-white/90">
-              <span>AI manager for empty teams (optional)</span>
+              <span>Chimmy manager for empty teams (optional)</span>
               <input
                 type="checkbox"
                 checked={ui.orphanTeamAiManagerEnabled && (ui.orphanDrafterMode ?? 'cpu') === 'ai'}
@@ -814,9 +817,9 @@ export default function DraftSettingsPanel({ leagueId }: { leagueId: string }) {
                   Orphan rosters: <strong className="text-white">{orphanStatus.orphanRosterIds.length}</strong>
                   {ui.orphanTeamAiManagerEnabled
                     ? (ui.orphanDrafterMode === 'ai'
-                        ? ' · AI manager will draft (fallback to CPU if unavailable).'
+                        ? ' · Chimmy manager will draft (fallback to CPU if unavailable).'
                         : ' · CPU manager will draft for them when on the clock.')
-                    : ' · Enable toggle above to let CPU or AI draft for orphan teams.'}
+                    : ' · Enable toggle above to let CPU or Chimmy draft for orphan teams.'}
                 </p>
                 {orphanStatus.recentActions.length > 0 && (
                   <p className="mt-1 text-white/60">
@@ -975,6 +978,30 @@ export default function DraftSettingsPanel({ leagueId }: { leagueId: string }) {
                   )}
                 </div>
               </div>
+
+              {effectiveSessionVariant.startupDraftMode ? (
+                <>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">Startup drafts</h4>
+                  <div className="space-y-2 text-xs rounded-lg border border-white/10 bg-black/25 p-3" data-testid="commissioner-startup-drafts">
+                    <p className="text-white/80">
+                      {effectiveSessionVariant.startupDraftMode === 'merged'
+                        ? 'One draft: pro and college players are drafted together.'
+                        : 'Two drafts: the pro draft first, then the college draft. The season starts after both.'}
+                    </p>
+                    <label className="flex min-h-11 items-center gap-2 text-white/90">
+                      <input
+                        type="checkbox"
+                        checked={effectiveSessionVariant.startupDraftMode === 'merged'}
+                        onChange={(e) => setSessionVariantField({ startupDraftMode: e.target.checked ? 'merged' : 'separate' })}
+                        disabled={!isCommissioner}
+                        className="rounded border-white/20"
+                        data-testid="commissioner-merged-college-draft-toggle"
+                      />
+                      Merge them into one draft
+                    </label>
+                  </div>
+                </>
+              ) : null}
 
               <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">Devy rules</h4>
               <div className="space-y-2 text-xs rounded-lg border border-white/10 bg-black/25 p-3">

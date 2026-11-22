@@ -71,7 +71,7 @@
 .af-bx-detail > p { margin-bottom: 15px; font-size: 13px; }
 .af-bx-sidebody > .af-bx-btn { margin-top: 14px; }
 .af-bx-invite { display: flex; justify-content: space-between; align-items: center; background: #193e3c; border: 1px dashed #5db69a; border-radius: 10px; padding: 7px 9px; margin-top: 15px; }
-.af-bx-invite code { color: #afffdc; font-size: 14px; }
+.af-bx-invite code { min-width: 0; overflow-wrap: anywhere; color: #afffdc; font-size: 14px; }
 .af-bx-icon-btn { background: transparent; color: #b6f2d8; border: 0; min-height: 44px; min-width: 44px; display: grid; place-items: center; cursor: pointer; }
 .af-bx-text-link { display: flex; align-items: center; justify-content: center; gap: 8px; color: #a4cdbd; font-size: 12px; padding: 14px 0 0; text-decoration: none; }
 .af-bx-select { display: block; margin: 15px 0; font-size: 12px; color: #a4c2bf; }
@@ -104,7 +104,9 @@
 .af-bx-live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #ff6b6b; box-shadow: 0 0 0 3px rgba(255, 107, 107, .18); animation: afBxPulse 1.6s ease-in-out infinite; vertical-align: 1px; }
 @keyframes afBxPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .af-bx-switch button { display: inline-flex; align-items: center; }
-.af-bx-stat > span { display: flex !important; justify-content: space-between; align-items: center; gap: 8px; }
+/* flex-wrap: on a phone the LIVE NOW tag drops below the label instead of squeezing it — with the tile's
+   overflow-wrap: anywhere, a squeezed label broke mid-word ("Tournam / ent"). */
+.af-bx-stat > span { display: flex !important; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; }
 .af-bx-live-tag, .af-bx-soon-tag { font-style: normal; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
 .af-bx-live-tag { display: inline-flex; align-items: center; color: #ffb1b1; background: rgba(255, 107, 107, .12); }
 .af-bx-live-tag .af-bx-live-dot { width: 6px; height: 6px; margin-right: 5px; box-shadow: none; }

@@ -35,19 +35,6 @@ export type ContextModeId =
   | 'trade_market'
   | 'start_sit_market'
 
-export type TrendingDashboardInput = {
-  sportFilter: TrendSportFilter
-  leagueId: string | null
-  userId: string | null
-  trendType: TrendTypeId
-  position: string
-  rookiesOnly: boolean
-  timeWindow: TimeWindowId
-  contextMode: ContextModeId
-  limitPerSide: number
-  skipAi?: boolean
-}
-
 export type TrendReasonChip =
   | 'Injury Opportunity'
   | 'Role Growth'
@@ -144,7 +131,7 @@ export type TrendingDashboardResult = {
   sourceFlags: TrendingSourceFlags
 }
 
-export type TrendingDashboardError = {
+type TrendingDashboardError = {
   ok: false
   error: string
   code?: LeagueToolAccessErrorCode | 'VALIDATION'

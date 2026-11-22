@@ -18,14 +18,14 @@ export function SurvivorAiMeteredSmokeButton({ leagueId }: { leagueId: string })
     setMsg(null)
     const r = await run(leagueId, 'tribal_help', confirmed)
     if (r.ok && r.body?.narrative) {
-      setMsg('OK — AI response received (metered path satisfied).')
+      setMsg('OK — Chimmy response received (metered path satisfied).')
       setDialog(null)
       return
     }
     if (r.status === 409 && r.body?.code === 'token_confirmation_required' && r.body.preview) {
       setDialog({
         cost: Number(r.body.preview.tokenCost ?? 2),
-        label: r.body.preview.featureLabel ?? 'Survivor AI — tribal_help',
+        label: r.body.preview.featureLabel ?? 'Survivor Chimmy — tribal_help',
       })
       setMsg('Confirmation required — use the dialog to spend tokens.')
       return
@@ -54,7 +54,7 @@ export function SurvivorAiMeteredSmokeButton({ leagueId }: { leagueId: string })
 
       <SurvivorTokenSpendConfirmDialog
         open={dialog !== null}
-        title="Confirm Survivor AI spend"
+        title="Confirm Survivor Chimmy spend"
         tokenCost={dialog?.cost ?? 2}
         featureLabel={dialog?.label}
         onCancel={() => setDialog(null)}

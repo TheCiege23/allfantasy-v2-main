@@ -3,7 +3,7 @@
  * tested directly and shared by server and client components.
  */
 
-export type BodySegment = { kind: 'text'; text: string } | { kind: 'link'; text: string; href: string }
+type BodySegment = { kind: 'text'; text: string } | { kind: 'link'; text: string; href: string }
 
 /**
  * http(s) URLs only. `javascript:`, `data:` and bare `www.` are left as text: a link a

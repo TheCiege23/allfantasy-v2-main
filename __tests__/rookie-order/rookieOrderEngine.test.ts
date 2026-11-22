@@ -84,18 +84,21 @@ describe('computeRookieOrder — the season as it happens', () => {
 })
 
 describe('computeRookieOrder — options and edge cases', () => {
-  it('a decided 3rd-place game orders the semifinal losers by finish, overriding seed', () => {
+  it('seed, not a 3rd-place game, orders the semifinal losers: the worse seed picks first', () => {
+    // s1 lost the 3rd-place game to s3 and finished 4th; s3 is still the worse seed, so it picks first.
     const third: RookieOrderPlayoffGame = { round: 3, kind: 'placement', place: 3, teamA: 's1', teamB: 's3', winner: 's3' }
     const r = computeRookieOrder({ teams: league(), regularSeasonComplete: true, playoffGames: [...qf, ...sf, ...fin, third] })
-    // s1 finished 4th, so it picks before 3rd-place s3.
-    expect(ids(r).slice(8, 10)).toEqual(['s1', 's3'])
-    expect(r.slots[8].finish).toBe('4th place')
+    expect(ids(r).slice(8, 10)).toEqual(['s3', 's1'])
+    expect(r.slots[8].finish).toBe('3rd place')
+    expect(r.slots[9].finish).toBe('4th place')
+    expect(r.slots[8].reason).toContain('worse seed picks first')
   })
 
-  it('an undecided 3rd-place game keeps the semifinal losers provisional', () => {
+  it('the semifinal losers lock once the semifinals are decided, whether or not the 3rd-place game is', () => {
     const third: RookieOrderPlayoffGame = { round: 3, kind: 'placement', place: 3, teamA: 's1', teamB: 's3', winner: null }
     const r = computeRookieOrder({ teams: league(), regularSeasonComplete: true, playoffGames: [...qf, ...sf, third] })
-    expect(status(r).slice(8, 10)).toBe('pp')
+    expect(ids(r).slice(8, 10)).toEqual(['s3', 's1'])
+    expect(status(r).slice(8, 10)).toBe('ll')
   })
 
   it('a 3rd-place game recorded as a bracket game is not treated as a second title game', () => {

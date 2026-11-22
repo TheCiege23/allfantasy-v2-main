@@ -7,7 +7,7 @@
  */
 import type { FreshnessClass, IntelligenceRunRecord } from './types'
 
-export type FreshnessPolicy = {
+type FreshnessPolicy = {
   /** Seconds a succeeded result is considered FRESH (immediately reusable). */
   ttlSeconds: number
   /** Seconds AFTER expiry a stale result may be served while a single refresh runs (0 = never serve stale). */

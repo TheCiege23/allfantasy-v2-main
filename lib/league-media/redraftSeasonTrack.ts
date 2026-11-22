@@ -29,8 +29,8 @@ export type RedraftSeasonFacts = {
   drafting?: boolean
 }
 
-export type SeasonTrackMarkerId = 'draft' | 'now' | 'deadline' | 'playoffs' | 'championship'
-export type SeasonTrackMarker = {
+type SeasonTrackMarkerId = 'draft' | 'now' | 'deadline' | 'playoffs' | 'championship'
+type SeasonTrackMarker = {
   id: SeasonTrackMarkerId
   label: string
   week: number | null
@@ -38,7 +38,7 @@ export type SeasonTrackMarker = {
   at: number | null
   state: 'done' | 'now' | 'upcoming'
 }
-export type SeasonTrack = {
+type SeasonTrack = {
   /** "Week 9 of 17", "Week 9", or null before there is a week. */
   weekLabel: string | null
   /** 0..1, or null when the fill cannot be computed from real data. */

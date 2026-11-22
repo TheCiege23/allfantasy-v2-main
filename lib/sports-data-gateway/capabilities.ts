@@ -24,7 +24,7 @@ export type SportsDataCapability =
   | 'player_headshots'
   | 'team_branding'
 
-export type RefreshSupport = 'live' | 'scheduled' | 'static'
+type RefreshSupport = 'live' | 'scheduled' | 'static'
 
 export type ProviderCapabilityDeclaration = {
   provider: string
@@ -34,7 +34,7 @@ export type ProviderCapabilityDeclaration = {
   limitations: string[]
 }
 
-export function providerSupports(
+function providerSupports(
   decl: ProviderCapabilityDeclaration,
   sport: string,
   capability: SportsDataCapability,

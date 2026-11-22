@@ -21,11 +21,11 @@ import type { ProviderHealthState } from './selection'
 export type ProviderHealth = { provider: string; state: ProviderHealthState; checkedAt: string; latencyMs: number | null; detail?: string }
 
 export type FetchPlayersInput = { sport: string; limit?: number; sinceCheckpoint?: string | null }
-export type FetchTeamsInput = { sport: string }
-export type FetchGamesInput = { sport: string; season: string; weekOrRound?: string | null }
-export type FetchAvailabilityInput = { sport: string; playerIds?: string[] }
-export type FetchStatsInput = { sport: string; season: string; period?: string }
-export type FetchProjectionsInput = { sport: string; scoringContextId?: string | null }
+type FetchTeamsInput = { sport: string }
+type FetchGamesInput = { sport: string; season: string; weekOrRound?: string | null }
+type FetchAvailabilityInput = { sport: string; playerIds?: string[] }
+type FetchStatsInput = { sport: string; season: string; period?: string }
+type FetchProjectionsInput = { sport: string; scoringContextId?: string | null }
 
 export interface SportsProviderAdapter {
   provider: string

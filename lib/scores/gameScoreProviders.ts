@@ -1,6 +1,7 @@
 import 'server-only'
 import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import { noteCfbdResponse } from '@/lib/cfbd-quota'
 
 /**
  * gameScoreProviders — score/schedule feeds that actually work, per sport.
@@ -216,6 +217,8 @@ async function getJson(url: string, headers?: Record<string, string>): Promise<J
       // Per ATTEMPT, and this runs twice on a 304 — see PROVIDER_ATTEMPT_TIMEOUT_MS.
       signal: AbortSignal.timeout(PROVIDER_ATTEMPT_TIMEOUT_MS),
     })
+    // CFBD reports its remaining monthly calls on every response (lib/cfbd-quota.ts).
+    if (url.startsWith(CFBD_BASE_URL)) noteCfbdResponse(res)
     if (res.status === 304) return { status: 304, result: { body: null, failure: null } }
     if (!res.ok) {
       const text = await res.text().catch(() => '')

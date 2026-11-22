@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
 
   const parsed = proposeSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid proposal data', details: parsed.error.errors }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid proposal data', details: parsed.error.issues }, { status: 400 });
   }
 
   const { leagueId, offerFrom, offerTo, drops, adds } = parsed.data;
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
       where: { id: offerTo },
       select: { platformUserId: true },
     });
-    const recipientUserId = recipientRoster?.platformUserId && !String(recipientRoster.platformUserId).startsWith('orphan-')
+    const recipientUserId = recipientRoster?.platformUserId && !isSeatPlaceholderUserId(String(recipientRoster.platformUserId))
       ? String(recipientRoster.platformUserId)
       : null;
     if (recipientUserId && recipientUserId !== session.user.id) {

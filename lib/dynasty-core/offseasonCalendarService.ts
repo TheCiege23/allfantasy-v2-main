@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import 'server-only'
 
 /**
@@ -34,7 +35,7 @@ export async function readOffseasonCalendar(leagueId: string, userId: string, no
   })
   if (!league) return { ok: false, status: 404 }
   const [member, commissioner] = await Promise.all([
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+    prisma.roster.findFirst({ where: managedRosterWhere(leagueId, userId), select: { id: true } }),
     isElevatedCommissioner(leagueId, userId),
   ])
   if (!member && !commissioner) return { ok: false, status: 403 }

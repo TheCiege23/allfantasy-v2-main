@@ -36,7 +36,7 @@ export type TradeOfferStatus =
   | 'vetoed'
   | 'processed'
 
-export const TRADE_OFFER_STATUSES: readonly TradeOfferStatus[] = [
+const TRADE_OFFER_STATUSES: readonly TradeOfferStatus[] = [
   'pending',
   'accepted',
   'rejected',
@@ -49,7 +49,7 @@ export const TRADE_OFFER_STATUSES: readonly TradeOfferStatus[] = [
 
 export type TradeOfferAsset = { label: string; detail?: string | null }
 
-export type TradeOfferSide = {
+type TradeOfferSide = {
   /** The manager's name as the league shows it. Never an email address. */
   manager: string
   team?: string | null
@@ -107,7 +107,7 @@ function obj(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 }
 
-export function describeTradeAssets(assets: TradeOfferAsset[]): string {
+function describeTradeAssets(assets: TradeOfferAsset[]): string {
   if (assets.length === 0) return 'nothing'
   return assets.map((a) => (a.detail ? `${a.label} (${a.detail})` : a.label)).join(', ')
 }

@@ -14,7 +14,7 @@
 import { tradeHubAnalyzeSides, type TradeHubSides } from './tradeHubDirection'
 
 /** An asset as the Trade Hub builds it for the analyzer (`buildSide` on the page). */
-export type TradeBreakdownAsset = {
+type TradeBreakdownAsset = {
   type?: string
   player?: { name?: string | null } | null
   pick?: { year?: number | string | null; season?: number | string | null; round?: number | string | null; pickNumber?: number | null } | null

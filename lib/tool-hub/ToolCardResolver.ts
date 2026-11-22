@@ -24,8 +24,3 @@ export function getToolCardDisplay(slug: ToolSlug): ToolCardDisplay | null {
   }
 }
 
-export function getToolCardsForSlugs(slugs: ToolSlug[]): ToolCardDisplay[] {
-  return slugs
-    .map((s) => getToolCardDisplay(s))
-    .filter((c): c is ToolCardDisplay => c != null)
-}

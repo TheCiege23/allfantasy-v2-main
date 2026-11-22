@@ -52,6 +52,8 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/redraft/scoringEngine', () => ({
   calculateScoreFromSportConfig,
+  // The sync asks whether to add the best ball week-as-held roster; this league is not best ball.
+  leagueIsBestBall: () => false,
 }))
 
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'

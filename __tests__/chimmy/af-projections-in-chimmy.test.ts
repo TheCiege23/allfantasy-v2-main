@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const h = vi.hoisted(() => ({
+  metrics: vi.fn(),
   find: vi.fn(),
   league: vi.fn(),
   fpFind: vi.fn(),
@@ -18,6 +19,7 @@ const h = vi.hoisted(() => ({
   engine: vi.fn(),
 }))
 
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 vi.mock('@/lib/af-projections/readAfProjections', () => ({ findAfProjectionsByName: h.find }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { league: { findUnique: h.league }, fantasyProjection: { findMany: h.fpFind } },
@@ -56,45 +58,34 @@ beforeEach(() => {
   h.engine.mockResolvedValue(new Map([['4040', { playerId: '4040', projectedPoints: 9.6, basis: null, confidence: null }]]))
 })
 
-describe('player-projection tool — AF and API, labelled', () => {
-  it('names the engine as AF and, in a league, gives the provider (API) and AF under its rules', async () => {
+describe('player projection from the connected league', () => {
+  const board = { sport: 'NFL', season: 2026, week: 4, unit: 'fantasy points' }
+  const metric = { playerName: 'Test Back', position: 'RB', rank: 3, positionRank: 1, perGame: 9.2, weekGames: 1, weekly: 12 }
+
+  it('quotes the AF week, season and units used by the league and OS', async () => {
+    h.metrics.mockResolvedValue({ ...board, rows: [{ ...metric, fullSeason: 150, restOfSeason: 105 }] })
     const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain("AF (AllFantasy's own projection engine): 9.2 points PER GAME")
-    expect(out).toContain('Sleeper projection: 10.0 points in KBFL for week 4')
-    // 9.6 engine x (10 league / 8 generic) = 12.0 — the same carry every /core surface uses.
-    expect(out).toContain('AF in KBFL for week 4: 12.0 points')
-    expect(out).toContain('do not average them')
-    expect(h.engine).toHaveBeenCalledWith(['4040'], { season: '2026', week: 4 })
+    expect(out).toContain('AF league rank #3')
+    expect(out).toContain('Week 4: 12.00 fantasy points')
+    expect(out).toContain('150.00 fantasy points over the full season')
+    expect(h.lookup).not.toHaveBeenCalled()
   })
 
-  it('leaves out the AF league line when the engine has no row, keeping the provider line', async () => {
-    h.engine.mockResolvedValue(new Map())
-    const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain('Sleeper projection:')
-    expect(out).not.toContain('AF in KBFL')
+  it('distinguishes an unavailable week from a verified zero for a defender', async () => {
+    for (const weekly of [null, 0]) {
+      h.metrics.mockResolvedValue({ ...board, rows: [{ ...metric, position: 'LB', weekly }] })
+      const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
+      expect(out).toContain(weekly == null ? 'Weekly estimate unavailable' : 'Week 4: 0.00 fantasy points')
+    }
   })
 
-  it('credits a DEFENDER in an IDP league to AllFantasy’s IDP model, not to Sleeper', async () => {
-    /* The lookup passes IDP enrichment, and Sleeper has no defensive line — so this number is ours. */
-    h.find.mockResolvedValue({ rows: [{ ...row, position: 'LB' }], season: 2026 })
-    h.league.mockResolvedValue({ name: 'KBFL', settings: { scoring_settings: { rec: 2, idp_tkl: 1 } } })
-    const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain('AllFantasy IDP model (Sleeper publishes no defensive projection): 10.0 points in KBFL for week 4')
-    expect(out).not.toContain('Sleeper projection:')
-  })
-
-  it('still says Sleeper for the same defender in a league that does not score IDP', async () => {
-    h.find.mockResolvedValue({ rows: [{ ...row, position: 'LB' }], season: 2026 })
-    const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain('Sleeper projection: 10.0 points in KBFL for week 4')
-  })
-
-  it('a failed AF read drops only the AF line', async () => {
-    h.engine.mockRejectedValue(new Error('db down'))
-    const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1' })
-    expect(out).toContain('Sleeper projection:')
-    expect(out).not.toContain('AF in KBFL')
-    expect(out).not.toContain('could not be read just now')
+  it('withholds estimates for another sport, missing identity, or unavailable AF data', async () => {
+    h.metrics.mockResolvedValueOnce({ ...board, rows: [metric] }).mockResolvedValueOnce({ ...board, rows: [] }).mockRejectedValueOnce(new Error('unavailable'))
+    for (const sport of ['NBA', 'NFL', 'NFL']) {
+      const out = await buildPlayerProjectionContext({ playerName: 'Test Back', leagueId: 'lg-1', sport })
+      expect(out).toContain('no matching projection')
+    }
+    expect(h.fpFind).not.toHaveBeenCalled()
   })
 })
 

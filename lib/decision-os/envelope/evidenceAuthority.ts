@@ -20,7 +20,7 @@ import type { EnvelopeFact, EnvelopeGap, EnvelopeRefusal, TemporalScope } from '
  * fact about that league; a market consensus is an average over leagues that
  * mostly are not it.
  */
-export const LEAGUE_EVIDENCE_RANK: readonly string[] = [
+const LEAGUE_EVIDENCE_RANK: readonly string[] = [
   'league_settings',
   'league_rules',
   'roster',
@@ -30,7 +30,7 @@ export const LEAGUE_EVIDENCE_RANK: readonly string[] = [
   'market',
 ]
 
-export function evidenceRankOf(source: string): number {
+function evidenceRankOf(source: string): number {
   const i = LEAGUE_EVIDENCE_RANK.indexOf(source)
   /* Unknown sources rank last rather than first — an unrecognised source is not
    * thereby authoritative. */
@@ -42,25 +42,6 @@ export function orderByEvidenceAuthority(facts: EnvelopeFact[]): EnvelopeFact[] 
   return [...facts].sort(
     (a, b) => evidenceRankOf(a.citation.source) - evidenceRankOf(b.citation.source)
   )
-}
-
-/**
- * The two values, kept apart.
- *
- * 🛑 MARKET VALUE AND TEAM-SPECIFIC VALUE ARE DIFFERENT NUMBERS AND MERGING
- * THEM DESTROYS BOTH. Market value is what the player is worth in general;
- * team-specific value is what he is worth to THIS roster under THIS scoring,
- * given its window. A single blended number cannot be checked against either,
- * and cannot be explained — "worth a 2nd" stops meaning anything.
- *
- * ⚠ `teamSpecific` MAY LEGITIMATELY BE NULL WHILE `market` IS PRESENT. That is
- * the ordinary case for a league we cannot compute against, and it must read as
- * "we do not know what he is worth to you", never as "he is worth the market
- * number to you".
- */
-export type SeparatedValue = {
-  market: { value: number | null; source: string | null }
-  teamSpecific: { value: number | null; source: string | null; basis: string | null }
 }
 
 /**
@@ -107,7 +88,7 @@ export function refusalForMissingTeamValue(playerLabel: string): {
  * either spam caveats onto historical facts or hide staleness during a live one.
  * `historical` has no threshold at all: a 1992 result does not go stale.
  */
-export const STALENESS_TOLERANCE_MS: Record<TemporalScope, number | null> = {
+const STALENESS_TOLERANCE_MS: Record<TemporalScope, number | null> = {
   historical: null,
   current: 24 * 60 * 60 * 1000,
   live: 5 * 60 * 1000,
@@ -147,7 +128,7 @@ export function markStaleness(
  * refuses, so a caller wired up early degrades to an honest gap rather than to
  * invented evidence.
  */
-export interface GeneralSportsFactPort {
+interface GeneralSportsFactPort {
   lookup(query: {
     question: string
     sport: string | null

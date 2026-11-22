@@ -73,7 +73,7 @@ export const commissionerAreasMessages = defineMessages({
     wfReplaceQuietBody: 'Member activity below lists every manager with no owner or no move in 14 days.',
     wfReplaceQuietLink: 'See member activity',
     wfReplaceOpenTeamTitle: 'Open the team up',
-    wfReplaceOpenTeamBody: 'Orphan teams lists ownerless teams and lets you advertise one or hand it to an AI manager for now.',
+    wfReplaceOpenTeamBody: 'Orphan teams lists ownerless teams and lets you advertise one or hand it to a Chimmy manager for now.',
     wfReplaceOpenTeamLink: 'Open orphan teams',
     wfReplaceInviteTitle: 'Invite the replacement',
     wfReplaceInviteBody: 'Send your league’s invite link. The new manager joins and takes over the open team.',
@@ -227,7 +227,7 @@ export const commissionerAreasMessages = defineMessages({
     wfReplaceQuietLink: 'Ver la actividad de los miembros',
     wfReplaceOpenTeamTitle: 'Deja el equipo disponible',
     wfReplaceOpenTeamBody:
-      'Equipos huérfanos lista los equipos sin dueño y te permite anunciar uno o dejárselo por ahora a un mánager de IA.',
+      'Equipos huérfanos lista los equipos sin dueño y te permite anunciar uno o dejárselo por ahora a un mánager de Chimmy.',
     wfReplaceOpenTeamLink: 'Abrir equipos huérfanos',
     wfReplaceInviteTitle: 'Invita al reemplazo',
     wfReplaceInviteBody: 'Envía el enlace de invitación de tu liga. El nuevo mánager se une y se hace cargo del equipo disponible.',

@@ -97,7 +97,8 @@ test('tablet league navigation and delete cancellation fit after resizing', asyn
     for (const size of tabletSizes) {
       await page.setViewportSize(size)
       const preview = page.getByTestId('mobile-support-preview')
-      await expect(preview.locator('.af-lt-compact-row [aria-current=page]')).toHaveText('Moves')
+      // Trades, not Moves (2026-11-14): Moves folded into Trades, which took its last slot in the phone strip.
+      await expect(preview.locator('.af-lt-compact-row [aria-current=page]')).toHaveText('Trades')
       const more = preview.locator('.af-lt-more')
       await more.locator('summary').click()
       await expect(more).toHaveAttribute('open', '')

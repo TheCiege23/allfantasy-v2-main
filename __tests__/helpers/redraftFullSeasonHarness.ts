@@ -153,7 +153,7 @@ function hash(text: string): number {
   return h >>> 0
 }
 
-function rngFor(seed: number, key: string): () => number {
+export function rngFor(seed: number, key: string): () => number {
   return mulberry32(hash(`${seed}:${key}`))
 }
 
@@ -179,14 +179,14 @@ function isDailySport(sport: SimSport): boolean {
 }
 
 /** The calendar day in New York of an instant, as the UTC-midnight date key the daily rows use. */
-function easternDayKey(t: Date): number {
+export function easternDayKey(t: Date): number {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(t)
   const get = (type: string) => Number(parts.find((x) => x.type === type)?.value)
   return Date.UTC(get('year'), get('month') - 1, get('day'))
 }
 
 /** One generated NFL week for a player. `skill` shifts the mean. */
-function nflWeekStats(position: string, rng: () => number, skill: number): Record<string, number> {
+export function nflWeekStats(position: string, rng: () => number, skill: number): Record<string, number> {
   const s = skill
   switch (position) {
     case 'QB':
@@ -287,13 +287,13 @@ function nhlBoxLine(position: string, rng: () => number, skill: number, dayIndex
 }
 
 /** A daily sport's generated line for one day, and the normalizer the ingest runs on it. */
-function dailyBoxLine(sport: SimSport, position: string, rng: () => number, skill: number, dayIndex: number): unknown | null {
+export function dailyBoxLine(sport: SimSport, position: string, rng: () => number, skill: number, dayIndex: number): unknown | null {
   if (sport === 'MLB') return mlbBoxLine(position, rng, skill, dayIndex)
   if (sport === 'NBA') return nbaBoxLine(position, rng, skill, dayIndex)
   return nhlBoxLine(position, rng, skill, dayIndex)
 }
 
-function dailyNormalizer(sport: SimSport): (raw: unknown) => NormalizedGameStats {
+export function dailyNormalizer(sport: SimSport): (raw: unknown) => NormalizedGameStats {
   if (sport === 'MLB') return normalizeMlbGameStats
   if (sport === 'NBA') return normalizeNbaGameStats
   return normalizeNhlGameStats

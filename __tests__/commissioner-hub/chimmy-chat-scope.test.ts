@@ -11,6 +11,8 @@ vi.mock('@/lib/ai-commissioner', () => ({ answerAICommissionerQuestion: mocks.an
 vi.mock('@/lib/subscription/entitlement-middleware', () => ({ requireFeatureEntitlement: mocks.gate }))
 vi.mock('@/lib/tokens/TokenSpendService', () => ({ TokenSpendService: class {} }))
 vi.mock('@/lib/ai-commissioner/commissionerDesk', () => ({ readCommissionerDesk: mocks.desk }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { POST } from '@/app/api/leagues/[leagueId]/ai-commissioner/chat/route'
 

@@ -13,7 +13,7 @@ import { coreLang } from './messages/coreLocale'
  * covered here; that needs the loader to take a language.
  */
 
-export const HUB_TABS_ES: Record<HubFormat, string> = {
+const HUB_TABS_ES: Record<HubFormat, string> = {
   zombie: 'Zombie',
   tournament: 'Torneo',
   survivor: 'Survivor',
@@ -30,7 +30,7 @@ export function hubTab(format: HubFormat, english: string, language: string | nu
 }
 
 /** The themed copy per format, keyed by the English `Theme` field names. */
-export type ThemeCopy = {
+type ThemeCopy = {
   title: string
   desc: string
   connect: string

@@ -1,20 +1,31 @@
 /**
- * One-time: email every existing account holder about the 2026-10 legal documents.
+ * One-time: email every existing account holder about a legal-document update.
  *
- * Owner-approved 2026-10-06. Run it only AFTER the documents are live in production — every link
- * in the email opens them. The email itself is lib/legal/termsUpdateNotice.ts.
+ * 🛑 --notice IS REQUIRED, AND THERE IS NO DEFAULT. Two notices exist:
  *
- *   npx tsx scripts/send-terms-update-notice.ts --preview=notice.html     # write the email to a file; no DB, no send
- *   npx tsx scripts/send-terms-update-notice.ts --to=you@example.com      # send ONE test copy; no DB
- *   npx tsx scripts/send-terms-update-notice.ts                           # dry run: count recipients, send nothing
- *   npx tsx scripts/send-terms-update-notice.ts --apply --production      # send to everyone
+ *   --notice=2026-10              the 2026-10 document set (owner-approved 2026-10-06; ALREADY SENT —
+ *                                 its text derives the Terms stamp, which has since moved, so re-sending
+ *                                 it now would put today's date on October's changes)
+ *   --notice=2026-11-washington   Washington moved to a Restricted State (owner-approved 2026-11-21);
+ *                                 lib/legal/washingtonTermsNotice.ts
+ *
+ * Until 2026-11-21 the script had no flag and sent the October notice. A default would make
+ * "re-run the script" silently mean "re-send October", so it refuses instead.
+ *
+ * Run it only AFTER the documents are live in production — every link in the email opens them.
+ *
+ *   npx tsx scripts/send-terms-update-notice.ts --notice=<id> --preview=notice.html   # write the email to a file; no DB, no send
+ *   npx tsx scripts/send-terms-update-notice.ts --notice=<id> --to=you@example.com    # send ONE test copy; no DB
+ *   npx tsx scripts/send-terms-update-notice.ts --notice=<id>                         # dry run: count recipients, send nothing
+ *   npx tsx scripts/send-terms-update-notice.ts --notice=<id> --apply --production    # send to everyone
  *
  * Recipients: accounts with a VERIFIED email that is not an anonymized deleted account and not on a
  * known-undeliverable domain (lib/email/undeliverableDomains). Pass --include-unverified to add
  * unverified addresses too; that raises the bounce rate, which Resend counts against the domain.
  *
  * RESUMABLE. Every sent account id is appended to --progress (default
- * .terms-notice-2026-10.progress.jsonl in the current directory) and skipped on the next run, so a
+ * .terms-notice-<id>.progress.jsonl in the current directory, one file PER NOTICE so the October
+ * record cannot suppress the November send) and skipped on the next run, so a
  * run stopped half-way is finished by running it again. Each batch also carries a Resend
  * idempotency key, so a batch retried within 24 hours is not delivered twice.
  *
@@ -28,6 +39,7 @@ import { Resend } from "resend"
 import { describeDbTarget, isProductionDbTarget } from "./_db-target-identity"
 import { isUndeliverableEmailDomain } from "../lib/email/undeliverableDomains"
 import { buildTermsUpdateNotice } from "../lib/legal/termsUpdateNotice"
+import { buildWashingtonTermsNotice } from "../lib/legal/washingtonTermsNotice"
 
 const args = process.argv.slice(2)
 const flag = (name: string) => args.includes(`--${name}`)
@@ -47,8 +59,25 @@ function resend(): { client: Resend; from: string } {
   return { client: new Resend(key), from }
 }
 
+const NOTICES = {
+  "2026-10": buildTermsUpdateNotice,
+  "2026-11-washington": buildWashingtonTermsNotice,
+} as const
+type NoticeId = keyof typeof NOTICES
+
+function chosenNotice(): NoticeId {
+  const id = option("notice")
+  if (!id || !(id in NOTICES)) {
+    console.error(`--notice is required: one of ${Object.keys(NOTICES).join(", ")}. There is no default.`)
+    process.exit(2)
+  }
+  return id as NoticeId
+}
+
 async function main() {
-  const notice = buildTermsUpdateNotice(BASE_URL)
+  const noticeId = chosenNotice()
+  const notice = NOTICES[noticeId](BASE_URL)
+  console.log(`[send-terms-update-notice] notice: ${noticeId} — subject: ${notice.subject}`)
 
   const preview = option("preview")
   if (preview) {
@@ -73,7 +102,7 @@ async function main() {
     process.exit(2)
   }
 
-  const progressFile = option("progress") ?? ".terms-notice-2026-10.progress.jsonl"
+  const progressFile = option("progress") ?? `.terms-notice-${noticeId}.progress.jsonl`
   const done = new Set<string>(
     fs.existsSync(progressFile)
       ? fs.readFileSync(progressFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).id as string)
@@ -109,7 +138,7 @@ async function main() {
       const batch = recipients.slice(i, i + BATCH_SIZE)
       const { error } = await client.batch.send(
         batch.map((u) => ({ from, to: u.email!, subject: notice.subject, html: notice.html, text: notice.text })),
-        { idempotencyKey: `terms-2026-10:${batch[0].id}:${batch.length}` },
+        { idempotencyKey: `terms-${noticeId}:${batch[0].id}:${batch.length}` },
       )
       if (error) {
         failed += batch.length

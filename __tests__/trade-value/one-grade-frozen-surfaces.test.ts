@@ -208,6 +208,18 @@ describe('the Trade Center’s provider-completed rows show the frozen original'
     expect([email.letter, email.partnerLetter]).toEqual([tc.partnerLetter, tc.letter])
   })
 
+  it('🛑 a non-Sleeper provider’s completed row is frozen too, and its id is never read as a Sleeper timestamp', async () => {
+    const yahoo = { ...providerRow(1), provider: 'yahoo' as const, transactionId: '423.l.9.tr.4', completedAt: undefined }
+    const first = (await gradeProviderCompletedTrades({ afLeagueId: AF(), trades: [yahoo], now: NOW })).get('423.l.9.tr.4')!
+    expect(table).toHaveLength(1)
+    expect(table[0]!.contextKey).toBe('423.l.9.tr.4')
+    Object.assign(VALUES, { 'sleeper:6794': 900, 'sleeper:11001': 2000 })
+    const again = (await gradeProviderCompletedTrades({ afLeagueId: AF(), trades: [yahoo], now: new Date(NOW.getTime() + 86_400_000) })).get('423.l.9.tr.4')!
+    if (!first.graded || !again.graded) throw new Error('expected grades')
+    expect(again.letter).toBe(first.letter)
+    expect(table).toHaveLength(1)
+  })
+
   it('a giveaway is graded as before and never written as an original', async () => {
     const giveaway = { ...providerRow(1), assetsReceived: [] }
     await gradeProviderCompletedTrades({ afLeagueId: AF(), trades: [giveaway], now: NOW })

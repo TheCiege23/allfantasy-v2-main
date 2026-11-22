@@ -7,7 +7,7 @@
  * column heads and the view controls. This renders the whole screen with odds in Spanish and sweeps the
  * text AND every aria-label/title for English, with an English control.
  */
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
@@ -133,6 +133,9 @@ afterEach(() => {
 function screenText(language: 'en' | 'es', layout: 'table' | 'cards' = 'table'): string {
   h.language = language
   const { container } = render(<Standings data={data()} odds={ODDS} view={{ ...DEFAULT_STANDINGS_VIEW, layout }} />)
+  // 2026-11-14: open "More columns" too, so every column's words are checked in both languages.
+  const more = container.querySelector('[data-testid="standings-more-columns"]')
+  if (more) fireEvent.click(more)
   const attrs = [...container.querySelectorAll('[aria-label],[title]')].map((e) => `${e.getAttribute('aria-label') ?? ''} | ${e.getAttribute('title') ?? ''}`)
   return `${container.textContent ?? ''}\n${attrs.join('\n')}`
 }

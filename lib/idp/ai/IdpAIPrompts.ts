@@ -17,7 +17,7 @@ function jsonBlock(obj: unknown): string {
   return JSON.stringify(obj, null, 2)
 }
 
-export function buildIdpDraftAssistantPrompt(ctx: IdpDraftAssistantContext): { system: string; user: string } {
+function buildIdpDraftAssistantPrompt(ctx: IdpDraftAssistantContext): { system: string; user: string } {
   const system = `You are the IDP Draft Assistant for AllFantasy. You help managers balance offensive and defensive drafting.
 
 ${AI_RULE}
@@ -45,7 +45,7 @@ Provide draft advice: how to balance offense vs defense, when to attack LB vs DL
   return { system, user }
 }
 
-export function buildIdpWaiverAssistantPrompt(ctx: IdpWaiverAssistantContext): { system: string; user: string } {
+function buildIdpWaiverAssistantPrompt(ctx: IdpWaiverAssistantContext): { system: string; user: string } {
   const system = `You are the IDP Waiver Assistant for AllFantasy.
 
 ${AI_RULE}
@@ -69,7 +69,7 @@ Provide waiver advice: who to consider adding/dropping, stream vs hold, and how 
   return { system, user }
 }
 
-export function buildIdpTradeAnalyzerPrompt(ctx: IdpTradeAnalyzerContext): { system: string; user: string } {
+function buildIdpTradeAnalyzerPrompt(ctx: IdpTradeAnalyzerContext): { system: string; user: string } {
   const system = `You are the IDP Trade Analyzer for AllFantasy. You value defenders in scoring context and explain scarcity.
 
 ${AI_RULE}
@@ -94,7 +94,7 @@ Explain how defenders are valued in this scoring format, scarcity by position, a
   return { system, user }
 }
 
-export function buildIdpStartSitPrompt(ctx: IdpStartSitContext): { system: string; user: string } {
+function buildIdpStartSitPrompt(ctx: IdpStartSitContext): { system: string; user: string } {
   const system = `You are the IDP Start/Sit Assistant for AllFantasy. You compare defenders for a single slot.
 
 ${AI_RULE}
@@ -117,7 +117,7 @@ Compare these options for this slot: tackle floor, big-play upside, role stabili
   return { system, user }
 }
 
-export function buildIdpLeagueEducatorPrompt(ctx: IdpLeagueEducatorContext): { system: string; user: string } {
+function buildIdpLeagueEducatorPrompt(ctx: IdpLeagueEducatorContext): { system: string; user: string } {
   const system = `You are the IDP League Educator for AllFantasy. You explain the league's scoring and help new players.
 
 ${AI_RULE}

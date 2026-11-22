@@ -11,7 +11,7 @@ import type {
   MflImportTeam,
   MflImportTransaction,
 } from '@/lib/league-import/adapters/mfl/types'
-import { persistProviderTransactionFacts } from '@/lib/league-import/persistProviderTransactionFacts'
+import { persistProviderTransactionFacts, type ProviderTransactionFactInput } from '@/lib/league-import/persistProviderTransactionFacts'
 import { persistSeasonStandingFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
@@ -179,6 +179,33 @@ function buildMflTransactionEntries(
   return entries
 }
 
+/**
+ * The season's transactions as idempotent provider facts (`persistProviderTransactionFacts`) — the one row builder,
+ * shared by the historical backfill and the daily current-season waiver refresh (`providerWaiverRefresh.ts`), so a
+ * refreshed claim is the same row, under the same deterministic id, as the backfill's.
+ */
+export function mflTransactionFactRows(leagueId: string, payload: MflImportPayload): ProviderTransactionFactInput[] {
+  const season = getSeasonFromPayload(payload)
+  const sport = normalizeSportForWarehouse(payload.league.sport)
+  return payload.transactions.flatMap((transaction) =>
+    buildMflTransactionEntries(transaction).map((entry, entryIndex) => ({
+      provider: 'mfl',
+      upstreamTransactionId: transaction.transactionId,
+      entryIndex,
+      leagueId,
+      sport,
+      type: entry.type,
+      playerId: entry.playerId ?? null,
+      managerId: entry.rosterId ?? null,
+      rosterId: entry.rosterId ?? null,
+      payload: entry.payload,
+      season,
+      weekOrPeriod: null,
+      occurredAt: entry.createdAt,
+    })),
+  )
+}
+
 async function persistMflSeasonWarehouseFacts(args: {
   leagueId: string
   payload: MflImportPayload
@@ -233,23 +260,8 @@ async function persistMflSeasonWarehouseFacts(args: {
     )
   )
 
-  const transactionRows = args.payload.transactions.flatMap((transaction) =>
-    buildMflTransactionEntries(transaction).map((entry, entryIndex) => ({
-      provider: 'mfl',
-      upstreamTransactionId: transaction.transactionId,
-      entryIndex,
-      leagueId: args.leagueId,
-      sport,
-      type: entry.type,
-      playerId: entry.playerId ?? null,
-      managerId: entry.rosterId ?? null,
-      rosterId: entry.rosterId ?? null,
-      payload: entry.payload,
-      season,
-      weekOrPeriod: null,
-      occurredAt: entry.createdAt,
-    }))
-  )
+  const transactionRows = mflTransactionFactRows(args.leagueId, args.payload)
+
 
   const draftRows = args.payload.draftPicks
   const draftCreates = draftRows.map((pick: MflImportDraftPick) =>

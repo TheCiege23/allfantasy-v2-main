@@ -197,7 +197,7 @@ test.describe('@meta global meta click audit', () => {
     // Link entry points remain wired.
     await expect(page.getByRole('link', { name: 'Leagues' })).toHaveAttribute('href', '/leagues')
     await expect(page.getByRole('link', { name: 'Meta Insights' }).first()).toHaveAttribute('href', '/app/meta-insights')
-    await expect(page.getByRole('link', { name: 'Waiver AI' }).first()).toHaveAttribute('href', '/waiver-ai')
+    await expect(page.getByRole('link', { name: 'Waiver Chimmy' }).first()).toHaveAttribute('href', '/waiver-ai')
     await expect(page.getByRole('link', { name: 'Mock draft' }).first()).toHaveAttribute('href', '/mock-draft-simulator')
 
     expect(playerTrendRequests.some((r) => r.sport === 'SOCCER' && r.timeframe === '30d')).toBe(true)

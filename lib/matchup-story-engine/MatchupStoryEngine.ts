@@ -89,7 +89,7 @@ export async function generateMatchupStory(
       ok: false,
       sport,
       status: ai.status || 503,
-      error: ai.details || 'AI provider unavailable',
+      error: ai.details || 'Chimmy provider unavailable',
     }
   }
 
@@ -99,7 +99,7 @@ export async function generateMatchupStory(
       ok: false,
       sport,
       status: 502,
-      error: 'AI narrative response was empty',
+      error: 'Chimmy narrative response was empty',
     }
   }
 

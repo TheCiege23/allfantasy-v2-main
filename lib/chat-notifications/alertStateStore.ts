@@ -13,9 +13,9 @@ import { readChatAlertState, type ChatAlertState } from './alertThrottle'
  * Losing is not an error — the winner is sending the alert.
  */
 
-export const CHAT_ALERT_STATE_PREFIX = 'chat-notify:v1:'
+const CHAT_ALERT_STATE_PREFIX = 'chat-notify:v1:'
 /** Long enough to outlive the email window with room to spare; the sweep deletes expired rows. */
-export const CHAT_ALERT_STATE_TTL_MS = 2 * 24 * 60 * 60 * 1000
+const CHAT_ALERT_STATE_TTL_MS = 2 * 24 * 60 * 60 * 1000
 
 export function chatAlertStateKey(scope: string, userId: string): string {
   return `${CHAT_ALERT_STATE_PREFIX}${scope}:${userId}`

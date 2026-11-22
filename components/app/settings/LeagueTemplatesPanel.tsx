@@ -124,7 +124,7 @@ export default function LeagueTemplatesPanel({ leagueId }: { leagueId: string })
     <div className="space-y-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <h3 className="text-base font-semibold text-white">League templates</h3>
       <p className="text-sm text-white/70">
-        Save this league’s settings as a template to reuse when creating new leagues (draft, AI, automation, and all
+        Save this league’s settings as a template to reuse when creating new leagues (draft, Chimmy, automation, and all
         league settings).
       </p>
 

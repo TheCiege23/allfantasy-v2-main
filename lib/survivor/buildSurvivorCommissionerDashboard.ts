@@ -22,6 +22,20 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { getPendingTribeRedraw } from './survivorTribeRedrawDecision'
 import { SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION } from './survivorCommissionerAlerts'
 import { buildSurvivorCommissionerTodo, type SurvivorCommissionerTodo } from './survivorCommissionerTodo'
+import { CHALLENGE_BUILDER_TYPE, challengeSettlementSource, readChallengeBuilderConfig } from './survivorChallengeBuilderModel'
+import { listSurvivorRewards } from './survivorRewardEngine'
+
+/** Builder challenges locked and set to be settled by hand: the season runner leaves these to the commissioner. */
+export async function countManualChallengesAwaitingResult(leagueId: string): Promise<number> {
+  const rows = await prisma.survivorChallenge.findMany({
+    where: { leagueId, challengeType: CHALLENGE_BUILDER_TYPE, status: 'locked' },
+    select: { configJson: true },
+  })
+  return rows.filter((row) => {
+    const config = readChallengeBuilderConfig(row.configJson)
+    return config != null && challengeSettlementSource(config) === 'manual'
+  }).length
+}
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -65,6 +79,8 @@ export type SurvivorCommissionerDashboardResult =
         emoji: ReturnType<typeof extractLeadingTribeIcon>
         /** Members carry the manager behind the roster so the host can move them by name. */
         members: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number]['members'][number] & { userId: string | null; displayName: string | null }>
+        /** Members still in the game. `members` keeps the voted-out too: their tribe row is history. */
+        inGameCount: number
       }>
       tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
       /** The weekly to-do list: usually "nothing needed". */
@@ -125,6 +141,10 @@ export async function buildSurvivorCommissionerDashboard(
   const nbaSeason = typeof fullSeasonPlan.season === 'number' ? fullSeasonPlan.season : new Date().getFullYear()
 
   const week = await resolveSurvivorCurrentWeek(leagueId, null)
+  const outOfGameCount = await prisma.survivorPlayer
+    .findMany({ where: { leagueId }, select: { playerState: true } })
+    .then((cast) => (cast.length ? cast.filter((p) => p.playerState !== 'active' && p.playerState !== 'survivor_winner').length : null))
+    .catch(() => null)
 
   const [
     config,
@@ -149,6 +169,8 @@ export async function buildSurvivorCommissionerDashboard(
     nbaAdpRows,
     tribeRedraw,
     sentAlerts,
+    manualChallengesAwaitingResult,
+    rewardsAwaitingChoice,
   ] = await Promise.all([
     getSurvivorConfig(leagueId),
     getTribesWithMembers(leagueId),
@@ -176,6 +198,9 @@ export async function buildSurvivorCommissionerDashboard(
       where: { leagueId, action: SURVIVOR_COMMISSIONER_ALERT_AUDIT_ACTION, OR: [{ relatedEntityId: { startsWith: 'scores_overdue:' } }, { relatedEntityId: { startsWith: 'jury_overdue:' } }] },
       orderBy: { createdAt: 'desc' }, take: 20, select: { relatedEntityId: true },
     }),
+    // Waiting on people, so the to-do list can say so. Best-effort: a failed count never hides the dashboard.
+    countManualChallengesAwaitingResult(leagueId).catch(() => 0),
+    listSurvivorRewards(leagueId).then((rows) => rows.filter((r) => r.status === 'awaiting_choice').length).catch(() => 0),
   ])
 
   const activeCast = tribeRows.length
@@ -190,6 +215,7 @@ export async function buildSurvivorCommissionerDashboard(
       userId: castByRoster.get(member.rosterId)?.userId ?? null,
       displayName: castByRoster.get(member.rosterId)?.displayName ?? null,
     })),
+    inGameCount: tribe.members.filter(member => !eliminatedIds.has(member.rosterId)).length,
   }))
 
   const afPlan = resolveAfPlanFromEntitlement(entitlementSnapshot.plans, entitlementSnapshot.status)
@@ -242,6 +268,8 @@ export async function buildSurvivorCommissionerDashboard(
     scoresPending: !gs?.weekScoringFinalAt,
     sentAlertKeys: sentAlerts.map(row => row.relatedEntityId).filter((key): key is string => Boolean(key)),
     tribeRedrawPending: Boolean(tribeRedraw),
+    manualChallengesAwaitingResult,
+    rewardsAwaitingChoice,
   })
   return {
     ok: true,
@@ -302,7 +330,12 @@ export async function buildSurvivorCommissionerDashboard(
     juryCount: jury.length,
     merged,
     rosterCount,
-    eliminatedCount: eliminatedIds.size,
+    /*
+     * `eliminatedIds` holds each voted-out manager under BOTH roster ids (the league roster and its
+     * season roster) so either can be looked up. Its size is therefore twice the head count: one
+     * manager voted out read "10 active, 2 eliminated" of 12. Count the people, not the ids.
+     */
+    eliminatedCount: outOfGameCount ?? eliminatedIds.size,
     auditTail: auditTail.map(entry => ({ eventType: entry.eventType, createdAt: entry.createdAt, metadata: {} })),
     privacy: {
       commissionerParticipationMode: access.settings.commissionerParticipationMode,

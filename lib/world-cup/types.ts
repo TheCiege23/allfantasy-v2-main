@@ -2,9 +2,9 @@ export const WORLD_CUP_TOURNAMENT_KEY = "fifa_world_cup"
 export const WORLD_CUP_ROUNDS = ["round_of_32", "round_of_16", "quarterfinal", "semifinal", "third_place", "final"] as const
 export type WorldCupRound = (typeof WORLD_CUP_ROUNDS)[number]
 export type WorldCupMatchStatus = "scheduled" | "live" | "halftime" | "final" | "postponed" | "cancelled"
-export type WorldCupPickLockStrategy = "per_match" | "tournament_start"
-export type WorldCupVisibility = "public" | "private"
-export type WorldCupKnockoutMode = "predictive" | "reseeded" | "knockout_only"
+type WorldCupPickLockStrategy = "per_match" | "tournament_start"
+type WorldCupVisibility = "public" | "private"
+type WorldCupKnockoutMode = "predictive" | "reseeded" | "knockout_only"
 export const WORLD_CUP_ROUND_LABELS: Record<WorldCupRound, string> = {
   round_of_32: "Round of 32",
   round_of_16: "Round of 16",
@@ -17,7 +17,7 @@ export type WorldCupSlotSpec = { slotKey: string; round: WorldCupRound; region?:
 export type WorldCupMatchSpec = { matchNumber: number; round: WorldCupRound; roundIndex: number; homeSlotKey: string; awaySlotKey: string; homeTeamName: string; awayTeamName: string; nextMatchNumber?: number | null; nextMatchSlot?: "home" | "away" | null }
 export type WorldCupScoringValues = { roundOf32Points: number; roundOf16Points: number; quarterFinalPoints: number; semiFinalPoints: number; finalPoints: number; championBonusPoints: number; thirdPlacePoints?: number | null; confidenceScoringEnabled?: boolean | null }
 export type WorldCupMatchView = { id: string; apiFixtureId: number | null; round: WorldCupRound; roundIndex: number; matchNumber: number; homeSlotKey: string; awaySlotKey: string; homeTeamId: string | null; awayTeamId: string | null; homeTeamName: string; awayTeamName: string; homeTeamLogo: string | null; awayTeamLogo: string | null; homeScore: number | null; awayScore: number | null; homePenaltyScore: number | null; awayPenaltyScore: number | null; status: WorldCupMatchStatus; startsAt: string | null; winnerTeamId: string | null; winnerTeamName: string | null; nextMatchId: string | null; nextMatchSlot: "home" | "away" | null; elapsedMinute: number | null; injuryTime: number | null; period: string | null; venueName: string | null; venueCity: string | null; apiStatusShort: string | null; lastScoreSyncedAt: string | null }
-export type WorldCupParticipantView = {
+type WorldCupParticipantView = {
   id: string
   userId: string
   displayName: string
@@ -42,7 +42,7 @@ export type WorldCupPickView = {
   isCorrect: boolean | null
   lockedAt: string | null
 }
-export type WorldCupEntrySummaryView = {
+type WorldCupEntrySummaryView = {
   id: string
   name: string
   createdAt: string
@@ -76,8 +76,6 @@ export type WorldCupLeaderboardRow = {
   updatedAt: string
   submittedAt: string | null
 }
-/** Alias — leaderboard is entry-scoped. */
-export type WorldCupEntryLeaderboardRow = WorldCupLeaderboardRow
 export type WorldCupChallengeView = {
   challenge: {
     id: string
@@ -188,9 +186,3 @@ export type WorldCupBracketHealth = {
   summary: string
 }
 
-export type WorldCupAiBuilderProgress = {
-  state: "idle" | "running" | "done" | "error"
-  current: number
-  total: number
-  message: string
-}

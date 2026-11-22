@@ -15,9 +15,9 @@ import 'server-only'
  */
 import { CertifiedLineupIntegrationService, type PlayerRef, type CertifiedScheduleDescription } from './lineupIntegration'
 
-export type { PlayerRef, CertifiedScheduleDescription }
+export type { CertifiedScheduleDescription }
 
-export type DraftPickSafety = {
+type DraftPickSafety = {
   block: boolean
   reason: string
   freshnessStatus: string

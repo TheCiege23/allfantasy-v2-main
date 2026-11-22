@@ -463,9 +463,6 @@ export async function runTrendingDashboard(input: {
   let risers: TrendPlayerCard[] = []
   let fallers: TrendPlayerCard[] = []
 
-  const sportsToRun: SupportedSport[] =
-    input.sportFilter === 'ALL' ? [...SUPPORTED_SPORTS] : [normalizeToSupportedSport(input.sportFilter)]
-
   const fcSettings = fantasyCalcSettingsFromLeague(loadedLeague)
 
   let trendingLeagueContext: NormalizedLeagueContext | null = null

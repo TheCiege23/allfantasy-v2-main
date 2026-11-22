@@ -56,7 +56,7 @@ export {
   SLEEPER_POOL_TABLE_ROW_HEIGHT,
 } from './SleeperPoolTable.constants'
 
-export interface SleeperPoolTableProps {
+interface SleeperPoolTableProps {
   filtered: PlayerEntry[]
   draftedNames: Set<string>
   draftedPlayerIds?: ReadonlySet<string> | null
@@ -94,10 +94,10 @@ function rowKey(p: PlayerEntry): string {
   return `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
 }
 
-/** D.7 — scannable position badge, filled in the board's position colour (Sleeper palette). */
-function PositionChip({ pos }: { pos: string | null }) {
+/** D.7 — scannable position badge, filled in the board's position colour (same sport-aware palette). */
+function PositionChip({ pos, sport }: { pos: string | null; sport?: string | null }) {
   const p = (pos ?? '').trim().slice(0, 4).toUpperCase() || '—'
-  const tint = positionTintHex(p)
+  const tint = positionTintHex(p, sport)
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded px-1 py-px text-[11px] font-bold uppercase leading-none"
@@ -282,7 +282,7 @@ function SleeperRow(props: SleeperRowProps) {
                 ) : null}
               </div>
               <div className="flex min-w-0 items-center gap-1">
-                <PositionChip pos={p.position} />
+                <PositionChip pos={p.position} sport={draftSport} />
                 {p.team ? (
                   <span className="truncate text-[11px] text-white/38">{p.team}</span>
                 ) : isProspect ? (
@@ -361,7 +361,7 @@ function SleeperRow(props: SleeperRowProps) {
                   {confidencePct != null ? (
                     <span
                       className="inline-flex items-center gap-1 rounded border border-cyan-300/35 bg-cyan-500/10 px-1 py-0.5 text-[11px] font-semibold text-cyan-100"
-                      title={`AI confidence ${confidencePct}%`}
+                      title={`Chimmy confidence ${confidencePct}%`}
                       data-testid={`${testIdBase}-ai-confidence`}
                     >
                       {confidencePct}%
@@ -379,11 +379,8 @@ function SleeperRow(props: SleeperRowProps) {
         )
         }
       case 'adp': {
-        const delta =
-          p.adp != null && Number.isFinite(Number(p.adp)) &&
-          p.afAdp != null && Number.isFinite(Number(p.afAdp))
-            ? Math.round(p.adp - Number(p.afAdp))
-            : null
+        // No unlabelled "+3/−2" beside the number: it was the gap to the AF ADP column printed
+        // right next to it, so it said the same thing twice and nobody could tell what it meant.
         return (
           <Cell key={col.key} width={col.width} align="right">
             <span
@@ -392,18 +389,6 @@ function SleeperRow(props: SleeperRowProps) {
               title={systemAdpCellTitle(p.adp != null && Number.isFinite(Number(p.adp)))}
             >
               <span>{adpDisplay}</span>
-              {delta !== null && delta !== 0 ? (
-                <span
-                  aria-hidden
-                  data-testid={`${testIdBase}-adp-delta`}
-                  title={`vs AF ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
-                  className={`text-[11px] font-medium tabular-nums leading-none ${
-                    delta > 0 ? 'text-emerald-300/85' : 'text-rose-300/70'
-                  }`}
-                >
-                  {delta > 0 ? '+' : ''}{delta}
-                </span>
-              ) : null}
             </span>
           </Cell>
         )
@@ -507,48 +492,7 @@ function SleeperRow(props: SleeperRowProps) {
         )
       case 'actions':
         return (
-          <Cell key={col.key} width={col.width} align="right" className="gap-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCompareTap()
-              }}
-              aria-label={isCompareAnchor ? 'Clear compare selection' : `Compare ${p.name}`}
-              data-testid={`${testIdBase}-compare`}
-              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
-                isCompareAnchor
-                  ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
-                  : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
-              }`}
-            >
-              <GitCompare className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                if (drafted) return
-                onAddToQueue()
-              }}
-              disabled={drafted}
-              aria-pressed={queued}
-              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
-              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
-              data-testid={`${testIdBase}-queue`}
-              data-queued={queued ? 'true' : 'false'}
-              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
-                drafted
-                  ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
-                  : queued
-                    ? 'border-transparent bg-white text-[#14172a]'
-                    : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
-              }`}
-              title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
-            >
-              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
-              {queued && !drafted ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
-            </button>
+          <Cell key={col.key} width={col.width} align={col.align} className="gap-1">
             {canNominate && onNominateRequest ? (
               <button
                 type="button"
@@ -583,6 +527,47 @@ function SleeperRow(props: SleeperRowProps) {
                 {drafted ? 'Drafted' : 'Draft'}
               </button>
             )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (drafted) return
+                onAddToQueue()
+              }}
+              disabled={drafted}
+              aria-pressed={queued}
+              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
+              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
+              data-testid={`${testIdBase}-queue`}
+              data-queued={queued ? 'true' : 'false'}
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
+                drafted
+                  ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
+                  : queued
+                    ? 'border-transparent bg-white text-[#14172a]'
+                    : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
+              }`}
+              title={aiOverlaySignal ? 'Chimmy quick action: queue candidate' : undefined}
+            >
+              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
+              {queued && !drafted ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCompareTap()
+              }}
+              aria-label={isCompareAnchor ? 'Clear compare selection' : `Compare ${p.name}`}
+              data-testid={`${testIdBase}-compare`}
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
+                isCompareAnchor
+                  ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
+                  : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
+              }`}
+            >
+              <GitCompare className="h-3.5 w-3.5" />
+            </button>
           </Cell>
         )
       default: {
@@ -619,16 +604,14 @@ function SleeperRow(props: SleeperRowProps) {
       onKeyDown={event => {
         if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
           event.preventDefault()
-          if (!drafted) onSelect()
+          onSelect()
         }
       }}
       data-testid={testIdBase}
       data-drafted={drafted ? 'true' : 'false'}
       data-selected={selected ? 'true' : 'false'}
-      onClick={() => {
-        if (drafted) return
-        onSelect()
-      }}
+      // Drafted rows open the player card too — looking a player up is not drafting him.
+      onClick={() => onSelect()}
       style={{ height: rowHeight, minWidth }}
       className={`flex items-stretch border-b border-white/[0.04] text-xs transition-[background-color,color,border-color] duration-150 ${
         drafted
@@ -674,9 +657,14 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
 
   const leftAtPickLabel = leftAtPick?.label ?? null
   const leftAtOverall = leftAtPick?.overall ?? null
+  // AF ADP shows once any player in the pool has one; a column of dashes is hidden.
+  const hasAfAdp = useMemo(
+    () => filtered.some((p) => p.afAdp != null && Number.isFinite(Number(p.afAdp))),
+    [filtered],
+  )
   const layout = useMemo(
-    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel }),
-    [draftSport, statColumnOptions, leftAtPickLabel],
+    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel, hideAfAdp: !hasAfAdp }),
+    [draftSport, statColumnOptions, leftAtPickLabel, hasAfAdp],
   )
 
   const statByKey = useMemo(() => new Map(layout.statDefs.map((d) => [d.key, d])), [layout.statDefs])

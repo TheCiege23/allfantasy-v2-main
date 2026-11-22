@@ -792,7 +792,6 @@ function buildDeterministicPlan(
   const tradeWindows: TradeWindow[] = [];
   const riskPoints: RiskPoint[] = [];
 
-  const remainingWeeks = Math.max(0, 14 - currentWeek);
   const tradeDeadlineWeek = 12;
   const weeksToDeadline = Math.max(0, tradeDeadlineWeek - currentWeek);
 
@@ -1234,10 +1233,10 @@ Please provide your detailed strategy roadmap for this team.`;
       return result.text;
     }
     console.error('AI roadmap generation failed:', result.ok === false ? result.details : 'unknown');
-    return 'AI roadmap generation failed. The deterministic strategy plan above is still valid.';
+    return 'Chimmy roadmap generation failed. The deterministic strategy plan above is still valid.';
   } catch (e) {
     console.error('AI roadmap generation error:', e);
-    return 'AI roadmap generation failed. The deterministic strategy plan above is still valid.';
+    return 'Chimmy roadmap generation failed. The deterministic strategy plan above is still valid.';
   }
 }
 

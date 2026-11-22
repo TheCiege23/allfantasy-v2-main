@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-export interface ComparisonMatrixProps {
+interface ComparisonMatrixProps {
   matrix: ComparisonMatrixRow[];
   players: ResolvedPlayerStats[];
 }

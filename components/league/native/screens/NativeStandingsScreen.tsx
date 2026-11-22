@@ -1,8 +1,10 @@
 'use client'
 
+import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
+import { GuillotineStandingsScreen } from './NativeGuillotineScreens'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
-import { allPlayShare, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
+import { allPlayShare, fitPlayoffFormatToLeague, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
 import { Card, ScreenHead, Segmented } from './NativeScreenParts'
 import { SideContestsCard } from './SideContestsCard'
 import { PayoutsCard } from './PayoutsCard'
@@ -23,7 +25,7 @@ import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
  * (divisions included), live until the bracket is generated; otherwise `fantasyStanding.playoffSeed`. "Power" is an all-play
  * ranking from the same standings read. All DB reads; no provider call.
  */
-type Row = { rosterId: string; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number | null; rank: number | null; streak?: string | null; allPlay?: string | null }
+type Row = { rosterId: string; /** The season's own id for the team, when the standings come from an AllFantasy season. */ seasonRosterId?: string | null; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number | null; rank: number | null; streak?: string | null; allPlay?: string | null }
 type DivisionRow = { key: string; name: string; rosterIds: string[] }
 type StandingsData = {
   season: number
@@ -41,7 +43,13 @@ type View = 'standings' | 'playoffs' | 'power'
 
 const record = (r: Row) => `${r.wins}–${r.losses}${r.ties ? `–${r.ties}` : ''}`
 
-export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
+export function NativeStandingsScreen(props: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
+  // Guillotine has no record and no playoffs: the table is who is still alive, then who was chopped.
+  if (isNativeGuillotineLeague(props.league)) return <GuillotineStandingsScreen league={props.league} onSelectTab={props.onSelectTab} />
+  return <HeadToHeadStandingsScreen {...props} />
+}
+
+function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
   const [view, setView] = useState<View>('standings')
   const [data, setData] = useState<StandingsData | null>(null)
   const [forecast, setForecast] = useState<Forecast[] | null>(null)
@@ -99,11 +107,13 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
     return () => ac.abort()
   }, [league.id, season, week])
 
-  const format = useMemo(
-    () => readPlayoffFormat(league.settings, league.playoffStartWeek ?? null, league.playoffLowerBracket ?? null),
-    [league.settings, league.playoffStartWeek, league.playoffLowerBracket],
-  )
   const rows = useMemo(() => [...(data?.standings ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999)), [data])
+  // The format as the bracket runs it: a playoff size larger than the league is the whole league.
+  const leagueSize = rows.length || (typeof league.teamCount === 'number' ? league.teamCount : null)
+  const format = useMemo(
+    () => fitPlayoffFormatToLeague(readPlayoffFormat(league.settings, league.playoffStartWeek ?? null, league.playoffLowerBracket ?? null), leagueSize),
+    [league.settings, league.playoffStartWeek, league.playoffLowerBracket, leagueSize],
+  )
   const oddsFor = useMemo(() => {
     const byId = new Map((forecast ?? []).map((f) => [f.teamId, f]))
     const byName = new Map((forecast ?? []).filter((f) => f.teamName).map((f) => [String(f.teamName).toLowerCase(), f]))
@@ -128,11 +138,20 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
         ? 'Division winners are guaranteed a playoff spot; seeds follow record.'
         : null
 
-  const race = (rosterId: string) => (rd ? playoffRaceStatus(runtime, rosterId) : null)
+  /*
+   * 🛑 THE PLAYOFF RUNTIME SPEAKS IN THE SEASON'S OWN ROSTER IDS, the standings rows in the league
+   * page's. Compared directly, no row ever matched a seed: every team of a finished season read
+   * "Eliminated", the top seed included, nobody read "Champion", and the bracket never marked the
+   * viewer's game (seen on a 36-team league, 2026-11-19). Each row carries its season id for this.
+   */
+  const seasonIdOf = (r: Row) => r.seasonRosterId ?? r.rosterId
+  const race = (r: Row) => (rd ? playoffRaceStatus(runtime, seasonIdOf(r)) : null)
   const bracket = useMemo(() => {
     if (!rd || !runtime?.bracket?.generated || !runtime.bracket.rounds?.length) return []
-    const names = new Map([...(data?.standings ?? []).map((r) => [r.rosterId, r.teamName] as const), ...(runtime.seeds ?? []).map((sd) => [sd.rosterId, sd.displayName] as const)])
-    return bracketColumns(runtime.bracket.rounds, (id) => names.get(id) ?? null, data?.viewerRosterId ?? null)
+    const table = data?.standings ?? []
+    const names = new Map([...table.map((r) => [r.seasonRosterId ?? r.rosterId, r.teamName] as const), ...(runtime.seeds ?? []).map((sd) => [sd.rosterId, sd.displayName] as const)])
+    const viewerRow = table.find((r) => r.rosterId === data?.viewerRosterId)
+    return bracketColumns(runtime.bracket.rounds, (id) => names.get(id) ?? null, viewerRow ? viewerRow.seasonRosterId ?? viewerRow.rosterId : data?.viewerRosterId ?? null)
   }, [rd, runtime, data])
 
   const teamCell = (r: Row, i: number) => (
@@ -141,7 +160,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
       <strong>{r.teamName}</strong>
       {byes > 0 && i < byes ? <span className="nls-chip" data-tone="good">BYE</span> : null}
       {(() => {
-        const st = race(r.rosterId)
+        const st = race(r)
         return st ? <span className="nls-chip nls-rd-race" data-tone={st === 'eliminated' ? undefined : st === 'champion' ? 'accent' : 'good'} data-testid={`native-standings-race-${r.rosterId}`}>{PLAYOFF_RACE_LABEL[st]}</span> : null
       })()}
       {r.rosterId === data?.viewerRosterId ? <span className="nls-sr">(your team)</span> : null}
@@ -170,7 +189,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   if (data?.scoringMode === 'roto') {
     return (
       <div className="nls" data-testid="native-standings-screen">
-        <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Rotisserie standings" />
+        <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Rotisserie standings" />
         <div className="nls-cols">
           <section className="nls-card nls-card-flush" aria-label="Standings">
             {!rows.length ? (
@@ -219,7 +238,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-standings-screen" data-rd-screen={rd ? 'standings' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Standings & playoffs">
+      <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Standings & playoffs">
         <Segmented label="Standings view" value={view} onChange={setView} options={[{ id: 'standings', label: 'Standings' }, { id: 'playoffs', label: 'Playoff picture' }, { id: 'power', label: 'Power rankings' }]} />
       </ScreenHead>
 
@@ -243,7 +262,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                       <th scope="col">PF</th>
                       <th scope="col" data-hide="phone">PA</th>
                       <th scope="col" data-hide="phone">Strk</th>
-                      <th scope="col" data-align="left">Playoff odds</th>
+                      <th scope="col" data-align="left"><span className="nls-rd-th-lead">Playoff </span>odds</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -255,7 +274,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                             <td colSpan={7}><span>Playoff line · top {cut}</span></td>
                           </tr>
                         ) : null}
-                        <tr data-viewer={r.rosterId === data.viewerRosterId || undefined} data-cut={cut != null && i === cut && i > 0 ? true : undefined} data-rd-out={race(r.rosterId) === 'eliminated' || undefined}>
+                        <tr data-viewer={r.rosterId === data.viewerRosterId || undefined} data-cut={cut != null && i === cut && i > 0 ? true : undefined} data-rd-out={race(r) === 'eliminated' || undefined}>
                           <td data-align="left" className="nls-mono nls-muted">{r.rank ?? i + 1}</td>
                           <td data-align="left">{teamCell(r, i)}</td>
                           <td>{record(r)}</td>

@@ -83,7 +83,7 @@ async function writeSettingsKey(leagueId: string, key: string, value: unknown): 
   })
 }
 
-export type StartShowError = 'not_found' | 'draft_started' | 'order_incomplete' | 'no_lottery' | 'lottery_stale' | 'bad_pace' | 'bad_kind'
+type StartShowError = 'not_found' | 'draft_started' | 'order_incomplete' | 'no_lottery' | 'lottery_stale' | 'bad_pace' | 'bad_kind'
 
 export async function startShow(
   leagueId: string,

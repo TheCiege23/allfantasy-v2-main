@@ -86,13 +86,3 @@ export function LeagueIntroVideoModal({
   )
 }
 
-/**
- * Hook: check if intro should be shown for a league.
- */
-export function useLeagueIntroSeen(leagueId: string): boolean {
-  const [seen, setSeen] = useState(true) // default true to prevent flash
-  useEffect(() => {
-    setSeen(!!localStorage.getItem(`${DISMISSED_KEY_PREFIX}${leagueId}`))
-  }, [leagueId])
-  return seen
-}

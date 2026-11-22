@@ -15,7 +15,7 @@ const messages = [
   "Rebuilding your dynasty empire...",
   "Analyzing seasons of glory & heartbreak...",
   "Unlocking hidden trade gold...",
-  "AI co-GM calibrating your path to the ship...",
+  "Chimmy co-GM calibrating your path to the ship...",
   "Assembling your fantasy legacy...",
 ];
 
@@ -168,7 +168,7 @@ export default function ImportLoading() {
     { icon: Database, label: 'Connecting to Sleeper', done: activeStep >= 0 },
     { icon: Trophy, label: 'Loading leagues & history', done: activeStep >= 1 },
     { icon: Brain, label: 'Calculating legacy stats', done: activeStep >= 2 },
-    { icon: Brain, label: 'Generating AI insights', done: activeStep >= 3 },
+    { icon: Brain, label: 'Generating Chimmy insights', done: activeStep >= 3 },
     { icon: LayoutDashboard, label: 'Preparing dashboard', done: activeStep >= 4 },
   ];
 
@@ -310,7 +310,7 @@ export default function ImportLoading() {
           <div className="grid grid-cols-2 gap-4">
             {[
               { icon: LayoutDashboard, label: 'Report Card' },
-              { icon: Brain, label: 'AI Insights' },
+              { icon: Brain, label: 'Chimmy Insights' },
               { icon: Trophy, label: 'Power Rankings' },
               { icon: Scale, label: 'Trade Evaluator' },
             ].map((item, i) => (

@@ -27,7 +27,7 @@
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 
 /** One selection. Identical in both envelopes — that is what makes one mapper work. */
-export interface FleaflickerDraftCell {
+interface FleaflickerDraftCell {
   team?: { id?: number | null; name?: string | null } | null
   player?: {
     proPlayer?: {
@@ -45,12 +45,12 @@ export interface FleaflickerDraftCell {
   slot?: { round?: number | null; slot?: number | null; overall?: number | null } | null
 }
 
-export interface FleaflickerDraftBoard {
+interface FleaflickerDraftBoard {
   rows?: Array<{ round?: number | null; cells?: FleaflickerDraftCell[] | null }> | null
   orderedSelections?: FleaflickerDraftCell[] | null
 }
 
-export interface FleaflickerDraftSummary {
+interface FleaflickerDraftSummary {
   picks: NormalizedDraftPick[]
   /** Which shape the payload actually was. `empty` is a real answer, not a failure. */
   envelope: 'board' | 'list' | 'empty'

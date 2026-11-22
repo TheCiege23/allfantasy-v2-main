@@ -220,3 +220,15 @@ describe('🛑 two players behind one name are never merged', () => {
     expect(block(out, 'LB')).not.toMatch(/9,000/)
   })
 })
+
+describe('daily sports are not put through the football engine (2026-11-16)', () => {
+  it('🛑 NBA, MLB, NHL, college basketball and soccer get no derivation and no number — and nothing is read', async () => {
+    for (const sport of ['NBA', 'mlb', 'NHL', 'NCAABB', 'SOCCER']) {
+      const out = await buildExplainValueContext({ playerName: 'Nikola Jokic', sport })
+      expect(out).toContain(`NO DERIVATION FOR ${sport.toUpperCase()} HERE`)
+      expect(out).toContain('Do NOT give a derivation or a number from general knowledge')
+    }
+    expect(h.boardFind).not.toHaveBeenCalled()
+  })
+})
+

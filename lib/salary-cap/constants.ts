@@ -72,13 +72,3 @@ export const DEFAULT_DEAD_MONEY_PERCENT = 25
 export const DEFAULT_ROLLOVER_MAX = 25
 export const DEFAULT_AUCTION_HOLDBACK = 50
 
-export const OFFSEASON_PHASES = [
-  'lock',
-  'expiration',
-  'rollover',
-  'extension',
-  'tag',
-  'draft',
-  'fa_open',
-  'in_season',
-] as const

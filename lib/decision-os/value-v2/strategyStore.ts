@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { confirmStrategy, observeStrategy, type StrategyState } from './strategy'
 
-export const strategyName = z.enum(['win-now', 'balanced', 'rebuild'])
-export const strategyScopeSchema = z.object({
+const strategyName = z.enum(['win-now', 'balanced', 'rebuild'])
+const strategyScopeSchema = z.object({
   userId: z.string().trim().min(1).max(128), leagueId: z.string().trim().min(1).max(128),
   season: z.number().int().min(1900).max(2200),
 }).strict()
@@ -17,7 +17,7 @@ const storedSchema = strategyScopeSchema.extend({ id: z.string().min(1), active:
 }).strip().refine(s => !s.pending || (s.pending.strategy !== s.active && s.pending.lastWeek === s.lastObservedWeek))
 export type StrategyScope = z.infer<typeof strategyScopeSchema>
 export type StoredStrategy = z.infer<typeof storedSchema>
-export const strategyObservationSchema = z.object({ strategy: strategyName, week: z.number().int().min(1).max(60),
+const strategyObservationSchema = z.object({ strategy: strategyName, week: z.number().int().min(1).max(60),
   evidenceId: z.string().trim().min(1).max(200), materialChange: z.boolean(), restartSequence: z.boolean().optional() }).strict()
 export const strategyConfirmationSchema = z.object({ expectedRevision: z.number().int().nonnegative(),
   strategy: strategyName, confirmed: z.literal(true) }).strict()

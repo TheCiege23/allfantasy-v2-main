@@ -93,7 +93,7 @@ export function buildDraftTradeAiReview(input: DraftTradeAiReviewInput): DraftTr
     reasons.push('Counter only if you want a specific tier break in a nearby slot.')
   }
 
-  const summary = reasons[0] ?? 'Review this proposal in your private AI context before responding.'
+  const summary = reasons[0] ?? 'Review this proposal in your private Chimmy context before responding.'
   return {
     verdict,
     reasons,

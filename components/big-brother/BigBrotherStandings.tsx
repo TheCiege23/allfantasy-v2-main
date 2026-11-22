@@ -11,6 +11,15 @@ const LABELS: Record<BigBrotherStanding['status'], string> = {
   HOH: 'Head of Household', NOMINATED: 'On the block', VETO_WINNER: 'Veto winner', VETO_PLAYER: 'Veto player',
   SAFE: 'In house', JURY: 'Jury', ELIMINATED: 'Evicted', WINNER: 'Winner', FINALIST: 'Finalist', AWAITING_START: 'Awaiting start',
 }
+/**
+ * Column headers: a short visible label and the full name for screen readers. The long visible labels made the table
+ * 880px wide inside a card that is narrower at every width — two columns off-screen even at 1440 — and "Nominations"
+ * broke mid-word ("Nominatio / ns") (2026-11-07, Big Brother audit item 5).
+ */
+const COLUMNS: Array<[short: string, full?: string]> = [
+  ['Finish'], ['Team'], ['House status'], ['HOH', 'HOH wins'], ['Veto', 'Veto wins'],
+  ['Noms', 'Nominations'], ['Evicted', 'Evicted week'], ['Points', 'Processed points'],
+]
 type Filter = 'all' | 'active' | 'jury' | 'evicted'
 type Sort = 'survival' | 'hoh' | 'veto' | 'points'
 
@@ -89,7 +98,12 @@ export function BigBrotherStandings({ leagueId }: { leagueId: string }) {
       </dl>
       <div className="af-overview-card border space-y-3">
         <h3>Season standings</h3>
-        <p className="text-sm text-white/60">Active houseguests remain in contention without a numbered finish. Evicted teams appear by finish; HOH and veto wins are competition records.</p>
+        {/* One disclosure instead of two paragraphs above the table: on a phone they pushed the first team below the fold. */}
+        <details className="af-bb-about">
+          <summary>How standings work</summary>
+          <p>Active houseguests remain in contention without a numbered finish. Evicted teams appear by finish; HOH and veto wins are competition records.</p>
+          <p id="bb-standings-hint">Points include finalized weeks processed in AllFantasy; a dash means no recorded score.</p>
+        </details>
         <div className="af-bb-tools">
           <label>Find a team<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Team name" /></label>
           <label>House status<select value={filter} onChange={e => setFilter(e.target.value as Filter)}>
@@ -99,13 +113,12 @@ export function BigBrotherStandings({ leagueId }: { leagueId: string }) {
             <option value="survival">Survival / finish</option><option value="hoh">HOH wins</option><option value="veto">Veto wins</option><option value="points">Processed points</option>
           </select></label>
         </div>
-        <p className="af-standings-scroll-hint" id="bb-standings-hint">Scroll horizontally for all columns. Points include finalized weeks processed in AllFantasy; a dash means no recorded score.</p>
         <p role="status" className="text-sm text-white/60">{rows.length} of {current.rows.length} houseguests</p>
         {current.rows.length === 0 ? <p>No houseguests have been added to this league yet.</p> : rows.length === 0 ? <p>No teams match these filters.</p> : (
           <div className="af-standings-scroll overflow-x-auto rounded-xl border" role="region" aria-label="Big Brother season standings" aria-describedby="bb-standings-hint" tabIndex={0}>
             <table className="w-full text-sm af-bb-table">
               <caption className="sr-only">Big Brother season standings and competition records</caption>
-              <thead><tr>{['Finish', 'Team', 'House status', 'HOH wins', 'Veto wins', 'Nominations', 'Evicted week', 'Processed points'].map(h => <th scope="col" key={h}>{h}</th>)}</tr></thead>
+              <thead><tr>{COLUMNS.map(([short, full]) => <th scope="col" key={short}>{full ? <><span aria-hidden="true">{short}</span><span className="sr-only">{full}</span></> : short}</th>)}</tr></thead>
               <tbody>{rows.map(r => <tr key={r.rosterId} data-viewer={r.rosterId === current.viewerRosterId || undefined}>
                 <td>{r.place ?? '—'}</td>
                 <th scope="row"><span>{r.teamName}</span>{r.rosterId === current.viewerRosterId && <span className="af-bb-you">You</span>}</th>
@@ -116,6 +129,24 @@ export function BigBrotherStandings({ leagueId }: { leagueId: string }) {
             </table>
           </div>
         )}
+        {/* Narrow card (phone, and tablet beside the sidebar): one compact card per houseguest instead of a table that
+            scrolls sideways. The stylesheet shows exactly one of the two, by the card's own width. */}
+        {rows.length > 0 && <ol className="af-bb-cards" aria-label="Big Brother season standings, compact">
+          {rows.map(r => <li key={r.rosterId} data-viewer={r.rosterId === current.viewerRosterId || undefined}>
+            <div className="af-bb-card-head">
+              <span className="af-bb-card-place" aria-label={r.place ? `Finish ${r.place}` : 'No finish yet'}>{r.place ?? '—'}</span>
+              <span className="af-bb-card-team">{r.teamName}{r.rosterId === current.viewerRosterId && <span className="af-bb-you">You</span>}</span>
+              <span className="af-bb-status" data-status={r.status}>{LABELS[r.status]}</span>
+            </div>
+            <dl className="af-bb-card-stats">
+              <div><dt>HOH</dt><dd>{r.hohWins}</dd></div>
+              <div><dt>Veto</dt><dd>{r.vetoWins}</dd></div>
+              <div><dt>Noms</dt><dd>{r.timesNominated}</dd></div>
+              <div><dt>Evicted</dt><dd>{r.evictedWeek === null ? '—' : `Wk ${r.evictedWeek}`}</dd></div>
+              <div><dt>Points</dt><dd>{r.processedPoints === null ? '—' : r.processedPoints.toFixed(2)}</dd></div>
+            </dl>
+          </li>)}
+        </ol>}
       </div>
       {current.history.length > 0 && <section className="af-overview-card border" aria-label="Weekly Big Brother results">
         <h3>Weekly results</h3>

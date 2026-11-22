@@ -217,6 +217,15 @@ export async function requireVerifiedUser(): Promise<
  * next.config.js kept that out of the build log.
  *
  * Same return shape as its sibling on purpose — callers do `if (!x.ok) return x.response`.
+ *
+ * 🛑 LEAGUE IMPORT AND SYNC SIT BEHIND THIS GATE TOO, SINCE 2026-11-15 (owner's call: "import
+ * before confirmation is fine"). Every import route (`/api/leagues/import/*`, `/api/import-sleeper`,
+ * `/api/import-espn`, `/api/mfl/import`, `/api/yahoo/leagues`, `/api/fantrax/player-pool`) and the
+ * league sync / lineup-refresh buttons (`/api/core/sync*`, `/api/core/players/{leagues,refresh-lineups}`)
+ * used `requireVerifiedUser`, so an email sign-up could not see their own league until they had
+ * opened the confirmation email and signed in again — measured 2026-09-25, 44 of 110 accounts had
+ * never confirmed. Confirming is still asked for; it no longer stands between a new account and
+ * its league. League CREATION, chat uploads/broadcasts and phone/avatar settings still require it.
  */
 export async function requireAgeConfirmedUser(): Promise<
   | { ok: true; userId: string; profile: VerifiedUserProfile }

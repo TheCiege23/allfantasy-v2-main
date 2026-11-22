@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { computeDraftCountdownSeconds } from '@/lib/draft/computeDraftCountdownSeconds'
 
-export type DraftCountdownPauseReason = 'commissioner' | 'overnight_window' | null | undefined
+type DraftCountdownPauseReason = 'commissioner' | 'overnight_window' | null | undefined
 
-export type UseDraftCountdownOpts = {
+type UseDraftCountdownOpts = {
   pauseReason?: DraftCountdownPauseReason
   overnightResumeAtIso?: string | null
 }

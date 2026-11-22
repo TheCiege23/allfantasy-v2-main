@@ -24,7 +24,7 @@ import { buildRosterIdMap } from './rosterIdMatch'
  * ⚠ `WeeklyMatchup.leagueId` HOLDS THE PLATFORM LEAGUE ID, NOT `League.id`.
  */
 
-export type AllPlayRow = {
+type AllPlayRow = {
   rosterId: string
   teamName: string | null
   managerName: string | null

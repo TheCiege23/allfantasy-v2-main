@@ -21,10 +21,10 @@
  * Pure.
  */
 
-export const DAILY_WAIVER_RUN_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
+const DAILY_WAIVER_RUN_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
 
 /** Every weekday, Sunday = 0 — the form `computeNextWaiverRunAtUtc` reads. */
-export const EVERY_DAY_PROCESSING_DAYS: readonly number[] = [0, 1, 2, 3, 4, 5, 6]
+const EVERY_DAY_PROCESSING_DAYS: readonly number[] = [0, 1, 2, 3, 4, 5, 6]
 
 /** The processing days the league runs on, or null to keep its own. */
 export function dailySportWaiverRunDays(input: {

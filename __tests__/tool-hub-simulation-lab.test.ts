@@ -53,7 +53,7 @@ describe('tool hub → Simulation Lab', () => {
   })
 
   it('canonical URL is /tools/simulation-lab', () => {
-    expect(getToolCanonical('simulation-lab')).toBe('https://allfantasy.ai/tools/simulation-lab')
+    expect(getToolCanonical('simulation-lab')).toBe('https://www.allfantasy.ai/tools/simulation-lab')
   })
 
   // landing_tool_visit reports /tools/simulation-lab: see tool-landing-analytics-path.test.tsx.

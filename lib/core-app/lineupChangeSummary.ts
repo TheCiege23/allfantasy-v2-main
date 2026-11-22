@@ -14,7 +14,7 @@
  */
 import type { LineupOptimizerChange } from '@/lib/decision-os/lineup/bestLineup'
 
-export type LineupChangeSummary = {
+type LineupChangeSummary = {
   starts: Array<{ name: string; projected: number; slotLabel: string; emptySeat: boolean }>
   benches: Array<{ name: string; projected: number | null }>
   moves: Array<{ name: string; fromSlot: string; toSlot: string }>

@@ -24,10 +24,10 @@ import type { TradeReview } from './tradeReview'
  * weekly lineup change — which no grade can contradict.
  */
 
-export type TradeVerdictKind = 'accept' | 'decline' | 'counter' | 'fair_either_way'
-export type VerdictConfidence = 'high' | 'medium' | 'low'
+type TradeVerdictKind = 'accept' | 'decline' | 'counter' | 'fair_either_way'
+type VerdictConfidence = 'high' | 'medium' | 'low'
 
-export type PacketAsset = {
+type PacketAsset = {
   name: string
   kind: 'player' | 'pick' | 'faab'
   leagueValue: number | null
@@ -35,7 +35,7 @@ export type PacketAsset = {
   adjustments: string[]
 }
 
-export type PacketLineup = {
+type PacketLineup = {
   week: number | null
   startingPointsBefore: number | null
   startingPointsAfter: number | null
@@ -44,7 +44,7 @@ export type PacketLineup = {
   depthChanges: Array<{ position: string; rosteredBefore: number; rosteredAfter: number }>
 }
 
-export type PacketBenefitSide = {
+type PacketBenefitSide = {
   lineupBeforePerWeek: number
   lineupDeltaPerWeek: number
   forcedDrops: Array<{ name: string; value: number }>

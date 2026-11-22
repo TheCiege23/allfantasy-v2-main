@@ -18,6 +18,7 @@ import {
 
 const completeDraftSessionMock = vi.fn(async () => true)
 const postDraftPickChatEventMock = vi.fn(async () => {})
+const signRookieContractForPickMock = vi.fn(async (..._args: unknown[]) => null)
 const recordTrendSignalMock = vi.fn(async () => {})
 const resolveTrendPlayerIdsMock = vi.fn(async (lookups: unknown[]) => lookups.map(() => null as string | null))
 const leagueLifecycleTransitionMock = vi.fn(async () => {})
@@ -154,6 +155,8 @@ const ctx = vi.hoisted(() => {
   }
 
   const prisma = {
+    // No season rosters yet, so the rostered-player guard (rosteredPlayerGuard.ts) has nothing to refuse.
+    redraftSeason: { findFirst: vi.fn(async () => null) },
     draftSession: {
       // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
       findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
@@ -237,8 +240,10 @@ vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
   getSalaryCapConfig: vi.fn(async () => null),
 }))
 
+// submitPick signs through signRookieContractForPick. A mock without it made the call throw inside
+// submitPick's non-fatal try/catch, so the suite stayed green while asserting nothing about it.
 vi.mock('@/lib/salary-cap/RookieContractService', () => ({
-  assignRookieContract: vi.fn(async () => {}),
+  signRookieContractForPick: (...args: unknown[]) => signRookieContractForPickMock(...args),
 }))
 
 vi.mock('@/lib/draft-room/postDraftPickChatEvent', () => ({
@@ -322,6 +327,10 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     expect(ctx.store.session.timerEndAt!.getTime()).toBeGreaterThan(Date.now())
     expect(ctx.store.session.version).toBe(6)
     expect(completeDraftSessionMock).not.toHaveBeenCalled()
+    // The committed pick asks to sign its rookie contract (the signer decides whether the league signs one).
+    expect(signRookieContractForPickMock).toHaveBeenLastCalledWith({
+      leagueId: 'league-1', rosterId: 'roster-a', playerId: 'player-1', playerName: 'Josh Allen', position: 'QB', overall: 1,
+    })
   })
 
   /**
@@ -557,6 +566,40 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  /*
+   * An OFFLINE draft (the commissioner enters every pick) ran a 90-second clock and auto-drafted a real
+   * manager when it expired — found on staging. Every automatic picker submits with source 'auto'.
+   */
+  describe('offline draft', () => {
+    const offline = async () => {
+      const { getDraftUISettingsForLeague } = await import('@/lib/draft-defaults/DraftUISettingsResolver')
+      vi.mocked(getDraftUISettingsForLeague).mockResolvedValueOnce({ tradedPickOwnerNameRedEnabled: false, tradedPickColorModeEnabled: false, executionMode: 'offline' } as never)
+    }
+
+    it('refuses an automatic pick and writes nothing', async () => {
+      await offline()
+      const timerBefore = ctx.store.session.timerEndAt
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'auto', expectedOverall: 1 })
+      expect(r).toMatchObject({ success: false, code: 'DRAFT_PICK_OFFLINE_DRAFT' })
+      expect(ctx.store.picks).toHaveLength(0)
+      expect(ctx.store.session.timerEndAt).toBe(timerBefore)
+    })
+
+    it("takes the commissioner pick and starts no clock for the next team", async () => {
+      await offline()
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'commissioner', commissionerOverride: true, expectedOverall: 1 })
+      expect(r.success).toBe(true)
+      expect(ctx.store.picks).toHaveLength(1)
+      expect(ctx.store.session.timerEndAt).toBeNull()
+    })
+
+    it('CONTROL: a live draft still auto-picks and starts the next clock', async () => {
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'auto', expectedOverall: 1 })
+      expect(r.success).toBe(true)
+      expect(ctx.store.session.timerEndAt).toBeInstanceOf(Date)
+    })
   })
 
   it('traded pick: on-clock owner is new roster; wrong roster rejected', async () => {

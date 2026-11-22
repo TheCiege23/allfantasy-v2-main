@@ -185,6 +185,15 @@ export const myTeamScreenMessages = defineMessages({
       `Should I start ${bench} instead of ${starter} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
     benchAskChimmy: 'Ask Chimmy about this swap',
     benchCaveat: 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.',
+    /* The bench check's graded record for a swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`). */
+    /** The same small label as every measured line on /core (`messages/adviceRecord.ts` recordLabel). */
+    benchCheckRecordLabel: 'Track record',
+    benchCheckRecord: (pct: number, n: number, band: 'narrow' | 'clear' | 'wide', low: boolean) => {
+      const edge = band === 'narrow' ? '2–4 point' : band === 'clear' ? '4–8 point' : '8+ point'
+      return low
+        ? `Swaps with a ${edge} edge have been right only ${pct}% of the time (${n} graded calls) — closer than the projections suggest.`
+        : `Swaps with a ${edge} edge have been right ${pct}% of the time (${n} graded calls).`
+    },
 
     // TaxiYears
     taxiUnknownTitle: "This needs the league's taxi-year limit and its season-end roster history. One of them is missing, so we are not going to guess.",
@@ -219,7 +228,7 @@ export const myTeamScreenMessages = defineMessages({
     decisionReviewSwap: (starter: string, bench: string) => `Review ${starter} vs ${bench}`,
     decisionKickoffReached: 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.',
     decisionOutOrBye: (name: string, onBye: boolean) =>
-      `${name} is ${onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`,
+      `${name} is ${onBye ? 'on a bye' : 'ruled out'} — he scores zero unless you start someone else.`,
     decisionBenchProjectsMore: (bench: string, delta: number) =>
       `${bench} projects ${delta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`,
     decisionScoringDisfavors: "This league's scoring does not favor the bench option. These projections do not support a swap.",
@@ -384,6 +393,13 @@ export const myTeamScreenMessages = defineMessages({
       `¿Debería poner de titular a ${bench} en lugar de ${starter} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`,
     benchAskChimmy: 'Preguntar a Chimmy por este cambio',
     benchCaveat: 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.',
+    benchCheckRecordLabel: 'Historial',
+    benchCheckRecord: (pct, n, band, low) => {
+      const edge = band === 'narrow' ? '2 a 4 puntos' : band === 'clear' ? '4 a 8 puntos' : 'más de 8 puntos'
+      return low
+        ? `Los cambios con una ventaja de ${edge} solo han acertado el ${pct}% de las veces (${n} decisiones evaluadas): más ajustado de lo que sugieren las proyecciones.`
+        : `Los cambios con una ventaja de ${edge} han acertado el ${pct}% de las veces (${n} decisiones evaluadas).`
+    },
 
     taxiUnknownTitle: 'Hace falta el límite de años de taxi de la liga y su historial de plantillas a fin de temporada. Falta uno de los dos, así que no vamos a adivinar.',
     taxiUnknown: 'años restantes desconocidos',
@@ -412,7 +428,7 @@ export const myTeamScreenMessages = defineMessages({
     decisionReviewSwap: (starter, bench) => `Revisa ${starter} frente a ${bench}`,
     decisionKickoffReached: 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.',
     decisionOutOrBye: (name, onBye) =>
-      `${name} está ${onBye ? 'en semana de descanso' : 'descartado'}. Revisa la elegibilidad del reemplazo, los cierres individuales y los cambios automáticos en tu plataforma.`,
+      `${name} está ${onBye ? 'en semana de descanso' : 'descartado'}: suma cero si no alineas a otro.`,
     decisionBenchProjectsMore: (bench, delta) =>
       `${bench} proyecta ${delta.toFixed(1)} puntos más con la puntuación de esta liga. Confirma primero su estado de lesión y su elegibilidad.`,
     decisionScoringDisfavors: 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.',

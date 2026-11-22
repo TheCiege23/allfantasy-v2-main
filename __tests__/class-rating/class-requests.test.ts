@@ -1,15 +1,10 @@
 // @vitest-environment node
-/**
- * "Ask the commissioner" around the division gate (ADR F2.10a rule 6), ported from PR #1753.
- */
+/** Manager-specific commissioner approvals for Career Level joins. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DivisionGateDecision } from '@/lib/class-rating/divisionGate'
-import type { ManagerClass } from '@/lib/class-rating/reads'
 
 const s = vi.hoisted(() => ({
   settings: {} as Record<string, unknown>,
-  gate: { outcome: 'allow', reason: 'in_band', userDivision: 3, leagueDivision: 3 } as DivisionGateDecision,
-  classes: new Map<string, ManagerClass>(),
+  careerLevel: 1,
   users: [] as Array<{ id: string; username: string | null; displayName: string | null }>,
   locked: [] as string[],
   writes: [] as Array<Record<string, unknown>>,
@@ -28,6 +23,7 @@ vi.mock('@/lib/prisma', () => {
   return {
     prisma: {
       league,
+      userProfile: { findMany: vi.fn(async () => [{ userId: 'newbie', xpLevel: s.careerLevel, xpTotal: null }]) },
       leagueTeam: { findMany: vi.fn(async () => [{ claimedByUserId: 'co-commish' }]) },
       appUser: {
         findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) => s.users.filter((u) => where.id.in.includes(u.id))),
@@ -49,14 +45,10 @@ vi.mock('@/lib/prisma', () => {
 })
 vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: vi.fn(async () => 'member') }))
 vi.mock('@/lib/adminAuth', () => ({ isAdminRole: () => false, isAdminEmailAllowed: () => false }))
-vi.mock('@/lib/class-rating/reads', () => ({ getManagerClass: vi.fn(async (id: string) => s.classes.get(id) ?? { status: 'unrated' }) }))
-vi.mock('@/lib/class-rating/divisionGate', async (orig) => ({
-  ...(await orig<typeof import('@/lib/class-rating/divisionGate')>()),
-  getLeagueDivision: vi.fn(async () => 3),
-}))
-vi.mock('@/lib/league-join/joinDivisionGate', () => ({
-  evaluateJoinDivisionGate: vi.fn(async () => s.gate),
-  isOpenLeague: vi.fn(() => true),
+vi.mock('@/lib/rank/careerLedger', () => ({
+  loadCareerLedger: vi.fn(async (ids: string[]) => ids.includes('newbie')
+    ? [{ userId: 'newbie', platform: 'sleeper', wins: 8, losses: 6, ties: 0, season: 2024, leagueSize: 12, gamesPlayed: 14, wonChampionship: true }]
+    : []),
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
   dispatchNotification: vi.fn(async (n: { userIds: string[]; type: string; title: string; body: string }) => {
@@ -77,15 +69,9 @@ import {
 import { decideClassException, getClassGateSummary, requestClassException } from '@/lib/league-join/classRequests'
 import { isClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 
-const est = (division: number): ManagerClass => ({
-  status: 'established', rating: 1500, rd: 60, games: 40, classLevel: division * 5, division, percentile: 0.5, computedAt: 'x',
-})
-const DENY: DivisionGateDecision = { outcome: 'deny', reason: 'outside_division_band', userDivision: 1, leagueDivision: 3, band: [2, 4] }
-
 beforeEach(() => {
-  s.settings = { inviteCode: 'CODE1' }
-  s.gate = { outcome: 'allow', reason: 'in_band', userDivision: 3, leagueDivision: 3 }
-  s.classes = new Map([['newbie', est(1)]])
+  s.settings = { inviteCode: 'CODE1', creatorRankLevel: 10 }
+  s.careerLevel = 10
   s.users = [{ id: 'newbie', username: 'rookie_rae', displayName: null }]
   s.locked = []
   s.writes = []
@@ -123,9 +109,9 @@ describe('exceptions on League.settings — pure', () => {
   })
 
   it('the join pages recognise exactly the division refusal', () => {
-    expect(isClassGateBlocked({ code: 'DIVISION_GATE_BLOCKED', error: 'x' })).toBe(true)
+    expect(isClassGateBlocked({ code: 'CAREER_LEVEL_GATE_BLOCKED', error: 'x' })).toBe(true)
     expect(isClassGateBlocked({ code: 'RANK_GATE_BLOCKED' })).toBe(false)
-    expect(isClassGateBlocked({ error: 'DIVISION_GATE_BLOCKED' })).toBe(false)
+    expect(isClassGateBlocked({ error: 'CAREER_LEVEL_GATE_BLOCKED' })).toBe(false)
     expect(isClassGateBlocked(null)).toBe(false)
   })
 })
@@ -137,19 +123,20 @@ describe('requestClassException — the manager side', () => {
     expect(s.notified).toEqual([])
   })
 
-  it('records a refused manager under the league lock, with their division, and tells every commissioner', async () => {
-    s.gate = DENY
+  it('records a refused manager under the league lock, with their Career Level, and tells every commissioner', async () => {
+    s.careerLevel = 6
     expect(await requestClassException({ leagueId: 'L1', userId: 'newbie' })).toEqual({ ok: true, status: 'requested' })
     expect(s.locked).toEqual(['L1'])
-    expect(readClassJoinRequests(s.settings)).toMatchObject([{ userId: 'newbie', divisionAtRequest: 1 }])
+    expect(readClassJoinRequests(s.settings)).toMatchObject([{ userId: 'newbie', divisionAtRequest: null }])
     expect(s.notified).toHaveLength(1)
     expect(s.notified[0].userIds.sort()).toEqual(['co-commish', 'commish'])
     expect(s.notified[0].title).toBe('@rookie_rae asked to join Gridiron Gang')
-    expect(s.notified[0].body).toContain('@rookie_rae is in Division 1; your league plays in Division 3, so open joins are for Divisions 2–4.')
+    expect(s.notified[0].body).toContain('Career Level 6. This league allows direct joins from levels 7–13.')
+    expect(s.notified[0].body).toContain('8–6–0 (W–L–T)')
   })
 
   it('asking twice does not notify twice; an excepted manager is told to join', async () => {
-    s.gate = DENY
+    s.careerLevel = 6
     await requestClassException({ leagueId: 'L1', userId: 'newbie' })
     expect(await requestClassException({ leagueId: 'L1', userId: 'newbie' })).toEqual({ ok: true, status: 'already_requested' })
     expect(s.notified).toHaveLength(1)
@@ -163,10 +150,10 @@ describe('decideClassException — the commissioner side', () => {
     s.settings = withClassJoinRequest(s.settings, { userId: 'newbie', divisionAtRequest: 1 })
     const r = await decideClassException({ leagueId: 'L1', decidedBy: 'commish', action: 'approve', userId: 'newbie' })
     expect(r.ok).toBe(true)
-    expect(readClassExceptions(s.settings)).toMatchObject([{ userId: 'newbie', via: 'request', grantedBy: 'commish', divisionAtGrant: 1 }])
+    expect(readClassExceptions(s.settings)).toMatchObject([{ userId: 'newbie', via: 'request', grantedBy: 'commish', divisionAtGrant: null }])
     expect(readClassJoinRequests(s.settings)).toEqual([])
     expect(s.notified.at(-1)).toMatchObject({ userIds: ['newbie'], type: 'class_join_approved', title: 'You can join Gridiron Gang' })
-    if (r.ok) expect(r.summary).toMatchObject({ division: 3, band: [2, 4], open: true, exceptions: [{ userId: 'newbie', classLevel: 5, division: 1 }] })
+    if (r.ok) expect(r.summary).toMatchObject({ leagueLevel: 10, band: [7, 13], exceptions: [{ userId: 'newbie', careerLevel: 10 }] })
   })
 
   it('grants by username, refuses an unknown one, and will not approve a request that does not exist', async () => {
@@ -192,13 +179,12 @@ describe('decideClassException — the commissioner side', () => {
     expect(s.notified).toHaveLength(before)
   })
 
-  it('the summary shows a provisional or unrated requester without inventing a Class', async () => {
-    s.classes.set('prov', { status: 'provisional', rating: 1510, rd: 170, games: 3, establishedAtRd: 100, computedAt: 'x' })
-    s.settings = withClassJoinRequest(withClassJoinRequest(s.settings, { userId: 'prov', divisionAtRequest: null }), { userId: 'nobody', divisionAtRequest: null })
+  it('includes the manager’s career history and gives a new manager Level 1', async () => {
+    s.settings = withClassJoinRequest(withClassJoinRequest(s.settings, { userId: 'newbie', divisionAtRequest: null }), { userId: 'nobody', divisionAtRequest: null })
     const summary = await getClassGateSummary('L1')
-    expect(summary?.requests.map((r) => [r.userId, r.classLevel, r.division, r.provisional])).toEqual([
-      ['prov', null, null, true],
-      ['nobody', null, null, false],
+    expect(summary?.requests).toMatchObject([
+      { userId: 'newbie', careerLevel: 10, history: '1 season year · 1 league-season · 8–6–0 (W–L–T) · 1 title' },
+      { userId: 'nobody', careerLevel: 1, history: 'No verified results on file.' },
     ])
   })
 })

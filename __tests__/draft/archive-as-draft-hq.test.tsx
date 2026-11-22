@@ -5,7 +5,7 @@
  * and end times and active-OTC durations. Now the archive carries the Draft HQ title and a one-line
  * summary, and the provenance folds into a closed "Timing and source details" section.
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
@@ -61,10 +61,40 @@ const detail = () =>
 const props = { choices: [], leagueId: 'L1', page: 1, more: false, total: 1 }
 
 describe('the archive as Draft HQ', () => {
-  it('carries the Draft HQ title and says which draft this is', () => {
-    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+  /*
+   * 2026-11-13: the title says where this league's draft is and where it is made, instead of the word
+   * "Draft HQ" — and the status and pick count are said once, in it, not again in the line under it.
+   */
+  it('leads with where the draft is and where it is made, and says which draft this is', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2026 draft done on Sleeper · 2 picks')
+    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL · snake')
+    expect(document.querySelector('.af-archive-hq-intro')?.textContent).toContain('This draft runs on Sleeper — make your picks there.')
+  })
+
+  it('a draft still running reads as drafting, with its pick count', () => {
+    const d = detail()
+    render(<DraftArchive {...props} detail={{ ...d, choice: { ...d.choice, status: 'drafting' } } as ArchiveDetail} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Drafting on Sleeper · 2 picks made')
+  })
+
+  it('a draft imported without its format or status says what is on file, never "unknown"', () => {
+    // Staging 2026-11-19: a Fantrax draft read "Draft status: unknown" over "2026 · NFL · unknown".
+    const d = detail()
+    const bare = { ...d, choice: { ...d.choice, key: 'legacy:NFL:2026', format: 'unknown', status: 'unknown' } } as ArchiveDetail
+    const view = render(<DraftArchive {...props} detail={bare} asDraftHq platformName="Fantrax" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2026 draft on Fantrax · 2 picks on file')
+    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL')
+    expect(document.body.textContent).not.toMatch(/unknown/i)
+    view.unmount()
+    h.language = 'es'
+    render(<DraftArchive {...props} detail={bare} asDraftHq platformName="Fantrax" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft de 2026 en Fantrax · 2 selecciones registradas')
+  })
+
+  it('with no draft open it is still titled Draft HQ', () => {
+    render(<DraftArchive {...props} detail={null} asDraftHq />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft HQ')
-    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL · snake · complete · 2 picks')
   })
 
   it('folds the source id, UTC clock and coverage notes into a closed details section', () => {
@@ -86,7 +116,7 @@ describe('the archive as Draft HQ', () => {
 
   it('says each thing once: no repeated draft heading, no lone "Page 1", a singular record count', () => {
     render(<DraftArchive {...props} detail={detail()} asDraftHq />)
-    expect(document.querySelectorAll('h3')).toHaveLength(2) // Selections and ownership, Draft analysis — not the draft line again
+    expect(document.querySelectorAll('h3')).toHaveLength(3) // Selections and ownership, Draft analysis, Records from this draft — not the draft line again
     expect([...document.querySelectorAll('h3')].some(h => h.textContent?.startsWith('2026 · NFL'))).toBe(false)
     expect(screen.queryByRole('navigation', { name: 'Archive pages' })).toBeNull()
     expect(screen.getByText('1 draft record')).toBeTruthy()
@@ -143,10 +173,31 @@ describe('the archive as Draft HQ', () => {
     expect(document.querySelector('.af-archive-cols-note')).toBeNull()
   })
 
+  it('shows pick timing behind one switch for the whole table, not a drawer on every row', () => {
+    // Live /core 2026-11-06: 25 "Identity and owner time" drawers nearly doubled the table's height on a phone.
+    const d = detail()
+    Object.assign(d.picks[0], { playerId: '4034', identityBasis: 'Recorded at selection' })
+    render(<DraftArchive {...props} detail={d} asDraftHq />)
+    expect(picksTable().querySelectorAll('details')).toHaveLength(0)
+    expect(picksTable().textContent).not.toContain('Recorded at selection')
+    const toggle = screen.getByRole('button', { name: 'Show pick details' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: 'Hide pick details' }).getAttribute('aria-pressed')).toBe('true')
+    expect(picksTable().textContent).toContain('4034 · Recorded at selection')
+  })
+
+  it('groups the history drawers in one records card, with no lone timeline page', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+    const card = screen.getByRole('region', { name: 'Records from this draft' })
+    expect(card.querySelectorAll('details').length).toBe(5)
+    expect(screen.queryByRole('navigation', { name: 'Timeline pages' })).toBeNull()
+  })
+
   it('reads Spanish', () => {
     h.language = 'es'
-    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Centro del draft')
+    render(<DraftArchive {...props} detail={detail()} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft 2026 terminado en Sleeper · 2 selecciones')
     expect(document.querySelector('details.af-archive-tech summary')?.textContent).toBe('Detalles de horario y origen')
   })
 })

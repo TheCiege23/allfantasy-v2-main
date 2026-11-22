@@ -5,7 +5,7 @@ import { hasWorldCupPickSelection } from "./worldCupProjectedBracket"
 import { isWorldCupMatchPickable } from "./worldCupProjectedBracket"
 import { projectWorldCupMatchesForEntryCompletion } from "./worldCupScoringService"
 
-export type WorldCupEntryCompletionAnalysis = {
+type WorldCupEntryCompletionAnalysis = {
   entryId: string
   userId: string
   entryName: string
@@ -73,7 +73,7 @@ export function analyzeWorldCupEntryPickCompletion(input: {
   }
 }
 
-export type WorldCupChallengeIncompleteSummary = {
+type WorldCupChallengeIncompleteSummary = {
   analyses: WorldCupEntryCompletionAnalysis[]
   incompleteEntries: WorldCupEntryCompletionAnalysis[]
   completedEntries: WorldCupEntryCompletionAnalysis[]

@@ -8,6 +8,8 @@ import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFiel
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
+import { certifyFinalRiBox } from './gameBoxCoverage'
+import { dailyBoxCoverage, invalidateGameStatCoverage, writeStatCoverage } from './statCoverage'
 import { carryOfficialNhlGameWinningGoals } from '@/lib/nhl-scoring/officialGameWinningGoals'
 import { carryOfficialNhlGoalieStats } from '@/lib/nhl-scoring/officialGoalieGameStats'
 
@@ -347,7 +349,7 @@ function goalieLinePlayed(raw: Record<string, unknown>): boolean {
 }
 
 /** RI's `status` vocabulary (ENDPOINTS.yaml): only these two mean the box is settled. */
-function isFinalRiStatus(status: string | null | undefined): boolean {
+export function isFinalRiStatus(status: string | null | undefined): boolean {
   const s = String(status ?? '').trim().toLowerCase()
   return s === 'final' || s === 'completed'
 }
@@ -567,7 +569,7 @@ export async function writeRiGameRows(opts: {
       result.unrecognizedSeasonTypes.push(box.seasonTypeLabel ?? '(missing)')
     }
 
-    if (opts.persistSchedule && box.gameDate && box.seasonType) {
+    if (sport !== 'NBA' && opts.persistSchedule && box.gameDate && box.seasonType) {
       const full = asRecord(asRecord(rawGame)?.full_box)
       const home = asRecord(full?.home_team), away = asRecord(full?.away_team)
       const homeTeam = str(home?.abbrv), awayTeam = str(away?.abbrv)
@@ -603,7 +605,9 @@ export async function writeRiGameRows(opts: {
       season: box.season ?? fallbackSeason,
       weekOrRound: box.weekOrRound,
       statPayload: toPrismaJsonInput(line.raw),
-      normalizedStatMap: toPrismaJsonInput(normalized),
+      normalizedStatMap: toPrismaJsonInput(sport === 'NCAAB' || sport === 'NCAAF'
+        ? { ...normalized, gameFinal: isFinalRiStatus(box.status) }
+        : normalized),
       source: SOURCE,
       confidence,
       team: line.team,
@@ -611,6 +615,46 @@ export async function writeRiGameRows(opts: {
       gameDate: box.gameDay,
       fetchedAt: now,
     })
+
+    if (sport === 'NBA' && box.seasonType === 'regular') {
+      const proof = certifyFinalRiBox(sport, rawGame, box, identityByRiId)
+      let wroteSnapshot = false
+      try {
+        await prisma.$transaction(async tx => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sport + ":" + box.providerGameId}, 0))`
+          // Official fallback and this writer share the game lock: preserve a fully verified official snapshot.
+          if (await tx.playerGameStat.count({ where: { sportType: 'NBA', gameId: box.providerGameId, source: 'nba_official_live' } })) return
+          if (opts.persistSchedule && box.gameDate && box.seasonType) {
+            const full = asRecord(asRecord(rawGame)?.full_box)
+            const home = asRecord(full?.home_team), away = asRecord(full?.away_team)
+            const homeTeam = str(home?.abbrv), awayTeam = str(away?.abbrv)
+            if (homeTeam && awayTeam) {
+              const data = { homeTeam, awayTeam, homeScore: num(home?.score), awayScore: num(away?.score),
+                status: box.status, startTime: box.gameDate, season: box.season ?? fallbackSeason, seasonType: box.seasonType,
+                fetchedAt: now, expiresAt: new Date(now.getTime() + 120_000) }
+              await tx.sportsGame.upsert({ where: { sport_externalId_source: { sport, externalId: box.providerGameId, source: 'rolling_insights' } },
+                create: { sport, externalId: box.providerGameId, source: 'rolling_insights', ...data }, update: data })
+            }
+          }
+          if (!proof) await invalidateGameStatCoverage(tx, sport, box.providerGameId)
+          for (const { line, playerId, gameId } of prepared) {
+            const data = dataFor(line, normalizedStatMapFor(line, box))
+            await tx.playerGameStat.upsert({
+              where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },
+              update: data, create: { playerId, sportType: sport, gameId, ...data },
+            })
+          }
+          if (proof && prepared.length === box.lines.length) await writeStatCoverage(tx, dailyBoxCoverage(proof))
+          wroteSnapshot = true
+        }, { timeout: 30_000 })
+        if (wroteSnapshot) result.written += prepared.length
+      } catch (e) {
+        if (result.errors.length < 10) result.errors.push(
+          'NBA game ' + box.providerGameId + ': ' + (e instanceof Error ? e.message : String(e)),
+        )
+      }
+      continue
+    }
 
     if (sport === 'NHL') {
       if (!prepared.length) continue

@@ -15,7 +15,6 @@ export function CapPieChart({ activeSalary, deadMoney, availableCap, size = 180 
   const sum = a + d + o || 1
   const ca = (a / sum) * 360
   const cd = (d / sum) * 360
-  const start2 = ca
   const start3 = ca + cd
   const grad = `conic-gradient(
     var(--cap-contract) 0deg ${ca}deg,

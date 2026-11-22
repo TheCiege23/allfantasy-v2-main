@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { clearPasswordGuesses, spendPasswordGuess } from "@/lib/auth/passwordGuessBudget"
 import { makeToken, sha256Hex } from "@/lib/tokens"
 
 export const runtime = "nodejs"
@@ -146,10 +147,19 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
+    // The in-process limit above is per replica and per IP. This one is per ACCOUNT and shared,
+    // spent from the same budget as sign-in (lib/auth/passwordGuessBudget).
+    if (!(await spendPasswordGuess(userId))) {
+      return NextResponse.json(
+        { error: "TOO_MANY_ATTEMPTS", message: "Too many incorrect passwords. Try again in 15 minutes." },
+        { status: 429 }
+      )
+    }
     const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash)
     if (!isPasswordValid) {
       return NextResponse.json({ error: "WRONG_PASSWORD", message: "Current password is incorrect." }, { status: 400 })
     }
+    await clearPasswordGuesses(userId)
   }
 
   try {

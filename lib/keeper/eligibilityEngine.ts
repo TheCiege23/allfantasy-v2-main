@@ -1,4 +1,5 @@
 import type { League } from '@prisma/client'
+import { countKeeperYears, keeperNameKey, keeperPlayerKeys } from '@/lib/keeper/keeperPlayerKey'
 import { prisma } from '@/lib/prisma'
 import type { KeeperEligibilityRow } from './types'
 import { keeperCostRound, resolveKeeperRules } from './keeperRules'
@@ -71,20 +72,18 @@ export async function computeKeeperEligibility(
       select: { rounds: true },
     }),
   ])
-  const nameKey = (name: string | null | undefined, position: string | null | undefined) =>
-    `${String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${String(position ?? '').trim().toUpperCase()}`
+  // One key rule with the draft room's "Yr N" (lib/keeper/keeperPlayerKey).
+  const nameKey = keeperNameKey
   const draftedRound = new Map<string, number>()
   for (const pick of picks) {
     for (const key of [pick.playerId?.trim(), nameKey(pick.playerName, pick.position)]) {
       if (key && !draftedRound.has(key)) draftedRound.set(key, pick.round)
     }
   }
-  const keptCount = new Map<string, number>()
+  const keptCount = countKeeperYears(keeps)
   const lastKeptCost = new Map<string, number>()
   for (const keep of keeps) {
-    for (const key of [keep.playerId?.trim(), nameKey(keep.playerName, keep.position)]) {
-      if (!key) continue
-      keptCount.set(key, (keptCount.get(key) ?? 0) + 1)
+    for (const key of keeperPlayerKeys(keep)) {
       if (keep.costRound != null && !lastKeptCost.has(key)) lastKeptCost.set(key, keep.costRound)
     }
   }
@@ -109,7 +108,8 @@ export async function computeKeeperEligibility(
         ineligibleReason = 'max_years_reached'
       }
 
-      if (isEligible && league.keeperWaiverAllowed === false && p.acquisitionType === 'waiver') {
+      // "Drafted players only" covers every pickup: a free-agent add was let through where a waiver claim was not.
+      if (isEligible && league.keeperWaiverAllowed === false && (p.acquisitionType === 'waiver' || p.acquisitionType === 'free_agent')) {
         isEligible = false
         ineligibleReason = 'not_drafted'
       }

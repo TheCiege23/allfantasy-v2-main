@@ -17,7 +17,7 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rosters = await prisma.roster.findMany({
-    where: { platformUserId: userId },
+    where: { OR: [{ platformUserId: userId }, { managerUserId: userId }] },
     select: { id: true, leagueId: true, playerData: true },
     take: MAX_LEAGUES,
     orderBy: { updatedAt: 'desc' },

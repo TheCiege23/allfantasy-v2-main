@@ -21,7 +21,7 @@ import {
  * Votes, ballots, idol holdings and audit rows are never read.
  */
 
-export interface SeasonStoryView {
+interface SeasonStoryView {
   leagueName: string
   sport: string
   season: number

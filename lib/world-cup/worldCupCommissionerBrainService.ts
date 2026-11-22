@@ -30,7 +30,7 @@ import {
 // Re-export so callers only need one import
 export type { InsightCard } from "./worldCupInsightCards"
 
-export type WorldCupCommissionerBrainSnapshot = {
+type WorldCupCommissionerBrainSnapshot = {
   incompleteBracketCount: number
   completedBracketCount: number
   totalEntries: number
@@ -335,7 +335,7 @@ export async function getWorldCupCommissionerBrainSnapshot(
   }
 }
 
-export async function buildIncompleteBracketReminderLines(challengeId: string) {
+async function buildIncompleteBracketReminderLines(challengeId: string) {
   const snap = await getWorldCupCommissionerBrainSnapshot(challengeId)
   if (!snap) return []
   const challenge = await prisma.worldCupBracketChallenge.findUnique({
@@ -437,7 +437,7 @@ export async function buildStandingsSummaryLines(challengeId: string) {
   if (!challenge) return []
   if (challenge.entries.length === 0) {
     return [
-      "No finalized brackets are available yet. Finalized entries will appear in the AI standings summary once participants submit their brackets.",
+      "No finalized brackets are available yet. Finalized entries will appear in Chimmy standings summary once participants submit their brackets.",
     ]
   }
   const rows = buildWorldCupLeaderboardRows({
@@ -452,7 +452,7 @@ export async function buildStandingsSummaryLines(challengeId: string) {
   return lines
 }
 
-export async function buildLeagueHypeLines(challengeId: string) {
+async function buildLeagueHypeLines(challengeId: string) {
   const snap = await getWorldCupCommissionerBrainSnapshot(challengeId)
   if (!snap) return ["Let's go — bracket pool is heating up."]
   const crown = snap.mostPopularChampion
@@ -467,7 +467,7 @@ export async function buildLeagueHypeLines(challengeId: string) {
   ]
 }
 
-export async function buildWhatToWatchLines(challengeId: string) {
+async function buildWhatToWatchLines(challengeId: string) {
   const matches = await prisma.worldCupBracketMatch.findMany({
     where: { challengeId },
     orderBy: [{ startsAt: "asc" }],
@@ -488,7 +488,7 @@ export async function buildWhatToWatchLines(challengeId: string) {
   return lines
 }
 
-export async function buildPostRoundRecapLines(challengeId: string, round: WorldCupRound) {
+async function buildPostRoundRecapLines(challengeId: string, round: WorldCupRound) {
   const challenge = await prisma.worldCupBracketChallenge.findUnique({
     where: { id: challengeId },
     include: {
@@ -522,7 +522,7 @@ export async function buildPostRoundRecapLines(challengeId: string, round: World
   return lines
 }
 
-export async function buildPathToWinLines(challengeId: string, entryId: string) {
+async function buildPathToWinLines(challengeId: string, entryId: string) {
   const entry = await prisma.worldCupBracketEntry.findUnique({
     where: { id: entryId },
     include: {
@@ -694,7 +694,7 @@ async function maybeEnhanceWithOpenAi(
 // ---------------------------------------------------------------------------
 
 /** Chalk concentration + "if X loses, the leaderboard flips" narrative. */
-export async function buildChalkBustNarrativeLines(challengeId: string): Promise<string[]> {
+async function buildChalkBustNarrativeLines(challengeId: string): Promise<string[]> {
   const challenge = await prisma.worldCupBracketChallenge.findUnique({
     where: { id: challengeId },
     include: {
@@ -769,7 +769,7 @@ export async function buildChalkBustNarrativeLines(challengeId: string): Promise
 }
 
 /** Which upcoming match has the biggest leaderboard swing potential. */
-export async function buildMatchSwingLines(challengeId: string): Promise<string[]> {
+async function buildMatchSwingLines(challengeId: string): Promise<string[]> {
   const challenge = await prisma.worldCupBracketChallenge.findUnique({
     where: { id: challengeId },
     include: {
@@ -852,7 +852,7 @@ export async function buildMatchSwingLines(challengeId: string): Promise<string[
 }
 
 /** Playful trash-talk prompt ready to post to the group. */
-export async function buildTrashTalkLines(challengeId: string): Promise<string[]> {
+async function buildTrashTalkLines(challengeId: string): Promise<string[]> {
   const [snap, challenge] = await Promise.all([
     getWorldCupCommissionerBrainSnapshot(challengeId),
     prisma.worldCupBracketChallenge.findUnique({
@@ -893,7 +893,7 @@ export async function buildTrashTalkLines(challengeId: string): Promise<string[]
 }
 
 /** Entries that face a steep uphill to reach the leader — names the gap explicitly. */
-export async function buildAtRiskUsersLines(challengeId: string): Promise<string[]> {
+async function buildAtRiskUsersLines(challengeId: string): Promise<string[]> {
   const challenge = await prisma.worldCupBracketChallenge.findUnique({
     where: { id: challengeId },
     include: {
@@ -953,7 +953,7 @@ export async function buildAtRiskUsersLines(challengeId: string): Promise<string
 }
 
 /** Ready-to-share social post to invite more participants. */
-export async function buildSocialInviteLines(challengeId: string): Promise<string[]> {
+async function buildSocialInviteLines(challengeId: string): Promise<string[]> {
   const [challenge, snap] = await Promise.all([
     prisma.worldCupBracketChallenge.findUnique({
       where: { id: challengeId },
@@ -993,7 +993,7 @@ export async function buildSocialInviteLines(challengeId: string): Promise<strin
 }
 
 /** Engagement message ready to post — sparks pool activity. */
-export async function buildEngagementNudgeLines(challengeId: string): Promise<string[]> {
+async function buildEngagementNudgeLines(challengeId: string): Promise<string[]> {
   const [snap, challenge] = await Promise.all([
     getWorldCupCommissionerBrainSnapshot(challengeId),
     prisma.worldCupBracketChallenge.findUnique({
@@ -1031,7 +1031,7 @@ export async function buildEngagementNudgeLines(challengeId: string): Promise<st
 }
 
 /** Hype post for tomorrow's matches — kickoff times ET + round. */
-export async function buildTomorrowHypeLines(challengeId: string): Promise<string[]> {
+async function buildTomorrowHypeLines(challengeId: string): Promise<string[]> {
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   tomorrow.setHours(0, 0, 0, 0)

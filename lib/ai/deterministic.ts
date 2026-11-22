@@ -22,7 +22,8 @@ import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
 // module (one import) rather than `grounding/packet`, whose 17 imports include ChimmyContextEngine
 // — this path runs on EVERY chat message, including the ones that never build a packet.
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
-import { deriveValueFormat, deriveLeagueSizeAndPpr } from '@/lib/decision-os/grounding/leagueValueFormat'
+import { deriveLeagueSizeAndPpr } from '@/lib/decision-os/grounding/leagueValueFormat'
+import { loadLeagueValueFormat } from '@/lib/decision-os/grounding/leagueValueBook'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { looksLikeTradeTargetQuestion, namesBothSidesOfTrade } from '@/lib/chimmy/tradeTargetQuestion'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
@@ -902,12 +903,16 @@ export async function buildFantasyCalcValueAnswer(
    * Null on any failure — never a default, because a default here becomes a stated claim below.
    */
   let rules: unknown = null
+  let fmt: Awaited<ReturnType<typeof loadLeagueValueFormat>> = null
   if (leagueId) {
-    rules = await createLeagueOsLoaders()
-      .loadRules(leagueId)
-      .catch(() => null)
+    // The chart by the same rule as the player card (`valueBookFor`), so a quick answer and the card agree.
+    ;[rules, fmt] = await Promise.all([
+      createLeagueOsLoaders()
+        .loadRules(leagueId)
+        .catch(() => null),
+      loadLeagueValueFormat(leagueId).catch(() => null),
+    ])
   }
-  const fmt = deriveValueFormat(rules)
   const size = deriveLeagueSizeAndPpr(rules)
 
   // With no resolvable league we still price the player, but on an explicitly GENERIC basis that

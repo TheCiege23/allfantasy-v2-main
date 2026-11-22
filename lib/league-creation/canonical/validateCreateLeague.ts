@@ -6,6 +6,9 @@ import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPl
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
+import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
+import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
  */
@@ -54,7 +57,7 @@ export function normalizeDraftTypeForEngine(draftType: string): string {
   return normalizeDraftTypeForEngineValidation(draftType)
 }
 
-export const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
+const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
   'userId',
   'user_id',
   'commissionerUserId',
@@ -94,14 +97,14 @@ const dynastyCreationChoicesSchema = z.object({
 
 const SPORTS = z.enum(['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'])
 
-export const createLeagueBodySchema = z.object({
+const createLeagueBodySchema = z.object({
   concept: z.string().min(1).max(64),
   sport: SPORTS,
   scoringPreset: z.string().min(1).max(96).trim(),
   teamCount: z.number().int().min(2).max(256),
   draftType: z.string().min(1).max(32),
   leagueName: z.string().min(1).max(100).trim(),
-  conceptSetup: z.record(z.unknown()).optional().nullable(),
+  conceptSetup: z.record(z.string(), z.unknown()).optional().nullable(),
   soccerPipeline: z.enum(['mls', 'euro']).optional().nullable(),
   timezone: z.string().trim().min(1).max(64).refine(isValidIanaTimeZone, 'Choose a valid IANA timezone').optional(),
   language: z.enum(['en', 'es']).optional(),
@@ -112,7 +115,7 @@ export type ValidatedCreateLeagueBody = z.infer<typeof createLeagueBodySchema> &
   sport: LeagueSport
 }
 
-export type ValidateCreateLeagueResult =
+type ValidateCreateLeagueResult =
   | { ok: true; data: ValidatedCreateLeagueBody }
   | { ok: false; error: string; status: number; errors: ValidationIssue[] }
 
@@ -369,6 +372,25 @@ export function validateCreatePayload(
     }
   }
 
+  /*
+   * A pro-sport Redraft or Dynasty league must fit the sport's players (lib/league-creation/
+   * playerSupply.ts): the form offers 250 teams in every sport and a 250-team NFL draft runs dry.
+   * Checked before the size list, so the answer is the reason and not a list of 73 numbers.
+   * College leagues are not checked. A league carried over from an import keeps the size it has.
+   */
+  // C2C as well: a college C2C league's pro side must fit the pro sport (owner's decision, 2026-11-22).
+  if ((formatId === 'redraft' || formatId === 'dynasty' || formatId === 'c2c') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
+    const supply = checkNewLeaguePlayerSupply({ sport, leagueType: idpRequested ? 'idp' : formatId, teamCount: data.teamCount })
+    if (!supply.ok && supply.message) {
+      return {
+        ok: false,
+        status: 400,
+        error: supply.message,
+        errors: [{ path: 'teamCount', message: supply.message, code: 'PLAYER_SUPPLY_EXHAUSTED' }],
+      }
+    }
+  }
+
   const teamOpts = getTeamCountOptions(sport as SupportedSport, formatId as LeagueTypeId, data.soccerPipeline ?? null)
 
   const importedCountAccepted =
@@ -465,6 +487,38 @@ export function validateCreatePayload(
         errors: [{ path: 'conceptSetup.bestBall.playoffTeams', message: 'Playoff teams cannot exceed the number of teams in the league' }],
       }
     }
+  }
+
+  /*
+   * Best ball lineups fill every starter seat for every team from what it drafted, so the league's
+   * seats must fit the sport's player pool (lib/bestball/poolCapacity.ts). Checked against the roster
+   * template bootstrap installs for this league type: `best_ball` for Classic Best Ball, the Guilly
+   * template for a best ball Guilly league. Tight-but-possible is a wizard warning, not a refusal.
+   */
+  const bestBallLeagueType =
+    formatId === 'best_ball' ? 'best_ball' : formatId === 'guillotine' && schedule.guillotineBestBall === true ? 'guillotine' : null
+  if (bestBallLeagueType) {
+    const poolCheck = checkNewBestBallLeaguePool({ sport, leagueType: bestBallLeagueType, teamCount: data.teamCount })
+    if (poolCheck.refusals.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: poolCheck.refusals[0].message,
+        errors: poolCheck.refusals.map((r) => ({ path: 'teamCount', message: r.message, code: 'BEST_BALL_POOL_EXHAUSTED' })),
+      }
+    }
+  }
+
+  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): MLB only. Refused rather
+  // than dropped, so a league is never created on a period length it did not ask for.
+  if (schedule.guillotinePeriodWeeks !== undefined && schedule.guillotinePeriodWeeks !== 1) {
+    const message =
+      schedule.guillotinePeriodWeeks !== 2
+        ? 'An elimination period is one week or two.'
+        : formatId !== 'guillotine' || !supportsTwoWeekPeriods(sport)
+          ? 'Two-week elimination periods are for MLB Guilly leagues.'
+          : null
+    if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.guillotinePeriodWeeks', message }] }
   }
 
   if (formatId === 'survivor' && schedule.survivorTribeSlots !== undefined) {

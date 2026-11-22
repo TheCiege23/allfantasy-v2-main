@@ -14,11 +14,12 @@
  * standing. Reading is open to any member so the prompt can be shown.
  */
 
+import { prisma } from '@/lib/prisma'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { leagueTypeState, confirmLeagueType } from '@/lib/career/leagueTypeConfirmation'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +47,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   try {
     const [state, commissioner] = await Promise.all([
       leagueTypeState(gate.leagueId),
-      isCommissioner(gate.leagueId, gate.userId),
+      canCommissionerAct(gate.leagueId, gate.userId, 'view'),
     ])
     if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -62,14 +63,38 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   }
 }
 
+/** Who confirmed the league type, from `settings.leagueTypeConfirmation`; null when nobody has. */
+function leagueTypeConfirmedBy(settings: unknown): string | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
+  const raw = (settings as Record<string, unknown>).leagueTypeConfirmation
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const by = (raw as Record<string, unknown>).confirmedByUserId
+  return typeof by === 'string' && by ? by : null
+}
+
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   const gate = await requireMember(ctx)
   if (gate instanceof NextResponse) return gate
 
-  const commissioner = await isCommissioner(gate.leagueId, gate.userId)
+  const commissioner = await canCommissionerAct(gate.leagueId, gate.userId, 'league')
   if (!commissioner) {
     return NextResponse.json(
       { error: 'Only the commissioner can confirm a league format' },
+      { status: 403 },
+    )
+  }
+
+  /*
+   * The main commissioner's league type stands (owner's rule, 2026-11-22). A co-commissioner may set
+   * the type while the main commissioner has not, and may not change it once they have. After the
+   * league is handed to a new main commissioner, the earlier answer was someone else's, so it no
+   * longer blocks anyone and the new main commissioner's answer becomes the one that stands.
+   */
+  const row = await prisma.league.findUnique({ where: { id: gate.leagueId }, select: { userId: true, settings: true } })
+  const confirmedBy = leagueTypeConfirmedBy(row?.settings)
+  if (row && gate.userId !== row.userId && confirmedBy === row.userId) {
+    return NextResponse.json(
+      { error: 'The main commissioner set this league type. Only they can change it.', code: 'MAIN_COMMISSIONER_SET' },
       { status: 403 },
     )
   }

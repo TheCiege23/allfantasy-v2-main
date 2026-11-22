@@ -172,6 +172,7 @@ export async function runLeagueBootstrap(
       const seed = nflScoringSeedForCreate({ scoringPresetId: leagueRow?.scoringPresetId, tePremiumPoints: settings.te_premium_points })
       await applyDefaultNflScoringOnCreate(leagueId, seed.presetKey, seed.rules)
       nflTePremium = seed.enableTEPremium
+      await fillEmptyScoringRulebook(leagueId, seed.rules)
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAF') {
@@ -384,6 +385,9 @@ export async function runLeagueBootstrap(
     try {
       const { upsertBigBrotherConfig } = await import('@/lib/big-brother/BigBrotherLeagueConfig')
       await upsertBigBrotherConfig(leagueId, {})
+      // The commissioner's setup choices (tie-break, finale, jury, HOH challenge) become the game's rules.
+      const { applyBigBrotherSetupRules } = await import('@/lib/big-brother/bigBrotherSetupRulesApply')
+      await applyBigBrotherSetupRules(leagueId)
       try {
         const { runBigBrotherLeagueBootstrap } = await import('@/lib/big-brother/bigBrotherLeagueBootstrap')
         const boot = await runBigBrotherLeagueBootstrap(leagueId)
@@ -426,4 +430,27 @@ export async function runLeagueBootstrap(
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+/**
+ * A format with no settings snapshot of its own (zombie is one) is created with
+ * `scoringSettings: { rules: [], preset, ... }`: a label and no rulebook. Its real rules are seeded
+ * into the scoring panel's store just above, so the league scored correctly while everything that
+ * reads `scoringSettings` (projections first) saw nothing (production, 2026-11-22: five hosted NFL
+ * leagues). Write the same rules there in the vocabulary those readers use. A league that already
+ * has a rulebook is left alone, and a failure here never fails creation.
+ */
+async function fillEmptyScoringRulebook(leagueId: string, panelRules: Record<string, number>): Promise<void> {
+  const { extractScoringSettings, hasScoringRules, projectionRulesFromNflPanelRules } = await import('@/lib/projections/leagueScoring')
+  const rules = projectionRulesFromNflPanelRules(panelRules)
+  if (!rules) return
+  const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const settings = asObject(row?.settings)
+  const { nfl_scoring_config: _panel, ...withoutPanel } = settings
+  // Judged without the panel store, which the reader would otherwise fall back to.
+  if (hasScoringRules(extractScoringSettings(withoutPanel))) return
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: { settings: { ...settings, scoringSettings: { ...asObject(settings.scoringSettings), rules } } as never },
+  })
 }

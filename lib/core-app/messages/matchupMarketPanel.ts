@@ -8,7 +8,8 @@ import { defineMessages } from '@/lib/i18n/messages'
  */
 export const matchupMarketPanelMessages = defineMessages({
   en: {
-    title: 'Scoring environment',
+    // Plain name, folded by default (2026-11-13 matchup guide): betting lines are for the curious.
+    title: 'Game outlook for your players (betting lines)',
     tipLabel: 'How to read the scoring environment',
     tip1: 'Each of your starters, with the points the betting market expects his team’s offense to score this week — a forecast of the game, read the way a projection is.',
     tip2: '“Favored by 3.5” means the market expects his team to win by about that much; “combined” is the points it expects both teams to score together.',
@@ -27,7 +28,7 @@ export const matchupMarketPanelMessages = defineMessages({
     failed: 'The scoring environment did not load. Reload the page to try again.',
   },
   es: {
-    title: 'Entorno de anotación',
+    title: 'Panorama de los partidos de tus jugadores (líneas de apuestas)',
     tipLabel: 'Cómo leer el entorno de anotación',
     tip1: 'Cada uno de tus titulares, con los puntos que el mercado de apuestas espera que anote la ofensiva de su equipo esta semana: un pronóstico del partido, leído como una proyección.',
     tip2: '«Favorito por 3.5» significa que el mercado espera que su equipo gane por más o menos esa diferencia; «entre ambos» son los puntos que espera que anoten los dos equipos juntos.',

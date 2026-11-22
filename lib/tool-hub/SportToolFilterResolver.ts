@@ -7,7 +7,7 @@ import { getAllTools } from './ToolHubService'
 
 const UNIVERSAL_TOOL_SLUGS: ToolSlug[] = ['league-transfer', 'trade-finder', 'career-share', 'season-strategy']
 
-export type SportFilterOption = {
+type SportFilterOption = {
   slug: SportSlug
   label: string
   leagueSport: string

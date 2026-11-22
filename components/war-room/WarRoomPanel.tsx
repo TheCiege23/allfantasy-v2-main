@@ -390,7 +390,7 @@ export function WarRoomPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF Legacy AI</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF Legacy Chimmy</p>
           <p className="text-[11px] text-white/45">
             Live pick engine · tiers · scarcity · stacks · contingencies · take vs wait
             {useDemoBoard && !brainInput?.available?.length ? (

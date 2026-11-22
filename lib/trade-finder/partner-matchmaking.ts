@@ -1,9 +1,5 @@
 import type { ManagerTendencyProfile } from '@/lib/trade-engine/manager-tendency-engine'
-import type {
-  ManagerProfile,
-  Asset,
-  LeagueIntelligence,
-} from '@/lib/trade-engine/types'
+import type { ManagerProfile, LeagueIntelligence } from '@/lib/trade-engine/types'
 import type { PricedAsset } from './candidate-generator'
 
 export type MatchmakingGoal =
@@ -17,7 +13,7 @@ export type MatchmakingGoal =
   | 'rebuild'
   | 'target_player'
 
-export interface MatchmakingInput {
+interface MatchmakingInput {
   userRosterId: number
   goal: MatchmakingGoal
   targetPlayerName?: string
@@ -28,7 +24,7 @@ export interface MatchmakingInput {
   maxResults?: number
 }
 
-export interface OfferAsset {
+interface OfferAsset {
   assetId: string
   name: string
   value: number
@@ -36,13 +32,13 @@ export interface OfferAsset {
   isPick: boolean
 }
 
-export interface OfferSkeleton {
+interface OfferSkeleton {
   userGives: OfferAsset[]
   partnerGives: OfferAsset[]
   fairnessPct: number
 }
 
-export interface PartnerMatch {
+interface PartnerMatch {
   rosterId: number
   displayName: string
   avatar?: string
@@ -62,7 +58,7 @@ export interface PartnerMatch {
   tendencyInsights: string[]
 }
 
-export interface MatchmakingOutput {
+interface MatchmakingOutput {
   goal: MatchmakingGoal
   goalDescription: string
   targetPlayer?: string

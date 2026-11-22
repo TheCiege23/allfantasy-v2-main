@@ -81,7 +81,10 @@ describe('deriveGuillotineAtmosphere', () => {
   it('falls back to default and the league row when the summary is unavailable', () => {
     const state = derive(null, { settings: { eliminationStartWeek: 6 } })
     expect(state.mood).toBe('default')
-    expect(guillotineBannerLine(state)).toBe('16 alive · First chop wk 6')
+    // In a season under way the team count is not how many are alive: with no summary it is left out.
+    expect(guillotineBannerLine(state)).toBe('First chop wk 6')
+    // Before the draft nobody can have been chopped, so the count is true and is shown.
+    expect(guillotineBannerLine(derive(null, { predraft: true, settings: { eliminationStartWeek: 6 } }))).toBe('16 alive · First chop wk 6')
   })
 
   it('season over (past the last chop week) is calm, not a chop week', () => {

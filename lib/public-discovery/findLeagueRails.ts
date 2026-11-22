@@ -12,7 +12,7 @@
 
 import type { DiscoveryCard } from "./types"
 
-export type FindLeagueRailKind = "your_level" | "step_up" | "drafting_soon" | "filling_fast"
+type FindLeagueRailKind = "your_level" | "step_up" | "drafting_soon" | "filling_fast"
 
 export interface FindLeagueRail {
   kind: FindLeagueRailKind

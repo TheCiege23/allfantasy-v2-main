@@ -8,17 +8,7 @@
 
 export type TradeRole = 'commissioner' | 'manager' | 'non_member'
 
-export type TradeIntentKind =
-  | 'explain_trade'
-  | 'commissioner_review'
-  | 'find_partners'
-  | 'suggest_packages'
-  | 'explain_player_value'
-  | 'summarize_block'
-  | 'teach'
-  | 'general_trade'
-
-export interface TradeToolLimitation {
+interface TradeToolLimitation {
   code:
     | 'INSUFFICIENT_SAMPLE'
     | 'NO_SNAPSHOT'

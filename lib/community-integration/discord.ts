@@ -37,7 +37,7 @@ export function buildDiscordShareContent(input: CommunityShareInput): DiscordSha
 /**
  * Build webhook payload for Discord API (POST to webhook URL).
  */
-export function buildDiscordWebhookPayload(
+function buildDiscordWebhookPayload(
   input: CommunityShareInput,
   options?: { username?: string; avatarUrl?: string }
 ): DiscordWebhookPayload {

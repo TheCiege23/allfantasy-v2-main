@@ -8,11 +8,11 @@
  *
  * See docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.1 and lib/rookie-order/.
  */
+import { commissionerAccessResponse, type CommissionerNeed } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { publishRookieDraftOrderChange } from '@/lib/league-rules-explainer/rookieOrderChange'
 import {
@@ -26,19 +26,18 @@ import { parseRoundNoticeSettings } from '@/lib/rookie-order/roundNotices'
 
 export const dynamic = 'force-dynamic'
 
-async function auth(params: Promise<{ leagueId: string }>) {
+async function auth(params: Promise<{ leagueId: string }>, need: CommissionerNeed) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   const { leagueId } = await params
   if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  if (!(await isCommissioner(leagueId, userId))) {
-    return { error: NextResponse.json({ error: 'Commissioner only' }, { status: 403 }) }
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, need)
+  if (refused) return { error: refused }
   return { userId, leagueId }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
-  const a = await auth(params)
+  const a = await auth(params, 'view')
   if ('error' in a) return a.error
 
   const url = new URL(req.url)
@@ -64,7 +63,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
-  const a = await auth(params)
+  const a = await auth(params, 'league')
   if ('error' in a) return a.error
 
   const league = await prisma.league.findUnique({

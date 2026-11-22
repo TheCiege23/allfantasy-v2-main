@@ -103,7 +103,7 @@ function ConfidenceRing({ pct }: { pct: number }) {
   )
 }
 
-export type PlayerComparisonPremiumViewProps = {
+type PlayerComparisonPremiumViewProps = {
   data: PlayerComparisonPremiumSnapshot
   leagueId?: string | null
   className?: string
@@ -257,7 +257,7 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
           <p className="text-sm font-semibold text-white">Chimmy&apos;s summary</p>
           {data.explanation?.source === 'ai' ? (
             <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[11px] font-medium text-sky-200">
-              AI
+              Chimmy
             </span>
           ) : (
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/50">Deterministic</span>

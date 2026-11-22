@@ -8,6 +8,8 @@ import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; rosterId: string | null }) {
   const [cfg, setCfg] = useState<C2CConfigClient | null>(null)
   const [picks, setPicks] = useState<C2CPickRow[]>([])
+  /** Pick owners are roster ids; the season's rosters carry their team names. */
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({})
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -21,6 +23,16 @@ export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; roste
       const q = rosterId
         ? `leagueId=${encodeURIComponent(leagueId)}&rosterId=${encodeURIComponent(rosterId)}`
         : `leagueId=${encodeURIComponent(leagueId)}`
+      // Names only — a failure here leaves the picks readable with a generic label.
+      fetch(`/api/redraft/season?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((sj: { season?: { rosters?: { id: string; teamName?: string | null }[] } } | null) => {
+          const names: Record<string, string> = {}
+          for (const r of sj?.season?.rosters ?? []) if (r.teamName) names[r.id] = r.teamName
+          setTeamNames(names)
+        })
+        .catch(() => {})
+
       const pr = await fetch(`/api/c2c/picks?${q}`, { credentials: 'include' })
       if (!pr.ok) throw new Error('Picks unavailable')
       const pj = (await pr.json()) as { picks?: C2CPickRow[] }
@@ -42,6 +54,7 @@ export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; roste
   }
 
   const fmt = cfg.futureDraftFormat ?? 'combined'
+  const teamLabel = (ownerRosterId: string) => teamNames[ownerRosterId] ?? (ownerRosterId === rosterId ? 'Your team' : 'Another team')
 
   return (
     <div className="mx-auto max-w-3xl px-4 pb-12 pt-4">
@@ -54,7 +67,7 @@ export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; roste
         </span>
       </div>
 
-      <C2CPicksBoard picks={picks} format={fmt} />
+      <C2CPicksBoard picks={picks} format={fmt} teamLabel={teamLabel} />
 
       <div className="mt-10 overflow-x-auto rounded-xl border border-white/[0.06]">
         <table className="w-full min-w-[480px] text-left text-[11px] text-white/70">
@@ -67,8 +80,8 @@ export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; roste
           <tbody>
             {picks.slice(0, 24).map((p) => (
               <tr key={p.id} className="border-b border-white/[0.04]">
-                <td className="p-2 font-mono text-white/80">
-                  {p.currentOwnerId.slice(0, 6)}… · R{p.round}
+                <td className="p-2 text-white/80">
+                  {teamLabel(p.currentOwnerId)} · R{p.round} · {p.season}
                 </td>
                 <td className="p-2">
                   <span

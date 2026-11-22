@@ -123,7 +123,6 @@ export type {
 // ── Token system ──────────────────────────────────────────────────────────────
 export {
   SEVERITY_DEFINITIONS,
-  severityDefinition,
   scoreToSeverity,
   percentileToSeverity,
   engagementTierToSeverity,
@@ -149,7 +148,6 @@ export {
 export {
   buildManagerBadges,
   buildLeagueBadges,
-  buildCommissionerBadges,
   buildPlatformBadges,
 } from './badges'
 
@@ -194,7 +192,6 @@ export {
 // ── Recommendation presentation ───────────────────────────────────────────────
 export {
   buildRecommendationPresentation,
-  buildRecommendationPresentations,
   buildRecommendationPresentationSet,
 } from './recommendations'
 
@@ -215,7 +212,6 @@ export {
   buildManagerApiPresentation,
   buildLeagueApiPresentation,
   buildPlatformApiPresentation,
-  buildCompanyApiPresentation,
 } from './api-presentation'
 
 // ── White-label layer ─────────────────────────────────────────────────────────

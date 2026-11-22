@@ -58,7 +58,7 @@ export const CONSOLATION_PICK_GOES_TO_KEY = 'consolation_pick_goes_to'
 export const CONSOLATION_PICK_GOES_TO_VALUES: readonly ConsolationPickGoesTo[] = ['loser', 'winner']
 
 /** The league fields that say whether its rosters, and so its draft order, carry into next season. */
-export type DraftOrderCarryoverLeague = { leagueType?: string | null; isDynasty?: boolean | null }
+type DraftOrderCarryoverLeague = { leagueType?: string | null; isDynasty?: boolean | null }
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -120,7 +120,7 @@ export function parseConsolationPlaysFor(value: unknown): ConsolationPlaysFor | 
   return typeof value === 'string' ? normalize(value) : null
 }
 
-export type LowerBracketDraftResult = {
+type LowerBracketDraftResult = {
   mode: 'consolation' | 'toilet_bowl'
   /** The non-playoff teams, best finish first, once the season's bracket is finalized; else null. */
   finishOrder: string[] | null

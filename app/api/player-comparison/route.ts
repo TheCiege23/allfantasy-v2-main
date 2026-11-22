@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         includeAIExplanation = false;
         explanationGate = {
           requiredPlan: 'AF Pro',
-          message: 'Sign in and upgrade to AF Pro for AI player comparison explanations.',
+          message: 'Sign in and upgrade to AF Pro for Chimmy player comparison explanations.',
           upgradePath: '/upgrade?plan=pro&feature=player_comparison_explanations',
         };
       } else {
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
         includeAIExplanation = false;
         explanationGate = {
           requiredPlan: 'AF Pro',
-          message: 'Sign in and upgrade to AF Pro for AI player comparison explanations.',
+          message: 'Sign in and upgrade to AF Pro for Chimmy player comparison explanations.',
           upgradePath: '/upgrade?plan=pro&feature=player_comparison_explanations',
         };
       } else {

@@ -66,8 +66,10 @@ describe('DraftBoard — board grid min-w-max (Commit 24)', () => {
     expect(boardSrc).toMatch(/data-testid="draft-board-grid"/)
   })
 
-  it('header row is sticky top-0 (mobile wrapper must not break sticky header)', () => {
-    expect(boardSrc).toMatch(/sticky top-0/)
+  // `position: sticky` never worked here: the header sits inside the board's sideways scroller,
+  // which becomes its sticky container and never scrolls vertically. useStickyBoardHeader pins it.
+  it('header row is pinned while scrolling (mobile wrapper must not break it)', () => {
+    expect(boardSrc).toMatch(/useStickyBoardHeader\(teamGridRef, teamHeaderRef/)
   })
 })
 

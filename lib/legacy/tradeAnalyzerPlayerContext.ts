@@ -23,9 +23,9 @@ import { SPORTS_PLAYER_TTL_MS } from '@/lib/workers/sports-player-record-freshne
  * the model is told about beats another athlete's numbers stated as his.
  */
 
-export type TradeContextAsset = { name: string; position?: string | null; team?: string | null }
+type TradeContextAsset = { name: string; position?: string | null; team?: string | null }
 
-export type TradeContextPlayer = {
+type TradeContextPlayer = {
   name: string
   position: string | null
   team: string | null

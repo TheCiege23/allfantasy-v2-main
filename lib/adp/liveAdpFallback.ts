@@ -255,3 +255,61 @@ export async function findLiveAdp(name: string, query: LiveAdpQuery = {}): Promi
   const map = await getLiveAdpByName(query)
   return map.get(normalizePlayerName(name)) ?? null
 }
+
+/* ── Team defenses ─────────────────────────────────────────────────────────────────────────────── */
+
+export type SeasonDefenseAdp = { name: string; team: string | null; adp: number; week: number; scoring: string }
+
+const DEFENSE_POSITIONS = ['DEF', 'DST', 'D/ST']
+let defenseCache: { loadedAt: number; season: number; rows: SeasonDefenseAdp[] } | null = null
+
+/**
+ * Every NFL team defense's MOST RECENT consensus redraft ADP this season, one row per defense.
+ *
+ * 🛑 WHY NOT THE LATEST WEEK. The consensus board for a given week carries only the defenses that
+ * week's mock drafts actually took: measured 2026-11-16 (week 47), the standard board had FOUR
+ * defenses, so an 8-team NFL mock had 4 defenses for 8 teams. Across the season the same table
+ * holds 29 of the 32. So each defense keeps its last real price — standard scoring preferred, then
+ * the most recent week. A defense never priced this season is left out rather than given an invented
+ * ADP. Reads Postgres only. Never throws: a failed read is an empty list.
+ */
+export async function getSeasonDefenseAdp(opts: { sport?: string; now?: number } = {}): Promise<SeasonDefenseAdp[]> {
+  const sport = opts.sport ?? 'NFL'
+  const now = opts.now ?? Date.now()
+  if (defenseCache && now - defenseCache.loadedAt < CACHE_TTL_MS) return defenseCache.rows
+  try {
+    const latest = await prisma.adpDataRecord.findFirst({
+      where: { sport, format: 'redraft', source: 'consensus' },
+      orderBy: [{ season: 'desc' }, { week: 'desc' }],
+      select: { season: true },
+    })
+    if (!latest) return []
+    const rows = await prisma.adpDataRecord.findMany({
+      where: { sport, format: 'redraft', source: 'consensus', season: latest.season, position: { in: DEFENSE_POSITIONS } },
+      orderBy: { week: 'desc' },
+      select: { playerName: true, team: true, adp: true, week: true, scoring: true },
+    })
+    const best = new Map<string, SeasonDefenseAdp>()
+    for (const row of rows) {
+      if (!row.playerName || !Number.isFinite(row.adp) || row.adp <= 0) continue
+      const key = normalizePlayerName(row.playerName)
+      if (!key) continue
+      const have = best.get(key)
+      const candidate = { name: row.playerName, team: row.team ?? null, adp: row.adp, week: row.week, scoring: row.scoring }
+      // Most recent week first; within that week, standard scoring wins.
+      if (!have || row.week > have.week || (row.week === have.week && row.scoring === 'standard' && have.scoring !== 'standard')) {
+        best.set(key, candidate)
+      }
+    }
+    const out = [...best.values()].sort((a, b) => a.adp - b.adp)
+    defenseCache = { loadedAt: now, season: latest.season, rows: out }
+    return out
+  } catch {
+    return []
+  }
+}
+
+/** Test seam. */
+export function __resetSeasonDefenseAdpCache(): void {
+  defenseCache = null
+}

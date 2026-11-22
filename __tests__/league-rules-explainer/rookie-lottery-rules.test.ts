@@ -66,6 +66,8 @@ vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({
     orphanTeamAiManagerEnabled: false, orphanDrafterMode: 'cpu',
   })),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PUT } from '@/app/api/leagues/[leagueId]/draft-lottery/config/route'
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ trades: vi.fn(), sessions: vi.fn(), drafts: vi.fn(), corrections: vi.fn(), imported: vi.fn(), teams: vi.fn(), players: vi.fn(), lotteryAudit: vi.fn() }))
+const mocks = vi.hoisted(() => ({ trades: vi.fn(), sessions: vi.fn(), drafts: vi.fn(), corrections: vi.fn(), imported: vi.fn(), teams: vi.fn(), players: vi.fn(), lotteryAudit: vi.fn(), archive: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   redraftLeagueTrade: { findMany: mocks.trades },
   draftSession: { findMany: mocks.sessions },
@@ -12,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   sportsPlayer: { findMany: mocks.players },
 } }))
 vi.mock('@/lib/league-history/leagueWarehouseReads', () => ({ readRecentImportedTrades: mocks.imported }))
+vi.mock('@/lib/draft-archive/catalog', () => ({ draftArchiveCatalog: mocks.archive }))
 
 import { importedTradeLabel, loadCommissionerHistory } from '@/lib/core-app/commissioner/history'
 
@@ -31,6 +32,7 @@ beforeEach(() => {
   mocks.corrections.mockResolvedValue([])
   mocks.lotteryAudit.mockResolvedValue([])
   mocks.imported.mockResolvedValue([])
+  mocks.archive.mockResolvedValue({ choices: [], more: false, page: 1, total: 0 })
   mocks.teams.mockResolvedValue([
     { externalId: '1', teamName: 'Gridiron Gang', ownerName: 'ada', avatarUrl: null, platformUserId: 'u1', claimedByUserId: null },
     { externalId: '2', teamName: null, ownerName: 'bo', avatarUrl: null, platformUserId: 'u2', claimedByUserId: null },
@@ -42,6 +44,32 @@ beforeEach(() => {
 })
 
 describe('commissioner history', () => {
+  it('lists an imported draft as a line that opens it in the draft archive', async () => {
+    // An imported draft has no AllFantasy draft session; it lives in the archive's own records.
+    mocks.archive.mockResolvedValue({ choices: [
+      { key: 'imported:abc 1', source: 'imported', season: 2025 },
+      { key: 'legacy:NFL:unknown', source: 'legacy', season: null },
+      { key: 'native:s1', source: 'native', season: 2026 },
+      { key: 'reset:r1', source: 'reset', season: 2026 },
+    ], more: false, page: 1, total: 4 })
+    const history = await loadCommissionerHistory('league-1', false)
+    expect(mocks.archive).toHaveBeenCalledWith(['league-1'], { limit: 20 })
+    expect(history.drafts).toEqual([])
+    expect(history.importedDrafts).toEqual([
+      { key: 'imported:abc 1', season: 2025, href: '/core/draft-hq?league=league-1&draft=imported%3Aabc+1' },
+      { key: 'legacy:NFL:unknown', season: null, href: '/core/draft-hq?league=league-1&draft=legacy%3ANFL%3Aunknown' },
+    ])
+    expect(history.draftAvailable).toBe(true)
+  })
+
+  it('says draft history could not be read when the archive read fails, never that there is none', async () => {
+    mocks.archive.mockRejectedValue(new Error('down'))
+    const history = await loadCommissionerHistory('league-1', false)
+    expect(history.importedDrafts).toEqual([])
+    expect(history.draftAvailable).toBe(false)
+    expect(history.draftNote).toBe('Some draft records or corrections could not be read.')
+  })
+
   it('shows only complete recorded weighted lottery orders with their saved odds', async () => {
     mocks.lotteryAudit.mockResolvedValue([
       { id: 'draw-1', createdAt: new Date('2026-04-01T00:00:00Z'), afterState: { season: 2027, slotOrder: [{ slot: 2, rosterId: 'b', displayName: 'Beta' }, { slot: 1, rosterId: 'a', displayName: 'Alpha' }], oddsSnapshot: [{ rosterId: 'a', oddsPercent: 42.5 }, { rosterId: 'b', oddsPercent: 57.5 }] } },

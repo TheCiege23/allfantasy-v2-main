@@ -6,6 +6,7 @@ import { xaiChatJson, parseTextFromXaiChatCompletion, XaiTool } from "@/lib/xai-
 import { getUniversalAIContext } from "@/lib/ai-player-context"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 const SYSTEM = `
 You are a fantasy sports "market sentiment" analyst with LIVE access to X (Twitter) and web search.
@@ -194,6 +195,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/social-pulse", tool: "
         { status: 401 }
       )
     }
+
+    // AF Legacy (`legacy_social_pulse`): the /af-legacy Market Board's lock was the only one. Before the model call.
+    const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: session.user.email ?? null, featureId: "legacy_social_pulse" })
+    if (!plan.ok) return plan.response
 
     const body = await req.json()
     const parsed = SocialPulseRequestSchema.safeParse(body)

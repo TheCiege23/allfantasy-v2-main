@@ -13,7 +13,7 @@ import { evaluateSurvivalRisk } from './guillotineSurvivalRiskEngine'
 import { evaluateRosterRisk } from './guillotineRosterRiskEngine'
 import type { GuillotinePlayerFact, GuillotineWarRoomContext } from './types'
 
-export interface GuillotineWaiverAdd {
+interface GuillotineWaiverAdd {
   playerId: string
   playerName: string
   position: string

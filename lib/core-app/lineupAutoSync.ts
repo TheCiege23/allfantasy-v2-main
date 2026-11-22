@@ -32,7 +32,7 @@ export function autoSyncDue(lastAt: number | null, now: number, gapMs: number): 
   return now - lastAt >= gapMs
 }
 
-export const AUTO_SYNC_STORAGE_PREFIX = 'af:lineup-auto-sync:'
+const AUTO_SYNC_STORAGE_PREFIX = 'af:lineup-auto-sync:'
 
 export function autoSyncStorageKey(leagueId: string | null): string {
   return `${AUTO_SYNC_STORAGE_PREFIX}${leagueId ?? 'all'}`

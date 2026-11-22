@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
  *   if (!(await askConfirm({ title, body, confirmLabel: "Disconnect" }))) return
  */
 
-export type ConfirmRequest = {
+type ConfirmRequest = {
   title: string
   body?: ReactNode
   confirmLabel: string

@@ -33,7 +33,7 @@ export function readDeadlineAt(settings: unknown): Date | null {
   return Number.isNaN(at.getTime()) ? null : at
 }
 
-export type DeadlineAtInput = { ok: true; value: string | null } | { ok: false; error: string }
+type DeadlineAtInput = { ok: true; value: string | null } | { ok: false; error: string }
 
 /** Validate a stored value from a settings save: an ISO instant, or null/'' to clear it. */
 export function parseDeadlineAtInput(value: unknown): DeadlineAtInput {

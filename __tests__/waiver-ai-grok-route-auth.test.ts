@@ -54,7 +54,8 @@ const { prismaMock, store, getServerSessionMock, chatCompletionsCreateMock } = v
     roster: {
       count: vi.fn(async ({ where }: any) => {
         return Array.from(store.rosters.values()).filter(
-          (r) => r.leagueId === where.leagueId && r.platformUserId === where.platformUserId
+          // Membership is asked both ways a manager can run a team: the owner key or the managed-by column.
+          (r) => r.leagueId === where.leagueId && (where.OR ?? [where]).some((w: any) => w.platformUserId != null && r.platformUserId === w.platformUserId)
         ).length
       }),
     },

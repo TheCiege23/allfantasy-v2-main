@@ -113,7 +113,7 @@ export function classifyBreakingHeadline(title: string, description?: string | n
  * ⚠ AN ALLOWLIST, ON PURPOSE. Rumour aggregators (e.g. nfltraderumors.co, which `syncNewsToDb`
  * searches) and fantasy sites are deliberately absent.
  */
-export const TRUSTED_NEWS_HOSTS = [
+const TRUSTED_NEWS_HOSTS = [
   'espn.com',
   'apnews.com',
   'reuters.com',
@@ -137,7 +137,7 @@ export const TRUSTED_NEWS_HOSTS = [
 ] as const
 
 /** Display name and X handle for an outlet, for attribution in alerts and social copy. */
-export const OUTLETS: Record<string, { name: string; handle: string | null }> = {
+const OUTLETS: Record<string, { name: string; handle: string | null }> = {
   'espn.com': { name: 'ESPN', handle: '@espn' },
   'apnews.com': { name: 'AP', handle: '@AP' },
   'reuters.com': { name: 'Reuters', handle: '@Reuters' },
@@ -206,7 +206,7 @@ const COLLEGE_SECTIONS: Record<string, 'NCAAF' | 'NCAAB' | 'OTHER'> = {
 }
 
 /** The college sport an article's URL section names, 'OTHER' for a college sport outside the seven, or null. */
-export function collegeSectionSport(sourceUrl: string | null | undefined): 'NCAAF' | 'NCAAB' | 'OTHER' | null {
+function collegeSectionSport(sourceUrl: string | null | undefined): 'NCAAF' | 'NCAAB' | 'OTHER' | null {
   if (!sourceUrl) return null
   let segments: string[]
   try {
@@ -244,7 +244,7 @@ export function isCollegeStoryForProSport(sport: string | null | undefined, sour
   return PRO_SPORTS.has(String(sport ?? '').toUpperCase()) && collegeSectionSport(sourceUrl) !== null
 }
 
-export type TeamNameEntry = { abbr: string; name: string }
+type TeamNameEntry = { abbr: string; name: string }
 
 /** Nicknames that are two words; everything else is the last word of "<City> <Nickname>". */
 const TWO_WORD_NICKNAMES = [

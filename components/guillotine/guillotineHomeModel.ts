@@ -23,7 +23,7 @@ export interface ChopLineRow {
   cutAbove: boolean
 }
 
-export interface ChopLine {
+interface ChopLine {
   rows: ChopLineRow[]
   cutScore: number | null
   me: ChopLineRow | null
@@ -102,9 +102,14 @@ const TIEBREAK_LABEL: Record<string, string> = {
   random: 'Random draw',
 }
 
-/** The league's configured tiebreak order in words (falls back to the step id). */
-export function tiebreakLabels(order: readonly string[] | null | undefined): string[] {
-  return (order ?? []).map((s) => TIEBREAK_LABEL[s] ?? s.replace(/_/g, ' '))
+/**
+ * The league's configured tiebreak order in words (falls back to the step id). In an MLB two-week league
+ * (`periodWeeks` 2, lib/guillotine/eliminationPeriods.ts) the previous-period step reads the last period.
+ */
+export function tiebreakLabels(order: readonly string[] | null | undefined, periodWeeks?: number): string[] {
+  return (order ?? []).map((s) =>
+    s === 'previous_period' && (periodWeeks ?? 1) > 1 ? 'Last period’s points' : TIEBREAK_LABEL[s] ?? s.replace(/_/g, ' '),
+  )
 }
 
 /**

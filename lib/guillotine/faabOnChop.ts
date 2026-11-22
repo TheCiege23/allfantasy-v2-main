@@ -27,7 +27,7 @@ export function readFaabOnChop(settings: unknown): FaabOnChop {
   return v === 'split' ? 'split' : 'keep'
 }
 
-export type FaabSplit = {
+type FaabSplit = {
   /** Total taken from the chopped teams. */
   pool: number
   /** rosterId → amount added. Whole dollars; the remainder goes one each to the lowest balances. */

@@ -1,36 +1,32 @@
+import { commissionerAccessResponse, type CommissionerNeed } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { readCommissionerRosterLocks, withCommissionerRosterLocks } from '@/lib/league/commissioner-roster-lock'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 type Context = { params: Promise<{ leagueId: string }> }
 
-async function authorize(context: Context) {
+async function authorize(context: Context, need: CommissionerNeed) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const { leagueId } = await context.params
   if (!session?.user?.id) return { leagueId, status: 401 as const }
-  try {
-    await assertCommissioner(leagueId, session.user.id)
-    return { leagueId, status: 200 as const }
-  } catch {
-    return { leagueId, status: 403 as const }
-  }
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, need)
+  return refused ? { leagueId, status: refused.status as 403 | 404, refused } : { leagueId, status: 200 as const, refused: null }
 }
 
 export async function GET(_req: Request, context: Context) {
-  const access = await authorize(context)
-  if (access.status !== 200) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const access = await authorize(context, 'view')
+  if (access.status !== 200) return access.refused ?? NextResponse.json({ error: 'Unauthorized' }, { status: access.status })
   const league = await prisma.league.findUnique({ where: { id: access.leagueId }, select: { settings: true } })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   return NextResponse.json({ lockedRosters: readCommissionerRosterLocks(league.settings) })
 }
 
 export async function PUT(req: Request, context: Context) {
-  const access = await authorize(context)
-  if (access.status !== 200) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+  const access = await authorize(context, 'rosters')
+  if (access.status !== 200) return access.refused ?? NextResponse.json({ error: 'Unauthorized' }, { status: access.status })
   const body = await req.json().catch(() => null) as { lockedRosters?: unknown } | null
   const raw = body?.lockedRosters
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||

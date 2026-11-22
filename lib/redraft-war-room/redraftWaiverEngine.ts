@@ -31,7 +31,7 @@ import {
 } from './redraftWaiverScoring'
 import type { RedraftPlayerFact, RedraftWarRoomContext } from './types'
 
-export interface WaiverAdd {
+interface WaiverAdd {
   playerId: string
   playerName: string
   position: string
@@ -54,7 +54,7 @@ export interface WaiverAdd {
   priorityGuidance: PriorityGuidance | null
 }
 
-export interface WaiverDrop {
+interface WaiverDrop {
   playerId: string
   playerName: string
   position: string

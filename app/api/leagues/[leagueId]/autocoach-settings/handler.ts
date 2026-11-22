@@ -1,8 +1,8 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +18,7 @@ export async function GET(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'view')
   } catch {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
@@ -44,7 +44,7 @@ export async function PUT(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'rosters')
   } catch {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }

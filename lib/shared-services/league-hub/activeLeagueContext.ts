@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 /**
  * Universal League Hub — Active League Context resolver (Parts 2, 5, 8).
@@ -112,11 +113,9 @@ export async function resolveActiveLeagueContext(args: {
     (isOwner && provider === 'allfantasy') ||
     verifiedAsCommissioner
 
-  const roster = await prisma.roster
-    .findFirst({
-      where: { leagueId: league.id, platformUserId: userId },
-      select: { id: true },
-    })
+  // The manager's team, or their first when they run several (a read: lib/league/viewerTeams.ts).
+  const roster = await resolveViewingRoster(league.id, userId, null, { allowCoOwner: false })
+    .then((viewing) => (viewing ? { id: viewing.rosterId } : null))
     .catch(() => null)
 
   return {

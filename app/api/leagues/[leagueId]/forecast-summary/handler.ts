@@ -82,7 +82,7 @@ Model role context:
 
     if (!result.ok) {
       return NextResponse.json(
-        { error: 'AI summary failed', detail: result.details },
+        { error: 'Chimmy summary failed', detail: result.details },
         { status: 502 }
       )
     }

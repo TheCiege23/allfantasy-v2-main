@@ -26,7 +26,7 @@ import { HEADLINE_MAX_CHARS, MAX_REASONS, MIN_REASONS, TradeVerdictSchema, type 
  * the packet does not contain, which is the thing this check exists to catch.
  */
 
-export type VerdictValidation = { ok: true; verdict: TradeVerdict } | { ok: false; violations: string[] }
+type VerdictValidation = { ok: true; verdict: TradeVerdict } | { ok: false; violations: string[] }
 
 /**
  * Rule 6. Word-bounded so "blocked", "bettor" in a name or "flock" do not trip it; each entry is a

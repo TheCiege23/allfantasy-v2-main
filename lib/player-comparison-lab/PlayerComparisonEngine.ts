@@ -29,6 +29,7 @@ export interface TwoPlayerComparisonEngineInput {
   scoringFormat?: ScoringFormat;
   leagueScoringSettings?: LeagueScoringSettings | null;
   includeAIExplanation?: boolean;
+  leagueWeekProjections?: { week: number | null; playerA: number | null; playerB: number | null };
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -280,12 +281,18 @@ export async function runTwoPlayerComparisonEngine(
   input: TwoPlayerComparisonEngineInput
 ): Promise<TwoPlayerComparisonEngineResult | null> {
   const sport = normalizeToSupportedSport(input.sport);
-  const comparison = await comparePlayers(input.playerAName, input.playerBName, {
+  const players = await comparePlayers(input.playerAName, input.playerBName, {
     sport,
     scoringFormat: input.scoringFormat,
     leagueScoringSettings: input.leagueScoringSettings ?? null,
   });
-  if (!comparison) return null;
+  if (!players) return null;
+  const weekly = input.leagueWeekProjections;
+  const comparison = weekly ? {
+    ...players,
+    playerA: { ...players.playerA, internalProjectionPoints: weekly.playerA, leagueWeeklyProjection: weekly.playerA },
+    playerB: { ...players.playerB, internalProjectionPoints: weekly.playerB, leagueWeeklyProjection: weekly.playerB },
+  } : players;
 
   const rows: DeterministicStatComparisonRow[] = METRICS.map((metric) => {
     const { playerAValue, playerBValue } = metric.extract({
@@ -299,7 +306,9 @@ export async function runTwoPlayerComparisonEngine(
     });
     return {
       metricId: metric.metricId,
-      label: metric.label,
+      label: weekly && metric.metricId === 'projection_points'
+        ? (weekly.week == null ? 'Weekly projected points' : 'Week ' + weekly.week + ' projected points')
+        : metric.label,
       playerAValue,
       playerBValue,
       higherIsBetter: metric.higherIsBetter,

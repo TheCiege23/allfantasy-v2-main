@@ -40,7 +40,7 @@ describe('native draft provider IDs on hidden idols', () => {
 
   it('rejects a provider ID without a completed pick and roster owner', async () => {
     picks.findMany.mockResolvedValue([{ playerId: '9221' }])
-    await expect(seedSGLiveDraftPowers('league', ['9221', '9509'], 2)).rejects.toThrow('missing player')
+    await expect(seedSGLiveDraftPowers('league', ['9221', '9509'], 2)).rejects.toThrow('completed draft')
     expect(powers.createMany).not.toHaveBeenCalled()
   })
 })

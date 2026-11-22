@@ -2,6 +2,7 @@
  * POST: AI-generate division/tribe names.
  * Commissioner only. Returns an array of creative names for the given count.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -39,7 +40,8 @@ export async function POST(
     select: { userId: true, leagueVariant: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const count = typeof body.count === 'number' ? Math.min(8, Math.max(1, body.count)) : 2

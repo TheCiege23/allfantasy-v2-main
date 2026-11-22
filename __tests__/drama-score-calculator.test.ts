@@ -16,7 +16,6 @@ describe('DramaScoreCalculator', () => {
       intensityFactor: 1.2,
       rivalryScore: 92,
       playoffSwing: 0.28,
-      managerBehaviorHeat: 80,
       leagueGraphHeat: 70,
     })
     expect(boosted).toBeGreaterThan(baseline)

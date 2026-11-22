@@ -89,7 +89,7 @@ export function ZombieRulesClient({
             className={clsx(
               'min-h-[44px] rounded-lg px-4 py-2 text-[12px] font-semibold whitespace-nowrap transition-colors',
               tab === t.id
-                ? 'bg-[var(--zombie-crimson)]/15 text-[var(--zombie-crimson)]'
+                ? 'bg-zombie-crimson/15 text-[var(--zombie-crimson)]'
                 : 'text-[var(--zombie-text-dim)] hover:text-[var(--zombie-text-mid)]',
             )}
           >
@@ -101,8 +101,14 @@ export function ZombieRulesClient({
       {/* Tab content */}
       {tab === 'rules' && (
         <div>
+          {/*
+            The generated rules (lib/zombie/rulesDocGenerator.ts) put each section body in a <pre> to keep its
+            line breaks. These were `prose-*` classes, but @tailwindcss/typography is not installed, so none
+            applied and every rule rendered in the browser's monospace (2026-11-07 Zombie audit). Style the
+            <pre> directly: the app's font, and the bordered panel the prose classes asked for.
+          */}
           <div
-            className="prose prose-invert max-w-none prose-headings:text-[var(--zombie-text-full)] prose-p:text-[var(--zombie-text-mid)] prose-li:text-[var(--zombie-text-mid)] prose-pre:bg-black/30 prose-pre:border prose-pre:border-[var(--zombie-border)] prose-pre:rounded-xl"
+            className="zombie-rules-body max-w-none text-[var(--zombie-text-mid)] [&_h2]:text-[var(--zombie-text-full)] [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--zombie-border)] [&_pre]:bg-black/30 [&_pre]:p-3 [&_pre]:font-sans [&_pre]:text-[13px] [&_pre]:leading-relaxed"
             dangerouslySetInnerHTML={{ __html: rulesHtml }}
           />
           <p className="mt-6 text-[11px] text-[var(--zombie-text-dim)]">
@@ -155,7 +161,7 @@ function ThresholdsTab({ cfg, rules, isPaid, infectionLossToWhisperer, infection
               {isPaid ? ' Loser forfeits additional pot share.' : ' Loser receives "Bashed" marker.'}
             </p>
           </div>
-          <div className="rounded-xl border border-[var(--zombie-red)]/20 bg-[var(--zombie-red)]/[0.04] p-4">
+          <div className="rounded-xl border border-zombie-red/20 bg-[var(--zombie-red)]/[0.04] p-4">
             <div className="flex items-center gap-2">
               <span className="text-2xl">💀</span>
               <div>
@@ -172,7 +178,7 @@ function ThresholdsTab({ cfg, rules, isPaid, infectionLossToWhisperer, infection
       </section>
 
       {/* Infection rules */}
-      <section className="rounded-xl border border-[var(--zombie-purple)]/20 bg-[var(--zombie-panel)] p-5">
+      <section className="rounded-xl border border-zombie-purple/20 bg-[var(--zombie-panel)] p-5">
         <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Infection Mechanics</h2>
         <div className="mt-3 space-y-2 text-[12px] text-[var(--zombie-text-mid)]">
           <div className="flex items-start gap-2">

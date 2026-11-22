@@ -4,7 +4,7 @@ function h(s: string) {
   return createHash("sha256").update(s).digest("hex").slice(0, 32)
 }
 
-export function worldCupEventKey(
+function worldCupEventKey(
   challengeId: string,
   parts: (string | number | null | undefined)[]
 ) {

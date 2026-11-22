@@ -1,6 +1,6 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { createNflRedraftCommissionerAnnouncement } from '@/lib/league-notifications/nflRedraftCommunicationPersistence'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, user.appUserId)
+    await assertCommissionerAccess(leagueId, user.appUserId, 'chat')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

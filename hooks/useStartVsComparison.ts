@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react'
 import type { StartVsApiResponse, StartVsStrategyMode } from '@/lib/player-comparison-lab'
 
-export type StartVsRequestBody = {
+type StartVsRequestBody = {
   teamId?: string | null
   sport?: string | null
   scoringFormat?: 'ppr' | 'half_ppr' | 'non_ppr' | null
@@ -20,7 +20,7 @@ export type StartVsRequestBody = {
   userPreference?: 'playerA' | 'playerB' | null
 }
 
-export type StartVsHookResult = StartVsApiResponse & {
+type StartVsHookResult = StartVsApiResponse & {
   leagueId: string
   explanationGate?: {
     requiredPlan: string | null

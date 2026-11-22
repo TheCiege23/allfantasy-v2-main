@@ -12,6 +12,7 @@
  * Works for ALL sports and ALL league types including specialty leagues.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { UserMinus, UserPlus, X, Search, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -153,7 +154,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
         const isOrphanFlag = Boolean(t.isOrphan)
         const isOrphan = isOrphanFlag
           || !manager?.userId
-          || (manager.userId as string).startsWith('orphan-')
+          || isSeatPlaceholderUserId(manager.userId as string)
           || (t.ownerName as string ?? '').toLowerCase().includes('unassigned')
         const rp = roster ? (rosterPlayers[roster.id] ?? { starters: [], allPlayers: [] }) : { starters: [], allPlayers: [] }
 

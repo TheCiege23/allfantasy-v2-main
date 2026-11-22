@@ -5,7 +5,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { defineMessages } from '@/lib/i18n/messages'
 import { getZombieCreationProfile, ZOMBIE_MAX_UNIVERSE_LEAGUES } from '@/lib/zombie/creationPolicy'
 
-export const zombieCreationMessages = defineMessages({
+const zombieCreationMessages = defineMessages({
   en: {
     title: 'Build your Zombie universe',
     count: 'Leagues to create',

@@ -112,8 +112,14 @@ export async function POST(req: Request) {
       );
     }
     console.error("Stripe checkout error:", e);
+    /*
+     * ⚠ NEVER THE RAW MESSAGE. This used to send `e.message` to the browser, which for a
+     * Stripe failure is Stripe's own text — an invalid or expired key says so, naming the
+     * key's mode and tail ("Invalid API Key provided: sk_live_…"), and request errors name
+     * internal ids. The full error is in the server log above; the buyer gets a retry line.
+     */
     return NextResponse.json(
-      { error: e?.message ?? "Server error" },
+      { error: "Checkout failed. Please try again." },
       { status: 500 }
     );
   }

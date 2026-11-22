@@ -18,6 +18,7 @@ import {
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import {
+  availableImportPlatformsPhrase,
   getImportProviderLabel,
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
@@ -36,9 +37,7 @@ const IMPORT_TABS: ReadonlyArray<{
   { id: 'fleaflicker', label: 'Fleaflicker' },
 ]
 
-export type { LegacyPlatformTab }
-
-export type LeagueImportFlowProps = {
+type LeagueImportFlowProps = {
   userId: string
   defaultProvider?: LegacyPlatformTab
   returnTo: string
@@ -497,7 +496,7 @@ export function LeagueImportFlow({
             </span>
           </h1>
           <p className="relative mt-3 text-center text-white/55">
-            Connect your Sleeper, ESPN, Yahoo, Fantrax, or MFL league to
+            Connect your {availableImportPlatformsPhrase()} league to
             AllFantasy — a read-only view we analyze but never change on the
             source platform.
           </p>

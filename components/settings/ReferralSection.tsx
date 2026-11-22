@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Copy, Check, Users, UserPlus, Gift, Loader2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ReferralShareBar } from "@/components/referral/ReferralShareBar"
+import { ProWeekOfferCard } from "@/components/referral/ProWeekOfferCard"
 import { copyText, selectField } from "@/lib/clipboard/copyText"
 
 /*
@@ -220,6 +221,11 @@ export function ReferralSection() {
           {link && (
             <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
               <ReferralShareBar referralLink={link} testIdPrefix="referral-share" />
+            </div>
+          )}
+          {link && (
+            <div className="mt-3">
+              <ProWeekOfferCard testId="settings-referral-pro-week-offer" />
             </div>
           )}
         </div>

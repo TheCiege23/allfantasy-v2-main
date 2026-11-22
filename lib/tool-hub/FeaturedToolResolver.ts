@@ -13,7 +13,7 @@ const CATEGORY_LABELS: Record<ToolCategoryId, string> = {
   bracket: 'Bracket',
   rankings: 'Rankings',
   legacy: 'Legacy & Dynasty',
-  ai: 'AI & Assistant',
+  ai: 'Chimmy & Assistant',
   transfer: 'Transfer',
 }
 

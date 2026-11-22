@@ -1,4 +1,4 @@
-export type OrphanAdoptionRequestStatus = "pending" | "approved" | "rejected"
+type OrphanAdoptionRequestStatus = "pending" | "approved" | "rejected"
 
 export interface OrphanAdoptionRequest {
   id: string

@@ -13,25 +13,15 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { computeDraftCountdownSeconds } from '@/lib/draft/computeDraftCountdownSeconds'
-import { getDraftCountdownDisplay } from '@/lib/draft/getDraftCountdownDisplay'
 import { filterByPosition, applyDraftFilters } from '@/lib/draft-room/DraftPlayerSearchResolver'
-import {
-  filterByAgeAtMost,
-  filterByByeWeek,
-  filterByIdpStatAtLeast,
-  filterByProjectedPointsAtLeast,
-  type DraftPoolNumericRow,
-} from '@/lib/draft-room/draftPoolNumericFilters'
-import { resolvePlayerPoolAdpColumns } from '@/lib/draft-room/playerPoolAdpColumns'
 import { planDraftQueueAiReorder } from '@/lib/live-draft-engine/draftQueueAiReorder'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
-import { isSnakeMakePickButtonEnabled } from '@/lib/draft-room/draftRoomUiPickEligibility'
 import { mergeDraftSessionSnapshot } from '@/lib/draft-room/mergeDraftSessionSnapshot'
 import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 
 const root = resolve(__dirname, '..', '..')
 
-describe('computeDraftCountdownSeconds / getDraftCountdownDisplay', () => {
+describe('computeDraftCountdownSeconds', () => {
   const t0 = Date.parse('2026-06-01T12:00:00.000Z')
 
   it('running + timerEndAt: counts down from anchor', () => {
@@ -52,44 +42,10 @@ describe('computeDraftCountdownSeconds / getDraftCountdownDisplay', () => {
     const soft = t0 + 45_000
     expect(computeDraftCountdownSeconds('running', null, 45, t0 + 10_000, soft)).toBe(35)
   })
-
-  it('getDraftCountdownDisplay: completed phase', () => {
-    const d = getDraftCountdownDisplay({
-      draftStatus: 'completed',
-      timerStatus: 'none',
-      nowMs: t0,
-    })
-    expect(d.phase).toBe('complete')
-    expect(d.remainingSeconds).toBeNull()
-    expect(d.missingTimerAnchor).toBe(false)
-  })
-
-  it('getDraftCountdownDisplay: missing anchor warning when in_progress + open board + timer none', () => {
-    const d = getDraftCountdownDisplay({
-      draftStatus: 'in_progress',
-      timerStatus: 'none',
-      timerEndAtIso: null,
-      serverRemainingSeconds: null,
-      nowMs: t0,
-      boardHasOpenPicks: true,
-    })
-    expect(d.missingTimerAnchor).toBe(true)
-  })
 })
 
-describe('resolvePlayerPoolAdpColumns', () => {
-  it('keeps system ADP and AI ADP separate', () => {
-    const r = resolvePlayerPoolAdpColumns({ adp: 12.4, aiAdp: 18.2, aiAdpSampleSize: 140 })
-    expect(r.systemAdp).toBe(12.4)
-    expect(r.aiAdp).toBe(18.2)
-    expect(r.aiAdpSampleSize).toBe(140)
-    expect(r.labels.ai).toBe('AI ADP')
-    expect(r.labels.system).toBe('ADP')
-  })
-})
-
-describe('DraftPlayerSearchResolver + draftPoolNumericFilters', () => {
-  const rows: DraftPoolNumericRow[] = [
+describe('DraftPlayerSearchResolver', () => {
+  const rows = [
     { name: 'Josh Allen', position: 'QB', projectedPoints: 300, age: 29, byeWeek: 7, tackles: null, sacks: null },
     { name: 'Fred Warner', position: 'LB', projectedPoints: 180, age: 28, byeWeek: 9, tackles: 120, sacks: 4 },
   ]
@@ -105,13 +61,6 @@ describe('DraftPlayerSearchResolver + draftPoolNumericFilters', () => {
     list = filterByPosition(rows, 'LB')
     expect(list).toHaveLength(1)
     expect(list[0].name).toBe('Fred Warner')
-  })
-
-  it('numeric filters: projected points, age, bye, IDP stat', () => {
-    expect(filterByProjectedPointsAtLeast(rows, 200)).toHaveLength(1)
-    expect(filterByAgeAtMost(rows, 28)).toHaveLength(1)
-    expect(filterByByeWeek(rows, 9)).toHaveLength(1)
-    expect(filterByIdpStatAtLeast(rows, 'tackles', 100)).toHaveLength(1)
   })
 })
 
@@ -145,20 +94,6 @@ describe('planDraftQueueAiReorder', () => {
     })
     expect(plan.mode).toBe('suggestion_af_pro_required')
     expect(plan.displayOrder).toEqual(q)
-  })
-})
-
-describe('isSnakeMakePickButtonEnabled', () => {
-  it('enabled only when on clock and not submitting', () => {
-    expect(isSnakeMakePickButtonEnabled({ canDraft: true, isCurrentUserOnClock: true, pickSubmitting: false })).toBe(
-      true,
-    )
-    expect(isSnakeMakePickButtonEnabled({ canDraft: true, isCurrentUserOnClock: false, pickSubmitting: false })).toBe(
-      false,
-    )
-    expect(isSnakeMakePickButtonEnabled({ canDraft: true, isCurrentUserOnClock: true, pickSubmitting: true })).toBe(
-      false,
-    )
   })
 })
 

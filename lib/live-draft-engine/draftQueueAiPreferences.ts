@@ -5,7 +5,7 @@
 
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 
-export const AI_MANAGE_DRAFT_QUEUE_SETTING_KEY = 'aiManageDraftQueueEnabled' as const
+const AI_MANAGE_DRAFT_QUEUE_SETTING_KEY = 'aiManageDraftQueueEnabled' as const
 
 export function getAiManageDraftQueueEnabled(settings: unknown): boolean {
   if (!settings || typeof settings !== 'object') return false

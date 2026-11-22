@@ -79,16 +79,6 @@ export function getPlayoffStagesBySport(sport: string): PlayoffStageOption[] {
   return STAGE_REGISTRY[sport.toUpperCase()] ?? []
 }
 
-/** Get only premium (locked) stages for a sport. */
-export function getPremiumPlayoffStages(sport: string): PlayoffStageOption[] {
-  return getPlayoffStagesBySport(sport).filter((s) => s.premium)
-}
-
-/** Get default (free) stages for a sport. */
-export function getDefaultPlayoffStages(sport: string): PlayoffStageOption[] {
-  return getPlayoffStagesBySport(sport).filter((s) => s.defaultEnabled)
-}
-
 /** Validate that a set of stage IDs are all valid for a sport. */
 export function validateStageIds(sport: string, stageIds: string[]): { valid: boolean; invalidIds: string[] } {
   const available = new Set(getPlayoffStagesBySport(sport).map((s) => s.id))

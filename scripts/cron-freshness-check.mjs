@@ -117,6 +117,8 @@ export function allowanceFor(gapMs, probe = {}) {
  * stayed invisible.
  */
 export const PROBES = {
+  // The aggregate heartbeat fails if either the NFL or NBA ingestion fails.
+  '/api/cron/survivor-guillotine-ingest': { heartbeat: 'cron-survivor-guillotine-provider' },
   // The operational overlay is outside cron-schedule.json. Probe its unique job heartbeat,
   // then audit every connected NFL league's certified active-lane success below.
   '/api/cron/fantasy-os-active-sync': { heartbeat: 'cron-fantasy-os-active-sync' },
@@ -210,6 +212,12 @@ export const PROBES = {
    * and needs its own identity rather than a differently-scoped table probe.
    */
   '/api/cron/import-player-game-stats?multiSport=1&days=2': { heartbeat: 'cron-import-player-game-stats-multisport' },
+  /*
+   * The game-day refresh: re-imports the NFL week that has a game in play, every 15 minutes. A
+   * heartbeat because it writes the same player_game_stats.updatedAt as the daily NFL mode above, and
+   * because outside a game window a correct fire writes nothing at all.
+   */
+  '/api/cron/import-player-game-stats?gameDay=1': { heartbeat: 'cron-import-player-game-stats-game-day' },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   /* ⚠ KEY MATCHES THE FULL PATH INCLUDING QUERY, so adding `&limit=500` to the cron orphaned
@@ -238,9 +246,9 @@ export const PROBES = {
    * wastes the most time — a false alarm on a healthy job. Append-only is still not enough when a
    * unique key makes most runs insert nothing: see `adp_data` under adp-refresh below.
    */
-  // One fire recomputes NFL, MLB, NBA and NHL (cron ceiling — see the route). The table probe stays
-  // the output check; the route's multisport heartbeat carries per-sport errors for diagnosis.
-  '/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
+  // One fire recomputes NFL, MLB, NBA, NHL and (since 2026-11-22) NCAAF, NCAAB and soccer (cron ceiling — see the
+  // route). The table probe stays the output check; the route's multisport heartbeat carries per-sport errors.
+  '/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL,NCAAF,NCAAB,SOCCER': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
   /*
    * ⚠ HEARTBEAT, NOT `adp_data.created_at`. That table is append-only, but it is unique per
    * calendar WEEK, so only the first run of each week inserts and every later run writes zero rows
@@ -344,6 +352,7 @@ export const PROBES = {
   // NBA Cup live scores (2026-11-01). A heartbeat: outside a Cup game window it correctly fetches
   // nothing, so an output probe would cry wolf for most of the year.
   '/api/cron/nba-cup-live': { heartbeat: 'cron-nba-cup-live' },
+  '/api/cron/season-tournaments': { heartbeat: 'cron-season-tournaments' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
@@ -430,6 +439,9 @@ export const PROBES = {
    */
   '/api/cron/draft-pool-prewarm': { heartbeat: 'cron-draft-pool-prewarm' },
   '/api/cron/import-backfill-sweeper': { heartbeat: 'cron-import-backfill-sweeper' },
+  // The daily Stripe key check writes nothing but this heartbeat: a check that stopped firing
+  // must not look like a check that keeps finding nothing wrong. A key problem records `failed`.
+  '/api/cron/stripe-key-health': { heartbeat: 'cron-stripe-key-health' },
   '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
   // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
   // the default path (flag off) recorded nothing and the job looked identical whether it ran
@@ -557,6 +569,13 @@ export const PROBES = {
   '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
 
   /*
+   * Weekly check of the Music tab's YouTube stations (lib/app-music/stationHealth.ts). A week
+   * where a station needs a look records `partial`, and a missing YOUTUBE_API_KEY records
+   * `failed` -- so this heartbeat answers both "did it fire" and "could it actually check".
+   */
+  '/api/cron/music-station-health': { heartbeat: 'cron-music-station-health' },
+
+  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --
@@ -572,6 +591,7 @@ export const PROBES = {
    * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
    * keeps the strong claim in season and self-suppresses out of it.
    */
+  '/api/cron/college-weekly-projections': { heartbeat: 'cron-college-weekly-projections' },
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 
   /*

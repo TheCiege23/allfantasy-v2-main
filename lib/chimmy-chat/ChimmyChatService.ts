@@ -64,8 +64,9 @@ export type SendChimmyMessageResult = {
   sessionId?: string
 }
 
+/** 20 = the server's MAX_CONVERSATION_TURNS; how much of it reaches the model is the plan's depth (lib/chimmy/chimmyDepth.ts). */
 function toConversationPayload(conversation: ChimmyThreadMessage[] = []) {
-  return conversation.slice(-10).map((m) => ({
+  return conversation.slice(-20).map((m) => ({
     role: m.role,
     content: m.content.slice(0, 4000),
   }))

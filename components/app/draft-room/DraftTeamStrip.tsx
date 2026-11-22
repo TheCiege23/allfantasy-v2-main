@@ -17,6 +17,8 @@ import { getManagerColorBySlot } from '@/lib/draft-room'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { BotPersonalityBadge } from '@/components/league-feed/BotPersonalityBadge'
 import { SurvivorTribeBadge } from '@/components/league/survivor/SurvivorTribeBadge'
+import { UserRound } from 'lucide-react'
+import { OPEN_SEAT_LABEL, seatDisplayName } from '@/lib/draft-room/seatLabel'
 
 export interface DraftTeamStripTeamMeta {
   rosterId: string
@@ -27,11 +29,11 @@ export interface DraftTeamStripTeamMeta {
   isOrphan?: boolean
   /** Highlights the cell border when this slot is on the clock. */
   isOnClock?: boolean
-  /** AI opponent archetype label from `/api/league/ai-opponents/summary`. */
+  /** Chimmy opponent archetype label from `/api/league/ai-opponents/summary`. */
   aiArchetypeLabel?: string | null
 }
 
-export interface DraftTeamStripProps {
+interface DraftTeamStripProps {
   teamCount: number
   slotOrder: SlotOrderEntry[]
   /** Map of rosterId → LeagueTeam metadata for richer display. Optional. */
@@ -86,11 +88,10 @@ export function DraftTeamStrip({
           const entry = bySlot.get(slot)
           const meta = entry ? teamMetaByRoster?.[entry.rosterId] : null
           const color = getManagerColorBySlot(slot)
-          const displayName =
-            meta?.teamName?.trim() ||
-            meta?.ownerName?.trim() ||
-            entry?.displayName ||
-            `Team ${slot}`
+          // An empty imported seat is named "Unknown" upstream; show it as an open seat instead.
+          const displayName = entry
+            ? seatDisplayName(meta?.teamName, meta?.ownerName, entry.displayName)
+            : `Team ${slot}`
           const isUser = !!currentUserRosterId && entry?.rosterId === currentUserRosterId
           const isOnClock = !!onClockRosterId && entry?.rosterId === onClockRosterId
           const isOrphan = meta?.isOrphan
@@ -152,6 +153,9 @@ export function DraftTeamStrip({
                       ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                     }}
                   />
+                ) : displayName === OPEN_SEAT_LABEL ? (
+                  // An empty seat has no manager to take initials from ("OS" read as a name).
+                  <UserRound className="h-4 w-4 text-white/70" aria-hidden data-testid="draft-strip-open-seat-icon" />
                 ) : (
                   <span className="text-[11px] font-black text-white/90">
                     {initials(displayName)}

@@ -10,6 +10,7 @@ import { loadSeasonNativeSetup } from './seasonNativeProvisioning'
 import { BlueprintOperationError } from './seasonBlueprintStore'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { withControlLock } from '@/lib/draft/draftLock'
 import { seasonResourceId } from '@/lib/domain/seasonTournamentLeague'
 import { assessSeasonDraftCompletion } from './seasonDraftReview'
@@ -20,6 +21,7 @@ import { projectSeasonWeek, seasonWeeklyEvidenceSchema, type SeasonWeeklyEvidenc
 import { assertSeasonObservedStartsConsistent } from './seasonActualStartGuard'
 import { reconcileSeasonStatSnapshots } from './seasonStatSnapshotReconciliation'
 import { resolveSeasonLockedProviderGames, resolveSeasonLockedProviderPairs } from './seasonLockedPlayerCoverage'
+import { lockAndCheckSeasonRecovery } from './seasonRecoveryState'
 
 const id = z.string().min(1).max(200)
 const instant = z.string().datetime({ offset: true })
@@ -34,15 +36,15 @@ type Review = NonNullable<Awaited<ReturnType<typeof assessSeasonDraftCompletion>
 type LedgerState = { context: Review['context']; session: NonNullable<Review['session']>; rosters: Array<{ rosterId: string; playerIds: string[]; starterIds: string[] }>; expected: { rulesHash: string; rosterHash: string; rosterIds: string[] } }
 
 /** Setup-only internal persistence. No HTTP ingestion route, provider IO or season activation. */
-async function preparedLeague<T>(leagueId: string, run: (tx: Prisma.TransactionClient, state: LedgerState) => Promise<T>, ownerId?: string) {
+async function preparedLeague<T>(leagueId: string, run: (tx: Prisma.TransactionClient, state: LedgerState) => Promise<T>, ownerId?: string, allowLive = false) {
   const locked = await withControlLock(leagueId, () => prisma.$transaction(async tx => {
-    return run(tx, await loadPreparedScoringState(tx, leagueId, ownerId))
+    return run(tx, await loadPreparedScoringState(tx, leagueId, ownerId, allowLive))
   }))
   if (!locked.acquired) throw new Error('Tournament scoring is busy. Retry shortly.')
   return locked.value
 }
-async function loadPreparedScoringState(tx: Prisma.TransactionClient, leagueId: string, ownerId?: string): Promise<LedgerState> {
-    const review = await assessSeasonDraftCompletion(leagueId, tx)
+async function loadPreparedScoringState(tx: Prisma.TransactionClient, leagueId: string, ownerId?: string, allowLive = false): Promise<LedgerState> {
+    const review = await assessSeasonDraftCompletion(leagueId, tx, allowLive)
     if (!review || review.state !== 'completed' || !review.boardHash || !review.session || !review.context.config.rules) throw new Error('A verified completed opening draft is required.')
     const { context, session, boardHash } = review
     const shell = await tx.tournamentShell.findUnique({ where: { id: context.tournamentId } })
@@ -152,6 +154,11 @@ async function readHead(tx: any, state: any, leagueId: string, period: number) {
 
 /** Internal trusted-adapter boundary. Fetch/map/score/reconcile outside this transaction. */
 async function persistSeasonScoreBatch(tx: Prisma.TransactionClient, state: LedgerState, leagueId: string, batch: SeasonScoreBatch, statEvidence?: Record<string, unknown>) {
+    if (await lockAndCheckSeasonRecovery(tx, state.context.tournamentId)) throw new Error('Tournament scoring is held for recovery.')
+    const liveFinal = await tx.tournamentAuditLog.findFirst({
+      where: { action: liveScoreAction, targetType: 'league_period', targetId: target(leagueId, batch.period) }, select: { id: true },
+    })
+    if (liveFinal) throw new Error('Use approved recovery to change a published live score.')
     const requestHash = seasonContractHash(statEvidence ? { batch, statEvidence } : batch)
     const window = state.context.config.rules!.calendar.periods.find((p: any) => p.number === batch.period)
     if (!window || checkedPeriod(state, window.startsAt) !== batch.period) throw new Error('Unknown opening period.')
@@ -280,7 +287,7 @@ export async function readSeasonOpeningLockedProviderPairs(leagueId: string, per
 /** Low-level internal numeric ingest; stat-adapter receipts cannot mix with unverified point batches. */
 export async function ingestSeasonOpeningScores(leagueId: string, raw: SeasonScoreBatch) {
   const batch = batchSchema.parse(raw)
-  return preparedLeague(leagueId, (tx,state)=>persistSeasonScoreBatch(tx,state,leagueId,batch))
+  return preparedLeague(leagueId, (tx,state)=>persistSeasonScoreBatch(tx,state,leagueId,batch), undefined, true)
 }
 
 /** Trusted worker boundary. Provider fetching, actual-start proof and coverage reconciliation happen outside locks. */
@@ -335,7 +342,7 @@ export async function ingestSeasonOpeningStatEvidence(leagueId: string, raw: Sea
     if(input.coverage==='complete'&&(seenGames.size!==frames.length||frames.some((f:any)=>!games.some(g=>g.gameId===f.gameId)))) throw new Error('Complete coverage must reconcile every locked game.')
     const batch: SeasonScoreBatch={requestId:input.requestId,expectedRevision:input.expectedRevision,period:input.period,source:input.provider+':'+input.format,observedAt:input.observedAt,coverage:input.coverage,scores}
     return persistSeasonScoreBatch(tx,state,leagueId,batch,{version:1,identityDigest,bindings,games,raw:input,...(bridge?{bridgeDigest:bridge.digest}:{})})
-  })
+  }, undefined, true)
 }
 
 async function verifyCurrentStatIdentities(tx: Prisma.TransactionClient, state: LedgerState, evidence: any) {
@@ -359,7 +366,7 @@ async function verifyCurrentStatIdentities(tx: Prisma.TransactionClient, state: 
   }
 }
 
-async function checkedWeek(tx: Prisma.TransactionClient, state: LedgerState, leagueId: string, period: number) {
+async function checkedWeek(tx: Prisma.TransactionClient, state: LedgerState, leagueId: string, period: number, now = new Date(Date.now())) {
   if (!Number.isInteger(period) || period < 1) throw new Error('A scoring period is required.')
   const window = state.context.config.rules!.calendar.periods.find(p => p.number === period)
   if (!window || checkedPeriod(state, window.startsAt) !== period) throw new Error('Unknown opening period.')
@@ -372,7 +379,7 @@ async function checkedWeek(tx: Prisma.TransactionClient, state: LedgerState, lea
   const frames = allFrames.filter((g: any) => Date.parse(g.actualStartsAt) <= Date.parse(head.evidence.observedAt))
   const ordered = (games: any[]) => [...games].sort((a, b) => a.gameId < b.gameId ? -1 : a.gameId > b.gameId ? 1 : 0)
   if (seasonContractHash(ordered(frames)) !== seasonContractHash(ordered(head.evidence.games))) throw new Error('The persisted lineup set changed. Reconciliation is required.')
-  const projection = projectSeasonWeek(state.context.config.rules!, state.expected, head.evidence, new Date(Date.now()))
+  const projection = projectSeasonWeek(state.context.config.rules!, state.expected, head.evidence, now)
   return { window, head, projection }
 }
 
@@ -516,7 +523,7 @@ export async function reviewSeasonOpeningWeek(userId: string, tournamentId: stri
     const statRefresh = reconciliation ? { baselineRows: reconciliation.baselineRows, correctedRows: reconciliation.correctedRows,
       backfilledRows: reconciliation.backfilledRows, statusChangedGames: reconciliation.statusChangedGames } : undefined
     return { ...base, state: receipt && projection.canFinalize ? 'finalized' : projection.canFinalize ? 'ready' : 'provisional', revision: head.revision, reviewToken: head.digestValue, missingResults: projection.teams.reduce((n, t) => n + t.missing.length, 0), provisionalResults: projection.teams.reduce((n, t) => n + t.provisional.length, 0), ...(statRefresh ? { statRefresh } : {}), blockers: projection.blockers, finalizedAt: receipt?.finalizedAt, canFinalize: projection.canFinalize && !receipt }
-  }, userId)
+  }, userId, true)
 }
 
 /** Saves a setup-only finalization receipt. No live standings, wins, cuts or activation. */
@@ -534,7 +541,7 @@ export async function finalizeSeasonOpeningWeek(userId: string, tournamentId: st
     await save(tx, state, leagueId, period, 'season_week_finalized_setup', finalResource(period, revision), { period, revision, ledgerDigest: head.digestValue, totalsHash: seasonContractHash(projection.teams), finalizedAt: new Date(Date.now()).toISOString(), teams: projection.teams }, userId)
     await ensureMatchupOutcomes(tx, state, leagueId, period, head, projection, false, userId)
     return { finalized: true, repeated: false, revision, launchReady: false }
-  }, userId)
+  }, userId, true)
 }
 
 /** One read-only repeatable snapshot for the frozen opening field; no client-supplied scores. */
@@ -580,4 +587,108 @@ export async function reviewSeasonOpeningStandings(userId: string, tournamentId:
     }
     return buildFinalizedOpeningStandings({ entrants, periods, weeks, tiebreakers: c.tiebreakers, throughPeriod })
   }, { isolationLevel: 'RepeatableRead', timeout: 15000 })
+}
+
+const liveScoreAction = 'season_week_finalized_live'
+const liveScoreSchema = z.object({
+  version: z.literal(1),
+  manifestHash: z.string().regex(/^[a-f0-9]{64}$/),
+  stage: z.number().int().min(1).max(3),
+  period: z.number().int().min(1).max(30),
+  revision: z.number().int().positive(),
+  previousDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  proof: z.discriminatedUnion('source', [
+    z.object({ source: z.literal('verified_provider'), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+    z.object({ source: z.literal('reviewed_opening'), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+    z.object({ source: z.literal('approved_correction'), caseId: id }).strict(),
+  ]),
+  scores: z.array(z.object({ rosterId: id, points: z.number().finite() }).strict()).min(1),
+  digest: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict()
+type LiveScore = z.infer<typeof liveScoreSchema>
+type LiveBinding = Pick<LiveScore, 'manifestHash' | 'stage' | 'period'>
+
+export function seasonLiveScoreTarget(leagueId: string, period: number) {
+  return target(leagueId, period)
+}
+
+export async function readSeasonLiveScores(
+  tx: Prisma.TransactionClient, leagueIds: string[], periods: number[], manifestHash: string, stage: number,
+): Promise<Map<string, LiveScore & { id: string }>> {
+  const targets = leagueIds.flatMap(leagueId => periods.map(period => [target(leagueId, period), { leagueId, period }] as const))
+  const expected = new Map(targets)
+  const rows = await tx.tournamentAuditLog.findMany({
+    where: { action: liveScoreAction, targetType: 'league_period', targetId: { in: [...expected.keys()] } },
+    select: { id: true, targetId: true, data: true },
+  })
+  const latest = new Map<string, LiveScore & { id: string }>()
+  const parsed = rows.map(row => ({ ...row, score: liveScoreSchema.parse(row.data) }))
+    .sort((a, b) => a.score.revision - b.score.revision)
+  for (const row of parsed) {
+    const binding = expected.get(row.targetId!)!
+    const { digest, ...payload } = row.score
+    const prior = latest.get(row.targetId!)
+    if (payload.manifestHash !== manifestHash || payload.stage !== stage || payload.period !== binding.period
+      || row.id !== seasonResourceId(binding.leagueId, 'official-score:' + payload.period + ':' + payload.revision)
+      || payload.revision !== (prior?.revision ?? 0) + 1 || payload.previousDigest !== (prior?.digest ?? null)
+      || (payload.revision > 1) !== (payload.proof.source === 'approved_correction')
+      || new Set(payload.scores.map(score => score.rosterId)).size !== payload.scores.length
+      || digest !== seasonContractHash(payload)) throw new Error('The live tournament score ledger does not match its checkpoint.')
+    latest.set(row.targetId!, { ...row.score, id: row.id })
+  }
+  return latest
+}
+
+/** Call inside the transaction that locks the season and updates its matchup projection. */
+export async function persistSeasonLiveScore(
+  tx: Prisma.TransactionClient,
+  input: LiveBinding & { tournamentId: string; leagueId: string; proof: LiveScore['proof']; scores: LiveScore['scores']; now: Date },
+) {
+  const { tournamentId, leagueId, stage, period, manifestHash, proof, now } = input
+  const scores = [...input.scores].sort((a, b) => a.rosterId.localeCompare(b.rosterId))
+  const key = target(leagueId, period)
+  const prior = (await readSeasonLiveScores(tx, [leagueId], [period], manifestHash, stage)).get(key)
+  if (prior && seasonContractHash(prior.scores) === seasonContractHash(scores)) return prior
+  if (!!prior !== (proof.source === 'approved_correction')) throw new Error('An official tournament score can only change through approved recovery.')
+  const revision = (prior?.revision ?? 0) + 1
+  const payload = { version: 1, stage, period, revision, manifestHash, scores, proof, previousDigest: prior?.digest ?? null } as const
+  const score = liveScoreSchema.parse({ ...payload, digest: seasonContractHash(payload) })
+  const receiptId = seasonResourceId(leagueId, 'official-score:' + period + ':' + revision)
+  await tx.tournamentAuditLog.create({ data: {
+    id: receiptId, tournamentId, roundNumber: stage, action: liveScoreAction, actorType: 'system',
+    targetType: 'league_period', targetId: key, data: toPrismaJsonInput(score), createdAt: now,
+  } })
+  return { ...score, id: receiptId }
+}
+
+export async function hasSeasonOpeningScoreEvidence(tx: Pick<Prisma.TransactionClient, 'tournamentAuditLog'>, leagueId: string, period: number) {
+  return !!await tx.tournamentAuditLog.findFirst({
+    where: { action: { in: ['season_scores_ingested', 'season_week_finalized_setup', 'season_lineup_locked', 'season_matchups_locked'] }, targetType: 'league_period', targetId: target(leagueId, period) },
+    select: { id: true },
+  })
+}
+
+/** A league that has setup-ledger evidence must finish that review before moving to the live projection. */
+export async function readReviewedSeasonOpeningScore(tx: Prisma.TransactionClient, leagueId: string, period: number, now: Date) {
+  const state = await loadPreparedScoringState(tx, leagueId, undefined, true)
+  const { head, projection } = await checkedWeek(tx, state, leagueId, period, now)
+  if (!head || !projection?.canFinalize) return null
+  const window = state.context.config.rules!.calendar.periods.find(row => row.number === period)!
+  await assertSeasonObservedStartsConsistent(tx, {
+    tournamentId: state.context.tournamentId, manifestHash: state.context.manifestHash, rulesHash: state.context.rulesHash,
+    sport: state.context.config.sport, periodStartsAt: window.startsAt, periodEndsAt: window.endsAt,
+  }, head.evidence.games, true)
+  const receipt = await finalReceipt(tx, state, leagueId, period, head, projection)
+  if (!receipt) return null
+  const outcomes = await currentMatchupOutcomes(tx, state, leagueId, period, head, projection)
+  if (!outcomes) return null
+  const rosters = await tx.roster.findMany({ where: { leagueId }, select: { id: true, redraftRosterId: true } })
+  const byGeneric = new Map(rosters.map(roster => [roster.id, roster.redraftRosterId]))
+  const results = projection.teams.map(team => ({ rosterId: byGeneric.get(team.rosterId), points: team.points }))
+  if (results.some(row => !row.rosterId || row.points === null)) throw new Error('Reviewed scores do not match the live roster binding.')
+  return {
+    scores: results.map(row => ({ rosterId: row.rosterId!, points: row.points! })),
+    outcomes: outcomes.map(row => ({ ...row, rosterId: byGeneric.get(row.rosterId), opponentRosterId: byGeneric.get(row.opponentRosterId) })),
+    evidenceHash: seasonContractHash({ receipt, outcomes }),
+  }
 }

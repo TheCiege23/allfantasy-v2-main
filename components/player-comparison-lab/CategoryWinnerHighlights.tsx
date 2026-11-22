@@ -4,7 +4,7 @@ import type { CategoryWinnerHighlight } from '@/lib/player-comparison-lab/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Trophy } from 'lucide-react';
 
-export interface CategoryWinnerHighlightsProps {
+interface CategoryWinnerHighlightsProps {
   highlights: CategoryWinnerHighlight[];
 }
 

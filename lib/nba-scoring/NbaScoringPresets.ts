@@ -70,8 +70,6 @@ export const NBA_STAT_KEYS = [
   'assist_turnover_bonus',
 ] as const
 
-export type NbaStatKey = (typeof NBA_STAT_KEYS)[number]
-
 /** Human-readable labels for each stat key. */
 export const NBA_STAT_LABELS: Record<string, string> = {
   // General

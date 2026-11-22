@@ -39,14 +39,14 @@ vi.mock('@/lib/player-trend', () => ({
   recordTrendSignalsAndUpdate: vi.fn(async () => {}),
 }))
 
-describe('AI action validation route contracts', () => {
+describe('Chimmy action validation route contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })
     rosterFindFirstMock.mockResolvedValue({ id: 'roster-1' })
   })
 
-  it('returns 422 for lineup apply when AI action lacks explicit confirmation', async () => {
+  it('returns 422 for lineup apply when Chimmy action lacks explicit confirmation', async () => {
     const { POST } = await import('@/app/api/leagues/roster/save/route')
 
     const req = new Request('http://localhost/api/leagues/roster/save', {
@@ -61,11 +61,11 @@ describe('AI action validation route contracts', () => {
     const res = await POST(req as any)
     expect(res.status).toBe(422)
     await expect(res.json()).resolves.toMatchObject({
-      error: 'AI action requires explicit user confirmation before execution.',
+      error: 'Chimmy action requires explicit user confirmation before execution.',
     })
   })
 
-  it('returns 422 for waiver claim add when AI action lacks explicit confirmation', async () => {
+  it('returns 422 for waiver claim add when Chimmy action lacks explicit confirmation', async () => {
     const { POST } = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
 
     const req = new Request('http://localhost/api/waiver-wire/leagues/league-1/claims', {
@@ -80,11 +80,11 @@ describe('AI action validation route contracts', () => {
     const res = await POST(req as any, { params: { leagueId: 'league-1' } } as any)
     expect(res.status).toBe(422)
     await expect(res.json()).resolves.toMatchObject({
-      error: 'AI action requires explicit user confirmation before execution.',
+      error: 'Chimmy action requires explicit user confirmation before execution.',
     })
   })
 
-  it('returns 422 for trade propose save counteroffer when AI action lacks explicit confirmation', async () => {
+  it('returns 422 for trade propose save counteroffer when Chimmy action lacks explicit confirmation', async () => {
     const { POST } = await import('@/app/api/trade/propose/route')
 
     const req = new Request('http://localhost/api/trade/propose', {
@@ -103,7 +103,7 @@ describe('AI action validation route contracts', () => {
     const res = await POST(req)
     expect(res.status).toBe(422)
     await expect(res.json()).resolves.toMatchObject({
-      error: 'AI action requires explicit user confirmation before execution.',
+      error: 'Chimmy action requires explicit user confirmation before execution.',
     })
   })
 
@@ -130,7 +130,7 @@ describe('AI action validation route contracts', () => {
     const res = await POST(req)
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({
-      error: 'AI action validation payload does not match requested action.',
+      error: 'Chimmy action validation payload does not match requested action.',
     })
   })
 
@@ -154,7 +154,7 @@ describe('AI action validation route contracts', () => {
     const res = await POST(req as any)
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({
-      error: 'AI action validation league does not match target league.',
+      error: 'Chimmy action validation league does not match target league.',
     })
   })
 })

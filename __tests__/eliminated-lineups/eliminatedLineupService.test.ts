@@ -183,3 +183,46 @@ describe('the commissioner view and the Commish OS task', () => {
     expect(await readEliminatedLineupTasks('L')).toEqual([])
   })
 })
+
+describe('the hourly run — anti-tanking optimize (owner decision 2026-11-06)', () => {
+  const OPTIMIZE = { eliminated_lineup_minimum: { enabled: true, standard: 'playable', autoFill: false, optimize: true } }
+  const starters = () => buildLineupListsFromPlayerData(((m.persist.mock.calls[0] as unknown as [Record<string, unknown>])[0]).nextPlayerData, 3).starters
+
+  it('sets the best lineup, not just a legal one — Big Back starts over Steady Back', async () => {
+    m.state.settings = OPTIMIZE
+    const r = await runEliminatedLineupMinimums()
+    // `notified` counts shortfall notices; the optimized lineup meets the minimum, so none is due.
+    expect(r).toMatchObject({ optimized: 1, filled: 0, notified: 0 })
+    expect(starters()).toEqual(['qb-two', 'rb-big', 'wr-two'])
+    const call = (m.persist.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect((call.automationAudit as { action: string; message: string }).action).toBe('eliminated_lineup.optimized')
+    // The manager hears once that week, and is told it will be set again — not that their edits stick.
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
+      userIds: ['uc'],
+      type: 'eliminated_lineup_optimized',
+      dedupePrefix: 'eliminated-lineup-optimized:L:r-c:2026:12',
+      body: expect.stringContaining('set again each hour until kickoff'),
+    }))
+  })
+
+  it('acts on a lineup that is legal but weak — the deliberate-tank case the minimum alone cannot see', async () => {
+    m.state.settings = OPTIMIZE
+    m.state.playerData = {
+      lineup_sections: {
+        starters: [{ id: 'qb-two', position: 'QB', slotIndex: 0 }, { id: 'rb-ok', position: 'RB', slotIndex: 1 }, { id: 'wr-two', position: 'WR', slotIndex: 2 }],
+        bench: [{ id: 'rb-big', position: 'RB' }, { id: 'qb-bye', position: 'QB' }],
+        ir: [], taxi: [], devy: [],
+      },
+      starters: ['qb-two', 'rb-ok', 'wr-two'],
+    }
+    expect(await runEliminatedLineupMinimums()).toMatchObject({ optimized: 1 })
+    expect(starters()).toEqual(['qb-two', 'rb-big', 'wr-two'])
+  })
+
+  it('never moves a player whose game has started', async () => {
+    m.state.settings = OPTIMIZE
+    m.lock.mockResolvedValue({ locked: false, lockedPlayerIds: ['rb-ok'] })
+    await runEliminatedLineupMinimums()
+    expect(starters()[1]).toBe('rb-ok')
+  })
+})

@@ -100,7 +100,13 @@ export async function decideDraftPick(dco: DraftDCO, deps: DraftDecisionDeps): P
   const uncertainty = [...dco.uncertainty]
   if (top && top.adpIsReal === false) uncertainty.push('The top choice has no market ADP, so reach and value against ADP are unknown.')
 
-  const pickLabel = world.currentOverall != null ? `pick ${world.currentOverall}` : 'your next pick'
+  // Off the clock the ranking is for the roster's own next turn (world.plannedOverall), not the pick being made.
+  const pickLabel =
+    world.plannedOverall != null
+      ? `your pick ${world.plannedOverall}`
+      : world.currentOverall != null
+        ? `pick ${world.currentOverall}`
+        : 'your next pick'
   const what_happened = top
     ? `${actions.length} player${actions.length === 1 ? '' : 's'} ranked for ${pickLabel}; the top choice is ${describe(top)}.`
     : dco.coverage.availablePoolSize === 0

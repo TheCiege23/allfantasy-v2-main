@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -76,9 +77,11 @@ async function teamLabeller(leagueId: string): Promise<TeamLabel> {
 }
 
 /** The asker's roster in ANY league: own platform id first, then the team they claimed. */
-async function findUserRoster(leagueId: string, userId: string) {
+async function findUserRoster(leagueId: string, userId: string, rosterId?: string | null) {
   const select = { id: true, platformUserId: true, faabRemaining: true, waiverPriority: true, settings: true, playerData: true } as const
-  const direct = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select }).catch(() => null)
+  // The named team, or the manager's first when they run several (a read: lib/league/viewerTeams.ts).
+  const viewing = await resolveViewingRoster(leagueId, userId, rosterId, { allowCoOwner: false }).catch(() => null)
+  const direct = viewing ? await prisma.roster.findFirst({ where: { leagueId, id: viewing.rosterId }, select }).catch(() => null) : null
   if (direct) return direct
   const claimed = await prisma.leagueTeam
     .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
@@ -87,7 +90,7 @@ async function findUserRoster(leagueId: string, userId: string) {
   return prisma.roster.findFirst({ where: { leagueId, platformUserId: claimed.platformUserId }, select }).catch(() => null)
 }
 
-export async function buildWaiverStatusContext(args: { leagueId: string; userId: string; now?: Date }): Promise<string> {
+export async function buildWaiverStatusContext(args: { leagueId: string; userId: string; now?: Date; rosterId?: string | null }): Promise<string> {
   const now = args.now ?? new Date()
   const membership = await resolveLeagueMembership(args.leagueId, args.userId).catch(() => null)
   if (!membership?.ok) {
@@ -100,8 +103,8 @@ export async function buildWaiverStatusContext(args: { leagueId: string; userId:
 
   try {
     return resolveWriteAuthority(league.platform) === 'NATIVE'
-      ? await nativeWaivers(league, args.userId, now)
-      : await importedWaivers(league, args.userId)
+      ? await nativeWaivers(league, args.userId, now, args.rosterId)
+      : await importedWaivers(league, args.userId, args.rosterId)
   } catch {
     return 'The waiver wire could not be read just now. Say that you could not read it; do not describe claims, budgets or order.'
   }
@@ -109,12 +112,12 @@ export async function buildWaiverStatusContext(args: { leagueId: string; userId:
 
 type LeagueRow = { id: string; name: string | null; sport: string; platform: string | null; settings: unknown }
 
-async function nativeWaivers(league: LeagueRow, userId: string, now: Date): Promise<string> {
+async function nativeWaivers(league: LeagueRow, userId: string, now: Date, rosterId?: string | null): Promise<string> {
   const sport = normalizeToSupportedSport(league.sport)
   const [settings, state, mine, rosters, label] = await Promise.all([
     getEffectiveLeagueWaiverSettings(league.id),
     getLeagueWaiverState(league.id).catch(() => null),
-    findUserRoster(league.id, userId),
+    findUserRoster(league.id, userId, rosterId),
     prisma.roster.findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, waiverPriority: true, faabRemaining: true } }),
     teamLabeller(league.id),
   ])
@@ -234,7 +237,7 @@ function importedWaiverType(raw: unknown): string | null {
   return null
 }
 
-async function importedWaivers(league: LeagueRow, userId: string): Promise<string> {
+async function importedWaivers(league: LeagueRow, userId: string, rosterId?: string | null): Promise<string> {
   const platform = sourcePlatformLabel(league.platform) ?? 'the source platform'
   const s = obj(league.settings)
   const nested = obj(s.settings)
@@ -263,7 +266,7 @@ async function importedWaivers(league: LeagueRow, userId: string): Promise<strin
     : `- Processing day: ${dayRaw != null && DAYS[dayRaw] ? DAYS[dayRaw] : `not in the imported data — tell them to check ${platform}`}.`
 
   const [mine, rosters, label] = await Promise.all([
-    findUserRoster(league.id, userId),
+    findUserRoster(league.id, userId, rosterId),
     prisma.roster.findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, waiverPriority: true, faabRemaining: true } }),
     teamLabeller(league.id),
   ])

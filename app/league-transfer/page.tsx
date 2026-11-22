@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { PLATFORM_LANDINGS } from '@/lib/league-import/platformLandingCopy'
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -51,27 +53,27 @@ const PLATFORMS: {
   {
     id: 'yahoo', label: 'Yahoo', emoji: '🏈', color: '#ef4444',
     available: false,
-    support: 'Full transfer support — coming soon'
+    support: 'Full history transfer — coming soon'
   },
   {
     id: 'mfl', label: 'MFL', emoji: '🏆', color: '#fbbf24',
     available: false,
-    support: 'Full transfer support — coming soon'
+    support: 'Full history transfer — coming soon'
   },
   {
     id: 'espn', label: 'ESPN', emoji: '🔴', color: '#f97316',
     available: false,
-    support: 'Settings + rosters (draft history limited) — coming soon'
+    support: 'Full history transfer — coming soon'
   },
   {
     id: 'fleaflicker', label: 'Fleaflicker', emoji: '🦊', color: '#34d399',
     available: false,
-    support: 'Full transfer support — coming soon'
+    support: 'Full history transfer — coming soon'
   },
   {
     id: 'fantrax', label: 'Fantrax', emoji: '📊', color: '#a78bfa',
     available: false,
-    support: 'Scoring + rosters (no draft history) — coming soon'
+    support: 'Full history transfer — coming soon'
   },
 ]
 
@@ -145,9 +147,17 @@ function PlatformStep({ onSelect }: { onSelect: (p: Platform) => void }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        {PLATFORMS.map(p => (
+        {PLATFORMS.map(p => {
+          /*
+           * TRANSFER (full history: draft results, playoffs, trades) is Sleeper-only — the transfer route
+           * refuses the rest. But most of these platforms can be IMPORTED today, and a card that only said
+           * "coming soon" read as "we can't take your league at all". Importable ones point at the importer;
+           * which ones is read from provider-ui-config, so Yahoo stays coming soon here as everywhere.
+           */
+          const importSlug = !p.available && isImportProviderAvailable(p.id) ? PLATFORM_LANDINGS.find((l) => l.provider === p.id)?.slug ?? null : null
+          return (
+          <div key={p.id} className="flex flex-col gap-2">
           <button
-            key={p.id}
             onClick={() => p.available && onSelect(p.id)}
             onMouseEnter={() => setHovered(p.id)}
             onMouseLeave={() => setHovered(null)}
@@ -181,7 +191,18 @@ function PlatformStep({ onSelect }: { onSelect: (p: Platform) => void }) {
               </div>
             )}
           </button>
-        ))}
+          {importSlug ? (
+            <Link
+              href={`/import/${importSlug}`}
+              className="text-[12px] font-bold text-white/70 underline underline-offset-2 hover:text-white min-h-[44px] flex items-center"
+              data-testid={`transfer-import-instead-${p.id}`}
+            >
+              Import from {p.label} today →
+            </Link>
+          ) : null}
+          </div>
+          )
+        })}
       </div>
 
       <div className="rounded-2xl border border-white/6 bg-white/2 p-4 text-sm text-white/40 text-center">

@@ -33,13 +33,3 @@ export function getAvatarPresetEmoji(presetId: string | null | undefined): strin
   return emoji ?? null
 }
 
-/**
- * Returns the display character for identity when using a preset: emoji or fallback initial.
- */
-export function getAvatarDisplayChar(
-  presetId: string | null | undefined,
-  fallbackInitial: string
-): string {
-  const emoji = getAvatarPresetEmoji(presetId)
-  return emoji ?? fallbackInitial
-}

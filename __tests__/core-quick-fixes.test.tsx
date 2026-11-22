@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -45,29 +45,54 @@ function barPaths(props: Record<string, unknown>): string[] {
 
 describe('phone bottom bar', () => {
   it('pins Matchup alongside Trades', () => {
-    expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/my-team', '/core/matchup', '/core/trades'])
+    expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/waivers', '/core/my-team', '/core/matchup', '/core/trades'])
   })
 
-  it('puts Leagues second, opening the league tray in place rather than navigating away', () => {
+  /* My team, Waivers and Matchup are league-only since 2026-11-12; Your week, Live and Player Finder take their slots. */
+  it('swaps the league-only tabs for Your week, Live and Player Finder with no league selected', () => {
+    const paths = barPaths({ selectedLeagueId: null })
+    expect(paths).toEqual(['/core', '/core/week', '/core/live', '/core/players', '/core/trades'])
+    expect(new Set(paths).size).toBe(paths.length)
+  })
+
+  /* "Live scores" and "Player Finder" wrapped to two lines at 390px; the bar uses their short forms. */
+  it('labels the no-league bar with short forms where a nav item has one', () => {
+    const { container } = render(
+      <AfCoreShell active="home" leagues={[]} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} selectedLeagueId={null}>
+        <div>screen</div>
+      </AfCoreShell>,
+    )
+    const items = [...container.querySelectorAll('.af-tabbar > .af-tabbar-item')]
+    expect(items.map((el) => el.textContent)).toEqual(['Home', 'Your week', 'Live', 'Players', 'Trades', 'More'])
+  })
+
+  /* Waivers took the Leagues slot (2026-11-07, owner's call); the league tray opens from More. */
+  it('puts Waivers second, and opens the league tray from More in place rather than navigating away', async () => {
     const { container } = render(
       <AfCoreShell active="home" leagues={[]} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} selectedLeagueId="L1">
         <div>screen</div>
       </AfCoreShell>,
     )
     const items = [...container.querySelectorAll('.af-tabbar > .af-tabbar-item')]
-    expect(items.map((el) => el.textContent)).toEqual(['Home', 'Leagues', 'My team', 'Matchup', 'Trades', 'More'])
-    const leagues = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
+    expect(items.map((el) => el.textContent)).toEqual(['Home', 'Waivers', 'My team', 'Matchup', 'Trades', 'More'])
+    expect(container.querySelector('[data-testid="af-tabbar-leagues"]')).toBeNull()
+    fireEvent.click(items[items.length - 1]!)
+    const leagues = container.querySelector<HTMLButtonElement>('[data-testid="af-more-leagues"]')!
     expect(leagues.tagName).toBe('BUTTON')
     expect(leagues.getAttribute('aria-controls')).toBe('af-rail')
-    expect(leagues.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(leagues)
-    expect(leagues.getAttribute('aria-expanded')).toBe('true')
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(container.querySelector('#af-mobile-more')).toBeNull()
+    expect(container.querySelector('.af-shell')?.getAttribute('data-rail-open')).toBe('true')
   })
 
   it('fills Matchup\'s slot with Player Finder before the league has a scored week, keeping the bar full', () => {
     // Your week is hidden too until a week is scored, so the unconditional stand-in takes it.
     expect(barPaths({ selectedLeagueId: 'L1', leagueHasScoredWeek: false })).toEqual([
       '/core',
+      '/core/waivers',
       '/core/my-team',
       '/core/players',
       '/core/trades',
@@ -79,6 +104,7 @@ describe('phone bottom bar, platform without trades', () => {
   it('fills the Trades slot with Your week', () => {
     expect(barPaths({ selectedLeagueId: 'L1', importCapabilities: { trades: false } })).toEqual([
       '/core',
+      '/core/waivers',
       '/core/my-team',
       '/core/matchup',
       '/core/week',

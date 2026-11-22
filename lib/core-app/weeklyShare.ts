@@ -25,7 +25,12 @@ function shortText(value: string, max: number): string {
   const chars = Array.from(value)
   return chars.length <= max ? value : chars.slice(0, max - 1).join('') + '…'
 }
-export function weeklySocialPost(data: WeeklyBlueprint, platform: WeekSocial, es = false): string {
+/**
+ * `shareUrl` (2026-11-15): the sharer's referral link when there is one (lib/referral/referralShareLink.ts).
+ * WEEK_PUBLIC_URL is a signed-in page, so a friend who tapped it met a sign-in wall; the referral link
+ * lands them on the home page with the sharer credited for any signup.
+ */
+export function weeklySocialPost(data: WeeklyBlueprint, platform: WeekSocial, es = false, shareUrl: string = WEEK_PUBLIC_URL): string {
   const c = copy(es)
   const team = data.teamName || c.myFantasyWeek
   const story = rivalryNarrative(data, es, true)
@@ -33,9 +38,9 @@ export function weeklySocialPost(data: WeeklyBlueprint, platform: WeekSocial, es
   const action = next ? `${c.myPriority}: ${weeklyActionText(next, es)} (${next.leagueName}).` : ''
   const matchup = data.matchup ? `${c.period} ${data.matchup.period}: vs ${data.matchup.opponent} (${data.matchup.leagueName}).` : ''
   const odds = data.playoff ? `${c.estimatedPlayoffOdds} (${data.playoff.leagueName}): ${formatPct1(data.playoff.probability)}%.` : ''
-  if (platform === 'X') return `${shortText([`${team}:`,matchup,odds,story || action].filter(Boolean).join(' '), 210)}\n#AllFantasy ${WEEK_PUBLIC_URL}`
+  if (platform === 'X') return `${shortText([`${team}:`,matchup,odds,story || action].filter(Boolean).join(' '), 210)}\n#AllFantasy ${shareUrl}`
   const hook = platform === 'TikTok' || platform === 'YouTube' ? c.videoHook : `${team} · AllFantasy`
-  return [hook,matchup,odds,action,story,data.playoff ? c.oddsAreEstimates : '',c.toughestDecision, '#AllFantasy #FantasySports', WEEK_PUBLIC_URL].filter(Boolean).join('\n\n')
+  return [hook,matchup,odds,action,story,data.playoff ? c.oddsAreEstimates : '',c.toughestDecision, '#AllFantasy #FantasySports', shareUrl].filter(Boolean).join('\n\n')
 }
 export function commissionerWeekDraft(data: WeeklyBlueprint, es = false, path?: WeeklyPlayoffPath | null): string {
   const c = copy(es)

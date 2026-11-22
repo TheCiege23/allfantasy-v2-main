@@ -72,24 +72,13 @@ const OUT = new Set<string>()
 const lookups = vi.hoisted(() => [] as Array<{ at: unknown; sport: unknown }>)
 /* When set, the feed holds nothing for week 4 — only its newest week, 5. */
 const feed = vi.hoisted(() => ({ missingWeek4: false }))
-vi.mock('@/lib/core-app/playerProjections', () => ({
-  /* The feed's NEWEST week is week 5 — a week AHEAD of the matchups, as production's usually is. */
-  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 5 })),
-  lookupProjections: vi.fn(async (ids: string[], at: unknown, _idp: unknown, sport: unknown) => {
-    lookups.push({ at, sport })
-    if (feed.missingWeek4 && (at as { week?: number } | null)?.week === 4) return new Map()
-    return new Map(
-      ids
-        .filter((id) => PLAYERS[id])
-        .map((id) => [
-          id,
-          {
-            projectedPoints: PLAYERS[id][0],
-            team: PLAYERS[id][1],
-            componentStats: GENERIC_ONLY.has(id) ? null : { rec: PLAYERS[id][0] },
-          },
-        ]),
-    )
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: vi.fn(async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => {
+    lookups.push({ at: { season: '2026', week }, sport: 'NFL' })
+    return { sport: 'NFL', season: 2026, week, unit: 'fantasy points',
+      rows: feed.missingWeek4 && week === 4 ? [] : rosterIds.filter(id => PLAYERS[id]).map(id => ({
+        rosterPlayerId: id, availabilityId: id, team: PLAYERS[id][1], weekly: GENERIC_ONLY.has(id) ? null : PLAYERS[id][0],
+      })) }
   }),
 }))
 vi.mock('@/lib/core-app/unavailableStarters', () => ({
@@ -295,20 +284,22 @@ describe('🛑 one win probability, shared with the league page', () => {
     expect(lookups.some((l) => (l.at as { week: number }).week === 5)).toBe(false)
   })
 
-  it('a week the feed does not hold keeps a margin from the newest week, but no odds', async () => {
+  it('a missing week supplies neither a margin nor odds', async () => {
     feed.missingWeek4 = true
     Object.assign(PLAYERS, { a: [10, 'KC'], c: [5, 'SF'] })
     league('W', ['a'], ['c'])
     const pulse = await getMatchupPulse(USER, NOW)
-    expect(pulse.leading[0]).toMatchObject({ leagueId: 'W', margin: 5, pWin: null })
+    expect(pulse.leading).toHaveLength(0)
+    expect(pulse.notRanked.unpriceable).toBe(1)
   })
 
-  it('🛑 a vendor-only price gives a margin but never odds — a PPR total is not this league’s number', async () => {
+  it('🛑 a generic-only value supplies neither a league margin nor odds', async () => {
     Object.assign(PLAYERS, { a: [10, 'KC'], c: [5, 'SF'] })
     GENERIC_ONLY.add('a')
     league('V', ['a'], ['c'])
     const pulse = await getMatchupPulse(USER, NOW)
-    expect(pulse.leading[0]).toMatchObject({ leagueId: 'V', margin: 5, pWin: null })
+    expect(pulse.leading).toHaveLength(0)
+    expect(pulse.notRanked.unpriceable).toBe(1)
   })
 
   it('🛑 a ruled-out starter is a zero in the margin and the odds, as on the league page', async () => {

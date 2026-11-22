@@ -40,7 +40,7 @@ export async function requireLeagueWarRoom(
       ok: false,
       response: NextResponse.json(
         {
-          error: 'War Room AI is disabled for this league or feature. Enable in league settings or upgrade.',
+          error: 'War Room Chimmy is disabled for this league or feature. Enable in league settings or upgrade.',
           code: 'war_room_disabled',
         },
         { status: 403 }

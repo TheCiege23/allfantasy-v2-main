@@ -11,7 +11,7 @@
  * - tryDeterministicAnswer locale param
  * - /api/chimmy cookie read (af_lang)
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -132,6 +132,13 @@ function setupHappyPath() {
 }
 
 // ── /api/chimmy — language cookie → UserContext.language ──────────────────────
+
+// Warm the route's module graph once, before any test. Its first import compiles a large graph — over
+// 10s on an idle machine — and with the other chat and Chimmy suites running alongside it passed 30s,
+// so the FIRST test timed out (and its call, still running, could take the next test's mocks).
+// Paid here, the 30s test limit measures only the test. The warm-up's own limit is generous because this is
+// compile time, not a hang: on a box busy with other type-checks, this one import has taken over 2 minutes.
+beforeAll(async () => { await import('@/app/api/chimmy/route') }, 300_000)
 
 describe('POST /api/chimmy — language cookie passthrough', () => {
   beforeEach(() => {

@@ -70,7 +70,7 @@ export async function maybeAutoRespondToTradeProposal(leagueId: string, proposal
         rosterId: proposal.receiverRosterId,
         action: 'trade_reject',
         payload: { proposalId, review },
-        reason: 'AI receiver: below accept confidence threshold',
+        reason: 'Chimmy receiver: below accept confidence threshold',
         triggeredBy: null,
       })
       return

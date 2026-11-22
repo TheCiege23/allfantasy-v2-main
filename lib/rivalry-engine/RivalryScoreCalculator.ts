@@ -4,7 +4,7 @@
 
 import type { RivalryScoreInput } from './types'
 
-export interface RivalryScoreWeights {
+interface RivalryScoreWeights {
   totalMatchups: number
   closeGameFrequency: number
   playoffMeetings: number

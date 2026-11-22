@@ -98,6 +98,8 @@ describe('commissioner tie recovery',()=>{
     fireEvent.change(screen.getByLabelText('Evict tied nominee'),{target:{value:'nom-b'}})
     fireEvent.click(screen.getByRole('button',{name:'Run admin'}))
     await screen.findByText('Tie resolved')
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({action:'resolve_eviction_tie',params:{rosterId:'nom-b'}})
+    // The panel also loads the rules editor's config on mount, so find the admin call by its URL, not its position.
+    const adminCall=fetchMock.mock.calls.find(([url]:[string])=>String(url).endsWith('/big-brother/admin'))
+    expect(JSON.parse(adminCall[1].body)).toEqual({action:'resolve_eviction_tie',params:{rosterId:'nom-b'}})
   })
 })

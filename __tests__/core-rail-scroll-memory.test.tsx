@@ -68,7 +68,8 @@ function setViewport(isDesktop: boolean) {
 }
 
 const scroller = (c: HTMLElement) => c.querySelector<HTMLElement>('#af-rail-scroll')!
-const tile = (c: HTMLElement, id: string) => c.querySelector<HTMLElement>(`a[href="/core?league=${id}"]`)!
+// A tile keeps the screen open now (lib/league/leagueSwitchHref.ts): on My team it links /core/my-team?league=<id>.
+const tile = (c: HTMLElement, id: string) => scroller(c).querySelector<HTMLElement>(`a[href$="?league=${id}"]`)!
 
 /** jsdom does no layout: give the scroller and tiles boxes so "in view" means something. */
 function stubBoxes(c: HTMLElement, tileTop: (id: string) => number) {

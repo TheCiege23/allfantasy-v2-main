@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import {
   getYahooIdentityForUser,
   linkYahooIdentity,
@@ -10,6 +10,12 @@ import {
   YahooImportConnectionError,
   type YahooCredentialContext,
 } from '@/lib/yahoo/yahooCredentialStore'
+import {
+  isYahooImportLive,
+  isYahooOpenForUser,
+  isYahooPreviewConfigured,
+  yahooComingSoonJson,
+} from '@/lib/yahoo/yahooAvailability'
 
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID
 const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET
@@ -110,7 +116,13 @@ function notConnected(error: unknown): NextResponse | null {
 }
 
 export const GET = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLeagues" })(async (_request: NextRequest) => {
-  const auth = await requireVerifiedUser()
+  // Coming soon: answer plainly instead of calling a Yahoo API that 403s every unapproved app.
+  // Owner-preview users (YAHOO_PREVIEW_USER_IDS) are let through — see lib/yahoo/yahooAvailability.ts.
+  const live = isYahooImportLive()
+  if (!live && !isYahooPreviewConfigured()) return yahooComingSoonJson()
+
+  const auth = await requireAgeConfirmedUser()
+  if (!live && !isYahooOpenForUser(auth.ok ? auth.userId : null)) return yahooComingSoonJson()
   if (!auth.ok) {
     return auth.response
   }
@@ -209,7 +221,11 @@ export const GET = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLe
 })
 
 export const POST = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLeagues" })(async (request: NextRequest) => {
-  const auth = await requireVerifiedUser()
+  const live = isYahooImportLive()
+  if (!live && !isYahooPreviewConfigured()) return yahooComingSoonJson()
+
+  const auth = await requireAgeConfirmedUser()
+  if (!live && !isYahooOpenForUser(auth.ok ? auth.userId : null)) return yahooComingSoonJson()
   if (!auth.ok) {
     return auth.response
   }

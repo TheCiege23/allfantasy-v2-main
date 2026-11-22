@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Trophy } from "lucide-react"
+import { AlertCircle, ArrowRight, Loader2 } from "lucide-react"
 import { trackWcPoolCreated, trackWcFunnelEvent } from "@/lib/world-cup/worldCupFunnelAnalytics"
 import { trackMetaEventsFromResponse } from "@/lib/meta-client"
 

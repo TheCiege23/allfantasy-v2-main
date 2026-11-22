@@ -25,13 +25,13 @@ export type NflRedraftPremiumEvidenceCounts = {
   byType: Record<string, number>
 }
 
-export type NflRedraftPremiumEvidenceResolverResult = {
+type NflRedraftPremiumEvidenceResolverResult = {
   evidencePackets: NflRedraftProviderEvidencePacket[]
   resolverStatus: NflRedraftPremiumEvidenceResolverStatus
   evidenceCounts: NflRedraftPremiumEvidenceCounts
 }
 
-export type NflRedraftPremiumEvidenceResolverInput = {
+type NflRedraftPremiumEvidenceResolverInput = {
   serviceId: NflRedraftPremiumServiceId
   serviceVariant?: NflRedraftPremiumServiceVariant
   canonicalIds: NflRedraftPremiumApiCanonicalIds
@@ -48,10 +48,6 @@ const SURFACE_CONTEXT_BY_SERVICE: Record<NflRedraftPremiumServiceId, NflRedraftE
   waiver_report: ['waiver_context'],
   trade_review: ['trade_context'],
   draft_prep: ['draft_context'],
-}
-
-function cleanString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function uniquePackets(packets: NflRedraftProviderEvidencePacket[]): NflRedraftProviderEvidencePacket[] {
@@ -203,16 +199,3 @@ export function resolveNflRedraftPremiumEvidence(
   }
 }
 
-export function evidenceResolverRequestHash(input: NflRedraftPremiumEvidenceResolverInput): string {
-  return [
-    input.serviceId,
-    input.serviceVariant ?? 'basic',
-    cleanString(input.canonicalIds.leagueId) ?? 'league-none',
-    cleanString(input.canonicalIds.teamId) ?? 'team-none',
-    cleanString(input.canonicalIds.managerId) ?? 'manager-none',
-    cleanString(input.canonicalIds.matchupId) ?? 'matchup-none',
-    cleanString(input.canonicalIds.playerId) ?? 'player-none',
-    input.canonicalIds.week ?? 'week-none',
-    input.canonicalIds.season ?? 'season-none',
-  ].join(':')
-}

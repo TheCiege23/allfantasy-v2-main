@@ -5,29 +5,6 @@ import { resolve } from 'node:path'
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
 
 describe('Slice 1 — Draft Settings modal + canonical entry point', () => {
-  it('DraftSettingsModal exposes all 5 expected controls by testid', () => {
-    const src = read('components/app/draft-room/DraftSettingsModal.tsx')
-    expect(src).toMatch(/data-testid="draft-settings-trr"/)
-    expect(src).toMatch(/data-testid="draft-settings-soft-timer"/)
-    expect(src).toMatch(/data-testid="draft-settings-onclock-inherit"/)
-    expect(src).toMatch(/data-testid="draft-settings-onclock-reset"/)
-    expect(src).toMatch(/data-testid="draft-settings-player-trades"/)
-    expect(src).toMatch(/data-testid="draft-settings-custom-rankings"/)
-    expect(src).toMatch(/data-testid="draft-settings-modal-save"/)
-  })
-
-  it('DraftSettingsModal locks Third Round Reversal when sessionStatus !== pre_draft', () => {
-    const src = read('components/app/draft-room/DraftSettingsModal.tsx')
-    // Lock derived from sessionStatus comparison.
-    expect(src).toMatch(/sessionStatus !== null && sessionStatus !== 'pre_draft'/)
-    // Lock state actually disables the input.
-    expect(src).toMatch(/disabled=\{trrLocked \|\| saving\}/)
-  })
-
-  it('DraftSettingsModal handles 409 THIRD_ROUND_REVERSAL_LOCKED response', () => {
-    const src = read('components/app/draft-room/DraftSettingsModal.tsx')
-    expect(src).toMatch(/THIRD_ROUND_REVERSAL_LOCKED/)
-  })
 
   it('CommissionerControlCenterModal delegates to the single draft-room settings surface', () => {
     const src = read('components/app/draft-room/CommissionerControlCenterModal.tsx')

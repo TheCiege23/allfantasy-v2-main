@@ -15,6 +15,31 @@ import type { PartnerAsset, PartnerRanking } from './partnerRanking'
  * ranking in place — it is the route's own object, about to be serialised. Never throws: a grade
  * that fails costs that card's letter, never the ranking.
  */
+/**
+ * A suggested side as the grader reads it. Shared with the rebuild advisor's packages, so the two
+ * cannot price the same assets differently.
+ */
+export function suggestionGradeInputs(
+  assets: PartnerAsset[],
+  picks: ReadonlyMap<string, { season: number | null; round: number | null; label: string }>,
+): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const a of assets) {
+    if (a.kind === 'player') {
+      out.assets.push({ kind: 'player', playerId: a.id, name: a.name })
+      continue
+    }
+    const pick = picks.get(a.id)
+    // A pick the builder could not rebuild (no season or round) is named, never priced as zero.
+    if (pick && pick.season != null && pick.round != null) {
+      out.assets.push({ kind: 'pick', year: pick.season, round: pick.round, label: pick.label })
+    } else {
+      out.unpriceable.push(a.name)
+    }
+  }
+  return out
+}
+
 export async function gradePartnerSuggestions(args: {
   ranking: PartnerRanking
   /** Pick coordinates by `pickId`, from the rosters the route already holds. */
@@ -23,23 +48,7 @@ export async function gradePartnerSuggestions(args: {
   /** Only the cards the screen shows are graded — grading rows nobody sees is pure cost. */
   limit: number
 }): Promise<void> {
-  const inputs = (assets: PartnerAsset[]): GradeInputs => {
-    const out: GradeInputs = { assets: [], unpriceable: [] }
-    for (const a of assets) {
-      if (a.kind === 'player') {
-        out.assets.push({ kind: 'player', playerId: a.id, name: a.name })
-        continue
-      }
-      const pick = args.picks.get(a.id)
-      // A pick the builder could not rebuild (no season or round) is named, never priced as zero.
-      if (pick && pick.season != null && pick.round != null) {
-        out.assets.push({ kind: 'pick', year: pick.season, round: pick.round, label: pick.label })
-      } else {
-        out.unpriceable.push(a.name)
-      }
-    }
-    return out
-  }
+  const inputs = (assets: PartnerAsset[]): GradeInputs => suggestionGradeInputs(assets, args.picks)
 
   await Promise.all(
     args.ranking.partners.slice(0, args.limit).map(async (p) => {

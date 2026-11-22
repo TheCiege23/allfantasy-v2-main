@@ -18,7 +18,7 @@ import type { WorldCupBracketGradeInsight } from "./worldCupAiSubscriptionInsigh
 import type { RootingRecommendation } from "./worldCupRootingGuide"
 import type { UniquenessInsight } from "./worldCupUniquenessInsights"
 
-export type WorldCupAiShareCardStatus =
+type WorldCupAiShareCardStatus =
   | "ready"
   | "no_entry"
   | "incomplete"
@@ -49,7 +49,7 @@ export type BuildWorldCupAiShareCardInput = {
 }
 
 const POWERED_BY = "Powered by AllFantasy."
-const SHARE_TITLE = "My AllFantasy World Cup AI Bracket Card"
+const SHARE_TITLE = "My AllFantasy World Cup Chimmy Bracket Card"
 
 const FORBIDDEN_TERMS = [
   /\bdfs\b/gi,
@@ -133,7 +133,7 @@ export function buildWorldCupAiBracketShareCard(
     const lines = baseLines.slice()
     lines.push(POWERED_BY)
     const lockedLines = [
-      "AF Pro unlocks Champion Confidence, AI Win Probability, today's rooting pick, and your uniqueness insight on this card.",
+      "AF Pro unlocks Champion Confidence, Chimmy Win Probability, today's rooting pick, and your uniqueness insight on this card.",
     ]
     return {
       title: SHARE_TITLE,
@@ -153,7 +153,7 @@ export function buildWorldCupAiBracketShareCard(
 
   if (typeof aiWinProbabilityPct === "number" && Number.isFinite(aiWinProbabilityPct)) {
     const pct = Math.max(0, Math.min(100, Math.round(aiWinProbabilityPct)))
-    proLines.push(`AI Win Probability: ${pct}%`)
+    proLines.push(`Chimmy Win Probability: ${pct}%`)
   }
 
   if (topRootingRec) {

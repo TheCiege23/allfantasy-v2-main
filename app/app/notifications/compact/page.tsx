@@ -21,7 +21,7 @@ export default function CompactNotificationCenterPage() {
         </Link>
         <div className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-100">
           <Sparkles className="h-3 w-3" />
-          Compact AI Center
+          Compact Chimmy Center
         </div>
       </header>
 

@@ -19,8 +19,8 @@
 
 import { lastWeekOfPlayoffRound } from './playoffRoundWeeks'
 
-/** The bracket engine supports at most 16 teams (four rounds) — canonicalNflRedraftPlayoffRuntime. */
-export const MAX_PLAYOFF_TEAMS = 16
+/** The bracket engine supports at most 32 teams (five rounds) — canonicalNflRedraftPlayoffRuntime. */
+export const MAX_PLAYOFF_TEAMS = 32
 
 /** Single-elimination rounds a field of `teams` plays; 0 when there is no bracket. */
 export function playoffRoundsForTeams(teams: number | null | undefined): number {

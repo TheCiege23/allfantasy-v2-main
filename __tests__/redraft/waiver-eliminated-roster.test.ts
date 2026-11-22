@@ -38,3 +38,12 @@ describe('processWaiverWindow — eliminated teams', () => {
     expect(db.redraftRosterPlayer.findFirst).not.toHaveBeenCalled()
   })
 })
+
+describe('Survivor Guilly waiver ownership', () => {
+  it('leaves redraft-engine claims untouched for the canonical waiver board', async () => {
+    db.redraftSeason.findFirst.mockResolvedValue({ id: 's1', leagueId: 'L1', sport: 'NFL', league: { leagueVariant: 'survivor_guillotine' } })
+    expect(await processWaiverWindow('L1', 's1')).toEqual([])
+    expect(db.redraftWaiverClaim.findMany).not.toHaveBeenCalled()
+    expect(db.redraftWaiverClaim.update).not.toHaveBeenCalled()
+  })
+})

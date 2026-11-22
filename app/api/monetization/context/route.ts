@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { isToolTradeAnalyzerEnabled } from "@/lib/feature-toggle"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import {
   buildFeatureUpgradePath,
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
     const tokenBalanceResolver = new TokenBalanceResolver()
     const tokenSpendService = new TokenSpendService()
 
-    const [entitlementResult, tokenBalance] = await Promise.all([
+    const [entitlementResult, tokenBalance, tradeReviewAvailable] = await Promise.all([
       entitlementResolver
         .resolveForUser(userId, featureId ?? undefined, session?.user?.email)
         .catch((error) => {
@@ -92,6 +93,7 @@ export async function GET(req: Request) {
           updatedAt: "",
         }
       }),
+      featureId === "trade_analyzer" ? isToolTradeAnalyzerEnabled().catch(() => false) : undefined,
     ])
 
     const rulePreviews = await Promise.all(
@@ -129,6 +131,7 @@ export async function GET(req: Request) {
       feature: featureId
         ? {
             featureId,
+            ...(tradeReviewAvailable === undefined ? {} : { available: tradeReviewAvailable }),
             hasAccess: Boolean(entitlementResult.hasAccess),
             requiredPlan,
             upgradePath: buildFeatureUpgradePath(featureId),

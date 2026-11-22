@@ -2,7 +2,7 @@
  * Rolling Insights soccer team season stats — draws vs ties, relegated rows.
  */
 
-export type RollingInsightsSoccerRegularSeasonSlice = Record<string, unknown> | null | undefined
+type RollingInsightsSoccerRegularSeasonSlice = Record<string, unknown> | null | undefined
 
 /** Canonical draws = draws ?? ties (vendor may emit either). */
 export function normalizeRollingInsightsSoccerDraws(regularSeason: RollingInsightsSoccerRegularSeasonSlice): number | null {

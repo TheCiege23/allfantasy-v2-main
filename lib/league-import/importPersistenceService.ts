@@ -171,6 +171,10 @@ export async function persistImportWithCanonicalAudit(input: {
   importerSourceManagerId?: string | null
   /** The team the importer picked as theirs — bootstrap claim only; see ImportedLeagueCommitService. */
   importerSourceTeamId?: string | null
+  /** The gate proved, from the provider's API, that the importer is the commissioner. See ImportedLeagueCommitService. */
+  importerIsProvenCommissioner?: boolean
+  /** See `refuseSecondCopy` in ImportedLeagueCommitService. */
+  refuseSecondCopy?: boolean
   /** The user confirmed they want back a league they previously deleted. */
   confirmReimportOfDeleted?: boolean
 }): Promise<{
@@ -310,6 +314,8 @@ export async function persistImportWithCanonicalAudit(input: {
       canonicalBundle: input.canonical,
       importerSourceManagerId: input.importerSourceManagerId ?? null,
       importerSourceTeamId: input.importerSourceTeamId ?? null,
+      importerIsProvenCommissioner: input.importerIsProvenCommissioner === true,
+      refuseSecondCopy: input.refuseSecondCopy === true,
       confirmReimportOfDeleted: input.confirmReimportOfDeleted ?? false,
     })
 

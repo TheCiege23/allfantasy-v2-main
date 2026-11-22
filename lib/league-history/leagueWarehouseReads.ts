@@ -421,76 +421,8 @@ export async function readActivityMix(leagueId: string): Promise<LeagueWarehouse
     .sort((a, b) => b.count - a.count)
 }
 
-export interface LeagueWarehouseManagerFingerprint {
-  managerName: string
-  aggression: number
-  activity: number
-  tradeFrequency: number
-  riskTolerance: number
-  labels: string[]
-}
-
-/**
- * The highest value each measure reaches ANYWHERE on the platform — the denominator the radar
- * plots against.
- *
- * 🛑 THE FOUR AXES ARE NOT ON A COMMON SCALE, AND PLOTTING THEM AS IF THEY WERE MADE THE CHART
- * UNREADABLE. Measured across all 2,679 rows: aggression tops out at 45, activity at 38, risk at
- * 63, and trade frequency at 100. Rendered against a shared 0–100 ring, three of the four axes
- * never leave the inner fifth, so every manager drew the same thin vertical sliver and two of the
- * eleven were invisible dots. Verified by rendering the real league in a browser, not by reading
- * the numbers — the shapes were legible as data and useless as a comparison.
- *
- * ⚠ SCALING PER AXIS IS ONLY HONEST BECAUSE THE DENOMINATOR IS STABLE. Scaling to the top score
- * in the CURRENT LEAGUE would be the misleading version: the rim would mean "highest here", it
- * would move whenever a manager joined or left, and two leagues could not be compared. The
- * platform-wide maximum is a fixed reference — a full spoke means "as high as this measure has
- * ever been recorded" — and the chart says so rather than leaving the reader to assume 100.
- */
-export interface LeagueWarehouseFingerprintAxisMax {
-  aggression: number
-  activity: number
-  tradeFrequency: number
-  riskTolerance: number
-}
-
-export async function readFingerprintAxisMax(): Promise<LeagueWarehouseFingerprintAxisMax> {
-  const agg = await prisma.managerPsychProfile.aggregate({
-    _max: {
-      aggressionScore: true,
-      activityScore: true,
-      tradeFrequencyScore: true,
-      riskToleranceScore: true,
-    },
-  })
-  // A zero or missing maximum would divide the whole axis by nothing; 1 keeps the chart drawable
-  // and the spoke at full length, which is the truthful reading when one value is all there is.
-  const safe = (v: unknown) => Math.max(1, num(v))
-  return {
-    aggression: safe(agg._max.aggressionScore),
-    activity: safe(agg._max.activityScore),
-    tradeFrequency: safe(agg._max.tradeFrequencyScore),
-    riskTolerance: safe(agg._max.riskToleranceScore),
-  }
-}
-
-/**
- * Behavioural fingerprints from `manager_psych_profiles`.
- *
- * 🛑 FOUR AXES, NOT FIVE — `waiverFocusScore` IS DEAD AND MUST NOT BE PLOTTED. Measured across all
- * 2,611 rows platform-wide: exactly ONE distinct value, min 0, max 0. Plotting it would draw a
- * permanently-collapsed spoke on every manager in every league and read as "nobody here touches
- * the waiver wire" — false on its face for a league with 31 waiver claims. It is excluded here
- * rather than in the view, so no future chart can pick it up by accident.
- *
- * The other four carry real within-league signal: measured mean spans across 190 leagues are
- * aggression 18.4, activity 13.7, trade frequency 39.8, risk tolerance 20.9. That was worth
- * checking — a fingerprint whose axes are the same for everyone in a league is a decoration.
- */
-export async function readManagerFingerprints(_leagueId: string): Promise<LeagueWarehouseManagerFingerprint[]> {
-  // Full behavioral fingerprints are internal; no plan exposes them in league history.
-  return []
-}
+// The fingerprint reads (`readManagerFingerprints`, `readFingerprintAxisMax`) over `manager_psych_profiles` were
+// removed 2026-11-19 with the personality profiles — re-score build item 10.
 
 export interface LeagueWarehouseRecord {
   teamName: string

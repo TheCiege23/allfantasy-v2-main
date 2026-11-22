@@ -4,7 +4,7 @@ import type { NormalizedImportResult } from './types'
 import type { ImportProvider } from './types'
 import { DefaultExternalIdentityMapper } from './mappers/DefaultExternalIdentityMapper'
 
-export interface PipelineInput {
+interface PipelineInput {
   provider: ImportProvider | string
   raw: unknown
 }

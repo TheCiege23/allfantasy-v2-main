@@ -43,7 +43,7 @@ export async function captureDraftAnalysisBasis(tx: Prisma.TransactionClient, le
             genericAfPerGame: row.afProjection, genericRosPoints: row.rosProjection, rosWeeksRemaining: row.rosWeeksRemaining })),
     };
 }
-export const DRAFT_ANALYSIS_VERSION = 'draft-analysis-v1';
+const DRAFT_ANALYSIS_VERSION = 'draft-analysis-v1';
 export function analysisReadiness(basis: unknown, totalPicks: number) {
     const raw = basis && typeof basis === 'object' ? basis as Record<string, unknown> : {};
     return {

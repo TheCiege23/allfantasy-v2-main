@@ -45,7 +45,7 @@ export default function ChimmyChatTab({
       sport={sport ?? null}
       season={season ?? null}
       week={week ?? null}
-      onOpenCompare={() => toast.info('Provider comparison available from AI Hub.')}
+      onOpenCompare={() => toast.info('Provider comparison available from Chimmy Hub.')}
     />
   )
 }
