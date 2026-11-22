@@ -32,7 +32,7 @@ const earlierWaiver = {
 
 const normalized = {
   source: { source_provider: 'sleeper', source_league_id: 'sl-1' },
-  league: { name: 'Test League', sport: 'NFL', season: 2026, leagueSize: 12, rosterSize: 30, scoring: 'ppr', isDynasty: true, current_week: 12, trade_deadline_week: 13, faab_budget: 100, huge_unknown_blob: { a: 1 } },
+  league: { name: 'Test League', sport: 'NFL', season: 2026, leagueSize: 12, rosterSize: 30, scoring: 'ppr', isDynasty: true, current_week: 12, trade_deadline_week: 13, faab_budget: 100, roster_positions: ['QB', 'SUPER_FLEX', 'BN'], huge_unknown_blob: { a: 1 } },
   rosters: [
     {
       source_team_id: '1', source_manager_id: 'mgr-1', owner_name: 'Avery', team_name: 'Comets', avatar_url: null,
@@ -78,7 +78,7 @@ describe('the context of one trade', () => {
     expect(snap.sides.find((s) => s.rosterId === '2')!.record.rank).toBeNull()
     expect(snap.starterSlots).toEqual({ QB: 1, SUPER_FLEX: 1 })
     expect(snap.scoring?.rules).toContainEqual({ stat: 'bonus_rec_te', points: 0.5, positions: ['TE'] })
-    expect(snap.league).toMatchObject({ sport: 'NFL', isDynasty: true, leagueSize: 12, trade_deadline_week: 13, faab_budget: 100 })
+    expect(snap.league).toMatchObject({ sport: 'NFL', isDynasty: true, leagueSize: 12, trade_deadline_week: 13, faab_budget: 100, roster_positions: ['QB', 'SUPER_FLEX', 'BN'] })
     expect(snap.league).not.toHaveProperty('huge_unknown_blob')
     expect(snap).toMatchObject({ version: 1, source: 'live_sync', provider: 'sleeper', lagHours: 30, tradeAt: hoursAgo(30) })
   })
