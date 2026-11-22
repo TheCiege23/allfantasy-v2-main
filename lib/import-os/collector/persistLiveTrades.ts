@@ -101,6 +101,8 @@ function toTradeFact(t: NormalizedTransaction, season: number): NormalizedTradeF
       }))
       .filter((p) => p.season !== '' && Number.isFinite(p.round)),
     created: Date.parse(t.completed_at ?? t.created_at) || 0,
+    // FAAB each way, only when the provider stated it — absent leaves `LeagueTrade.budgetGiven/Received` untouched.
+    ...(Array.isArray(t.waiver_budget) ? { waiverBudget: t.waiver_budget } : {}),
     /* Unused by `persistTradesForSeason`; present only to satisfy the shared type. */
     creator: '',
   }
