@@ -349,7 +349,7 @@ export async function gradeAllTradeOutcomes(opts: { now?: Date; db?: Db; nflCal?
     const normalizer = sport === 'NCAAF' ? null : getDailySportNormalizer(sport)
     const canonical = (rowsOfGame: unknown[]): Record<string, number> =>
       sport === 'NCAAF' ? aggregateNcaafWeek(rowsOfGame).stats : normalizer ? aggregateWeeklyStats(rowsOfGame, normalizer).stats : {}
-    const positions = await positionsByRosterId(db, ids)
+    const positions = await positionsByRosterId(db, ids, sport)
     for (const r of list) {
       const scorer = buildLeagueStatScorer({ sport, settings: r.settings as never })
       if (!scorer) {
@@ -392,10 +392,11 @@ async function positionsBySleeperId(db: Db, ids: readonly string[]): Promise<Map
 }
 
 /** A roster id's position, from whichever id column it is (a position is only needed for position-weighted rules). */
-async function positionsByRosterId(db: Db, ids: readonly string[]): Promise<Map<string, string>> {
+async function positionsByRosterId(db: Db, ids: readonly string[], sport: string): Promise<Map<string, string>> {
   if (!ids.length) return new Map()
   const rows = await db.sportsPlayer.findMany({
-    where: { OR: [{ sleeperId: { in: [...ids] } }, { externalId: { in: [...ids] } }] },
+    // externalid-audited: position only, held to this sport; a cross-source id collision can at worst mis-weight one position-weighted rule, never a points total
+    where: { sport: { in: [sport, sport.toLowerCase()] }, OR: [{ sleeperId: { in: [...ids] } }, { externalId: { in: [...ids] } }] },
     select: { sleeperId: true, externalId: true, position: true },
   })
   const out = new Map<string, string>()
